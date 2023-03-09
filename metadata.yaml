@@ -1,0 +1,25 @@
+name: jenkins-k8s-operator
+display-name: Jenkins K8s
+summary: Jenkins Continuous Integration Server
+maintainers:
+  - IS SRE <launchpad.net/~canonical-is-devops>
+description: >
+  Jenkins is an extendable open source continuous integration server that
+  monitors executions of repeated jobs. The focus of Jenkins is the
+  building/testing of software project continuously, and monitoring executions
+  of externally-run jobs. More information at http://jenkins-ci.org/.
+
+  This charm provides the Jenkins server service, and when paired with the
+  jenkins agent provides an easy way to deploy Jenkin.
+tags:
+  - application_development
+  - ops
+subordinate: false
+containers:
+  jenkins:
+    resource: jenkins-image
+resources:
+  jenkins-image:
+    type: oci-image
+    description: OCI image for Jenkins
+    auto-fetch: true
