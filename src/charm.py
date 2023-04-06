@@ -9,7 +9,7 @@ import logging
 
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.model import ActiveStatus
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +40,9 @@ class JenkinsK8SOperatorCharm(CharmBase):
                 "jenkins": {
                     "override": "replace",
                     "summary": "jenkins",
-                    "command": "/bin/bash -t",
+                    "command": "java -jar /srv/jenkins/jenkins.war",
                     "startup": "enabled",
-                    "environment": {},
+                    "environment": {"JENKINS_HOME": "/var/lib/.jenkins"},
                 }
             },
         }

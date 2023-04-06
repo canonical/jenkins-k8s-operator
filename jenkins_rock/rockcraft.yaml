@@ -9,10 +9,20 @@ env:
   - XDG_DATA_HOME: "/usr/share"
   - FONTCONFIG_PATH: "/etc/fonts"
   - JAVA_HOME: "/usr/lib/jvm/java-11-openjdk"
+  - LANG: C.UTF-8
+  - LC_ALL: C.UTF-8
+  - LC_LANG: C.UTF-8
 platforms:
   amd64:
 
 parts:
+  add-user:
+    plugin: nil
+    overlay-script: |
+      mkdir $CRAFT_OVERLAY/etc
+      chmod 755 $CRAFT_OVERLAY/etc
+      groupadd -R $CRAFT_OVERLAY --gid 2000 jenkins
+      useradd -R $CRAFT_OVERLAY --system --gid 2000 --uid 2000 --home /srv/jenkins jenkins
   jenkins:
     plugin: nil
     stage-packages:
@@ -27,9 +37,19 @@ parts:
       - libnss3
       - ca-certificates-java
     override-build: |
+      craftctl default
+      /bin/bash -c "mkdir -p --mode=775 srv/jenkins"
+      /bin/bash -c "mkdir -p --mode=775 var/lib/.jenkins"
+      /bin/bash -c "chown 2000:2000 srv/jenkins"
       curl -sLO https://mirrors.jenkins.io/war/2.387/jenkins.war
       unzip jenkins.war META-INF/MANIFEST.MF
       VERSION=$(grep Jenkins-Version META-INF/MANIFEST.MF | cut -d' ' -f2 | tr -d '\r')
       rm META-INF/MANIFEST.MF
+      cp jenkins.war srv/jenkins/
+      ln -s /usr/lib/jvm/java-11-openjdk-amd64/bin/java ${CRAFT_PART_INSTALL}/usr/bin/java
+    stage:
+      - "*"
+    prime:
+      - "*"
 
-cmd: [/usr/lib/jvm/java-11-openjdk/bin/java -Djava.awt.headless=true -jar jenkins.war]
+cmd: [java, -Djava.awt.headless=true, -jar, /srv/jenkins/jenkins.war]
