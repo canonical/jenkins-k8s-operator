@@ -1,34 +1,27 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import asyncio
+"""Integration tests for jenkins-k8s-operator charm."""
+
 import logging
 from pathlib import Path
 
-import pytest
+import requests
 import yaml
-from pytest_operator.plugin import OpsTest
+from juju.application import Application
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-APP_NAME = METADATA["name"]
+METADATA = yaml.safe_load(Path("./metadata.yaml").read_text(encoding="utf-8"))
 
 
-@pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest):
-    """Build the charm-under-test and deploy it together with related charms.
-
-    Assert on the unit status before any relations/configurations take place.
+async def test_jenkins_wizard_bypass(web_address: str):
     """
-    # Build and deploy charm from local source folder
-    charm = await ops_test.build_charm(".")
-    resources = {"httpbin-image": METADATA["resources"]["httpbin-image"]["upstream-source"]}
+    arrange: given an active Jenkins charm's unit ip.
+    act: when web application is accessed
+    assert: wizard is bypassed and a login screen is shown.
+    """
+    response = requests.get(f"{web_address}/login", params={"from": "/"}, timeout=10)
 
-    # Deploy the charm and wait for active/idle status
-    await asyncio.gather(
-        ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME),
-        ops_test.model.wait_for_idle(
-            apps=[APP_NAME], status="active", raise_on_blocked=True, timeout=1000
-        ),
-    )
+    assert "Unlock Jenkins" not in str(response.content)
+    assert "Welcome to Jenkins!" in str(response.content)
