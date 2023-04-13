@@ -1,1 +1,2 @@
 ops >=2,<3
+jenkinsapi>=0.3
