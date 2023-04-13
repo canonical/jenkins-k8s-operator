@@ -153,7 +153,7 @@ def test__on_jenkins_pebble_ready_no_container(harness: Harness):
         pytest.param(200, ActiveStatus, id="jenkins ready"),
     ],
 )
-def test__on_jenkins_pebble_ready(
+def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     harness: Harness,
     mocked_container: Container,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],

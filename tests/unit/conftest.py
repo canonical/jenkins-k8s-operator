@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Fixtures for Jenkins-k8s-operator charm unit tests."""
+
 from io import StringIO
 from pathlib import Path
 from secrets import token_hex

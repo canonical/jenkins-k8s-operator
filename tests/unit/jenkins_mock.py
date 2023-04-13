@@ -6,7 +6,7 @@
 from typing import Any
 
 
-class MockedJenkinsClient:
+class MockedJenkinsClient:  # pylint: disable=too-few-public-methods
     """Mocked Jenkins Client.
 
     Attributes:
@@ -21,7 +21,6 @@ class MockedJenkinsClient:
             kwargs: Placeholder keyword arguments.
         """
         del args, kwargs
-        pass
 
     @property
     def version(self) -> str:

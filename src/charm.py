@@ -87,7 +87,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         """
         for _ in range(timeout // check_interval):
             if self._is_jenkins_ready():
-                return
+                break
             sleep(check_interval)
         else:
             raise TimeoutError("Timed out waiting for Jenkins to become ready.")
