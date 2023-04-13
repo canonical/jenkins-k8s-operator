@@ -27,29 +27,26 @@ parts:
     plugin: nil
     stage-packages:
       - bash
+      - ca-certificates-java
       - fonts-dejavu-core
       - libfontconfig1
       - openjdk-11-jre-headless
-      - ca-certificates-java
     build-packages:
-      - curl
-      - unzip
-      - libnss3
       - ca-certificates-java
-    override-build: |
-      craftctl default
-      /bin/bash -c "mkdir -p --mode=775 srv/jenkins"
-      /bin/bash -c "mkdir -p --mode=775 var/lib/.jenkins"
-      /bin/bash -c "chown 2000:2000 srv/jenkins"
+      - curl
+      - libnss3
+      - unzip
+    overlay-script: |
+      mkdir -p $CRAFT_OVERLAY/srv/jenkins
+      mkdir -p $CRAFT_OVERLAY/etc/default/jenkins
+      mkdir -p $CRAFT_OVERLAY/usr/bin/
+      chown 2000:2000 $CRAFT_OVERLAY/srv/jenkins
+      # Use jenkins war rather than apt install for easier Jenkins version control.
+      cd $CRAFT_OVERLAY/srv/jenkins
       curl -sLO https://mirrors.jenkins.io/war/2.387/jenkins.war
       unzip jenkins.war META-INF/MANIFEST.MF
       VERSION=$(grep Jenkins-Version META-INF/MANIFEST.MF | cut -d' ' -f2 | tr -d '\r')
-      rm META-INF/MANIFEST.MF
-      cp jenkins.war srv/jenkins/
-      ln -s /usr/lib/jvm/java-11-openjdk-amd64/bin/java ${CRAFT_PART_INSTALL}/usr/bin/java
-    stage:
-      - "*"
-    prime:
-      - "*"
+      rm -rf META-INF
+      ln -s /usr/lib/jvm/java-11-openjdk-amd64/bin/java ${CRAFT_OVERLAY}/usr/bin/java
 
 cmd: [java, -Djava.awt.headless=true, -jar, /srv/jenkins/jenkins.war]
