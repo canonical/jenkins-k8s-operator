@@ -1,0 +1,8 @@
+/env
+/image
+.tox
+*.py[cod]
+*.charm
+image-builder
+Dockerfile
+Makefile
