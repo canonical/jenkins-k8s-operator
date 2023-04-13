@@ -10,7 +10,7 @@ description: >
   of externally-run jobs. More information at http://jenkins-ci.org/.
 
   This charm provides the Jenkins server service, and when paired with the
-  jenkins agent provides an easy way to deploy Jenkin.
+  jenkins agent provides an easy way to deploy Jenkins.
 tags:
   - application_development
   - ops
