@@ -13,4 +13,3 @@ def pytest_addoption(parser: pytest.Parser):
         parser: pytest command line parser.
     """
     parser.addoption("--jenkins-image", action="store", default="")
-    parser.addoption("--series", action="store", default="")

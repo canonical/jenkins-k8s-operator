@@ -25,23 +25,15 @@ def jenkins_image_fixture(request: FixtureRequest) -> str:
     return request.config.getoption("--jenkins-image")
 
 
-@pytest.fixture(scope="module", name="series")
-def series_fixture(request: FixtureRequest) -> str:
-    """The OCI image for Jenkins charm."""
-    return request.config.getoption("--series")
-
-
 @pytest_asyncio.fixture(scope="module", name="application")
-async def application_fixture(
-    ops_test: OpsTest, model: Model, jenkins_image: str, series: str
-) -> Application:
+async def application_fixture(ops_test: OpsTest, model: Model, jenkins_image: str) -> Application:
     """Build and deploy the charm."""
     # Build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
     resources = {"jenkins-image": jenkins_image}
 
     # Deploy the charm and wait for active/idle status
-    application = await model.deploy(charm, resources=resources, series=series)
+    application = await model.deploy(charm, resources=resources)
     await model.wait_for_idle(
         apps=[application.name], status="active", raise_on_blocked=True, timeout=1000
     )
