@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+JENKINS_WEB_URL = "http://localhost:8080"
+
 
 class JenkinsK8SOperatorCharm(CharmBase):
     """Charm Jenkins."""
@@ -69,11 +71,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         Returns:
             True if Jenkins server is online. False otherwise.
         """
-        try:
-            requests.get("http://localhost:8080/login", timeout=10).raise_for_status()
-            return True
-        except requests.HTTPError:
-            return False
+        return requests.get(f"{JENKINS_WEB_URL}/login", timeout=10).ok
 
     def _wait_jenkins_ready(self, timeout: int = 140, check_interval: int = 10) -> None:
         """Wait until Jenkins service is up.
@@ -112,7 +110,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
             container: The Jenkins container.
         """
         credentials = self._get_admin_credentials(container)
-        client = Jenkins("http://localhost:8080", credentials.username, credentials.password)
+        client = Jenkins(JENKINS_WEB_URL, credentials.username, credentials.password)
         container.push(LAST_EXEC, client.version, encoding="utf-8", make_dirs=True)
         container.push(UPDATE_VERSION, client.version, encoding="utf-8", make_dirs=True)
 
