@@ -25,4 +25,4 @@ class MockedJenkinsClient:  # pylint: disable=too-few-public-methods
     @property
     def version(self) -> str:
         """Return the Jenkins version."""
-        return "2.387"
+        return "2.400"
