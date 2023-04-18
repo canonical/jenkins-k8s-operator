@@ -33,7 +33,7 @@ async def application_fixture(ops_test: OpsTest, model: Model, jenkins_image: st
     resources = {"jenkins-image": jenkins_image}
 
     # Deploy the charm and wait for active/idle status
-    application = await model.deploy(charm, resources=resources)
+    application = await model.deploy(charm, resources=resources, series="jammy")
     await model.wait_for_idle(
         apps=[application.name], status="active", raise_on_blocked=True, timeout=1000
     )
