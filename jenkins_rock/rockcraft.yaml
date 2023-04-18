@@ -1,4 +1,4 @@
-name: Jenkins
+name: jenkins
 summary: Jenkins rock
 description: Jenkins OCI image for the Jenkins charm
 version: "1.0"
