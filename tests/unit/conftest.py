@@ -14,8 +14,7 @@ import requests
 from ops.model import Container
 from ops.testing import Harness
 
-from charm import JenkinsK8SOperatorCharm
-from path import INITIAL_PASSWORD
+from charm import INITIAL_PASSWORD, JenkinsK8SOperatorCharm
 from types_ import Credentials
 
 from .helpers import make_relative_to_path

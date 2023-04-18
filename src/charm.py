@@ -17,7 +17,6 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.pebble import Layer
 
-from path import INITIAL_PASSWORD, JENKINS_HOME, LAST_EXEC, UPDATE_VERSION
 from types_ import Credentials
 
 if TYPE_CHECKING:

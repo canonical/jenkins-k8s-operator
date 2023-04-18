@@ -17,8 +17,7 @@ from ops.model import ActiveStatus, BlockedStatus, Container, StatusBase
 from ops.testing import Harness
 
 import charm as charm_src
-from charm import JenkinsK8SOperatorCharm
-from path import LAST_EXEC, UPDATE_VERSION
+from charm import LAST_EXEC, UPDATE_VERSION, JenkinsK8SOperatorCharm
 from types_ import Credentials
 
 from .helpers import make_relative_to_path
