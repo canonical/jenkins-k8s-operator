@@ -6,7 +6,7 @@
 import pytest
 import pytest_asyncio
 from juju.application import Application
-from juju.client._definitions import FullStatus, UnitStatus
+from juju.client._definitions import FullStatus
 from juju.model import Model
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest

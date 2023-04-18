@@ -8,7 +8,6 @@ from pathlib import Path
 
 import requests
 import yaml
-from juju.application import Application
 
 logger = logging.getLogger(__name__)
 
