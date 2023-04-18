@@ -6,6 +6,7 @@
 """Charm Jenkins."""
 
 import logging
+from pathlib import Path
 from time import sleep
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +26,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 JENKINS_WEB_URL = "http://localhost:8080"
+JENKINS_HOME = Path("/var/lib/jenkins")
+# Path to initial admin password file
+INITIAL_PASSWORD = JENKINS_HOME / Path("secrets/initialAdminPassword")
+# Path to last executed jenkins version file, required to override wizard installation
+LAST_EXEC = JENKINS_HOME / Path("jenkins.install.InstallUtil.lastExecVersion")
+# Path to jenkins version file, required to override wizard installation
+UPDATE_VERSION = JENKINS_HOME / Path("jenkins.install.UpgradeWizard.state")
 
 
 class JenkinsK8SOperatorCharm(CharmBase):
