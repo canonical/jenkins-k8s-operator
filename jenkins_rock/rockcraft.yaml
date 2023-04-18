@@ -5,16 +5,8 @@ version: "1.0"
 base: bare
 build-base: ubuntu:22.04
 license: Apache-2.0
-env:
-  - XDG_DATA_HOME: "/usr/share"
-  - FONTCONFIG_PATH: "/etc/fonts"
-  - JAVA_HOME: "/usr/lib/jvm/java-11-openjdk"
-  - LANG: C.UTF-8
-  - LC_ALL: C.UTF-8
-  - LC_LANG: C.UTF-8
 platforms:
   amd64:
-
 parts:
   add-user:
     plugin: nil
@@ -48,5 +40,3 @@ parts:
       VERSION=$(grep Jenkins-Version META-INF/MANIFEST.MF | cut -d' ' -f2 | tr -d '\r')
       rm -rf META-INF
       ln -s /usr/lib/jvm/java-11-openjdk-amd64/bin/java ${CRAFT_OVERLAY}/usr/bin/java
-
-cmd: [java, -Djava.awt.headless=true, -jar, /srv/jenkins/jenkins.war]
