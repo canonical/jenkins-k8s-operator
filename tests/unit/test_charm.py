@@ -17,7 +17,7 @@ from ops.model import ActiveStatus, BlockedStatus, Container, StatusBase
 from ops.testing import Harness
 
 import charm as charm_src
-import jenkins as jenkins_src
+import jenkins_ as jenkins_src
 from charm import LAST_EXEC, UPDATE_VERSION, JenkinsK8SOperatorCharm
 
 from .helpers import make_relative_to_path
@@ -41,7 +41,7 @@ def test__unlock_jenkins(
 
     charm._unlock_jenkins(mocked_container)
 
-    expected_version = MockedJenkinsClient().version
+    expected_version = MockedJenkinsClient().get_version()
     assert (
         make_relative_to_path(container_tmppath, LAST_EXEC).read_text(encoding="utf-8")
         == expected_version

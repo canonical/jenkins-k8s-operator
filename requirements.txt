@@ -1,2 +1,2 @@
 ops >=2,<3
-jenkinsapi>=0.3
+python-jenkins>=1.8

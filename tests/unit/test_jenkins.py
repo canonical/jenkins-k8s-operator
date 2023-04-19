@@ -13,7 +13,7 @@ from typing import Any, Callable
 import pytest
 import requests
 
-from jenkins import (
+from jenkins_ import (
     JENKINS_HOME,
     _is_jenkins_ready,
     calculate_env,

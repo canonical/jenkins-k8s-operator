@@ -7,11 +7,7 @@ from typing import Any
 
 
 class MockedJenkinsClient:  # pylint: disable=too-few-public-methods
-    """Mocked Jenkins Client.
-
-    Attributes:
-        version: The mocked Jenkins version string.
-    """
+    """Mocked Jenkins Client."""
 
     def __init__(self, *args: Any, **kwargs: Any):
         """Init function to match function signature required to instantiate the client.
@@ -22,7 +18,10 @@ class MockedJenkinsClient:  # pylint: disable=too-few-public-methods
         """
         del args, kwargs
 
-    @property
-    def version(self) -> str:
-        """Return the Jenkins version."""
+    def get_version(self) -> str:
+        """Return the Jenkins version.
+
+        Returns:
+            The Jenkins server version number.
+        """
         return "2.400"
