@@ -3,7 +3,7 @@
 
 """Types used by the Jenkins charm."""
 
-from typing import NamedTuple
+from typing import NamedTuple, TypedDict
 
 
 class Credentials(NamedTuple):
@@ -16,3 +16,16 @@ class Credentials(NamedTuple):
 
     username: str
     password: str
+
+
+class JenkinsEnvironmentMap(TypedDict, total=False):
+    """Dictionary mapping of Jenkins environment variables.
+
+    Attrs:
+        JENKINS_HOME: The Jenkins home directory.
+        ADMIN_CONFIGURED: Boolean string "true" or "false", representing whether the Jenkins admin
+            account has been configured.
+    """
+
+    JENKINS_HOME: str
+    ADMIN_CONFIGURED: str

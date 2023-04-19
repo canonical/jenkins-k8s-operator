@@ -17,87 +17,11 @@ from ops.model import ActiveStatus, BlockedStatus, Container, StatusBase
 from ops.testing import Harness
 
 import charm as charm_src
+import jenkins as jenkins_src
 from charm import LAST_EXEC, UPDATE_VERSION, JenkinsK8SOperatorCharm
-from types_ import Credentials
 
 from .helpers import make_relative_to_path
 from .jenkins_mock import MockedJenkinsClient
-
-
-@pytest.mark.parametrize(
-    "status_code, expected_ready",
-    [pytest.param(503, False, id="Service unavailable"), pytest.param(200, True, id="Success")],
-)
-def test__is_jenkins_ready(
-    monkeypatch: pytest.MonkeyPatch,
-    harness: Harness,
-    mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
-    status_code: int,
-    expected_ready: bool,
-):
-    """
-    arrange: given mocked requests that return a response with status_code.
-    act: send a request to Jenkins login page.
-    assert: return true if ready, false otherwise.
-    """
-    monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=status_code))
-    harness.begin()
-    charm = cast(JenkinsK8SOperatorCharm, harness.charm)
-
-    ready = charm._is_jenkins_ready()
-
-    assert ready == expected_ready
-
-
-def test__wait_jenkins_ready_timeout(
-    monkeypatch: pytest.MonkeyPatch,
-    harness: Harness,
-    mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
-):
-    """
-    arrange: given mocked requests that returns a 503 response.
-    act: wait for jenkins to become ready.
-    assert: a TimeoutError is raised.
-    """
-    monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=503))
-    harness.begin()
-    charm = cast(JenkinsK8SOperatorCharm, harness.charm)
-
-    with pytest.raises(TimeoutError):
-        charm._wait_jenkins_ready(1, 1)
-
-
-def test__wait_jenkins_ready(
-    monkeypatch: pytest.MonkeyPatch,
-    harness: Harness,
-    mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
-):
-    """
-    arrange: given mocked requests that returns a 200 response.
-    act: wait for jenkins to become ready.
-    assert: No exceptions are raised.
-    """
-    monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=200))
-    harness.begin()
-    charm = cast(JenkinsK8SOperatorCharm, harness.charm)
-
-    charm._wait_jenkins_ready(1, 1)
-
-
-def test__get_admin_credentials(
-    harness: Harness, mocked_container: Container, admin_credentials: Credentials
-):
-    """
-    arrange: given a mocked container that returns the admin password file content.
-    act: admin credentials are fetched over pebble.
-    assert: correct admin credentials from the filesystem are returned.
-    """
-    harness.begin()
-    charm = cast(JenkinsK8SOperatorCharm, harness.charm)
-
-    assert charm._get_admin_credentials(mocked_container) == Credentials(
-        username="admin", password=admin_credentials.password
-    )
 
 
 def test__unlock_jenkins(
@@ -167,9 +91,7 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     """
     monkeypatch.setattr(charm_src, "Jenkins", MockedJenkinsClient)
     # speed up waiting by changing default argument values
-    monkeypatch.setattr(
-        charm_src.JenkinsK8SOperatorCharm._wait_jenkins_ready, "__defaults__", (1, 1)
-    )
+    monkeypatch.setattr(jenkins_src.wait_jenkins_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=status_code))
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     harness.begin()
