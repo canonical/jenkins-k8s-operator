@@ -3,6 +3,7 @@
 
 """Functions to operate Jenkins."""
 
+from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
 from typing import cast
@@ -34,12 +35,15 @@ def wait_jenkins_ready(timeout: int = 140, check_interval: int = 10) -> None:
     Raises:
         TimeoutError: if Jenkins status check did not pass within the timeout duration.
     """
-    for _ in range(timeout // check_interval):
+    start_time = datetime.now()
+    min_wait_seconds = timedelta(seconds=timeout)
+    while True:
         if _is_jenkins_ready():
             break
+        now = datetime.now()
+        if now - start_time > min_wait_seconds:
+            raise TimeoutError("Timed out waiting for Jenkins to become ready.")
         sleep(check_interval)
-    else:
-        raise TimeoutError("Timed out waiting for Jenkins to become ready.")
 
 
 def get_admin_credentials(password_file_contents: str) -> Credentials:
