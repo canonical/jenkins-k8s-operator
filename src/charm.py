@@ -9,19 +9,12 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from jenkins import Jenkins
 from ops.charm import CharmBase, PebbleReadyEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.pebble import Layer
 
-from jenkins_ import (
-    JENKINS_HOME,
-    JENKINS_WEB_URL,
-    calculate_env,
-    get_admin_credentials,
-    wait_jenkins_ready,
-)
+from jenkins_ import JENKINS_HOME, calculate_env, get_version, wait_jenkins_ready
 
 if TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
@@ -55,12 +48,9 @@ class JenkinsK8SOperatorCharm(CharmBase):
         Args:
             container: The Jenkins container.
         """
-        credentials = get_admin_credentials(
-            str(container.pull(INITIAL_PASSWORD, encoding="utf-8").read())
-        )
-        client = Jenkins(JENKINS_WEB_URL, credentials.username, credentials.password)
-        container.push(LAST_EXEC, client.get_version(), encoding="utf-8", make_dirs=True)
-        container.push(UPDATE_VERSION, client.get_version(), encoding="utf-8", make_dirs=True)
+        version = get_version()
+        container.push(LAST_EXEC, version, encoding="utf-8", make_dirs=True)
+        container.push(UPDATE_VERSION, version, encoding="utf-8", make_dirs=True)
 
     def _get_pebble_layer(self, env: dict[str, str]) -> Layer:
         """Return a dictionary representing a Pebble layer.

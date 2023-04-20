@@ -18,6 +18,7 @@ from jenkins_ import (
     _is_jenkins_ready,
     calculate_env,
     get_admin_credentials,
+    get_version,
     wait_jenkins_ready,
 )
 from types_ import Credentials, JenkinsEnvironmentMap
@@ -124,3 +125,18 @@ def test_calculate_env(admin_configured: bool, expected_map: JenkinsEnvironmentM
     env = calculate_env(admin_configured=admin_configured)
 
     assert env == expected_map
+
+
+def test_get_version(
+    monkeypatch: pytest.MonkeyPatch,
+    mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
+    jenkins_version: str,
+):
+    """
+    arrange: given a monkeypatched request that returns Jenkins version in headers.
+    act: when a request is sent to Jenkins server.
+    assert: The Jenkins server version is returned.
+    """
+    monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=200))
+
+    assert get_version() == jenkins_version

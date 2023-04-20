@@ -18,6 +18,7 @@ from charm import INITIAL_PASSWORD, JenkinsK8SOperatorCharm
 from types_ import Credentials
 
 from .helpers import make_relative_to_path
+from .types_ import ContainerWithPath
 
 
 @pytest.fixture(scope="function", name="harness")
@@ -28,8 +29,14 @@ def harness_fixture():
     harness.cleanup()
 
 
+@pytest.fixture(scope="function", name="jenkins_version")
+def jenkins_version_fixture():
+    """Jenkins version fixture."""
+    return "2.400"
+
+
 @pytest.fixture(scope="function", name="mocked_get_request")
-def mocked_get_request_fixture():
+def mocked_get_request_fixture(jenkins_version: str):
     """Mock get request with given status code."""
 
     def mocked_get(url: str, status_code: int = 200, **kwargs: Any):
@@ -46,6 +53,7 @@ def mocked_get_request_fixture():
         del url, kwargs
         response = requests.Response()
         response.status_code = status_code
+        response.headers["X-Jenkins"] = jenkins_version
         return response
 
     return mocked_get
@@ -124,3 +132,17 @@ def mocked_container_fixture(
     mocked_container.push = mocked_container_push
 
     return mocked_container
+
+
+@pytest.fixture(scope="function", name="container_with_path")
+def container_with_path_fixture(mocked_container: Container, container_tmppath: Path):
+    """Mocked Jenkins container with it's file system path.
+
+    This is used to package the mocked_container and container_tmppath together to reduce number
+    of arguments.
+
+    Args:
+        mocked_container: The mocked Jenkins container.
+        container_tmppath: The mocked temporary filesystem of given container.
+    """
+    return ContainerWithPath(container=mocked_container, path=container_tmppath)

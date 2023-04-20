@@ -6,7 +6,6 @@
 # pylint:disable=protected-access
 
 from functools import partial
-from pathlib import Path
 from typing import Any, Callable, cast
 from unittest.mock import MagicMock
 
@@ -16,39 +15,38 @@ from ops.charm import PebbleReadyEvent
 from ops.model import ActiveStatus, BlockedStatus, Container, StatusBase
 from ops.testing import Harness
 
-import charm as charm_src
 import jenkins_ as jenkins_src
 from charm import LAST_EXEC, UPDATE_VERSION, JenkinsK8SOperatorCharm
 
 from .helpers import make_relative_to_path
-from .jenkins_mock import MockedJenkinsClient
+from .types_ import ContainerWithPath
 
 
 def test__unlock_jenkins(
     harness: Harness,
-    mocked_container: Container,
-    container_tmppath: Path,
+    container_with_path: ContainerWithPath,
+    mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
+    jenkins_version: str,
 ):
     """
     arrange: given a mocked container and a monkeypatched Jenkins client.
     act: _unlock_jenkins is called.
     assert: files necessary to unlock Jenkins are written.
     """
-    monkeypatch.setattr(charm_src, "Jenkins", MockedJenkinsClient)
+    monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=403))
     harness.begin()
     charm = cast(JenkinsK8SOperatorCharm, harness.charm)
 
-    charm._unlock_jenkins(mocked_container)
+    charm._unlock_jenkins(container_with_path.container)
 
-    expected_version = MockedJenkinsClient().get_version()
     assert (
-        make_relative_to_path(container_tmppath, LAST_EXEC).read_text(encoding="utf-8")
-        == expected_version
+        make_relative_to_path(container_with_path.path, LAST_EXEC).read_text(encoding="utf-8")
+        == jenkins_version
     )
     assert (
-        make_relative_to_path(container_tmppath, UPDATE_VERSION).read_text(encoding="utf-8")
-        == expected_version
+        make_relative_to_path(container_with_path.path, UPDATE_VERSION).read_text(encoding="utf-8")
+        == jenkins_version
     )
 
 
@@ -89,7 +87,6 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     act: when the Jenkins pebble ready event is fired.
     assert: the unit status should show expected status.
     """
-    monkeypatch.setattr(charm_src, "Jenkins", MockedJenkinsClient)
     # speed up waiting by changing default argument values
     monkeypatch.setattr(jenkins_src.wait_jenkins_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=status_code))

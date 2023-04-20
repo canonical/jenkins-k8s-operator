@@ -73,3 +73,12 @@ def calculate_env(admin_configured: bool) -> dict[str, str]:
     env["ADMIN_CONFIGURED"] = str(admin_configured)
     # Mypy type doesn't recognize TypedDict to be compatible with dict.
     return cast(dict[str, str], env)
+
+
+def get_version() -> str:
+    """Get the Jenkins server version.
+
+    Returns:
+        The Jenkins server version.
+    """
+    return requests.get(JENKINS_WEB_URL, timeout=10).headers["X-Jenkins"]
