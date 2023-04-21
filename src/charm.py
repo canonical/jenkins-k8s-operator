@@ -14,7 +14,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.pebble import Layer
 
-from jenkins_ import JENKINS_HOME, calculate_env, get_version, wait_jenkins_ready
+from jenkins import JENKINS_HOME, calculate_env, get_version, wait_jenkins_ready
 
 if TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
