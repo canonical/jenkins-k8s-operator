@@ -1,4 +1,6 @@
 name: jenkins-k8s-operator
+assumes:
+  - k8s-api
 display-name: Jenkins K8s
 summary: Jenkins Continuous Integration Server
 maintainers:
