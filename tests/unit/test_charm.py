@@ -15,7 +15,7 @@ from ops.charm import PebbleReadyEvent
 from ops.model import ActiveStatus, BlockedStatus, Container, StatusBase
 from ops.testing import Harness
 
-import jenkins_ as jenkins_src
+import jenkins as jenkins_src
 from charm import LAST_EXEC, UPDATE_VERSION, JenkinsK8SOperatorCharm
 
 from .helpers import make_relative_to_path

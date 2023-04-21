@@ -13,7 +13,7 @@ from typing import Any, Callable
 import pytest
 import requests
 
-from jenkins_ import (
+from jenkins import (
     JENKINS_HOME,
     _is_jenkins_ready,
     calculate_env,
@@ -22,6 +22,21 @@ from jenkins_ import (
     wait_jenkins_ready,
 )
 from types_ import Credentials, JenkinsEnvironmentMap
+
+from .helpers import ConnectionExceptionPatch
+
+
+def test__is_jenkins_ready_connection_exception(monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given mocked requests that raises a connection exception.
+    act: send a request to Jenkins login page.
+    assert: return false, denoting Jenkins is not ready.
+    """
+    monkeypatch.setattr(requests, "get", ConnectionExceptionPatch)
+
+    ready = _is_jenkins_ready()
+
+    assert not ready
 
 
 @pytest.mark.parametrize(

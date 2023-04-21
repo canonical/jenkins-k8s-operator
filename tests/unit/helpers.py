@@ -5,6 +5,8 @@
 
 from pathlib import Path
 
+import requests
+
 
 def make_relative_to_path(tmp_path: Path, root_path: Path) -> Path:
     """Make a root path (/path/from/root) relative to tmp_path.
@@ -22,3 +24,20 @@ def make_relative_to_path(tmp_path: Path, root_path: Path) -> Path:
     if str(root_path).startswith("/"):
         root_path = Path(str(root_path).replace("/", "", 1))
     return tmp_path / root_path
+
+
+class ConnectionExceptionPatch:  # pylint: disable=too-few-public-methods
+    """Class to raise ConnectionError exception."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        """Placeholder init function to match function signatures.
+
+        Args:
+            args: Placeholder args.
+            kwargs: Placeholder kwargs.
+
+        Raises:
+            ConnectionError: To mock connection error.
+        """
+        del args, kwargs
+        raise requests.ConnectionError
