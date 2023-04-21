@@ -22,7 +22,9 @@ def model_fixture(ops_test: OpsTest) -> Model:
 @pytest.fixture(scope="module", name="jenkins_image")
 def jenkins_image_fixture(request: FixtureRequest) -> str:
     """The OCI image for Jenkins charm."""
-    return request.config.getoption("--jenkins-image")
+    jenkins_image = request.config.getoption("--jenkins-image")
+    assert jenkins_image, "--jenkins-image argument was not provided."
+    return jenkins_image
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
