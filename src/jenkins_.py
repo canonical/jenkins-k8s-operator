@@ -22,7 +22,10 @@ def _is_jenkins_ready() -> bool:
     Returns:
         True if Jenkins server is online. False otherwise.
     """
-    return requests.get(f"{JENKINS_WEB_URL}/login", timeout=10).ok
+    try:
+        return requests.get(f"{JENKINS_WEB_URL}/login", timeout=10).ok
+    except requests.exceptions.ConnectionError:
+        return False
 
 
 def wait_jenkins_ready(timeout: int = 140, check_interval: int = 10) -> None:
