@@ -1,7 +1,5 @@
 # jenkins-k8s-operator
 
-**This is a WIP project.**
-
 A [Juju](https://juju.is/) [charm](https://juju.is/docs/olm/charmed-operators)
 deploying and managing [Jenkins](https://jenkins.io/) on Kubernetes. Jenkins is an open source
 automation server, providing plugins to support building, deploying and automating any project.
