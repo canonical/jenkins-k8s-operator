@@ -2,41 +2,42 @@ name: jenkins
 summary: Jenkins rock
 description: Jenkins OCI image for the Jenkins charm
 version: "1.0"
-base: bare
+base: ubuntu:22.04
 build-base: ubuntu:22.04
 license: Apache-2.0
 platforms:
   amd64:
+services:
+  jenkins:
+    override: replace
+    summary: The Jenkins server.
+    command: java -Djava.awt.headless=true -jar /srv/jenkins/jenkins.war
+    startup: enabled
 parts:
   add-user:
     plugin: nil
     overlay-script: |
-      mkdir $CRAFT_OVERLAY/etc
-      chmod 755 $CRAFT_OVERLAY/etc
       groupadd -R $CRAFT_OVERLAY --gid 2000 jenkins
       useradd -R $CRAFT_OVERLAY --system --gid 2000 --uid 2000 --home /srv/jenkins jenkins
   jenkins:
     plugin: nil
-    stage-packages:
-      - bash
-      - ca-certificates-java
-      - fonts-dejavu-core
-      - libfontconfig1
-      - openjdk-11-jre-headless
     build-packages:
       - ca-certificates-java
       - curl
       - libnss3
       - unzip
-    overlay-script: |
-      mkdir -p $CRAFT_OVERLAY/srv/jenkins
-      mkdir -p $CRAFT_OVERLAY/etc/default/jenkins
-      mkdir -p $CRAFT_OVERLAY/usr/bin/
-      chown 2000:2000 $CRAFT_OVERLAY/srv/jenkins
+    overlay-packages:
+      - bash
+      - ca-certificates-java
+      - fonts-dejavu-core
+      - libfontconfig1
+      - openjdk-11-jre-headless
+    override-build: |
+      mkdir -p ${CRAFT_PART_INSTALL}/{srv/jenkins/,etc/default/jenkins/}
+      chown 2000:2000 ${CRAFT_PART_INSTALL}/srv/jenkins
       # Use jenkins war rather than apt install for easier Jenkins version control.
-      cd $CRAFT_OVERLAY/srv/jenkins
+      cd ${CRAFT_PART_INSTALL}/srv/jenkins
       curl -sLO https://mirrors.jenkins.io/war/2.400/jenkins.war
       unzip jenkins.war META-INF/MANIFEST.MF
       VERSION=$(grep Jenkins-Version META-INF/MANIFEST.MF | cut -d' ' -f2 | tr -d '\r')
       rm -rf META-INF
-      ln -s /usr/lib/jvm/java-11-openjdk-amd64/bin/java ${CRAFT_OVERLAY}/usr/bin/java
