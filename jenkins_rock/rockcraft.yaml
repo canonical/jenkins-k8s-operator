@@ -12,7 +12,7 @@ platforms:
   amd64:
 services:
   jenkins:
-    override: replace
+    override: merge
     summary: The Jenkins server.
     command: java -Djava.awt.headless=true -jar /srv/jenkins/jenkins.war
     startup: enabled
