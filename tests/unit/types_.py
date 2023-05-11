@@ -3,19 +3,19 @@
 
 """Types used for unit testing Jenkins."""
 
-from pathlib import Path
 from typing import NamedTuple
 
 from ops.model import Container
+from ops.testing import Harness
 
 
-class ContainerWithPath(NamedTuple):
+class HarnessWithContainer(NamedTuple):
     """Charm container with temp path to mock container filesystem.
 
     Attrs:
-        container: The mocked charm container.
-        path: The mocked container filesystem path.
+        harness: The ops testing Harness.
+        container: Connectable jenkins harness container.
     """
 
+    harness: Harness
     container: Container
-    path: Path

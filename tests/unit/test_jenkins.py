@@ -12,7 +12,6 @@ from typing import Any, Callable
 
 import pytest
 import requests
-from ops.model import Container
 
 from jenkins import (
     JENKINS_HOME_PATH,
@@ -27,8 +26,8 @@ from jenkins import (
 )
 from types_ import Credentials
 
-from .helpers import ConnectionExceptionPatch, make_relative_to_path
-from .types_ import ContainerWithPath
+from .helpers import ConnectionExceptionPatch
+from .types_ import HarnessWithContainer
 
 
 def test__is_jenkins_ready_connection_exception(monkeypatch: pytest.MonkeyPatch):
@@ -126,13 +125,15 @@ def test_wait_jenkins_ready(
     wait_jenkins_ready(1, 1)
 
 
-def test_get_admin_credentials(mocked_container: Container, admin_credentials: Credentials):
+def test_get_admin_credentials(
+    harness_container: HarnessWithContainer, admin_credentials: Credentials
+):
     """
     arrange: given a mocked container that returns the admin password file content.
     act: admin credentials are fetched over pebble.
     assert: correct admin credentials from the filesystem are returned.
     """
-    assert get_admin_credentials(mocked_container) == admin_credentials
+    assert get_admin_credentials(harness_container.container) == admin_credentials
 
 
 @pytest.mark.parametrize(
@@ -178,7 +179,7 @@ def test_get_version(
 
 
 def test_unlock_jenkins(
-    container_with_path: ContainerWithPath,
+    harness_container: HarnessWithContainer,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
     jenkins_version: str,
@@ -190,17 +191,13 @@ def test_unlock_jenkins(
     """
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=403))
 
-    unlock_jenkins(container_with_path.container)
+    unlock_jenkins(harness_container.container)
 
     assert (
-        make_relative_to_path(container_with_path.path, LAST_EXEC_VERSION_PATH).read_text(
-            encoding="utf-8"
-        )
+        harness_container.container.pull(LAST_EXEC_VERSION_PATH, encoding="utf-8").read()
         == jenkins_version
     )
     assert (
-        make_relative_to_path(container_with_path.path, WIZARD_VERSION_PATH).read_text(
-            encoding="utf-8"
-        )
+        harness_container.container.pull(WIZARD_VERSION_PATH, encoding="utf-8").read()
         == jenkins_version
     )

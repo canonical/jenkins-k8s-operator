@@ -13,11 +13,13 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 from ops.charm import PebbleReadyEvent
-from ops.model import ActiveStatus, BlockedStatus, Container, StatusBase
+from ops.model import ActiveStatus, BlockedStatus, StatusBase
 from ops.testing import Harness
 
 import jenkins as jenkins_src
 from charm import JenkinsK8SOperatorCharm
+
+from .types_ import HarnessWithContainer
 
 
 def test__on_jenkins_pebble_ready_no_container(harness: Harness):
@@ -46,8 +48,7 @@ def test__on_jenkins_pebble_ready_no_container(harness: Harness):
 )
 # there are too many dependent fixtures that cannot be merged.
 def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
-    harness: Harness,
-    mocked_container: Container,
+    harness_container: HarnessWithContainer,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
     status_code: int,
@@ -61,14 +62,13 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     # speed up waiting by changing default argument values
     monkeypatch.setattr(jenkins_src.wait_jenkins_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=status_code))
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    harness.begin()
-    charm = cast(JenkinsK8SOperatorCharm, harness.charm)
+    harness_container.harness.begin()
+    charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
     mock_event = MagicMock(spec=PebbleReadyEvent)
-    mock_event.workload = mocked_container
+    mock_event.workload = harness_container.container
 
     charm._on_jenkins_pebble_ready(mock_event)
 
     assert (
-        harness.model.unit.status.name == expected_status.name
+        harness_container.harness.model.unit.status.name == expected_status.name
     ), f"unit should be in {expected_status}"
