@@ -36,7 +36,7 @@ parts:
       - libfontconfig1
       - default-jre-headless
     build-environment:
-      - JENKINS_VERSION: 2.403
+      JENKINS_VERSION: 2.403
     override-build: |
       mkdir -p ${CRAFT_PART_INSTALL}/{srv/jenkins/,etc/default/jenkins/}
       chown 2000:2000 ${CRAFT_PART_INSTALL}/srv/jenkins
