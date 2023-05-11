@@ -49,12 +49,10 @@ async def application_fixture(ops_test: OpsTest, model: Model, jenkins_image: st
 async def unit_ip_fixture(model: Model, application: Application):
     """Get Jenkins charm unit IP."""
     status: FullStatus = await model.get_status([application.name])
-    try:
-        unit_status: UnitStatus = next(status.applications[application.name].units.values())
-        assert unit_status.address, "Invalid unit address"
-        return unit_status.address
-    except StopIteration as exc:
-        raise StopIteration("Invalid unit status") from exc
+    for unit in status.applications[application.name].units.values():
+        assert unit, "Invalid unit status."
+        assert unit.address, "Unit does not have an assigned IP."
+        return str(unit.address)
 
 
 @pytest_asyncio.fixture(scope="module", name="web_address")
