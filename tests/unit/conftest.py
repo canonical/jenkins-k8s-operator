@@ -43,18 +43,15 @@ def jenkins_version_fixture():
 def mocked_get_request_fixture(jenkins_version: str):
     """Mock get request with given status code."""
 
-    def mocked_get(url: str, status_code: int = 200, **kwargs: Any):
+    def mocked_get(_: str, status_code: int = 200, **__: Any):
         """Mock get request with predefined status code.
 
         Args:
-            url: URL placeholder parameter to match original function signature.
             status_code: Status code of the returned response.
-            kwargs: Other keyword arguments to match function signature.
 
         Returns:
             Mocked response.
         """
-        del url, kwargs
         response = requests.Response()
         response.status_code = status_code
         response.headers["X-Jenkins"] = jenkins_version
@@ -113,7 +110,7 @@ def mocked_container_fixture(
         source: Union[bytes, str, BinaryIO, TextIO],
         *,
         encoding: str = "utf-8",
-        **kwargs,
+        **_,
     ) -> None:
         """Mocked container push function.
 
@@ -121,9 +118,7 @@ def mocked_container_fixture(
             path: Path to push the files to.
             source: Content to write to given path.
             encoding: Encoding of the given source content.
-            kwargs: Other keyword arguments to match function signature.
         """
-        del kwargs
         # if the path is an absolute path starting at root / directory, we must make it relative
         # path, otherwise the overloaded path append operator (/) doesn't work.
         path = make_relative_to_path(container_tmppath, path)

@@ -26,15 +26,12 @@ def make_relative_to_path(tmp_path: Path, root_path: Path) -> Path:
     return tmp_path / root_path
 
 
+# There aren't enough public methods with this patch class.
 class ConnectionExceptionPatch:  # pylint: disable=too-few-public-methods
     """Class to raise ConnectionError exception."""
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *_, **__) -> None:
         """Placeholder init function to match function signatures.
-
-        Args:
-            args: Placeholder args.
-            kwargs: Placeholder kwargs.
 
         Raises:
             ConnectionError: To mock connection error.
