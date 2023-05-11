@@ -36,7 +36,7 @@ def harness_fixture():
 @pytest.fixture(scope="function", name="jenkins_version")
 def jenkins_version_fixture():
     """Jenkins version fixture."""
-    return str(ROCKCRAFT_YAML["parts"]["jenkins"]["build-environment"]["JENKINS_VERSION"])
+    return str(ROCKCRAFT_YAML["parts"]["jenkins"]["build-environment"][0])
 
 
 @pytest.fixture(scope="function", name="mocked_get_request")
