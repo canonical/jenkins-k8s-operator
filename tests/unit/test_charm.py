@@ -16,13 +16,14 @@ from ops.model import ActiveStatus, BlockedStatus, Container, StatusBase
 from ops.testing import Harness
 
 import jenkins as jenkins_src
-from charm import LAST_EXEC, UPDATE_VERSION, JenkinsK8SOperatorCharm
+from charm import JenkinsK8SOperatorCharm
+from jenkins import LAST_EXEC, UPDATE_VERSION, unlock_jenkins
 
 from .helpers import make_relative_to_path
 from .types_ import ContainerWithPath
 
 
-def test__unlock_jenkins(
+def test_unlock_jenkins(
     harness: Harness,
     container_with_path: ContainerWithPath,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
@@ -31,14 +32,13 @@ def test__unlock_jenkins(
 ):
     """
     arrange: given a mocked container and a monkeypatched Jenkins client.
-    act: _unlock_jenkins is called.
+    act: unlock_jenkins is called.
     assert: files necessary to unlock Jenkins are written.
     """
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=403))
     harness.begin()
-    charm = cast(JenkinsK8SOperatorCharm, harness.charm)
 
-    charm._unlock_jenkins(container_with_path.container)
+    unlock_jenkins(container_with_path.container)
 
     assert (
         make_relative_to_path(container_with_path.path, LAST_EXEC).read_text(encoding="utf-8")

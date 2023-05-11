@@ -7,14 +7,14 @@
 
 
 from functools import partial
-from secrets import token_hex
 from typing import Any, Callable
 
 import pytest
 import requests
+from ops.model import Container
 
 from jenkins import (
-    JENKINS_HOME,
+    JENKINS_HOME_PATH,
     _is_jenkins_ready,
     calculate_env,
     get_admin_credentials,
@@ -90,30 +90,13 @@ def test_wait_jenkins_ready(
     wait_jenkins_ready(1, 1)
 
 
-# Pylint diesn't understand how the walrus operator works
-# pylint: disable=undefined-variable,unused-variable
-@pytest.mark.parametrize(
-    "init_password_file_content, expected_credentials",
-    [
-        pytest.param(
-            password_content := token_hex(),
-            Credentials(username="admin", password=password_content),
-            id="random password",
-        ),
-        pytest.param(
-            f"{(password_content:=token_hex())}\n",
-            Credentials(username="admin", password=password_content),
-            id="random password with newline",
-        ),
-    ],
-)
-def test_get_admin_credentials(init_password_file_content: str, expected_credentials: Credentials):
+def test_get_admin_credentials(mocked_container: Container, admin_credentials: Credentials):
     """
     arrange: given a mocked container that returns the admin password file content.
     act: admin credentials are fetched over pebble.
     assert: correct admin credentials from the filesystem are returned.
     """
-    assert get_admin_credentials(init_password_file_content) == expected_credentials
+    assert get_admin_credentials(mocked_container) == admin_credentials
 
 
 @pytest.mark.parametrize(
@@ -121,12 +104,12 @@ def test_get_admin_credentials(init_password_file_content: str, expected_credent
     [
         pytest.param(
             False,
-            {"JENKINS_HOME": str(JENKINS_HOME), "ADMIN_CONFIGURED": "False"},
+            {"JENKINS_HOME": str(JENKINS_HOME_PATH), "ADMIN_CONFIGURED": "False"},
             id="Admin not configured",
         ),
         pytest.param(
             True,
-            {"JENKINS_HOME": str(JENKINS_HOME), "ADMIN_CONFIGURED": "True"},
+            {"JENKINS_HOME": str(JENKINS_HOME_PATH), "ADMIN_CONFIGURED": "True"},
             id="Admin configured",
         ),
     ],

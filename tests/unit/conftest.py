@@ -14,7 +14,8 @@ import requests
 from ops.model import Container
 from ops.testing import Harness
 
-from charm import INITIAL_PASSWORD, JenkinsK8SOperatorCharm
+from charm import JenkinsK8SOperatorCharm
+from jenkins import JENKINS_PASSWORD_FILE_PATH
 from types_ import Credentials
 
 from .helpers import make_relative_to_path
@@ -70,7 +71,7 @@ def container_tmppath_fixture(tmp_path: Path, admin_credentials: Credentials) ->
     """Temporary directory structure for Jenkins container."""
     # if the path is an absolute path starting at root / directory, we must make it relative
     # path, otherwise the overloaded path append operator (/) doesn't work.
-    initial_password_path = make_relative_to_path(tmp_path, INITIAL_PASSWORD)
+    initial_password_path = make_relative_to_path(tmp_path, JENKINS_PASSWORD_FILE_PATH)
     initial_password_path.parent.mkdir(exist_ok=True, parents=True)
     initial_password_path.write_text(admin_credentials.password, encoding="utf-8", newline="\n")
     return tmp_path

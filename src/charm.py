@@ -6,28 +6,21 @@
 """Charm Jenkins."""
 
 import logging
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict, cast
 
 from ops.charm import CharmBase, PebbleReadyEvent
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.pebble import Layer
 
-from jenkins import JENKINS_HOME, calculate_env, get_version, wait_jenkins_ready
+from jenkins import JENKINS_WEB_URL, calculate_env, unlock_jenkins, wait_jenkins_ready
+from types_ import JenkinsEnvironmentMap
 
 if TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
 
 
 logger = logging.getLogger(__name__)
-
-# Path to initial admin password file
-INITIAL_PASSWORD = JENKINS_HOME / Path("secrets/initialAdminPassword")
-# Path to last executed jenkins version file, required to override wizard installation
-LAST_EXEC = JENKINS_HOME / Path("jenkins.install.InstallUtil.lastExecVersion")
-# Path to jenkins version file, required to override wizard installation
-UPDATE_VERSION = JENKINS_HOME / Path("jenkins.install.UpgradeWizard.state")
 
 
 class JenkinsK8SOperatorCharm(CharmBase):
@@ -42,21 +35,11 @@ class JenkinsK8SOperatorCharm(CharmBase):
         super().__init__(*args)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
 
-    def _unlock_jenkins(self, container: Container) -> None:
-        """Write to executed version and updated version file to bypass Jenkins setup wizard.
-
-        Args:
-            container: The Jenkins container.
-        """
-        version = get_version()
-        container.push(LAST_EXEC, version, encoding="utf-8", make_dirs=True)
-        container.push(UPDATE_VERSION, version, encoding="utf-8", make_dirs=True)
-
-    def _get_pebble_layer(self, env: dict[str, str]) -> Layer:
+    def _get_pebble_layer(self, jenkins_env: JenkinsEnvironmentMap) -> Layer:
         """Return a dictionary representing a Pebble layer.
 
         Args:
-            env: Map of Jenkins environment variables.
+            jenkins_env: Map of Jenkins environment variables.
 
         Returns:
             The pebble layer defining Jenkins service layer.
@@ -70,7 +53,17 @@ class JenkinsK8SOperatorCharm(CharmBase):
                     "summary": "jenkins",
                     "command": "java -Djava.awt.headless=true -jar /srv/jenkins/jenkins.war",
                     "startup": "enabled",
-                    "environment": env,
+                    # TypedDict and Dict[str,str] are not compatible.
+                    "environment": cast(Dict[str, str], jenkins_env),
+                },
+            },
+            "checks": {
+                "online": {
+                    "override": "replace",
+                    "level": "ready",
+                    "http": {"url": JENKINS_WEB_URL},
+                    "period": "30s",
+                    "threshold": 5,
                 }
             },
         }
@@ -94,7 +87,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         container.replan()
         try:
             wait_jenkins_ready()
-            self._unlock_jenkins(container)
+            unlock_jenkins(container)
             # add environment variable to trigger replan
             container.add_layer(
                 "jenkins",
