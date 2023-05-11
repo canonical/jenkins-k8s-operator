@@ -1,3 +1,2 @@
 .tox
-*.py[cod]
 *.charm
