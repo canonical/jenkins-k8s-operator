@@ -44,8 +44,7 @@ def wait_jenkins_ready(timeout: int = 140, check_interval: int = 10) -> None:
     Raises:
         TimeoutError: if Jenkins status check did not pass within the timeout duration.
     """
-    start_time = datetime.now()
-    now = datetime.now()
+    start_time = now = datetime.now()
     min_wait_seconds = timedelta(seconds=timeout)
     while now - start_time < min_wait_seconds:
         if _is_jenkins_ready():
@@ -53,6 +52,8 @@ def wait_jenkins_ready(timeout: int = 140, check_interval: int = 10) -> None:
         now = datetime.now()
         sleep(check_interval)
     else:
+        if _is_jenkins_ready():
+            return
         raise TimeoutError("Timed out waiting for Jenkins to become ready.")
 
 
