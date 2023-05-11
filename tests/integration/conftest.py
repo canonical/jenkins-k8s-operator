@@ -23,7 +23,8 @@ def model_fixture(ops_test: OpsTest) -> Model:
 def jenkins_image_fixture(request: FixtureRequest) -> str:
     """The OCI image for Jenkins charm."""
     jenkins_image = request.config.getoption("--jenkins-image")
-    assert jenkins_image, "--jenkins-image argument was not provided."
+        jenkins_image
+    ), "--jenkins-image argument is required which should contain the name of the OCI image."
     return jenkins_image
 
 
