@@ -67,7 +67,9 @@ def get_admin_credentials(connectable_container: Container) -> Credentials:
         The Jenkins admin account credentials.
     """
     user = "admin"
-    password_file_contents = str(connectable_container.pull(JENKINS_PASSWORD_FILE_PATH).read())
+    password_file_contents = str(
+        connectable_container.pull(JENKINS_PASSWORD_FILE_PATH, encoding="utf-8").read()
+    )
     return Credentials(username=user, password=password_file_contents.strip())
 
 
