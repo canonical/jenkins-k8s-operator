@@ -34,7 +34,7 @@ parts:
       - ca-certificates-java
       - fonts-dejavu-core
       - libfontconfig1
-      - openjdk-11-jre-headless
+      - default-jre-headless
     override-build: |
       mkdir -p ${CRAFT_PART_INSTALL}/{srv/jenkins/,etc/default/jenkins/}
       chown 2000:2000 ${CRAFT_PART_INSTALL}/srv/jenkins
