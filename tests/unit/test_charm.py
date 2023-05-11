@@ -3,6 +3,7 @@
 
 """Jenkins-k8s charm unit tests."""
 
+# Need access to protected functions for testing
 # pylint:disable=protected-access
 
 from functools import partial
@@ -17,37 +18,6 @@ from ops.testing import Harness
 
 import jenkins as jenkins_src
 from charm import JenkinsK8SOperatorCharm
-from jenkins import LAST_EXEC, UPDATE_VERSION, unlock_jenkins
-
-from .helpers import make_relative_to_path
-from .types_ import ContainerWithPath
-
-
-def test_unlock_jenkins(
-    harness: Harness,
-    container_with_path: ContainerWithPath,
-    mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
-    monkeypatch: pytest.MonkeyPatch,
-    jenkins_version: str,
-):
-    """
-    arrange: given a mocked container and a monkeypatched Jenkins client.
-    act: unlock_jenkins is called.
-    assert: files necessary to unlock Jenkins are written.
-    """
-    monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=403))
-    harness.begin()
-
-    unlock_jenkins(container_with_path.container)
-
-    assert (
-        make_relative_to_path(container_with_path.path, LAST_EXEC).read_text(encoding="utf-8")
-        == jenkins_version
-    )
-    assert (
-        make_relative_to_path(container_with_path.path, UPDATE_VERSION).read_text(encoding="utf-8")
-        == jenkins_version
-    )
 
 
 def test__on_jenkins_pebble_ready_no_container(harness: Harness):
@@ -74,6 +44,7 @@ def test__on_jenkins_pebble_ready_no_container(harness: Harness):
         pytest.param(200, ActiveStatus, id="jenkins ready"),
     ],
 )
+# there are too many dependent fixtures that cannot be merged.
 def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     harness: Harness,
     mocked_container: Container,

@@ -6,7 +6,7 @@
 import pytest
 import pytest_asyncio
 from juju.application import Application
-from juju.client._definitions import FullStatus
+from juju.client._definitions import FullStatus, UnitStatus
 from juju.model import Model
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
@@ -23,6 +23,7 @@ def model_fixture(ops_test: OpsTest) -> Model:
 def jenkins_image_fixture(request: FixtureRequest) -> str:
     """The OCI image for Jenkins charm."""
     jenkins_image = request.config.getoption("--jenkins-image")
+    assert (
         jenkins_image
     ), "--jenkins-image argument is required which should contain the name of the OCI image."
     return jenkins_image
@@ -38,7 +39,7 @@ async def application_fixture(ops_test: OpsTest, model: Model, jenkins_image: st
     # Deploy the charm and wait for active/idle status
     application = await model.deploy(charm, resources=resources, series="jammy")
     await model.wait_for_idle(
-        apps=[application.name], status="active", raise_on_blocked=True, timeout=1000
+        apps=[application.name], status="active", raise_on_blocked=True, timeout=100
     )
 
     return application
@@ -48,10 +49,12 @@ async def application_fixture(ops_test: OpsTest, model: Model, jenkins_image: st
 async def unit_ip_fixture(model: Model, application: Application):
     """Get Jenkins charm unit IP."""
     status: FullStatus = await model.get_status([application.name])
-    for unit in status.applications[application.name].units.values():
-        assert unit, "Invalid unit status."
-        assert unit.address, "Unit does not have an assigned IP."
-        return str(unit.address)
+    try:
+        unit_status: UnitStatus = next(status.applications[application.name].units.values())
+        assert unit_status.address, "Invalid unit address"
+        return unit_status.address
+    except StopIteration as exc:
+        raise StopIteration("Invalid unit status") from exc
 
 
 @pytest_asyncio.fixture(scope="module", name="web_address")

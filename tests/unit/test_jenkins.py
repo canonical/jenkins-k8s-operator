@@ -3,6 +3,7 @@
 
 """Jenkins-k8s jenkins module tests."""
 
+# Need access to protected functions for testing
 # pylint:disable=protected-access
 
 
@@ -21,11 +22,13 @@ from jenkins import (
     calculate_env,
     get_admin_credentials,
     get_version,
+    unlock_jenkins,
     wait_jenkins_ready,
 )
-from types_ import Credentials, JenkinsEnvironmentMap
+from types_ import Credentials
 
-from .helpers import ConnectionExceptionPatch
+from .helpers import ConnectionExceptionPatch, make_relative_to_path
+from .types_ import ContainerWithPath
 
 
 def test__is_jenkins_ready_connection_exception(monkeypatch: pytest.MonkeyPatch):
@@ -78,6 +81,37 @@ def test__wait_jenkins_ready_timeout(
         wait_jenkins_ready(1, 1)
 
 
+def test_wait_jenkins_ready_last_successful_check(
+    monkeypatch: pytest.MonkeyPatch, jenkins_version: str
+):
+    """
+    arrange: given mocked requests that returns a 200 response the third time it's called.
+    act: wait for jenkins to become ready for 1 second with 1 second interval.
+    assert: No exceptions are raised.
+    """
+
+    class MockedResponse(requests.Response):
+        """Mocked requests.Response that returns successful status code on 3rd instantiation.
+
+        Attrs:
+            num_called: Number of times the class has been instantiated.
+        """
+
+        num_called = 0
+
+        def __init__(self, *_, **__) -> None:
+            """Initialize the response and count the number of instantiations."""
+            super().__init__()
+            MockedResponse.num_called += 1
+
+            self.status_code = 200 if MockedResponse.num_called == 3 else 503
+            self.headers["X-Jenkins"] = jenkins_version
+
+    monkeypatch.setattr(requests, "get", MockedResponse)
+
+    wait_jenkins_ready(1, 1)
+
+
 def test_wait_jenkins_ready(
     monkeypatch: pytest.MonkeyPatch,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
@@ -102,21 +136,19 @@ def test_get_admin_credentials(mocked_container: Container, admin_credentials: C
 
 
 @pytest.mark.parametrize(
-    "admin_configured, expected_map",
+    "admin_configured",
     [
         pytest.param(
             False,
-            {"JENKINS_HOME": str(JENKINS_HOME_PATH), "ADMIN_CONFIGURED": "False"},
             id="Admin not configured",
         ),
         pytest.param(
             True,
-            {"JENKINS_HOME": str(JENKINS_HOME_PATH), "ADMIN_CONFIGURED": "True"},
             id="Admin configured",
         ),
     ],
 )
-def test_calculate_env(admin_configured: bool, expected_map: JenkinsEnvironmentMap):
+def test_calculate_env(admin_configured: bool):
     """
     arrange: given admin_configured boolean state variable.
     act: when calculate_env is called.
@@ -124,7 +156,10 @@ def test_calculate_env(admin_configured: bool, expected_map: JenkinsEnvironmentM
     """
     env = calculate_env(admin_configured=admin_configured)
 
-    assert env == expected_map
+    assert env == {
+        "JENKINS_HOME": str(JENKINS_HOME_PATH),
+        "ADMIN_CONFIGURED": "True" if admin_configured else "False",
+    }
 
 
 def test_get_version(
@@ -140,3 +175,32 @@ def test_get_version(
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=200))
 
     assert get_version() == jenkins_version
+
+
+def test_unlock_jenkins(
+    container_with_path: ContainerWithPath,
+    mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
+    monkeypatch: pytest.MonkeyPatch,
+    jenkins_version: str,
+):
+    """
+    arrange: given a mocked container and a monkeypatched Jenkins client.
+    act: unlock_jenkins is called.
+    assert: files necessary to unlock Jenkins are written.
+    """
+    monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=403))
+
+    unlock_jenkins(container_with_path.container)
+
+    assert (
+        make_relative_to_path(container_with_path.path, LAST_EXEC_VERSION_PATH).read_text(
+            encoding="utf-8"
+        )
+        == jenkins_version
+    )
+    assert (
+        make_relative_to_path(container_with_path.path, WIZARD_VERSION_PATH).read_text(
+            encoding="utf-8"
+        )
+        == jenkins_version
+    )

@@ -36,5 +36,4 @@ class ConnectionExceptionPatch:  # pylint: disable=too-few-public-methods
         Raises:
             ConnectionError: To mock connection error.
         """
-        del args, kwargs
         raise requests.ConnectionError
