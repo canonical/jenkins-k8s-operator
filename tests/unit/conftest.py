@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import requests
+import yaml
 from ops.model import Container
 from ops.testing import Harness
 
@@ -20,6 +21,8 @@ from types_ import Credentials
 
 from .helpers import make_relative_to_path
 from .types_ import ContainerWithPath
+
+ROCKCRAFT_YAML = yaml.safe_load(Path("jenkins_rock/rockcraft.yaml").read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="function", name="harness")
@@ -33,7 +36,7 @@ def harness_fixture():
 @pytest.fixture(scope="function", name="jenkins_version")
 def jenkins_version_fixture():
     """Jenkins version fixture."""
-    return "2.400"
+    return str(ROCKCRAFT_YAML["parts"]["jenkins"]["build-environment"]["JENKINS_VERSION"])
 
 
 @pytest.fixture(scope="function", name="mocked_get_request")
