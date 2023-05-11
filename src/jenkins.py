@@ -82,9 +82,9 @@ def calculate_env(admin_configured: bool) -> JenkinsEnvironmentMap:
     Returns:
         The dictionary mapping of environment variables for the Jenkins service.
     """
-    env = JenkinsEnvironmentMap(JENKINS_HOME=str(JENKINS_HOME_PATH))
-    env["ADMIN_CONFIGURED"] = str(admin_configured)
-    return env
+    return JenkinsEnvironmentMap(
+        JENKINS_HOME=str(JENKINS_HOME_PATH), ADMIN_CONFIGURED=str(admin_configured)
+    )
 
 
 def get_version() -> str:

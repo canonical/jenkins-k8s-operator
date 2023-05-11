@@ -18,7 +18,7 @@ class Credentials(NamedTuple):
     password: str
 
 
-class JenkinsEnvironmentMap(TypedDict, total=False):
+class JenkinsEnvironmentMap(TypedDict):
     """Dictionary mapping of Jenkins environment variables.
 
     Attrs:
