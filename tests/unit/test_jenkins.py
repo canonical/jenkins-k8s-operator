@@ -15,6 +15,8 @@ from ops.model import Container
 
 from jenkins import (
     JENKINS_HOME_PATH,
+    LAST_EXEC_VERSION_PATH,
+    WIZARD_VERSION_PATH,
     _is_jenkins_ready,
     calculate_env,
     get_admin_credentials,

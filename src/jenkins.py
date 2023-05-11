@@ -17,9 +17,9 @@ JENKINS_HOME_PATH = Path("/var/jenkins")
 # Path to initial Jenkins password file
 JENKINS_PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
 # Path to last executed Jenkins version file, required to override wizard installation
-LAST_EXEC = JENKINS_HOME_PATH / Path("jenkins.install.InstallUtil.lastExecVersion")
+LAST_EXEC_VERSION_PATH = JENKINS_HOME_PATH / Path("jenkins.install.InstallUtil.lastExecVersion")
 # Path to Jenkins version file, required to override wizard installation
-UPDATE_VERSION = JENKINS_HOME_PATH / Path("jenkins.install.UpgradeWizard.state")
+WIZARD_VERSION_PATH = JENKINS_HOME_PATH / Path("jenkins.install.UpgradeWizard.state")
 
 
 def _is_jenkins_ready() -> bool:
@@ -103,5 +103,5 @@ def unlock_jenkins(connectable_container: Container) -> None:
         connectable_container: The connectable Jenkins workload container.
     """
     version = get_version()
-    connectable_container.push(LAST_EXEC, version, encoding="utf-8", make_dirs=True)
-    connectable_container.push(UPDATE_VERSION, version, encoding="utf-8", make_dirs=True)
+    connectable_container.push(LAST_EXEC_VERSION_PATH, version, encoding="utf-8", make_dirs=True)
+    connectable_container.push(WIZARD_VERSION_PATH, version, encoding="utf-8", make_dirs=True)
