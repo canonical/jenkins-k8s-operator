@@ -13,7 +13,7 @@ from ops.model import Container
 from types_ import Credentials, JenkinsEnvironmentMap
 
 JENKINS_WEB_URL = "http://localhost:8080"
-JENKINS_HOME_PATH = Path("/var/lib/jenkins")
+JENKINS_HOME_PATH = Path("/var/jenkins")
 # Path to initial Jenkins password file
 JENKINS_PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
 # Path to last executed Jenkins version file, required to override wizard installation
