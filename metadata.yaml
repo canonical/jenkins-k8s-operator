@@ -38,4 +38,3 @@ resources:
   jenkins-image:
     type: oci-image
     description: OCI image for Jenkins
-    auto-fetch: true
