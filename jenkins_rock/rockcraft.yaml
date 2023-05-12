@@ -1,0 +1,48 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: jenkins
+summary: Jenkins rock
+description: Jenkins OCI image for the Jenkins charm
+version: "1.0"
+base: ubuntu:22.04
+build-base: ubuntu:22.04
+license: Apache-2.0
+platforms:
+  amd64:
+services:
+  jenkins:
+    override: merge
+    summary: The Jenkins server.
+    command: java -Djava.awt.headless=true -jar /srv/jenkins/jenkins.war
+    startup: enabled
+parts:
+  add-user:
+    plugin: nil
+    overlay-script: |
+      groupadd -R $CRAFT_OVERLAY --gid 2000 jenkins
+      useradd -R $CRAFT_OVERLAY --system --gid 2000 --uid 2000 --home /srv/jenkins jenkins
+  jenkins:
+    plugin: nil
+    build-packages:
+      - ca-certificates-java
+      - curl
+      - libnss3
+      - unzip
+    overlay-packages:
+      - bash
+      - ca-certificates-java
+      - fonts-dejavu-core
+      - libfontconfig1
+      - default-jre-headless
+    build-environment:
+      - JENKINS_VERSION: 2.403
+    override-build: |
+      mkdir -p ${CRAFT_PART_INSTALL}/{srv/jenkins/,etc/default/jenkins/}
+      chown 2000:2000 ${CRAFT_PART_INSTALL}/srv/jenkins
+      # Use jenkins war rather than apt install for easier Jenkins version control.
+      cd ${CRAFT_PART_INSTALL}/srv/jenkins
+      curl -sLO https://mirrors.jenkins.io/war/${JENKINS_VERSION}/jenkins.war
+      unzip jenkins.war META-INF/MANIFEST.MF
+      VERSION=$(grep Jenkins-Version META-INF/MANIFEST.MF | cut -d' ' -f2 | tr -d '\r')
+      rm -rf META-INF
