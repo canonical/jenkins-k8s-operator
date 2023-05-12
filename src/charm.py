@@ -81,6 +81,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
             return
 
         self.unit.status = MaintenanceStatus("Configuring Jenkins.")
+        # First Jenkins server start installs Jenkins server.
         container.add_layer(
             "jenkins", self._get_pebble_layer(calculate_env(admin_configured=False)), combine=True
         )
@@ -88,7 +89,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         try:
             wait_jenkins_ready()
             unlock_jenkins(container)
-            # add environment variable to trigger replan
+            # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
             container.add_layer(
                 "jenkins",
                 self._get_pebble_layer(calculate_env(admin_configured=True)),
