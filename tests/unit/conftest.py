@@ -40,7 +40,7 @@ def jenkins_version_fixture():
 def mocked_get_request_fixture(jenkins_version: str):
     """Mock get request with given status code."""
 
-    def mocked_get(_: str, status_code: int = 200, **__: Any):
+    def mocked_get(_: str, status_code: int = 200, **_kwargs: Any):
         """Mock get request with predefined status code.
 
         Args:

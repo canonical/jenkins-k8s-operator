@@ -98,7 +98,7 @@ def test_wait_jenkins_ready_last_successful_check(
 
         num_called = 0
 
-        def __init__(self, *_, **__) -> None:
+        def __init__(self, *_args, **_kwargs) -> None:
             """Initialize the response and count the number of instantiations."""
             super().__init__()
             MockedResponse.num_called += 1

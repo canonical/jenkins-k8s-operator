@@ -10,7 +10,7 @@ import requests
 class ConnectionExceptionPatch:  # pylint: disable=too-few-public-methods
     """Class to raise ConnectionError exception."""
 
-    def __init__(self, *_, **__) -> None:
+    def __init__(self, *_args, **_kwargs) -> None:
         """Placeholder init function to match function signatures.
 
         Raises:
