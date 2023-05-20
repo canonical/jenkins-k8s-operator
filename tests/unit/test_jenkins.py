@@ -14,23 +14,23 @@ import pytest
 import requests
 
 from jenkins import (
-    JENKINS_HOME_PATH,
+    HOME_PATH,
     LAST_EXEC_VERSION_PATH,
     WIZARD_VERSION_PATH,
-    _is_jenkins_ready,
+    Credentials,
+    _is_ready,
+    _unlock_jenkins,
     calculate_env,
     get_admin_credentials,
     get_version,
-    unlock_jenkins,
-    wait_jenkins_ready,
+    wait_ready,
 )
-from types_ import Credentials
 
 from .helpers import ConnectionExceptionPatch
 from .types_ import HarnessWithContainer
 
 
-def test__is_jenkins_ready_connection_exception(monkeypatch: pytest.MonkeyPatch):
+def test__is_ready_connection_exception(monkeypatch: pytest.MonkeyPatch):
     """
     arrange: given mocked requests that raises a connection exception.
     act: send a request to Jenkins login page.
@@ -38,7 +38,7 @@ def test__is_jenkins_ready_connection_exception(monkeypatch: pytest.MonkeyPatch)
     """
     monkeypatch.setattr(requests, "get", ConnectionExceptionPatch)
 
-    ready = _is_jenkins_ready()
+    ready = _is_ready()
 
     assert not ready
 
@@ -47,7 +47,7 @@ def test__is_jenkins_ready_connection_exception(monkeypatch: pytest.MonkeyPatch)
     "status_code, expected_ready",
     [pytest.param(503, False, id="Service unavailable"), pytest.param(200, True, id="Success")],
 )
-def test__is_jenkins_ready(
+def test__is_ready(
     monkeypatch: pytest.MonkeyPatch,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
     status_code: int,
@@ -60,12 +60,12 @@ def test__is_jenkins_ready(
     """
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=status_code))
 
-    ready = _is_jenkins_ready()
+    ready = _is_ready()
 
     assert ready == expected_ready
 
 
-def test__wait_jenkins_ready_timeout(
+def test_wait_ready_timeout(
     monkeypatch: pytest.MonkeyPatch,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
 ):
@@ -77,12 +77,10 @@ def test__wait_jenkins_ready_timeout(
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=503))
 
     with pytest.raises(TimeoutError):
-        wait_jenkins_ready(1, 1)
+        wait_ready(1, 1)
 
 
-def test_wait_jenkins_ready_last_successful_check(
-    monkeypatch: pytest.MonkeyPatch, jenkins_version: str
-):
+def test_wait_ready_last_successful_check(monkeypatch: pytest.MonkeyPatch, jenkins_version: str):
     """
     arrange: given mocked requests that returns a 200 response the third time it's called.
     act: wait for jenkins to become ready for 1 second with 1 second interval.
@@ -108,10 +106,10 @@ def test_wait_jenkins_ready_last_successful_check(
 
     monkeypatch.setattr(requests, "get", MockedResponse)
 
-    wait_jenkins_ready(1, 1)
+    wait_ready(1, 1)
 
 
-def test_wait_jenkins_ready(
+def test_wait_ready(
     monkeypatch: pytest.MonkeyPatch,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
 ):
@@ -122,7 +120,7 @@ def test_wait_jenkins_ready(
     """
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=200))
 
-    wait_jenkins_ready(1, 1)
+    wait_ready(1, 1)
 
 
 def test_get_admin_credentials(
@@ -158,7 +156,7 @@ def test_calculate_env(admin_configured: bool):
     env = calculate_env(admin_configured=admin_configured)
 
     assert env == {
-        "JENKINS_HOME": str(JENKINS_HOME_PATH),
+        "JENKINS_HOME": str(HOME_PATH),
         "ADMIN_CONFIGURED": "True" if admin_configured else "False",
     }
 
@@ -178,7 +176,7 @@ def test_get_version(
     assert get_version() == jenkins_version
 
 
-def test_unlock_jenkins(
+def test__unlock_jenkins(
     harness_container: HarnessWithContainer,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
@@ -191,7 +189,7 @@ def test_unlock_jenkins(
     """
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=403))
 
-    unlock_jenkins(harness_container.container)
+    _unlock_jenkins(harness_container.container)
 
     assert (
         harness_container.container.pull(LAST_EXEC_VERSION_PATH, encoding="utf-8").read()

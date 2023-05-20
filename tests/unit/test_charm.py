@@ -60,7 +60,7 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     assert: the unit status should show expected status.
     """
     # speed up waiting by changing default argument values
-    monkeypatch.setattr(jenkins_src.wait_jenkins_ready, "__defaults__", (1, 1))
+    monkeypatch.setattr(jenkins_src.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=status_code))
     harness_container.harness.begin()
     charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)

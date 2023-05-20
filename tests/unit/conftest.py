@@ -14,8 +14,7 @@ from ops.model import Container
 from ops.testing import Harness
 
 from charm import JenkinsK8SOperatorCharm
-from jenkins import JENKINS_PASSWORD_FILE_PATH
-from types_ import Credentials
+from jenkins import PASSWORD_FILE_PATH, Credentials
 
 from .types_ import HarnessWithContainer
 
@@ -69,7 +68,7 @@ def container_fixture(harness: Harness, admin_credentials: Credentials) -> Conta
     harness.set_can_connect("jenkins", True)
     container: Container = harness.model.unit.get_container("jenkins")
     container.push(
-        JENKINS_PASSWORD_FILE_PATH, admin_credentials.password, encoding="utf-8", make_dirs=True
+        PASSWORD_FILE_PATH, admin_credentials.password, encoding="utf-8", make_dirs=True
     )
 
     return container
