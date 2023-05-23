@@ -12,10 +12,9 @@ from time import sleep
 
 import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
+import jinja2
+import ops
 import requests
-from jinja2 import Environment, FileSystemLoader
-from ops.model import Container
-from ops.pebble import ChangeError, ExecError, ExecProcess
 
 import state
 
@@ -97,7 +96,7 @@ class Credentials(typing.NamedTuple):
     password: str
 
 
-def get_admin_credentials(connectable_container: Container) -> Credentials:
+def get_admin_credentials(connectable_container: ops.Container) -> Credentials:
     """Retrieve admin credentials.
 
     Args:
@@ -147,7 +146,7 @@ def get_version() -> str:
     return requests.get(WEB_URL, timeout=10).headers["X-Jenkins"]
 
 
-def _unlock_wizard(connectable_container: Container) -> None:
+def _unlock_wizard(connectable_container: ops.Container) -> None:
     """Write to executed version and updated version file to bypass Jenkins setup wizard.
 
     Args:
@@ -159,7 +158,7 @@ def _unlock_wizard(connectable_container: Container) -> None:
 
 
 def _install_config(
-    connectable_container: Container, jnlp_port: str, num_master_executors: int
+    connectable_container: ops.Container, jnlp_port: str, num_master_executors: int
 ) -> None:
     """Install jenkins-config.xml.
 
@@ -168,13 +167,13 @@ def _install_config(
         jnlp_port: The JNLP port to communicate with the agents.
         num_master_executors: Number of executors to register on the Jenkins server.
     """
-    env = Environment(loader=FileSystemLoader("templates"), autoescape=True)
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader("templates"), autoescape=True)
     template = env.get_template("jenkins-config.xml")
     config = template.render(num_master_executors=num_master_executors, jnlp_port=jnlp_port)
     connectable_container.push(CONFIG_FILE_PATH, config)
 
 
-def _install_plugins(connectable_container: Container, plugins: typing.Iterable[str]) -> None:
+def _install_plugins(connectable_container: ops.Container, plugins: typing.Iterable[str]) -> None:
     """Install Jenkins plugins.
 
     Download Jenkins plugins. A restart is required for the changes to take effect.
@@ -188,7 +187,7 @@ def _install_plugins(connectable_container: Container, plugins: typing.Iterable[
     """
     plugins_to_install = itertools.chain(plugins, REQUIRED_PLUGINS)
     plugins = " ".join(list(plugins_to_install))
-    proc: ExecProcess = connectable_container.exec(
+    proc: ops.pebble.ExecProcess = connectable_container.exec(
         [
             "java",
             "-jar",
@@ -205,12 +204,12 @@ def _install_plugins(connectable_container: Container, plugins: typing.Iterable[
     )
     try:
         proc.wait_output()
-    except (ChangeError, ExecError) as exc:
+    except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
         raise JenkinsPluginError("Failed to install plugins.") from exc
 
 
 def bootstrap(
-    connectable_container: Container,
+    connectable_container: ops.Container,
     jnlp_port: str,
     num_master_executors: int,
     plugins: typing.Iterable[str],
