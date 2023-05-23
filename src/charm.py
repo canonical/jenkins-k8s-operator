@@ -171,13 +171,13 @@ class JenkinsK8SOperatorCharm(CharmBase):
                 jenkins_client=jenkins_client,
                 agent_meta=agent_meta,
             )
+            secret = jenkins.get_node_secret(
+                jenkins_client=jenkins_client, node_name=agent_meta.slavehost
+            )
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             self.app.status = BlockedStatus(f"Jenkins API exception: {exc=!r}")
             return
 
-        secret = jenkins.get_node_secret(
-            jenkins_client=jenkins_client, node_name=agent_meta.slavehost
-        )
         host = self.model.get_binding("juju-info").network.bind_address
         event.relation.data[self.model.unit].update(
             AgentRelationData(url=f"http://{str(host)}:8080", secret=secret)
