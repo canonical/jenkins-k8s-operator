@@ -53,7 +53,6 @@ class State:
     """The Jenkins k8s operator charm state.
 
     Attrs:
-        agent_metadata: Metadata of Jenkins agents.
         jnlp_port: The JNLP port to use to communicate with agents.
         num_master_executors: The number of executors for Jenkins server.
         plugins: The Jenkins plugins to install.
@@ -61,7 +60,6 @@ class State:
 
     def __init__(
         self,
-        jenkins_agents: typing.Iterable[AgentMeta],
         jnlp_port: str,
         num_master_executors: int,
         plugins: typing.Iterable[str],
@@ -69,59 +67,29 @@ class State:
         """Initialize the state.
 
         Args:
-            jenkins_agents: Metadata of related Jenkins agents.
             jnlp_port: JNLP port to communicate with agents.
             num_master_executors: The number of executors for Jenkins server.
             plugins: Jenkins plugins to install.
         """
-        self._agent_meta = jenkins_agents
         self._jnlp_port = jnlp_port
         self._num_master_executors = num_master_executors
         self._plugins = plugins
 
     @classmethod
-    def from_charm(
-        cls, agent_relation: ops.Relation | None, charm_config: ops.ConfigData
-    ) -> "State":
+    def from_charm(cls, charm_config: ops.ConfigData) -> "State":
         """Initialize the state from charm.
 
         Args:
-            agent_relation: The relation object with jenkins agent.
             charm_config: Current charm configuration data.
 
         Returns:
             Current state of Jenkins.
         """
-        agent_unit_relation_data = (
-            (
-                unit_data
-                for unit in agent_relation.units
-                if (unit_data := agent_relation.data.get(unit)) is not None
-            )
-            if agent_relation
-            else ()
-        )
-        agent_meta = (
-            AgentMeta(
-                executors=num_executors,
-                labels=labels,
-                slavehost=hosts,
-            )
-            for relation_data in agent_unit_relation_data
-            if (num_executors := relation_data.get("executors")) is not None
-            and (labels := relation_data.get("labels")) is not None
-            and (hosts := relation_data.get("slavehost")) is not None
-        )
         num_master_executors = int(charm_config.get("master_executors", 1))
         jnlp_port = charm_config.get("jnlp_port", "48484")
         plugins_config = charm_config.get("plugins", "")
         plugins = (plugin for plugin in plugins_config.split())
-        return cls(agent_meta, jnlp_port, num_master_executors, plugins)
-
-    @property
-    def agent_metadata(self) -> typing.Iterable[AgentMeta]:
-        """Metadata of Jenkins agents."""
-        return self._agent_meta
+        return cls(jnlp_port, num_master_executors, plugins)
 
     @property
     def jnlp_port(self) -> str:

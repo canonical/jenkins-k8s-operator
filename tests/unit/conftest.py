@@ -230,3 +230,21 @@ def container_fixture(
 def harness_container_fixture(harness: Harness, container: Container) -> HarnessWithContainer:
     """Named tuple containing Harness with container."""
     return HarnessWithContainer(harness=harness, container=container)
+
+
+@pytest.fixture(scope="function", name="raise_exception")
+def raise_exception_fixture():
+    """The mock function for patching."""
+
+    def raise_exception(*_args, exception: Exception, **_kwargs):
+        """Raise exception function for monkeypatching.
+
+        Args:
+            exception: The exception to raise.
+
+        Raises:
+            exception: .
+        """
+        raise exception
+
+    return raise_exception

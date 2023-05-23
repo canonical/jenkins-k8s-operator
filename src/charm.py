@@ -45,7 +45,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
             args: Arguments to initialize the char base.
         """
         super().__init__(*args)
-        self.state = state.State.from_charm(self.model.get_relation("agent"), self.model.config)
+        self.state = state.State.from_charm(self.model.config)
 
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on["agent"].relation_joined, self._on_agent_relation_joined)
@@ -142,7 +142,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         Args:
             event: An event fired from an agent joining the relationship.
         """
-        if not self.unit.is_leader() or not (binding := self.model.get_binding("juju-info")):
+        if not (binding := self.model.get_binding("juju-info")):
             return
         if not self._jenkins_container.can_connect():
             event.defer()
@@ -178,7 +178,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
                 jenkins_client=jenkins_client, node_name=agent_meta.slavehost
             )
         except jenkins.JenkinsError as exc:
-            self.app.status = BlockedStatus(f"Jenkins API exception: {exc=!r}")
+            self.unit.status = BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
         host = binding.network.bind_address
