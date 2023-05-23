@@ -8,7 +8,6 @@
 import logging
 import typing
 
-import jenkinsapi.custom_exceptions
 from ops.charm import CharmBase, PebbleReadyEvent, RelationJoinedEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
@@ -126,9 +125,13 @@ class JenkinsK8SOperatorCharm(CharmBase):
             )
             container.replan()
             jenkins.wait_ready()
-        except TimeoutError as err:
-            logger.error("Timed out waiting for Jenkins, %s", err)
+        except TimeoutError as exc:
+            logger.error("Timed out waiting for Jenkins, %s", exc)
             self.unit.status = BlockedStatus("Timed out waiting for Jenkins.")
+            return
+        except jenkins.JenkinsBootstrapError as exc:
+            logger.error("Error installing plugins, %s", exc)
+            self.unit.status = BlockedStatus("Error installling plugins.")
             return
 
         self.unit.status = ActiveStatus()
@@ -139,12 +142,12 @@ class JenkinsK8SOperatorCharm(CharmBase):
         Args:
             event: An event fired from an agent joining the relationship.
         """
-        if not self.unit.is_leader():
+        if not self.unit.is_leader() or not (binding := self.model.get_binding("juju-info")):
             return
         if not self._jenkins_container.can_connect():
             event.defer()
             return
-        if not all(
+        if not event.unit or not all(
             event.relation.data[event.unit].get(required_data)
             for required_data in ("executors", "labels", "slavehost")
         ):
@@ -174,11 +177,11 @@ class JenkinsK8SOperatorCharm(CharmBase):
             secret = jenkins.get_node_secret(
                 jenkins_client=jenkins_client, node_name=agent_meta.slavehost
             )
-        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        except jenkins.JenkinsError as exc:
             self.app.status = BlockedStatus(f"Jenkins API exception: {exc=!r}")
             return
 
-        host = self.model.get_binding("juju-info").network.bind_address
+        host = binding.network.bind_address
         event.relation.data[self.model.unit].update(
             AgentRelationData(url=f"http://{str(host)}:8080", secret=secret)
         )

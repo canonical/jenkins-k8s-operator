@@ -49,6 +49,10 @@ class JenkinsPluginError(JenkinsError):
     """An error occurred installing Jenkins plugin."""
 
 
+class JenkinsBootstrapError(JenkinsError):
+    """An error occurred during the bootstrapping process."""
+
+
 def _is_ready() -> bool:
     """Check if Jenkins webserver is ready.
 
@@ -185,8 +189,8 @@ def _install_plugins(connectable_container: ops.Container, plugins: typing.Itera
     Raises:
         JenkinsPluginError: if an error occurred installing the plugin.
     """
-    plugins_to_install = itertools.chain(plugins, REQUIRED_PLUGINS)
-    plugins = " ".join(list(plugins_to_install))
+    plugins_to_install = itertools.chain(REQUIRED_PLUGINS, plugins)
+    plugins = " ".join(set(plugins_to_install))
     proc: ops.pebble.ExecProcess = connectable_container.exec(
         [
             "java",
@@ -221,10 +225,16 @@ def bootstrap(
         jnlp_port: The JNLP port to communicate with the agents.
         num_master_executors: Number of executors to register on the Jenkins server.
         plugins: Plugins to install on the Jenkins server.
+
+    Raises:
+        JenkinsBootstrapError: if there was an error installing given plugins or required plugins.
     """
     _unlock_wizard(connectable_container)
     _install_config(connectable_container, jnlp_port, num_master_executors)
-    _install_plugins(connectable_container, plugins)
+    try:
+        _install_plugins(connectable_container, plugins)
+    except JenkinsPluginError as exc:
+        raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
 
 
 def get_client(client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
@@ -255,17 +265,19 @@ def get_node_secret(jenkins_client: jenkinsapi.jenkins.Jenkins, node_name: str) 
         The Jenkins agent node secret.
 
     Raises:
-        JenkinsAPIException: if an error occurred running groovy script getting the node secret.
+        JenkinsError: if an error occurred running groovy script getting the node secret.
     """
     try:
         return jenkins_client.run_groovy_script(
             f'println(jenkins.model.Jenkins.getInstance().getComputer("{node_name}").getJnlpMac())'
         ).strip()
-    except jenkinsapi.custom_exceptions.JenkinsAPIException:
-        raise
+    except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        raise JenkinsError("Failed to run groovy script getting node secret.") from exc
 
 
-def add_agent_node(jenkins_client: jenkinsapi.jenkins.Jenkins, agent_meta: state.AgentMeta):
+def add_agent_node(
+    jenkins_client: jenkinsapi.jenkins.Jenkins, agent_meta: state.AgentMeta
+) -> None:
     """Add a Jenkins agent node.
 
     Args:
@@ -273,7 +285,7 @@ def add_agent_node(jenkins_client: jenkinsapi.jenkins.Jenkins, agent_meta: state
         agent_meta: The Jenkins agent metadata to create the node from.
 
     Raises:
-        JenkinsAPIException: if an error occurred running groovy script creating the node.
+        JenkinsError: if an error occurred running groovy script creating the node.
     """
     try:
         jenkins_client.create_node(
@@ -284,5 +296,5 @@ def add_agent_node(jenkins_client: jenkinsapi.jenkins.Jenkins, agent_meta: state
         )
     except jenkinsapi.custom_exceptions.AlreadyExists:
         pass
-    except jenkinsapi.custom_exceptions.JenkinsAPIException:
-        raise
+    except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        raise JenkinsError("Failed to add agent node.") from exc

@@ -5,7 +5,7 @@
 import logging
 import typing
 
-from ops.model import ConfigData, Relation
+import ops
 
 logger = logging.getLogger(__name__)
 
@@ -33,15 +33,20 @@ class AgentMeta(typing.NamedTuple):
         Raises:
             ValidationError: if the field contains invalid data.
         """
-        empty_fields = [field for field in self._fields if not getattr(self, field)]
+        # Pylint doesn't understand that _fields is implemented in NamedTuple.
+        empty_fields = [
+            field
+            for field in self._fields  # pylint: disable=no-member
+            if not getattr(self, field)
+        ]
         if empty_fields:
             raise ValidationError(f"Fields {empty_fields} cannot be empty.")
         try:
             int(self.executors)
-        except ValueError:
+        except ValueError as exc:
             raise ValidationError(
                 f"Number of executors {self.executors} cannot be converted to type int."
-            )
+            ) from exc
 
 
 class State:
@@ -75,7 +80,9 @@ class State:
         self._plugins = plugins
 
     @classmethod
-    def from_charm(cls, agent_relation: Relation | None, charm_config: ConfigData) -> "State":
+    def from_charm(
+        cls, agent_relation: ops.Relation | None, charm_config: ops.ConfigData
+    ) -> "State":
         """Initialize the state from charm.
 
         Args:
@@ -85,22 +92,30 @@ class State:
         Returns:
             Current state of Jenkins.
         """
-        agent_meta = (
+        agent_unit_relation_data = (
             (
-                AgentMeta(
-                    executors=agent_relation.data.get(unit).get("executors"),
-                    labels=agent_relation.data.get(unit).get("labels"),
-                    slavehost=agent_relation.data.get(unit).get("slavehost"),
-                )
+                unit_data
                 for unit in agent_relation.units
+                if (unit_data := agent_relation.data.get(unit)) is not None
             )
             if agent_relation
             else ()
         )
+        agent_meta = (
+            AgentMeta(
+                executors=num_executors,
+                labels=labels,
+                slavehost=hosts,
+            )
+            for relation_data in agent_unit_relation_data
+            if (num_executors := relation_data.get("executors")) is not None
+            and (labels := relation_data.get("labels")) is not None
+            and (hosts := relation_data.get("slavehost")) is not None
+        )
         num_master_executors = int(charm_config.get("master_executors", 1))
         jnlp_port = charm_config.get("jnlp_port", "48484")
-        plugins = charm_config.get("plugins", "")
-        plugins = (plugin for plugin in plugins.split() if plugin)
+        plugins_config = charm_config.get("plugins", "")
+        plugins = (plugin for plugin in plugins_config.split())
         return cls(agent_meta, jnlp_port, num_master_executors, plugins)
 
     @property
