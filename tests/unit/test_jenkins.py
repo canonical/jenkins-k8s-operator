@@ -19,7 +19,7 @@ from jenkins import (
     WIZARD_VERSION_PATH,
     Credentials,
     _is_ready,
-    _unlock_jenkins,
+    _unlock_wizard,
     calculate_env,
     get_admin_credentials,
     get_version,
@@ -176,7 +176,7 @@ def test_get_version(
     assert get_version() == jenkins_version
 
 
-def test__unlock_jenkins(
+def test__unlock_wizard(
     harness_container: HarnessWithContainer,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
@@ -185,11 +185,11 @@ def test__unlock_jenkins(
     """
     arrange: given a mocked container and a monkeypatched Jenkins client.
     act: unlock_jenkins is called.
-    assert: files necessary to unlock Jenkins are written.
+    assert: files necessary to unlock Jenkins and bypass wizard are written.
     """
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=403))
 
-    _unlock_jenkins(harness_container.container)
+    _unlock_wizard(harness_container.container)
 
     assert (
         harness_container.container.pull(LAST_EXEC_VERSION_PATH, encoding="utf-8").read()

@@ -147,7 +147,7 @@ def get_version() -> str:
     return requests.get(WEB_URL, timeout=10).headers["X-Jenkins"]
 
 
-def _unlock_jenkins(connectable_container: Container) -> None:
+def _unlock_wizard(connectable_container: Container) -> None:
     """Write to executed version and updated version file to bypass Jenkins setup wizard.
 
     Args:
@@ -223,7 +223,7 @@ def bootstrap(
         num_master_executors: Number of executors to register on the Jenkins server.
         plugins: Plugins to install on the Jenkins server.
     """
-    _unlock_jenkins(connectable_container)
+    _unlock_wizard(connectable_container)
     _install_config(connectable_container, jnlp_port, num_master_executors)
     _install_plugins(connectable_container, plugins)
 
@@ -243,20 +243,6 @@ def get_client(client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
         password=client_credentials.password,
         timeout=60,
     )
-
-
-def get_agents(
-    jenkins_client: jenkinsapi.jenkins.Jenkins,
-) -> typing.Iterable[state.AgentMeta]:
-    """Get Jenkins agent metadata.
-
-    Args:
-        jenkins_client: The API client used to communicate with the Jenkins server.
-
-    Returns:
-        An iterable containing metadata of a Jenkins agent.
-    """
-    return ()
 
 
 def get_node_secret(jenkins_client: jenkinsapi.jenkins.Jenkins, node_name: str) -> str:
@@ -290,7 +276,6 @@ def add_agent_node(jenkins_client: jenkinsapi.jenkins.Jenkins, agent_meta: state
     Raises:
         JenkinsAPIException: if an error occurred running groovy script creating the node.
     """
-    # TODO: check if exists
     try:
         jenkins_client.create_node(
             name=agent_meta.slavehost,
@@ -298,5 +283,7 @@ def add_agent_node(jenkins_client: jenkinsapi.jenkins.Jenkins, agent_meta: state
             node_description=agent_meta.slavehost,
             labels=agent_meta.labels,
         )
+    except jenkinsapi.custom_exceptions.AlreadyExists:
+        pass
     except jenkinsapi.custom_exceptions.JenkinsAPIException:
         raise
