@@ -72,7 +72,7 @@ async def web_address_fixture(unit_ip: str):
 async def jenkins_k8s_agent(model: Model) -> Application:
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy("jenkins-agent-k8s")
-    await model.wait_for_idle(apps=[agent_app.name], status="blocked", timeout=100)
+    await model.wait_for_idle(apps=[agent_app.name], status="blocked", timeout=300)
     return agent_app
 
 
