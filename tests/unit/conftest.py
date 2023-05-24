@@ -15,7 +15,6 @@ from ops.model import Container
 from ops.pebble import ExecError
 from ops.testing import Harness
 
-import state
 from charm import JenkinsK8SOperatorCharm
 from jenkins import PASSWORD_FILE_PATH, PLUGINS_PATH, REQUIRED_PLUGINS, Credentials
 

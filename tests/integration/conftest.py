@@ -94,7 +94,7 @@ async def jenkins_client_fixture(
 
 @pytest.fixture(scope="module", name="jenkins_test_job_xml")
 def jenkins_test_job_xml() -> str:
-    """The Jenkins test job xml with node label x86_64, the default lable on an agent node."""
+    """The Jenkins test job xml with node label x86_64, the default label on an agent node."""
     return textwrap.dedent(
         """
         <project>

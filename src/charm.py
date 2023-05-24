@@ -188,7 +188,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         )
         self.unit.status = ActiveStatus()
 
-    def _on_get_admin_password(self, event: ActionEvent):
+    def _on_get_admin_password(self, event: ActionEvent) -> None:
         """Handle get-admin-password event.
 
         Args:

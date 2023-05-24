@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 import jenkinsapi
 import pytest
 import requests
-from ops.charm import PebbleReadyEvent
+from ops.charm import ActionEvent, PebbleReadyEvent
 from ops.model import ActiveStatus, BlockedStatus, StatusBase
 
 import charm
@@ -293,3 +293,40 @@ def test__on_agent_relation_joined(
 
     jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+
+
+def test__on_get_admin_password_action_container_not_ready(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given a jenkins container that is not connectable.
+    act: when get-admin-password action is run.
+    assert: the event is deferred.
+    """
+    harness_container.harness.set_can_connect(
+        harness_container.harness.model.unit.containers["jenkins"], False
+    )
+    mock_event = MagicMock(spec=ActionEvent)
+    harness_container.harness.begin()
+
+    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm._on_get_admin_password(mock_event)
+
+    assert mock_event.defer.called_once()
+
+
+def test__on_get_admin_password_action(
+    harness_container: HarnessWithContainer, admin_credentials: jenkins.Credentials
+):
+    """
+    arrange: given a jenkins container.
+    act: when get-admin-password action is run.
+    assert: the correct admin password is returned.
+    """
+    mock_event = MagicMock(spec=ActionEvent)
+    harness_container.harness.begin()
+
+    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm._on_get_admin_password(mock_event)
+
+    mock_event.set_results.assert_called_once_with({"password": admin_credentials.password})
