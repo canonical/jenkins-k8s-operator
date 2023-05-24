@@ -65,7 +65,7 @@ def _is_ready() -> bool:
         return False
 
 
-def wait_ready(timeout: int = 900, check_interval: int = 10) -> None:
+def wait_ready(timeout: int = 300, check_interval: int = 10) -> None:
     """Wait until Jenkins service is up.
 
     Args:
