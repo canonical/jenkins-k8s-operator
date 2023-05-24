@@ -42,7 +42,7 @@ async def test_jenkins_agent_relation(
     assert: the relation succeeds and the agent is able to run jobs successfully.
     """
     await application.relate("agent", f"{jenkins_k8s_agent.name}")
-    await model.wait_for_idle(status="active", timeout=300)
+    await model.wait_for_idle(status="active")
 
     nodes = jenkins_client.get_nodes()
     assert len(nodes) == 2, "Nodes should contain 2 nodes, 1 Built-in and 1 agent."
