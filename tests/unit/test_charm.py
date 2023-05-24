@@ -15,8 +15,7 @@ import jenkinsapi
 import pytest
 import requests
 from ops.charm import PebbleReadyEvent
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, StatusBase
-from ops.testing import Harness
+from ops.model import ActiveStatus, BlockedStatus, StatusBase
 
 import charm
 import jenkins
@@ -29,15 +28,14 @@ BLOCKED_STATUS_NAME = "blocked"
 MAINTENANCE_STATUS_NAME = "maintenance"
 
 
-def test__on_jenkins_pebble_ready_no_container(harness: Harness):
+def test__on_jenkins_pebble_ready_no_container(harness_container: HarnessWithContainer):
     """
     arrange: given a pebble ready event with container unable to connect.
     act: when the Jenkins pebble ready event is fired.
     assert: the event should be deferred.
     """
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], False)
-    harness.begin()
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness.charm)
+    harness_container.harness.begin()
+    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
     mock_event = MagicMock(spec=PebbleReadyEvent)
     mock_event.workload = None
 
@@ -65,16 +63,11 @@ def test__on_jenkins_pebble_ready_error(
         lambda *_args, **_kwargs: raise_exception(exception=jenkins.JenkinsBootstrapError()),
     )
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=200))
-    harness_container.harness.begin()
+
+    harness_container.harness.begin_with_initial_hooks()
+
     jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
-    mock_event = MagicMock(spec=PebbleReadyEvent)
-    mock_event.workload = harness_container.container
-
-    jenkins_charm._on_jenkins_pebble_ready(mock_event)
-
-    assert (
-        harness_container.harness.model.unit.status.name == BLOCKED_STATUS_NAME
-    ), "unit should be in BlockedStatus"
+    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
 @pytest.mark.parametrize(
@@ -100,15 +93,12 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     # speed up waiting by changing default argument values
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=status_code))
-    harness_container.harness.begin()
+
+    harness_container.harness.begin_with_initial_hooks()
+
     jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
-    mock_event = MagicMock(spec=PebbleReadyEvent)
-    mock_event.workload = harness_container.container
-
-    jenkins_charm._on_jenkins_pebble_ready(mock_event)
-
     assert (
-        harness_container.harness.model.unit.status.name == expected_status.name
+        jenkins_charm.unit.status.name == expected_status.name
     ), f"unit should be in {expected_status}"
 
 
@@ -122,13 +112,16 @@ def test__on_agent_relation_joined_no_ip(
     assert: the event is not handled.
     """
     harness_container.harness.begin()
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
-    monkeypatch.setattr(jenkins_charm.model, "get_binding", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        harness_container.harness.charm.model, "get_binding", lambda *_args, **_kwargs: None
+    )
     mock_event = MagicMock(spec=PebbleReadyEvent)
 
+    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_agent_relation_joined(mock_event)
 
     assert mock_event.defer.to_not_be_called()
+    assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
 
 
 def test__on_agent_relation_joined_no_container(harness_container: HarnessWithContainer):
@@ -146,7 +139,8 @@ def test__on_agent_relation_joined_no_container(harness_container: HarnessWithCo
 
     jenkins_charm._on_agent_relation_joined(mock_event)
 
-    mock_event.defer.to_be_called_once()
+    assert mock_event.defer.to_be_called_once()
+    assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
 
 
 def test__on_agent_relation_joined_relation_data_not_set(harness_container: HarnessWithContainer):
@@ -155,15 +149,15 @@ def test__on_agent_relation_joined_relation_data_not_set(harness_container: Harn
     act: when an agent relation joined event is fired without required data.
     assert: the event is deferred.
     """
+    harness_container.harness.begin()
     relation_id = harness_container.harness.add_relation("agent", "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
 
-    harness_container.harness.begin()
     relation = harness_container.harness.charm.model.get_relation("agent", relation_id)
     harness_container.harness.charm.on["agent"].relation_joined.emit(relation)
 
     jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
-    assert jenkins_charm.unit.status == MaintenanceStatus()
+    assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
 
 
 @pytest.mark.parametrize(
@@ -220,6 +214,7 @@ def test__on_agent_relation_joined_client_error(
     harness_container: HarnessWithContainer,
     raise_exception: Callable,
     monkeypatch: pytest.MonkeyPatch,
+    agent_relation_data: dict[str, str],
 ):
     """
     arrange: given a mocked patched jenkins client that raises an error.
@@ -236,18 +231,14 @@ def test__on_agent_relation_joined_client_error(
         "add_agent_node",
         lambda *_args, **_kwargs: raise_exception(exception=jenkins.JenkinsError()),
     )
+    harness_container.harness.begin()
     relation_id = harness_container.harness.add_relation("agent", "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(
         relation_id,
         "jenkins-agent/0",
-        {
-            "executors": "2",
-            "labels": "x84_64",
-            "slavehost": "http://sample-address:8080",
-        },
+        agent_relation_data,
     )
-    harness_container.harness.begin()
 
     relation = harness_container.harness.charm.model.get_relation("agent", relation_id)
     harness_container.harness.charm.on["agent"].relation_joined.emit(
@@ -264,6 +255,7 @@ def test__on_agent_relation_joined_client_error(
 def test__on_agent_relation_joined(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
+    agent_relation_data: dict[str, str],
 ):
     """
     arrange: given a charm instance.
@@ -280,6 +272,7 @@ def test__on_agent_relation_joined(
         "get_node_secret",
         lambda *_args, **_kwargs: secrets.token_hex(),
     )
+    harness_container.harness.begin()
     # The charm code `binding.network.bind_address` for getting unit ip address will fail without
     # the add_network call.
     harness_container.harness.add_network("10.0.0.10")
@@ -288,13 +281,8 @@ def test__on_agent_relation_joined(
     harness_container.harness.update_relation_data(
         relation_id,
         "jenkins-agent/0",
-        {
-            "executors": "2",
-            "labels": "x84_64",
-            "slavehost": "http://sample-address:8080",
-        },
+        agent_relation_data,
     )
-    harness_container.harness.begin()
 
     relation = harness_container.harness.charm.model.get_relation("agent", relation_id)
     harness_container.harness.charm.on["agent"].relation_joined.emit(
