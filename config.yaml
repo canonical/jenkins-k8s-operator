@@ -2,16 +2,16 @@
 # See LICENSE file for licensing details.
 
 options:
-  master-executors:
+  num-executors:
     type: int
     default: 1
     description: |
-      Number of executors to configure for jenkins master.
+      Number of executors to configure for jenkins server.
   jnlp-port:
     type: int
     default: 48484
     description: |
-      TCP port on which to listen for incoming connections from slaves.
+      TCP port on which to listen for incoming connections from agents.
       Set to 0 for a random port, or to -1 to disable JNLP entirely.
   plugins:
     type: string

@@ -54,25 +54,25 @@ class State:
 
     Attrs:
         jnlp_port: The JNLP port to use to communicate with agents.
-        num_master_executors: The number of executors for Jenkins server.
+        num_executors: The number of executors for Jenkins server.
         plugins: The Jenkins plugins to install.
     """
 
     def __init__(
         self,
         jnlp_port: str,
-        num_master_executors: int,
+        num_executors: int,
         plugins: typing.Iterable[str],
     ) -> None:
         """Initialize the state.
 
         Args:
             jnlp_port: JNLP port to communicate with agents.
-            num_master_executors: The number of executors for Jenkins server.
+            num_executors: The number of executors for Jenkins server.
             plugins: Jenkins plugins to install.
         """
         self._jnlp_port = jnlp_port
-        self._num_master_executors = num_master_executors
+        self._num_executors = num_executors
         self._plugins = plugins
 
     @classmethod
@@ -85,11 +85,11 @@ class State:
         Returns:
             Current state of Jenkins.
         """
-        num_master_executors = int(charm_config.get("master_executors", 1))
+        num_executors = int(charm_config.get("num_executors", 1))
         jnlp_port = charm_config.get("jnlp_port", "48484")
         plugins_config = charm_config.get("plugins", "")
         plugins = (plugin for plugin in plugins_config.split())
-        return cls(jnlp_port, num_master_executors, plugins)
+        return cls(jnlp_port, num_executors, plugins)
 
     @property
     def jnlp_port(self) -> str:
@@ -97,9 +97,9 @@ class State:
         return self._jnlp_port
 
     @property
-    def num_master_executors(self) -> int:
+    def num_executors(self) -> int:
         """The number of executors for Jenkins server."""
-        return self._num_master_executors
+        return self._num_executors
 
     @property
     def plugins(self) -> typing.Iterable[str]:

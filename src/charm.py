@@ -115,7 +115,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
             jenkins.bootstrap(
                 container,
                 self.state.jnlp_port,
-                self.state.num_master_executors,
+                self.state.num_executors,
                 self.state.plugins,
             )
             # Second Jenkins server start restarts Jenkins to bypass Wizard setup.

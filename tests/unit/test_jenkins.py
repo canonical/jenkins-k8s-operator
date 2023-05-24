@@ -256,7 +256,7 @@ def test_bootstrap_fail(
         jenkins.bootstrap(
             connectable_container=harness_container.container,
             jnlp_port="1234",
-            num_master_executors=2,
+            num_executors=2,
             plugins=invalid_plugins,
         )
 
@@ -276,7 +276,7 @@ def test_bootstrap(
     jenkins.bootstrap(
         connectable_container=harness_container.container,
         jnlp_port="3000",
-        num_master_executors=3,
+        num_executors=3,
         plugins=(),
     )
 

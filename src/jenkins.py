@@ -162,18 +162,18 @@ def _unlock_wizard(connectable_container: ops.Container) -> None:
 
 
 def _install_config(
-    connectable_container: ops.Container, jnlp_port: str, num_master_executors: int
+    connectable_container: ops.Container, jnlp_port: str, num_executors: int
 ) -> None:
     """Install jenkins-config.xml.
 
     Args:
         connectable_container: The connectable Jenkins workload container.
         jnlp_port: The JNLP port to communicate with the agents.
-        num_master_executors: Number of executors to register on the Jenkins server.
+        num_executors: Number of executors to register on the Jenkins server.
     """
     env = jinja2.Environment(loader=jinja2.FileSystemLoader("templates"), autoescape=True)
     template = env.get_template("jenkins-config.xml.j2")
-    config = template.render(num_master_executors=num_master_executors, jnlp_port=jnlp_port)
+    config = template.render(num_executors=num_executors, jnlp_port=jnlp_port)
     connectable_container.push(CONFIG_FILE_PATH, config)
 
 
@@ -216,7 +216,7 @@ def _install_plugins(connectable_container: ops.Container, plugins: typing.Itera
 def bootstrap(
     connectable_container: ops.Container,
     jnlp_port: str,
-    num_master_executors: int,
+    num_executors: int,
     plugins: typing.Iterable[str],
 ) -> None:
     """Initialize and install Jenkins.
@@ -224,14 +224,14 @@ def bootstrap(
     Args:
         connectable_container: The connectable Jenkins workload container.
         jnlp_port: The JNLP port to communicate with the agents.
-        num_master_executors: Number of executors to register on the Jenkins server.
+        num_executors: Number of executors to register on the Jenkins server.
         plugins: Plugins to install on the Jenkins server.
 
     Raises:
         JenkinsBootstrapError: if there was an error installing given plugins or required plugins.
     """
     _unlock_wizard(connectable_container)
-    _install_config(connectable_container, jnlp_port, num_master_executors)
+    _install_config(connectable_container, jnlp_port, num_executors)
     try:
         _install_plugins(connectable_container, plugins)
     except JenkinsPluginError as exc:
