@@ -7,3 +7,5 @@ jobs:
   integration-tests:
     uses: yanksyoon/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
+    with:
+      tmate-debugging: true
