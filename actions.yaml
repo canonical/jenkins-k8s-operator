@@ -1,3 +1,6 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 get-admin-password:
   description: |
     Retrieve the admin password which has been auto-generated during Jenkins install.
