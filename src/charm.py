@@ -8,7 +8,7 @@
 import logging
 import typing
 
-from ops.charm import CharmBase, PebbleReadyEvent, RelationJoinedEvent
+from ops.charm import ActionEvent, CharmBase, PebbleReadyEvent, RelationJoinedEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.pebble import Layer
@@ -49,6 +49,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
 
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on["agent"].relation_joined, self._on_agent_relation_joined)
+        self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
 
     @property
     def _jenkins_container(self) -> Container:
@@ -93,7 +94,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         """Configure and start Jenkins server.
 
         Args:
-            event: Event fired when pebble is ready.
+            event: The event fired when pebble is ready.
         """
         container = event.workload
         if not container or not container.can_connect():
@@ -140,7 +141,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         """Handle agent relation joined event.
 
         Args:
-            event: An event fired from an agent joining the relationship.
+            event: The event fired from an agent joining the relationship.
         """
         if not (binding := self.model.get_binding("juju-info")):
             return
@@ -186,6 +187,18 @@ class JenkinsK8SOperatorCharm(CharmBase):
             AgentRelationData(url=f"http://{str(host)}:8080", secret=secret)
         )
         self.unit.status = ActiveStatus()
+
+    def _on_get_admin_password(self, event: ActionEvent):
+        """Handle get-admin-password event.
+
+        Args:
+            event: The event fired from get-admin-password action.
+        """
+        if not self._jenkins_container.can_connect():
+            event.defer()
+            return
+        credentials = jenkins.get_admin_credentials(self._jenkins_container)
+        event.set_results({"password": credentials.password})
 
 
 if __name__ == "__main__":  # pragma: nocover

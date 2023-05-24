@@ -209,6 +209,7 @@ def _install_plugins(connectable_container: ops.Container, plugins: typing.Itera
     try:
         proc.wait_output()
     except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
+        logger.error("Failed to install plugins, %s", exc)
         raise JenkinsPluginError("Failed to install plugins.") from exc
 
 
