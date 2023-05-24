@@ -172,7 +172,7 @@ def _install_config(
         num_master_executors: Number of executors to register on the Jenkins server.
     """
     env = jinja2.Environment(loader=jinja2.FileSystemLoader("templates"), autoescape=True)
-    template = env.get_template("jenkins-config.xml")
+    template = env.get_template("jenkins-config.xml.j2")
     config = template.render(num_master_executors=num_master_executors, jnlp_port=jnlp_port)
     connectable_container.push(CONFIG_FILE_PATH, config)
 
