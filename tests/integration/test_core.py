@@ -41,7 +41,7 @@ async def test_jenkins_agent_relation(
     act: when the server charm is related to the k8s agent charm.
     assert: the relation succeeds and the agent is able to run jobs successfully.
     """
-    await application.relate("agent", f"{jenkins_k8s_agent.name}:slave")
+    await application.relate("agent", f"{jenkins_k8s_agent.name}")
     await model.wait_for_idle(status="active", timeout=100)
 
     nodes = jenkins_client.get_nodes()
