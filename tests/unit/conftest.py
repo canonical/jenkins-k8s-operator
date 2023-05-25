@@ -3,7 +3,6 @@
 
 """Fixtures for Jenkins-k8s-operator charm unit tests."""
 
-import itertools
 import typing
 from pathlib import Path
 from secrets import token_hex
@@ -148,17 +147,10 @@ def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Ha
     )
 
 
-@pytest.fixture(scope="function", name="invalid_plugins")
-def invalid_plugins_fixture() -> typing.Iterable[str]:
-    """Invalid plugins for testing."""
-    return ("invalid", "plugin")
-
-
 @pytest.fixture(scope="function", name="container")
 def container_fixture(
     harness: Harness,
     admin_credentials: Credentials,
-    invalid_plugins: typing.Iterable[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> Container:
     """Harness Jenkins workload container that acts as a Jenkins container."""
@@ -181,9 +173,6 @@ def container_fixture(
             RuntimeError: if the handler for a command has not yet been registered.
         """
         required_plugins = " ".join(set(REQUIRED_PLUGINS))
-        required_plugins_with_invalid_plugins = " ".join(
-            set(itertools.chain(REQUIRED_PLUGINS, invalid_plugins))
-        )
         match argv:
             # Ignore R0801: Similar lines in 2 files because this is a required stub
             # implementation of executed command.
@@ -200,18 +189,6 @@ def container_fixture(
                 required_plugins,
             ] == argv:
                 return (0, "", "Done")
-            case _ if [
-                "java",
-                "-jar",
-                "jenkins-plugin-manager-2.12.11.jar",
-                "-w",
-                "jenkins.war",
-                "-d",
-                str(PLUGINS_PATH),
-                "-p",
-                required_plugins_with_invalid_plugins,
-            ] == argv:
-                return (1, "", "Plugin not found.")
             # pylint: enable=R0801
             case _:
                 raise RuntimeError(f"unknown command: {argv}")

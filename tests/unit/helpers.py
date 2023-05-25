@@ -5,6 +5,10 @@
 
 import requests
 
+ACTIVE_STATUS_NAME = "active"
+BLOCKED_STATUS_NAME = "blocked"
+MAINTENANCE_STATUS_NAME = "maintenance"
+
 
 # There aren't enough public methods with this patch class.
 class ConnectionExceptionPatch:  # pylint: disable=too-few-public-methods

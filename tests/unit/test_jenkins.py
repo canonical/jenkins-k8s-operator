@@ -16,9 +16,10 @@ from functools import partial
 import jenkinsapi.jenkins
 import pytest
 import requests
+from ops.model import Container
+from ops.pebble import ExecError, ExecProcess
 
 import jenkins
-import state
 
 from .helpers import ConnectionExceptionPatch
 from .types_ import HarnessWithContainer
@@ -202,31 +203,32 @@ def test__install_config(harness_container: HarnessWithContainer):
     assert: jenkins configuration file is generated.
     """
     jnlp_port = "1234"
-    num_executors = 2
-    jenkins._install_config(harness_container.container, jnlp_port, num_executors)
+    jenkins._install_config(harness_container.container, jnlp_port)
 
     config_xml = str(
         harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
     )
 
-    executor_match = re.search(r"<numExecutors>(\d+)</numExecutors>", config_xml)
-    assert executor_match, "Configuration for num executors not found."
-    assert executor_match.group(1) == str(num_executors), "Number of executors mismatched."
     jnlp_match = re.search(r"<slaveAgentPort>(\d+)</slaveAgentPort>", config_xml)
     assert jnlp_match, "Configuration for jnlp port not found."
     assert jnlp_match.group(1) == jnlp_port
 
 
-def test__install_plugins_fail(
-    harness_container: HarnessWithContainer, invalid_plugins: typing.Iterable[str]
-):
+def test__install_plugins_fail(raise_exception):
     """
-    arrange: given a mocked container with jenkins-plugin-manager executable and invalid plugins.
+    arrange: given a mocked container with a mocked failing process.
     act: when _install_plugins is called.
     assert: JenkinsPluginError is raised.
     """
+    mock_proc = unittest.mock.MagicMock(spec=ExecProcess)
+    mock_proc.wait_output.side_effect = lambda: raise_exception(
+        exception=ExecError(["mock", "command"], 1, "", "Failed to install plugins.")
+    )
+    mock_container = unittest.mock.MagicMock(spec=Container)
+    mock_container.exec.return_value = mock_proc
+
     with pytest.raises(jenkins.JenkinsPluginError):
-        jenkins._install_plugins(harness_container.container, invalid_plugins)
+        jenkins._install_plugins(mock_container)
 
 
 def test__install_plugins(harness_container: HarnessWithContainer):
@@ -235,14 +237,14 @@ def test__install_plugins(harness_container: HarnessWithContainer):
     act: when _install_plugins is called.
     assert: No exceptions are raised.
     """
-    jenkins._install_plugins(harness_container.container, ())
+    jenkins._install_plugins(harness_container.container)
 
 
 def test_bootstrap_fail(
     harness_container: HarnessWithContainer,
-    invalid_plugins: typing.Iterable[str],
     monkeypatch: pytest.MonkeyPatch,
     jenkins_version: str,
+    raise_exception: typing.Callable,
 ):
     """
     arrange: given mocked container, monkeypatched get_version function and invalid plugins to \
@@ -251,13 +253,16 @@ def test_bootstrap_fail(
     assert: JenkinsPluginError is raised.
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: jenkins_version)
+    monkeypatch.setattr(
+        jenkins,
+        "_install_plugins",
+        lambda *_args, **kwargs: raise_exception(exception=jenkins.JenkinsPluginError),
+    )
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
         jenkins.bootstrap(
             connectable_container=harness_container.container,
             jnlp_port="1234",
-            num_executors=2,
-            plugins=invalid_plugins,
         )
 
 
@@ -273,12 +278,7 @@ def test_bootstrap(
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: jenkins_version)
 
-    jenkins.bootstrap(
-        connectable_container=harness_container.container,
-        jnlp_port="3000",
-        num_executors=3,
-        plugins=(),
-    )
+    jenkins.bootstrap(connectable_container=harness_container.container, jnlp_port="3000")
 
     assert harness_container.container.pull(
         jenkins.LAST_EXEC_VERSION_PATH, encoding="utf-8"
@@ -351,7 +351,7 @@ def test_add_agent_node_fail():
 
     with pytest.raises(jenkins.JenkinsError):
         jenkins.add_agent_node(
-            mock_jenkins_client, state.AgentMeta("3", "x86_64", "localhost:8080")
+            mock_jenkins_client, jenkins.AgentMeta("3", "x86_64", "localhost:8080")
         )
 
 
@@ -364,7 +364,7 @@ def test_add_agent_node_already_exists():
     mock_jenkins_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
     mock_jenkins_client.create_node.side_effect = jenkinsapi.custom_exceptions.AlreadyExists
 
-    jenkins.add_agent_node(mock_jenkins_client, state.AgentMeta("3", "x86_64", "localhost:8080"))
+    jenkins.add_agent_node(mock_jenkins_client, jenkins.AgentMeta("3", "x86_64", "localhost:8080"))
 
 
 def test_add_agent_node():
@@ -378,4 +378,29 @@ def test_add_agent_node():
         spec=jenkinsapi.node.Node
     )
 
-    jenkins.add_agent_node(mock_jenkins_client, state.AgentMeta("3", "x86_64", "localhost:8080"))
+    jenkins.add_agent_node(mock_jenkins_client, jenkins.AgentMeta("3", "x86_64", "localhost:8080"))
+
+
+@pytest.mark.parametrize(
+    "invalid_meta,expected_err_message",
+    [
+        pytest.param(
+            jenkins.AgentMeta(executors="", labels="abc", slavehost="http://sample-host:8080"),
+            "Fields ['executors'] cannot be empty.",
+        ),
+        pytest.param(
+            jenkins.AgentMeta(executors="abc", labels="abc", slavehost="http://sample-host:8080"),
+            "Number of executors abc cannot be converted to type int.",
+        ),
+    ],
+)
+def test_agent_meta__validate(invalid_meta: jenkins.AgentMeta, expected_err_message: str):
+    """
+    arrange: given an invalid agent metadata tuple.
+    act: when validate is called.
+    assert: ValidationError is raised with error messages.
+    """
+    with pytest.raises(jenkins.ValidationError) as exc:
+        invalid_meta.validate()
+
+    assert expected_err_message in str(exc.value)
