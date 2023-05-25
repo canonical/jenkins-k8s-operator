@@ -57,13 +57,11 @@ class State:
 
     Attrs:
         jnlp_port: The JNLP port to use to communicate with agents.
-        num_executors: The number of executors for Jenkins server.
-        plugins: The Jenkins plugins to install.
+        jenkins_service_name: The Jenkins service name. Note that the container name is the same.
     """
 
     jnlp_port: str
-    num_executors: int
-    plugins: typing.Iterable[str]
+    jenkins_service_name: str = "jenkins"
 
     @classmethod
     def from_charm(cls, charm_config: ops.ConfigData) -> "State":
@@ -75,8 +73,5 @@ class State:
         Returns:
             Current state of Jenkins.
         """
-        jnlp_port = charm_config.get("jnlp_port", "48484")
-        num_executors = int(charm_config.get("num_executors", 1))
-        plugins_config = charm_config.get("plugins", "")
-        plugins = (plugin for plugin in plugins_config.split())
-        return cls(jnlp_port=jnlp_port, num_executors=num_executors, plugins=plugins)
+        jnlp_port = charm_config.get("jnlp_port", "50000")
+        return cls(jnlp_port=jnlp_port)

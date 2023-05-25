@@ -161,36 +161,31 @@ def _unlock_wizard(connectable_container: ops.Container) -> None:
     connectable_container.push(WIZARD_VERSION_PATH, version, encoding="utf-8", make_dirs=True)
 
 
-def _install_config(
-    connectable_container: ops.Container, jnlp_port: str, num_executors: int
-) -> None:
+def _install_config(connectable_container: ops.Container, jnlp_port: str) -> None:
     """Install jenkins-config.xml.
 
     Args:
         connectable_container: The connectable Jenkins workload container.
         jnlp_port: The JNLP port to communicate with the agents.
-        num_executors: Number of executors to register on the Jenkins server.
     """
     env = jinja2.Environment(loader=jinja2.FileSystemLoader("templates"), autoescape=True)
     template = env.get_template("jenkins-config.xml.j2")
-    config = template.render(num_executors=num_executors, jnlp_port=jnlp_port)
+    config = template.render(jnlp_port=jnlp_port)
     connectable_container.push(CONFIG_FILE_PATH, config)
 
 
-def _install_plugins(connectable_container: ops.Container, plugins: typing.Iterable[str]) -> None:
+def _install_plugins(connectable_container: ops.Container) -> None:
     """Install Jenkins plugins.
 
     Download Jenkins plugins. A restart is required for the changes to take effect.
 
     Args:
         connectable_container: The connectable Jenkins workload container.
-        plugins: Plugins to install on the Jenkins server.
 
     Raises:
         JenkinsPluginError: if an error occurred installing the plugin.
     """
-    plugins_to_install = itertools.chain(REQUIRED_PLUGINS, plugins)
-    plugins = " ".join(set(plugins_to_install))
+    plugins = " ".join(set(REQUIRED_PLUGINS))
     proc: ops.pebble.ExecProcess = connectable_container.exec(
         [
             "java",
@@ -216,24 +211,20 @@ def _install_plugins(connectable_container: ops.Container, plugins: typing.Itera
 def bootstrap(
     connectable_container: ops.Container,
     jnlp_port: str,
-    num_executors: int,
-    plugins: typing.Iterable[str],
 ) -> None:
     """Initialize and install Jenkins.
 
     Args:
         connectable_container: The connectable Jenkins workload container.
         jnlp_port: The JNLP port to communicate with the agents.
-        num_executors: Number of executors to register on the Jenkins server.
-        plugins: Plugins to install on the Jenkins server.
 
     Raises:
         JenkinsBootstrapError: if there was an error installing given plugins or required plugins.
     """
     _unlock_wizard(connectable_container)
-    _install_config(connectable_container, jnlp_port, num_executors)
+    _install_config(connectable_container, jnlp_port)
     try:
-        _install_plugins(connectable_container, plugins)
+        _install_plugins(connectable_container)
     except JenkinsPluginError as exc:
         raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
 

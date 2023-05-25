@@ -112,12 +112,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         try:
             jenkins.wait_ready()
             self.unit.status = MaintenanceStatus("Configuring Jenkins.")
-            jenkins.bootstrap(
-                container,
-                self.state.jnlp_port,
-                self.state.num_executors,
-                self.state.plugins,
-            )
+            jenkins.bootstrap(container, self.state.jnlp_port)
             # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
             container.add_layer(
                 "jenkins",
