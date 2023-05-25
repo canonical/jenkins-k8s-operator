@@ -156,7 +156,7 @@ def get_admin_credentials(connectable_container: ops.Container) -> Credentials:
     return Credentials(username=user, password=password_file_contents.strip())
 
 
-class EnvironmentMap(typing.TypedDict):
+class Environment(typing.TypedDict):
     """Dictionary mapping of Jenkins environment variables.
 
     Attrs:
@@ -169,7 +169,7 @@ class EnvironmentMap(typing.TypedDict):
     ADMIN_CONFIGURED: str
 
 
-def calculate_env(admin_configured: bool) -> EnvironmentMap:
+def calculate_env(admin_configured: bool) -> Environment:
     """Return a dictionary for Jenkins Pebble layer.
 
     Args:
@@ -178,7 +178,7 @@ def calculate_env(admin_configured: bool) -> EnvironmentMap:
     Returns:
         The dictionary mapping of environment variables for the Jenkins service.
     """
-    return EnvironmentMap(JENKINS_HOME=str(HOME_PATH), ADMIN_CONFIGURED=str(admin_configured))
+    return Environment(JENKINS_HOME=str(HOME_PATH), ADMIN_CONFIGURED=str(admin_configured))
 
 
 def get_version() -> str:

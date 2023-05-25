@@ -45,7 +45,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         """The Jenkins workload container."""
         return self.unit.get_container(self.state.jenkins_service_name)
 
-    def _get_pebble_layer(self, jenkins_env: jenkins.EnvironmentMap) -> Layer:
+    def _get_pebble_layer(self, jenkins_env: jenkins.Environment) -> Layer:
         """Return a dictionary representing a Pebble layer.
 
         Args:
