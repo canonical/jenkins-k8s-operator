@@ -130,7 +130,7 @@ def test_get_admin_credentials(
 
 
 @pytest.mark.parametrize(
-    "admin_configured",
+    "bootstrapped",
     [
         pytest.param(
             False,
@@ -142,17 +142,17 @@ def test_get_admin_credentials(
         ),
     ],
 )
-def test_calculate_env(admin_configured: bool):
+def test_calculate_env(bootstrapped: bool):
     """
-    arrange: given admin_configured boolean state variable.
+    arrange: given bootstrapped boolean state variable.
     act: when calculate_env is called.
     assert: expected environment variable mapping dictionary is returned.
     """
-    env = jenkins.calculate_env(admin_configured=admin_configured)
+    env = jenkins.calculate_env(bootstrapped=bootstrapped)
 
     assert env == {
         "JENKINS_HOME": str(jenkins.HOME_PATH),
-        "ADMIN_CONFIGURED": "True" if admin_configured else "False",
+        "BOOTSTRAPPED": "True" if bootstrapped else "False",
     }
 
 
@@ -287,6 +287,36 @@ def test_bootstrap(
     assert harness_container.container.pull(
         jenkins.CONFIG_FILE_PATH, encoding="utf-8"
     ).read(), "Configuration not found"
+
+
+def test_is_bootstrapped_false(harness_container: HarnessWithContainer):
+    """
+    arrange: given a container before bootstrapped files.
+    act: when is_bootstrapped is run.
+    assert: returned value is false.
+    """
+    res = jenkins.is_boostrapped(harness_container.container)
+
+    assert not res, "The container should not be bootstrapped."
+
+
+def test_is_bootstrapped(harness_container: HarnessWithContainer):
+    """
+    arrange: given a container with required plugins, wizard setup and jenkins config installed.
+    act: when is_bootstrapped is run.
+    assert: returned value is true.
+    """
+    harness_container.container.push(jenkins.LAST_EXEC_VERSION_PATH, "", encoding="utf-8")
+    harness_container.container.push(jenkins.WIZARD_VERSION_PATH, "", encoding="utf-8")
+    harness_container.container.push(jenkins.CONFIG_FILE_PATH, "", encoding="utf-8")
+    for plugin in jenkins.REQUIRED_PLUGINS:
+        harness_container.container.push(
+            jenkins.PLUGINS_PATH / f"{plugin}.jpi", "", encoding="utf-8", make_dirs=True
+        )
+
+    res = jenkins.is_boostrapped(harness_container.container)
+
+    assert res, "The container should be bootstrapped."
 
 
 def test_get_client(admin_credentials: jenkins.Credentials):

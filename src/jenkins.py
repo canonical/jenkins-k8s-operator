@@ -4,6 +4,7 @@
 """Functions to operate Jenkins."""
 
 import dataclasses
+import itertools
 import logging
 import typing
 from datetime import datetime, timedelta
@@ -161,24 +162,24 @@ class Environment(typing.TypedDict):
 
     Attrs:
         JENKINS_HOME: The Jenkins home directory.
-        ADMIN_CONFIGURED: Boolean string "true" or "false", representing whether the Jenkins admin
-            account has been configured.
+        BOOTSTRAPPED: Boolean string "true" or "false", representing whether the Jenkins server
+            has been bootstrapped to bypass wizard setup.
     """
 
     JENKINS_HOME: str
-    ADMIN_CONFIGURED: str
+    BOOTSTRAPPED: str
 
 
-def calculate_env(admin_configured: bool) -> Environment:
+def calculate_env(bootstrapped: bool) -> Environment:
     """Return a dictionary for Jenkins Pebble layer.
 
     Args:
-        admin_configured: Whether admin user has been configured in Jenkins.
+        bootstrapped: Whether the Jenkins charm has been bootstrapped to bypass wizard setup.
 
     Returns:
         The dictionary mapping of environment variables for the Jenkins service.
     """
-    return Environment(JENKINS_HOME=str(HOME_PATH), ADMIN_CONFIGURED=str(admin_configured))
+    return Environment(JENKINS_HOME=str(HOME_PATH), BOOTSTRAPPED=str(bootstrapped))
 
 
 def get_version() -> str:
@@ -267,6 +268,31 @@ def bootstrap(
         _install_plugins(connectable_container)
     except JenkinsPluginError as exc:
         raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
+
+
+def is_boostrapped(connectable_container: ops.Container) -> bool:
+    """Check if the Jenkins server is bootstrapped.
+
+    Args:
+        connectable_container: The connectable Jenkins workload container.
+
+    Returns:
+        True if all necessary files for bypassing wizard and connecting agents are installed. False
+        otherwise.
+    """
+    return all(
+        itertools.chain(
+            (
+                connectable_container.exists(str(LAST_EXEC_VERSION_PATH)),
+                connectable_container.exists(str(WIZARD_VERSION_PATH)),
+                connectable_container.exists(str(CONFIG_FILE_PATH)),
+            ),
+            (
+                connectable_container.exists(str(PLUGINS_PATH / f"{plugin}.jpi"))
+                for plugin in REQUIRED_PLUGINS
+            ),
+        )
+    )
 
 
 def _get_client(client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:

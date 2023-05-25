@@ -94,7 +94,9 @@ class JenkinsK8SOperatorCharm(CharmBase):
         # First Jenkins server start installs Jenkins server.
         container.add_layer(
             "jenkins",
-            self._get_pebble_layer(jenkins.calculate_env(admin_configured=False)),
+            self._get_pebble_layer(
+                jenkins.calculate_env(bootstrapped=jenkins.is_boostrapped(self._jenkins_container))
+            ),
             combine=True,
         )
         container.replan()
@@ -105,7 +107,11 @@ class JenkinsK8SOperatorCharm(CharmBase):
             # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
             container.add_layer(
                 "jenkins",
-                self._get_pebble_layer(jenkins.calculate_env(admin_configured=True)),
+                self._get_pebble_layer(
+                    jenkins.calculate_env(
+                        bootstrapped=jenkins.is_boostrapped(self._jenkins_container)
+                    )
+                ),
                 combine=True,
             )
             container.replan()
