@@ -3,7 +3,7 @@
 
 """Functions to operate Jenkins."""
 
-import itertools
+import dataclasses
 import logging
 import typing
 from datetime import datetime, timedelta
@@ -16,11 +16,10 @@ import jinja2
 import ops
 import requests
 
-import state
-
 logger = logging.getLogger(__name__)
 
-WEB_URL = "http://localhost:8080"
+WEB_PORT = 8080
+WEB_URL = f"http://localhost:{WEB_PORT}"
 HOME_PATH = Path("/var/jenkins")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = HOME_PATH / "secrets/initialAdminPassword"
@@ -51,6 +50,46 @@ class JenkinsPluginError(JenkinsError):
 
 class JenkinsBootstrapError(JenkinsError):
     """An error occurred during the bootstrapping process."""
+
+
+class ValidationError(Exception):
+    """An unexpected data is encountered."""
+
+
+@dataclasses.dataclass(frozen=True)
+class AgentMeta:
+    """Metadata for registering Jenkins Agent.
+
+    Attrs:
+        executors: Number of executors of the agent in string format.
+        labels: Comma separated list of labels to be assigned to the agent.
+        slavehost: The host name of the agent.
+    """
+
+    executors: str
+    labels: str
+    slavehost: str
+
+    def validate(self) -> None:
+        """Validate the agent metadata.
+
+        Raises:
+            ValidationError: if the field contains invalid data.
+        """
+        empty_fields = [
+            field
+            # Pylint doesn't understand that _fields is implemented in NamedTuple.
+            for field in self.__annotations__.keys()  # pylint: disable=no-member
+            if not getattr(self, field)
+        ]
+        if empty_fields:
+            raise ValidationError(f"Fields {empty_fields} cannot be empty.")
+        try:
+            int(self.executors)
+        except ValueError as exc:
+            raise ValidationError(
+                f"Number of executors {self.executors} cannot be converted to type int."
+            ) from exc
 
 
 def _is_ready() -> bool:
@@ -88,7 +127,8 @@ def wait_ready(timeout: int = 300, check_interval: int = 10) -> None:
         raise TimeoutError("Timed out waiting for Jenkins to become ready.")
 
 
-class Credentials(typing.NamedTuple):
+@dataclasses.dataclass(frozen=True)
+class Credentials:
     """Information needed to log into Jenkins.
 
     Attrs:
@@ -267,9 +307,7 @@ def get_node_secret(jenkins_client: jenkinsapi.jenkins.Jenkins, node_name: str) 
         raise JenkinsError("Failed to run groovy script getting node secret.") from exc
 
 
-def add_agent_node(
-    jenkins_client: jenkinsapi.jenkins.Jenkins, agent_meta: state.AgentMeta
-) -> None:
+def add_agent_node(jenkins_client: jenkinsapi.jenkins.Jenkins, agent_meta: AgentMeta) -> None:
     """Add a Jenkins agent node.
 
     Args:

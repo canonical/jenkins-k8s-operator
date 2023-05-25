@@ -8,31 +8,20 @@
 import logging
 import typing
 
-from ops.charm import ActionEvent, CharmBase, PebbleReadyEvent, RelationJoinedEvent
+from ops.charm import ActionEvent, CharmBase, PebbleReadyEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.pebble import Layer
 
+import agent
 import jenkins
-import state
+from state import State
 
 if typing.TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
 
 
 logger = logging.getLogger(__name__)
-
-
-class AgentRelationData(typing.TypedDict):
-    """Relation data required for adding the Jenkins agent.
-
-    Attrs:
-        url: The Jenkins server url.
-        secret: The secret for agent node.
-    """
-
-    url: str
-    secret: str
 
 
 class JenkinsK8SOperatorCharm(CharmBase):
@@ -45,16 +34,16 @@ class JenkinsK8SOperatorCharm(CharmBase):
             args: Arguments to initialize the char base.
         """
         super().__init__(*args)
-        self.state = state.State.from_charm(self.model.config)
+        self.state = State.from_charm(self.model.config)
 
+        self.agent_observer = agent.Observer(self, self.state)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
-        self.framework.observe(self.on["agent"].relation_joined, self._on_agent_relation_joined)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
 
     @property
     def _jenkins_container(self) -> Container:
         """The Jenkins workload container."""
-        return self.unit.get_container("jenkins")
+        return self.unit.get_container(self.state.jenkins_service_name)
 
     def _get_pebble_layer(self, jenkins_env: jenkins.EnvironmentMap) -> Layer:
         """Return a dictionary representing a Pebble layer.
@@ -69,7 +58,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
             "summary": "jenkins layer",
             "description": "pebble config layer for jenkins",
             "services": {
-                "jenkins": {
+                self.state.jenkins_service_name: {
                     "override": "replace",
                     "summary": "jenkins",
                     "command": "java -Djava.awt.headless=true -jar /srv/jenkins/jenkins.war",
@@ -130,57 +119,6 @@ class JenkinsK8SOperatorCharm(CharmBase):
             self.unit.status = BlockedStatus("Error installling plugins.")
             return
 
-        self.unit.status = ActiveStatus()
-
-    def _on_agent_relation_joined(self, event: RelationJoinedEvent) -> None:
-        """Handle agent relation joined event.
-
-        Args:
-            event: The event fired from an agent joining the relationship.
-        """
-        if not (binding := self.model.get_binding("juju-info")):
-            return
-        if not self._jenkins_container.can_connect():
-            event.defer()
-            return
-        if not event.unit or not all(
-            event.relation.data[event.unit].get(required_data)
-            for required_data in ("executors", "labels", "slavehost")
-        ):
-            logger.warning("Relation data not ready yet. Deferring.")
-            event.defer()
-            return
-        agent_meta = state.AgentMeta(
-            executors=event.relation.data[event.unit]["executors"],
-            labels=event.relation.data[event.unit]["labels"],
-            slavehost=event.relation.data[event.unit]["slavehost"],
-        )
-        try:
-            agent_meta.validate()
-        except state.ValidationError as exc:
-            logger.error("Invalid agent relation data. %s", exc)
-            self.unit.status = BlockedStatus("Invalid agent relation data.")
-            return
-
-        self.unit.status = MaintenanceStatus("Adding agent node.")
-        credentials = jenkins.get_admin_credentials(self._jenkins_container)
-        jenkins_client = jenkins.get_client(client_credentials=credentials)
-        try:
-            jenkins.add_agent_node(
-                jenkins_client=jenkins_client,
-                agent_meta=agent_meta,
-            )
-            secret = jenkins.get_node_secret(
-                jenkins_client=jenkins_client, node_name=agent_meta.slavehost
-            )
-        except jenkins.JenkinsError as exc:
-            self.unit.status = BlockedStatus(f"Jenkins API exception. {exc=!r}")
-            return
-
-        host = binding.network.bind_address
-        event.relation.data[self.model.unit].update(
-            AgentRelationData(url=f"http://{str(host)}:8080", secret=secret)
-        )
         self.unit.status = ActiveStatus()
 
     def _on_get_admin_password(self, event: ActionEvent) -> None:
