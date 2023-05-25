@@ -78,7 +78,7 @@ class AgentMeta:
         """
         empty_fields = [
             field
-            # Pylint doesn't understand that _fields is implemented in NamedTuple.
+            # Pylint doesn't understand that __annotations__ is implemented in a Python class.
             for field in self.__annotations__.keys()  # pylint: disable=no-member
             if not getattr(self, field)
         ]
@@ -269,7 +269,7 @@ def bootstrap(
         raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
 
 
-def get_client(client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
+def _get_client(client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
     """Get the Jenkins client.
 
     Args:
@@ -286,12 +286,17 @@ def get_client(client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
     )
 
 
-def get_node_secret(jenkins_client: jenkinsapi.jenkins.Jenkins, node_name: str) -> str:
+def get_node_secret(
+    node_name: str,
+    credentials: Credentials,
+    client: jenkinsapi.jenkins.Jenkins | None = None,
+) -> str:
     """Get node secret from jenkins.
 
     Args:
-        jenkins_client: The API client used to communicate with the Jenkins server.
         node_name: The registered node to fetch the secret from.
+        credentials: The credentials of a Jenkins user with access to the Jenkins API.
+        client: The API client used to communicate with the Jenkins server.
 
     Returns:
         The Jenkins agent node secret.
@@ -299,26 +304,33 @@ def get_node_secret(jenkins_client: jenkinsapi.jenkins.Jenkins, node_name: str) 
     Raises:
         JenkinsError: if an error occurred running groovy script getting the node secret.
     """
+    client = client if client is not None else _get_client(credentials)
     try:
-        return jenkins_client.run_groovy_script(
+        return client.run_groovy_script(
             f'println(jenkins.model.Jenkins.getInstance().getComputer("{node_name}").getJnlpMac())'
         ).strip()
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         raise JenkinsError("Failed to run groovy script getting node secret.") from exc
 
 
-def add_agent_node(jenkins_client: jenkinsapi.jenkins.Jenkins, agent_meta: AgentMeta) -> None:
+def add_agent_node(
+    agent_meta: AgentMeta,
+    credentials: Credentials,
+    client: jenkinsapi.jenkins.Jenkins | None = None,
+) -> None:
     """Add a Jenkins agent node.
 
     Args:
-        jenkins_client: The API client used to communicate with the Jenkins server.
         agent_meta: The Jenkins agent metadata to create the node from.
+        credentials: The credentials of a Jenkins user with access to the Jenkins API.
+        client: The API client used to communicate with the Jenkins server.
 
     Raises:
         JenkinsError: if an error occurred running groovy script creating the node.
     """
+    client = client if client is not None else _get_client(credentials)
     try:
-        jenkins_client.create_node(
+        client.create_node(
             name=agent_meta.slavehost,
             num_executors=int(agent_meta.executors),
             node_description=agent_meta.slavehost,

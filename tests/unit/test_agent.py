@@ -22,28 +22,6 @@ from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME, MAINTENANCE_STATUS
 from .types_ import HarnessWithContainer
 
 
-def test__on_agent_relation_joined_no_ip(
-    harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """
-    arrange: given a charm instance without assigned IP address.
-    act: when agent relation joined event is fired.
-    assert: the event is not handled.
-    """
-    harness_container.harness.begin()
-    monkeypatch.setattr(
-        harness_container.harness.charm.model, "get_binding", lambda *_args, **_kwargs: None
-    )
-    mock_event = MagicMock(spec=PebbleReadyEvent)
-
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
-    jenkins_charm.agent_observer._on_agent_relation_joined(mock_event)
-
-    assert mock_event.defer.to_not_be_called()
-    assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
-
-
 def test__on_agent_relation_joined_no_container(harness_container: HarnessWithContainer):
     """
     arrange: given a charm with no connectable container.
@@ -143,7 +121,7 @@ def test__on_agent_relation_joined_client_error(
     """
     monkeypatch.setattr(
         charm.jenkins,
-        "get_client",
+        "_get_client",
         lambda *_args, **_kwargs: MagicMock(spec=jenkinsapi.jenkins.Jenkins),
     )
     monkeypatch.setattr(
@@ -184,7 +162,7 @@ def test__on_agent_relation_joined(
     """
     monkeypatch.setattr(
         charm.jenkins,
-        "get_client",
+        "_get_client",
         lambda *_args, **_kwargs: MagicMock(spec=jenkinsapi.jenkins.Jenkins),
     )
     monkeypatch.setattr(

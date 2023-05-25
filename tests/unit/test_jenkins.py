@@ -298,7 +298,7 @@ def test_get_client(admin_credentials: jenkins.Credentials):
     expected_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
     with unittest.mock.patch("jenkinsapi.jenkins.Jenkins", return_value=expected_client):
-        client = jenkins.get_client(admin_credentials)
+        client = jenkins._get_client(admin_credentials)
 
         assert client == expected_client
         # pylint doesn't understand that this is a patched implementation.
@@ -310,7 +310,7 @@ def test_get_client(admin_credentials: jenkins.Credentials):
         )
 
 
-def test_get_node_secret_api_error():
+def test_get_node_secret_api_error(admin_credentials: jenkins.Credentials):
     """
     arrange: given a mocked Jenkins client that raises an error.
     act: when a groovy script is executed through the client.
@@ -322,10 +322,10 @@ def test_get_node_secret_api_error():
     )
 
     with pytest.raises(jenkins.JenkinsError):
-        jenkins.get_node_secret(mock_jenkins_client, "jenkins-agent")
+        jenkins.get_node_secret("jenkins-agent", admin_credentials, mock_jenkins_client)
 
 
-def test_get_node_secret():
+def test_get_node_secret(admin_credentials: jenkins.Credentials):
     """
     arrange: given a mocked Jenkins client.
     act: when a groovy script getting a node secret is executed.
@@ -335,12 +335,12 @@ def test_get_node_secret():
     mock_jenkins_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
     mock_jenkins_client.run_groovy_script.return_value = secret
 
-    node_secret = jenkins.get_node_secret(mock_jenkins_client, "jenkins-agent")
+    node_secret = jenkins.get_node_secret("jenkins-agent", admin_credentials, mock_jenkins_client)
 
     assert secret == node_secret, "Secret value mismatch."
 
 
-def test_add_agent_node_fail():
+def test_add_agent_node_fail(admin_credentials: jenkins.Credentials):
     """
     arrange: given a mocked jenkins client that raises an API exception.
     act: when add_agent is called
@@ -351,11 +351,13 @@ def test_add_agent_node_fail():
 
     with pytest.raises(jenkins.JenkinsError):
         jenkins.add_agent_node(
-            mock_jenkins_client, jenkins.AgentMeta("3", "x86_64", "localhost:8080")
+            jenkins.AgentMeta("3", "x86_64", "localhost:8080"),
+            admin_credentials,
+            mock_jenkins_client,
         )
 
 
-def test_add_agent_node_already_exists():
+def test_add_agent_node_already_exists(admin_credentials: jenkins.Credentials):
     """
     arrange: given a mocked jenkins client that raises an Already exists exception.
     act: when add_agent is called.
@@ -364,10 +366,12 @@ def test_add_agent_node_already_exists():
     mock_jenkins_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
     mock_jenkins_client.create_node.side_effect = jenkinsapi.custom_exceptions.AlreadyExists
 
-    jenkins.add_agent_node(mock_jenkins_client, jenkins.AgentMeta("3", "x86_64", "localhost:8080"))
+    jenkins.add_agent_node(
+        jenkins.AgentMeta("3", "x86_64", "localhost:8080"), admin_credentials, mock_jenkins_client
+    )
 
 
-def test_add_agent_node():
+def test_add_agent_node(admin_credentials: jenkins.Credentials):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
@@ -378,7 +382,9 @@ def test_add_agent_node():
         spec=jenkinsapi.node.Node
     )
 
-    jenkins.add_agent_node(mock_jenkins_client, jenkins.AgentMeta("3", "x86_64", "localhost:8080"))
+    jenkins.add_agent_node(
+        jenkins.AgentMeta("3", "x86_64", "localhost:8080"), admin_credentials, mock_jenkins_client
+    )
 
 
 @pytest.mark.parametrize(

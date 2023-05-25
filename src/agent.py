@@ -54,8 +54,6 @@ class Observer(Object):
         Args:
             event: The event fired from an agent joining the relationship.
         """
-        if not (binding := self.model.get_binding("juju-info")):
-            return
         if not self._jenkins_container.can_connect():
             event.defer()
             return
@@ -80,19 +78,20 @@ class Observer(Object):
 
         self.charm.unit.status = MaintenanceStatus("Adding agent node.")
         credentials = jenkins.get_admin_credentials(self._jenkins_container)
-        jenkins_client = jenkins.get_client(client_credentials=credentials)
         try:
             jenkins.add_agent_node(
-                jenkins_client=jenkins_client,
                 agent_meta=agent_meta,
+                credentials=credentials,
             )
             secret = jenkins.get_node_secret(
-                jenkins_client=jenkins_client, node_name=agent_meta.slavehost
+                credentials=credentials, node_name=agent_meta.slavehost
             )
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
+        # This is to avoid the None type.
+        assert (binding := self.model.get_binding("juju-info"))  # nosec
         host = binding.network.bind_address
         event.relation.data[self.model.unit].update(
             AgentRelationData(url=f"http://{str(host)}:8080", secret=secret)
