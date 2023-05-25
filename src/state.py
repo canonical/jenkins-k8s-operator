@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Jenkins States."""
+import dataclasses
 import logging
 import typing
 
@@ -14,7 +15,8 @@ class ValidationError(Exception):
     """An unexpected data is encountered."""
 
 
-class AgentMeta(typing.NamedTuple):
+@dataclasses.dataclass(frozen=True)
+class AgentMeta:
     """Metadata for registering Jenkins Agent.
 
     Attrs:
@@ -49,6 +51,7 @@ class AgentMeta(typing.NamedTuple):
             ) from exc
 
 
+@dataclasses.dataclass(frozen=True)
 class State:
     """The Jenkins k8s operator charm state.
 
@@ -58,22 +61,9 @@ class State:
         plugins: The Jenkins plugins to install.
     """
 
-    def __init__(
-        self,
-        jnlp_port: str,
-        num_executors: int,
-        plugins: typing.Iterable[str],
-    ) -> None:
-        """Initialize the state.
-
-        Args:
-            jnlp_port: JNLP port to communicate with agents.
-            num_executors: The number of executors for Jenkins server.
-            plugins: Jenkins plugins to install.
-        """
-        self._jnlp_port = jnlp_port
-        self._num_executors = num_executors
-        self._plugins = plugins
+    jnlp_port: str
+    num_executors: int
+    plugins: typing.Iterable[str]
 
     @classmethod
     def from_charm(cls, charm_config: ops.ConfigData) -> "State":
@@ -85,23 +75,8 @@ class State:
         Returns:
             Current state of Jenkins.
         """
-        num_executors = int(charm_config.get("num_executors", 1))
         jnlp_port = charm_config.get("jnlp_port", "48484")
+        num_executors = int(charm_config.get("num_executors", 1))
         plugins_config = charm_config.get("plugins", "")
         plugins = (plugin for plugin in plugins_config.split())
-        return cls(jnlp_port, num_executors, plugins)
-
-    @property
-    def jnlp_port(self) -> str:
-        """The JNLP port to use to communicate with agents."""
-        return self._jnlp_port
-
-    @property
-    def num_executors(self) -> int:
-        """The number of executors for Jenkins server."""
-        return self._num_executors
-
-    @property
-    def plugins(self) -> typing.Iterable[str]:
-        """The Jenkins plugins to install."""
-        return self._plugins
+        return cls(jnlp_port=jnlp_port, num_executors=num_executors, plugins=plugins)
