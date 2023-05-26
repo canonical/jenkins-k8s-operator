@@ -54,3 +54,4 @@ async def test_jenkins_agent_relation(
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
     assert build.get_status() == "SUCCESS"
+    assert False
