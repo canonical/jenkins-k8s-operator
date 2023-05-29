@@ -34,7 +34,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
             args: Arguments to initialize the char base.
         """
         super().__init__(*args)
-        self.state = State.from_charm(self.model.config)
+        self.state = State.from_charm()
 
         self.agent_observer = agent.Observer(self, self.state)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
@@ -94,27 +94,16 @@ class JenkinsK8SOperatorCharm(CharmBase):
         # First Jenkins server start installs Jenkins server.
         container.add_layer(
             "jenkins",
-            self._get_pebble_layer(
-                jenkins.calculate_env(bootstrapped=jenkins.is_boostrapped(self._jenkins_container))
-            ),
+            self._get_pebble_layer(jenkins.calculate_env()),
             combine=True,
         )
         container.replan()
         try:
             jenkins.wait_ready()
             self.unit.status = MaintenanceStatus("Configuring Jenkins.")
-            jenkins.bootstrap(container, self.state.jnlp_port)
+            jenkins.bootstrap(container)
             # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
-            container.add_layer(
-                "jenkins",
-                self._get_pebble_layer(
-                    jenkins.calculate_env(
-                        bootstrapped=jenkins.is_boostrapped(self._jenkins_container)
-                    )
-                ),
-                combine=True,
-            )
-            container.replan()
+            container.restart(self.state.jenkins_service_name)
             jenkins.wait_ready()
         except TimeoutError as exc:
             logger.error("Timed out waiting for Jenkins, %s", exc)

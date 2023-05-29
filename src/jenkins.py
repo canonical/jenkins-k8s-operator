@@ -13,7 +13,6 @@ from time import sleep
 
 import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
-import jinja2
 import ops
 import requests
 
@@ -162,24 +161,18 @@ class Environment(typing.TypedDict):
 
     Attrs:
         JENKINS_HOME: The Jenkins home directory.
-        BOOTSTRAPPED: Boolean string "true" or "false", representing whether the Jenkins server
-            has been bootstrapped to bypass wizard setup.
     """
 
     JENKINS_HOME: str
-    BOOTSTRAPPED: str
 
 
-def calculate_env(bootstrapped: bool) -> Environment:
+def calculate_env() -> Environment:
     """Return a dictionary for Jenkins Pebble layer.
-
-    Args:
-        bootstrapped: Whether the Jenkins charm has been bootstrapped to bypass wizard setup.
 
     Returns:
         The dictionary mapping of environment variables for the Jenkins service.
     """
-    return Environment(JENKINS_HOME=str(HOME_PATH), BOOTSTRAPPED=str(bootstrapped))
+    return Environment(JENKINS_HOME=str(HOME_PATH))
 
 
 def get_version() -> str:
@@ -202,17 +195,14 @@ def _unlock_wizard(connectable_container: ops.Container) -> None:
     connectable_container.push(WIZARD_VERSION_PATH, version, encoding="utf-8", make_dirs=True)
 
 
-def _install_config(connectable_container: ops.Container, jnlp_port: str) -> None:
+def _install_config(connectable_container: ops.Container) -> None:
     """Install jenkins-config.xml.
 
     Args:
         connectable_container: The connectable Jenkins workload container.
-        jnlp_port: The JNLP port to communicate with the agents.
     """
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader("templates"), autoescape=True)
-    template = env.get_template("jenkins-config.xml.j2")
-    config = template.render(jnlp_port=jnlp_port)
-    connectable_container.push(CONFIG_FILE_PATH, config)
+    with open("templates/jenkins-config.xml", encoding="utf-8") as jenkins_config_file:
+        connectable_container.push(CONFIG_FILE_PATH, jenkins_config_file)
 
 
 def _install_plugins(connectable_container: ops.Container) -> None:
@@ -251,19 +241,17 @@ def _install_plugins(connectable_container: ops.Container) -> None:
 
 def bootstrap(
     connectable_container: ops.Container,
-    jnlp_port: str,
 ) -> None:
     """Initialize and install Jenkins.
 
     Args:
         connectable_container: The connectable Jenkins workload container.
-        jnlp_port: The JNLP port to communicate with the agents.
 
     Raises:
         JenkinsBootstrapError: if there was an error installing given plugins or required plugins.
     """
     _unlock_wizard(connectable_container)
-    _install_config(connectable_container, jnlp_port)
+    _install_config(connectable_container)
     try:
         _install_plugins(connectable_container)
     except JenkinsPluginError as exc:

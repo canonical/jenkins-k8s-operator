@@ -129,31 +129,15 @@ def test_get_admin_credentials(
     assert jenkins.get_admin_credentials(harness_container.container) == admin_credentials
 
 
-@pytest.mark.parametrize(
-    "bootstrapped",
-    [
-        pytest.param(
-            False,
-            id="Admin not configured",
-        ),
-        pytest.param(
-            True,
-            id="Admin configured",
-        ),
-    ],
-)
-def test_calculate_env(bootstrapped: bool):
+def test_calculate_env():
     """
     arrange: given bootstrapped boolean state variable.
     act: when calculate_env is called.
     assert: expected environment variable mapping dictionary is returned.
     """
-    env = jenkins.calculate_env(bootstrapped=bootstrapped)
+    env = jenkins.calculate_env()
 
-    assert env == {
-        "JENKINS_HOME": str(jenkins.HOME_PATH),
-        "BOOTSTRAPPED": "True" if bootstrapped else "False",
-    }
+    assert env == {"JENKINS_HOME": str(jenkins.HOME_PATH)}
 
 
 def test_get_version(
@@ -202,8 +186,7 @@ def test__install_config(harness_container: HarnessWithContainer):
     act: when _install_config is called.
     assert: jenkins configuration file is generated.
     """
-    jnlp_port = "1234"
-    jenkins._install_config(harness_container.container, jnlp_port)
+    jenkins._install_config(harness_container.container)
 
     config_xml = str(
         harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
@@ -211,7 +194,7 @@ def test__install_config(harness_container: HarnessWithContainer):
 
     jnlp_match = re.search(r"<slaveAgentPort>(\d+)</slaveAgentPort>", config_xml)
     assert jnlp_match, "Configuration for jnlp port not found."
-    assert jnlp_match.group(1) == jnlp_port
+    assert jnlp_match.group(1) == "50000", "jnlp not set as default port."
 
 
 def test__install_plugins_fail(raise_exception):
@@ -260,10 +243,7 @@ def test_bootstrap_fail(
     )
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
-        jenkins.bootstrap(
-            connectable_container=harness_container.container,
-            jnlp_port="1234",
-        )
+        jenkins.bootstrap(connectable_container=harness_container.container)
 
 
 def test_bootstrap(
@@ -278,7 +258,7 @@ def test_bootstrap(
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: jenkins_version)
 
-    jenkins.bootstrap(connectable_container=harness_container.container, jnlp_port="3000")
+    jenkins.bootstrap(connectable_container=harness_container.container)
 
     assert harness_container.container.pull(
         jenkins.LAST_EXEC_VERSION_PATH, encoding="utf-8"
