@@ -85,7 +85,7 @@ async def jenkins_client_fixture(
     await action.wait()
     password = action.results["password"]
 
-    # Initialization ot the jenkins client will raise an exception if unable to connect to the
+    # Initialization of the jenkins client will raise an exception if unable to connect to the
     # server.
     return jenkinsapi.jenkins.Jenkins(
         baseurl=web_address, username="admin", password=password, timeout=60
