@@ -29,6 +29,7 @@ parts:
       - curl
       - libnss3
       - unzip
+      - default-jdk-headless
     overlay-packages:
       - bash
       - ca-certificates-java
@@ -44,6 +45,7 @@ parts:
       cd ${CRAFT_PART_INSTALL}/srv/jenkins
       curl -sLO https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/${JENKINS_PLUGIN_MANAGER_VERSION}/jenkins-plugin-manager-${JENKINS_PLUGIN_MANAGER_VERSION}.jar
       curl -sLO https://mirrors.jenkins.io/war/${JENKINS_VERSION}/jenkins.war
+      jarsigner -verify -verbose jenkins.war
       unzip jenkins.war META-INF/MANIFEST.MF
       VERSION=$(grep Jenkins-Version META-INF/MANIFEST.MF | cut -d' ' -f2 | tr -d '\r')
       rm -rf META-INF
