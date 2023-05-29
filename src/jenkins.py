@@ -258,31 +258,6 @@ def bootstrap(
         raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
 
 
-def is_boostrapped(connectable_container: ops.Container) -> bool:
-    """Check if the Jenkins server is bootstrapped.
-
-    Args:
-        connectable_container: The connectable Jenkins workload container.
-
-    Returns:
-        True if all necessary files for bypassing wizard and connecting agents are installed. False
-        otherwise.
-    """
-    return all(
-        itertools.chain(
-            (
-                connectable_container.exists(str(LAST_EXEC_VERSION_PATH)),
-                connectable_container.exists(str(WIZARD_VERSION_PATH)),
-                connectable_container.exists(str(CONFIG_FILE_PATH)),
-            ),
-            (
-                connectable_container.exists(str(PLUGINS_PATH / f"{plugin}.jpi"))
-                for plugin in REQUIRED_PLUGINS
-            ),
-        )
-    )
-
-
 def _get_client(client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
     """Get the Jenkins client.
 
