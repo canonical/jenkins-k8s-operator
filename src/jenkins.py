@@ -4,7 +4,6 @@
 """Functions to operate Jenkins."""
 
 import dataclasses
-import itertools
 import logging
 import typing
 from datetime import datetime, timedelta
