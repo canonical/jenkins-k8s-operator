@@ -1,0 +1,3 @@
+rules:
+  # Ignore "slave" - the relation interface name for agents use this terminology.
+  - name: slave
