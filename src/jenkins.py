@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 WEB_PORT = 8080
 WEB_URL = f"http://localhost:{WEB_PORT}"
 HOME_PATH = Path("/var/jenkins")
+WAR_PATH = Path("/srv/jenkins/")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = HOME_PATH / "secrets/initialAdminPassword"
 # Path to last executed Jenkins version file, required to override wizard installation
@@ -228,7 +229,7 @@ def _install_plugins(connectable_container: ops.Container) -> None:
             "-p",
             plugins,
         ],
-        working_dir="/srv/jenkins/",
+        working_dir=str(WAR_PATH),
         timeout=300,
     )
     try:

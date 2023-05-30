@@ -94,6 +94,6 @@ class Observer(Object):
         assert (binding := self.model.get_binding("juju-info"))  # nosec
         host = binding.network.bind_address
         event.relation.data[self.model.unit].update(
-            AgentRelationData(url=f"http://{str(host)}:8080", secret=secret)
+            AgentRelationData(url=f"http://{str(host)}:{jenkins.WEB_PORT}", secret=secret)
         )
         self.charm.unit.status = ActiveStatus()
