@@ -230,7 +230,7 @@ def _install_plugins(connectable_container: ops.Container) -> None:
             plugins,
         ],
         working_dir=str(WAR_PATH),
-        timeout=300,
+        timeout=600,
     )
     try:
         proc.wait_output()
