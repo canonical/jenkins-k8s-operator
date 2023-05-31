@@ -3,7 +3,13 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+# subprocess module is required to bootstrap controllers for testing.
+import subprocess  # nosec
 import textwrap
+import typing
+from pathlib import Path
+from random import choices
+from string import ascii_lowercase, digits
 
 import jenkinsapi.jenkins
 import pytest
@@ -11,14 +17,15 @@ import pytest_asyncio
 from juju.action import Action
 from juju.application import Application
 from juju.client._definitions import FullStatus, UnitStatus
-from juju.model import Model
+from juju.client.jujudata import FileJujuData
+from juju.model import Controller, Model
 from juju.unit import Unit
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
 
-@pytest.fixture(scope="module", name="model")
-def model_fixture(ops_test: OpsTest) -> Model:
+@pytest_asyncio.fixture(scope="module", name="model")
+async def model_fixture(ops_test: OpsTest) -> Model:
     """The testing model."""
     assert ops_test.model
     return ops_test.model
@@ -121,3 +128,85 @@ def jenkins_test_job_xml() -> str:
         </project>
         """
     )
+
+
+@pytest.fixture(scope="module", name="controller_model_name")
+def controller_model_name_fixture(request: pytest.FixtureRequest) -> str:
+    """The name for machine controller and model."""
+    # This is taken from the same logic in pytest_operator plugin.py _generate_model_name
+    # to match the ops test naming.
+    module_name = request.module.__name__.rpartition(".")[-1]
+    suffix = "".join(choices(ascii_lowercase + digits, k=4))  # nosec
+    return f"{module_name.replace('_', '-')}-{suffix}"
+
+
+@pytest_asyncio.fixture(scope="module", name="machine_controller")
+async def machine_controller_fixture(
+    request: pytest.FixtureRequest, controller_model_name: str
+) -> typing.AsyncGenerator[Controller, None]:
+    """The lxd controller."""
+    prev_controller_name = FileJujuData().current_controller()
+    # bandit will warn about partial process path in executable, but juju executable can be trusted
+    # in a test environment.
+    res = subprocess.run(
+        ["juju", "bootstrap", "localhost", controller_model_name],
+        capture_output=True,
+        check=False,  # nosec
+    )
+    assert res.returncode == 0, f"failed to bootstrap localhost, {res=!r}"
+    # bandit will warn about partial process path in executable, but juju executable can be trusted
+    # in a test environment.
+    res = subprocess.run(["juju", "switch", prev_controller_name], check=False)  # nosec
+    assert res.returncode == 0, f"failed to switch back to original controller, {res=!r}"
+    controller = Controller()
+    await controller.connect_controller(controller_model_name)
+
+    yield controller
+
+    if not request.config.option.keep_models:
+        # bandit will warn about partial process path in executable, but juju executable can be
+        # trusted in a test environment.
+        res = subprocess.run(  # nosec
+            [
+                "juju",
+                "destroy-controller",
+                "-y",
+                controller_model_name,
+                "--force",
+                "--destroy-all-models",
+            ],
+            check=False,
+            capture_output=True,
+        )
+        assert res.returncode == 0, f"failed to clean up controller, {res=!r}"
+    # Disconnection is required for the coroutine tasks to finish.
+    await controller.disconnect()
+
+
+@pytest_asyncio.fixture(scope="module", name="machine_model")
+async def machine_model_fixture(
+    request: pytest.FixtureRequest, machine_controller: Controller, controller_model_name: str
+) -> typing.AsyncGenerator[Model, None]:
+    """The machine model."""
+    model = await machine_controller.add_model(controller_model_name)
+
+    yield model
+
+    if not request.config.option.keep_models:
+        await machine_controller.destroy_models(model.name, destroy_storage=True, force=True)
+        # Disconnection is required for the coroutine tasks to finish.
+    await model.disconnect()
+
+
+@pytest_asyncio.fixture(scope="module", name="jenkins_machine_agent")
+async def jenkins_machine_agent_fixture(machine_model: Model) -> Application:
+    """The machine model controller."""
+    fixed_agent = Path(
+        "../jenkins-agent-charm/"
+        "jenkins-agent_ubuntu-16.04-amd64_ubuntu-18.04-amd64_ubuntu-20.04-amd64.charm"
+    )
+    app = await machine_model.deploy(fixed_agent)
+    await machine_model.wait_for_idle(apps=[app.name], status="blocked", timeout=1200)
+    await machine_model.create_offer(f"{app.name}:slave")
+
+    return app
