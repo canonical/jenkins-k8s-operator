@@ -45,9 +45,40 @@ async def test_jenkins_agent_relation(
     await model.wait_for_idle(status="active")
 
     nodes = jenkins_client.get_nodes()
-    assert len(nodes) == 2, "Nodes should contain 2 nodes, 1 Built-in and 1 agent."
-    assert "Built-In Node" == nodes.keys()[0]
-    assert "jenkins-agent-k8s-0" in nodes.keys()[1]
+    assert any(
+        ("jenkins-agent-k8s-0" in key for key in nodes.keys())
+    ), "Jenkins k8s agent node not registered."
+
+    job = jenkins_client.create_job("test", jenkins_test_job_xml)
+    queue_item = job.invoke()
+    queue_item.block_until_complete()
+    build: jenkinsapi.build.Build = queue_item.get_build()
+    assert build.get_status() == "SUCCESS"
+
+
+async def test_jenkins_machine_agent_relation(
+    model: Model,
+    jenkins_machine_agent: Application,
+    application: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    jenkins_test_job_xml: str,
+):
+    """
+    arrange: given a cross controller cross model jenkins machine agent with an offer.
+    act: when the relation is setup through an offer.
+    assert: the relation succeeds and the agent is able to run jobs successfully.
+    """
+    controller_name = model_name = jenkins_machine_agent.model.name
+    await model.relate(
+        f"{application.name}:agent",
+        f"{controller_name}:admin/{model_name}.{jenkins_machine_agent.name}",
+    )
+    await model.wait_for_idle(status="active", timeout=1200)
+
+    nodes = jenkins_client.get_nodes()
+    assert any(
+        ("jenkins-agent-0" in key for key in nodes.keys())
+    ), "Jenkins agent node not registered."
 
     job = jenkins_client.create_job("test", jenkins_test_job_xml)
     queue_item = job.invoke()
