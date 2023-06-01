@@ -9,3 +9,4 @@ jobs:
     secrets: inherit
     with:
       tmate-debug: true
+      pre-run-script: tests/integration/pre-run-script.sh
