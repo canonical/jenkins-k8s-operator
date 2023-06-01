@@ -7,7 +7,6 @@
 import subprocess  # nosec
 import textwrap
 import typing
-from pathlib import Path
 from random import choices
 from string import ascii_lowercase, digits
 
