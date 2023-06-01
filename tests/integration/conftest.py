@@ -203,11 +203,9 @@ async def machine_model_fixture(
 @pytest_asyncio.fixture(scope="module", name="jenkins_machine_agent")
 async def jenkins_machine_agent_fixture(machine_model: Model) -> Application:
     """The machine model controller."""
-    fixed_agent = Path(
-        "../jenkins-agent-charm/"
-        "jenkins-agent_ubuntu-16.04-amd64_ubuntu-18.04-amd64_ubuntu-20.04-amd64.charm"
+    app = await machine_model.deploy(
+        "jenkins-agent", channel="latest/edge", config={"labels": "machine"}
     )
-    app = await machine_model.deploy(fixed_agent, config={"labels": "machine"})
     await machine_model.wait_for_idle(apps=[app.name], status="blocked", timeout=1200)
     await machine_model.create_offer(f"{app.name}:slave")
 
