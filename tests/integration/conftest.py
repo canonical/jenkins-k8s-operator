@@ -76,7 +76,9 @@ async def web_address_fixture(unit_ip: str):
 @pytest_asyncio.fixture(scope="module", name="jenkins_k8s_agent")
 async def jenkins_k8s_agent(model: Model) -> Application:
     """The Jenkins k8s agent."""
-    agent_app: Application = await model.deploy("jenkins-agent-k8s")
+    agent_app: Application = await model.deploy(
+        "jenkins-agent-k8s", config={"jenkins_agent_labels": "k8s"}
+    )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
     return agent_app
 
@@ -99,18 +101,18 @@ async def jenkins_client_fixture(
     )
 
 
-@pytest.fixture(scope="module", name="jenkins_test_job_xml")
-def jenkins_test_job_xml() -> str:
-    """The Jenkins test job xml with node label x86_64, the default label on an agent node."""
-    return textwrap.dedent(
-        """
+@pytest.fixture(scope="module", name="gen_jenkins_test_job_xml")
+def gen_jenkins_test_job_xml_fixture() -> typing.Callable[[str], str]:
+    """The Jenkins test job xml with given node label on an agent node."""
+    return lambda label: textwrap.dedent(
+        f"""
         <project>
             <actions/>
             <description/>
             <keepDependencies>false</keepDependencies>
             <properties/>
             <scm class="hudson.scm.NullSCM"/>
-            <assignedNode>x86_64</assignedNode>
+            <assignedNode>{label}</assignedNode>
             <canRoam>false</canRoam>
             <disabled>false</disabled>
             <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
@@ -205,7 +207,7 @@ async def jenkins_machine_agent_fixture(machine_model: Model) -> Application:
         "../jenkins-agent-charm/"
         "jenkins-agent_ubuntu-16.04-amd64_ubuntu-18.04-amd64_ubuntu-20.04-amd64.charm"
     )
-    app = await machine_model.deploy(fixed_agent)
+    app = await machine_model.deploy(fixed_agent, config={"labels": "machine"})
     await machine_model.wait_for_idle(apps=[app.name], status="blocked", timeout=1200)
     await machine_model.create_offer(f"{app.name}:slave")
 
