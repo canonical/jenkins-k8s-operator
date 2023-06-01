@@ -23,8 +23,8 @@ from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
 
-@pytest_asyncio.fixture(scope="module", name="model")
-async def model_fixture(ops_test: OpsTest) -> Model:
+@pytest.fixture(scope="module", name="model")
+def model_fixture(ops_test: OpsTest) -> Model:
     """The testing model."""
     assert ops_test.model
     return ops_test.model
