@@ -35,7 +35,7 @@ async def test_jenkins_agent_relation(
     application: Application,
     jenkins_k8s_agent: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
-    gen_jenkins_test_job_xml: str,
+    gen_jenkins_test_job_xml: typing.Callable[[str], str],
 ):
     """
     arrange: given jenkins-k8s-agent and jenkins server charms.
