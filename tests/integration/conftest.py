@@ -3,10 +3,9 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+import secrets
 import textwrap
 import typing
-from random import choices
-from string import ascii_lowercase, digits
 
 import jenkinsapi.jenkins
 import pytest
@@ -137,21 +136,12 @@ async def machine_controller_fixture() -> Controller:
     return controller
 
 
-@pytest.fixture(scope="module", name="machine_model_name")
-def machine_model_name_fixture(request: pytest.FixtureRequest) -> str:
-    """The name for machine model."""
-    # This is taken from the same logic in pytest_operator plugin.py _generate_model_name
-    # to match the ops test naming.
-    module_name = request.module.__name__.rpartition(".")[-1]
-    suffix = "".join(choices(ascii_lowercase + digits, k=4))  # nosec
-    return f"{module_name.replace('_', '-')}-{suffix}"
-
-
 @pytest_asyncio.fixture(scope="module", name="machine_model")
 async def machine_model_fixture(
-    request: pytest.FixtureRequest, machine_controller: Controller, machine_model_name: str
+    request: pytest.FixtureRequest, machine_controller: Controller
 ) -> typing.AsyncGenerator[Model, None]:
     """The machine model for jenkins agent machine charm."""
+    machine_model_name = secrets.token_hex(2)
     model = await machine_controller.add_model(machine_model_name)
 
     yield model
