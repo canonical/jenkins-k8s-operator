@@ -157,7 +157,7 @@ async def machine_model_fixture(
     yield model
 
     if not request.config.option.keep_models:
-        await machine_controller.destroy_models(model.name, destroy_storage=True, force=True)
+        await machine_controller.destroy_models(model.name, force=True)
         # Disconnection is required for the coroutine tasks to finish.
     await model.disconnect()
 
