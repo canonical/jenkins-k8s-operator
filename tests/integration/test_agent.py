@@ -4,6 +4,7 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import logging
+import typing
 from pathlib import Path
 
 import jenkinsapi.jenkins
@@ -34,7 +35,7 @@ async def test_jenkins_agent_relation(
     application: Application,
     jenkins_k8s_agent: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
-    jenkins_test_job_xml: str,
+    gen_jenkins_test_job_xml: typing.Callable[[str], str],
 ):
     """
     arrange: given jenkins-k8s-agent and jenkins server charms.
@@ -45,11 +46,43 @@ async def test_jenkins_agent_relation(
     await model.wait_for_idle(status="active")
 
     nodes = jenkins_client.get_nodes()
-    assert len(nodes) == 2, "Nodes should contain 2 nodes, 1 Built-in and 1 agent."
-    assert "Built-In Node" == nodes.keys()[0]
-    assert "jenkins-agent-k8s-0" in nodes.keys()[1]
+    assert any(
+        ("jenkins-agent-k8s-0" in key for key in nodes.keys())
+    ), "Jenkins k8s agent node not registered."
 
-    job = jenkins_client.create_job("test", jenkins_test_job_xml)
+    job = jenkins_client.create_job("test", gen_jenkins_test_job_xml("k8s"))
+    queue_item = job.invoke()
+    queue_item.block_until_complete()
+    build: jenkinsapi.build.Build = queue_item.get_build()
+    assert build.get_status() == "SUCCESS"
+
+
+async def test_jenkins_machine_agent_relation(
+    jenkins_machine_agent: Application,
+    application: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    gen_jenkins_test_job_xml: typing.Callable[[str], str],
+):
+    """
+    arrange: given a cross controller cross model jenkins machine agent.
+    act: when the offer is created and relation is setup through the offer.
+    assert: the relation succeeds and the agent is able to run jobs successfully.
+    """
+    machine_model: Model = jenkins_machine_agent.model
+    await machine_model.create_offer(f"{jenkins_machine_agent.name}:slave")
+    model: Model = application.model
+    await model.relate(
+        f"{application.name}:agent",
+        f"localhost:admin/{machine_model.name}.{jenkins_machine_agent.name}",
+    )
+    await model.wait_for_idle(status="active", timeout=1200)
+
+    nodes = jenkins_client.get_nodes()
+    assert any(
+        ("jenkins-agent-0" in key for key in nodes.keys())
+    ), "Jenkins agent node not registered."
+
+    job = jenkins_client.create_job("test", gen_jenkins_test_job_xml("machine"))
     queue_item = job.invoke()
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
