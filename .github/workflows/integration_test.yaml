@@ -9,3 +9,4 @@ jobs:
     secrets: inherit
     with:
       tmate-debug: true
+      tmate-timeout: 60
