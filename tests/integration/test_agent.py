@@ -58,21 +58,22 @@ async def test_jenkins_agent_relation(
 
 
 async def test_jenkins_machine_agent_relation(
-    model: Model,
     jenkins_machine_agent: Application,
     application: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
     gen_jenkins_test_job_xml: typing.Callable[[str], str],
 ):
     """
-    arrange: given a cross controller cross model jenkins machine agent with an offer.
-    act: when the relation is setup through an offer.
+    arrange: given a cross controller cross model jenkins machine agent.
+    act: when the offer is created and relation is setup through the offer.
     assert: the relation succeeds and the agent is able to run jobs successfully.
     """
-    model_name = jenkins_machine_agent.model.name
+    machine_model: Model = jenkins_machine_agent.model
+    await machine_model.create_offer(f"{jenkins_machine_agent.name}:slave")
+    model: Model = application.model
     await model.relate(
         f"{application.name}:agent",
-        f"localhost:admin/{model_name}.{jenkins_machine_agent.name}",
+        f"localhost:admin/{machine_model.name}.{jenkins_machine_agent.name}",
     )
     await model.wait_for_idle(status="active", timeout=1200)
 

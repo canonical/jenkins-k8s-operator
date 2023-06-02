@@ -139,7 +139,7 @@ async def machine_controller_fixture() -> Controller:
 
 @pytest.fixture(scope="module", name="machine_model_name")
 def machine_model_name_fixture(request: pytest.FixtureRequest) -> str:
-    """The name for machine controller and model."""
+    """The name for machine model."""
     # This is taken from the same logic in pytest_operator plugin.py _generate_model_name
     # to match the ops test naming.
     module_name = request.module.__name__.rpartition(".")[-1]
@@ -151,7 +151,7 @@ def machine_model_name_fixture(request: pytest.FixtureRequest) -> str:
 async def machine_model_fixture(
     request: pytest.FixtureRequest, machine_controller: Controller, machine_model_name: str
 ) -> typing.AsyncGenerator[Model, None]:
-    """The machine model."""
+    """The machine model for jenkins agent machine charm."""
     model = await machine_controller.add_model(machine_model_name)
 
     yield model
@@ -164,11 +164,12 @@ async def machine_model_fixture(
 
 @pytest_asyncio.fixture(scope="module", name="jenkins_machine_agent")
 async def jenkins_machine_agent_fixture(machine_model: Model) -> Application:
-    """The machine model controller."""
+    """The jenkins machine agent."""
+    # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
+    # stable.
     app = await machine_model.deploy(
         "jenkins-agent", channel="latest/edge", config={"labels": "machine"}
     )
     await machine_model.wait_for_idle(apps=[app.name], status="blocked", timeout=1200)
-    await machine_model.create_offer(f"{app.name}:slave")
 
     return app
