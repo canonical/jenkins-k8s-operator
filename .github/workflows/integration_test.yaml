@@ -5,8 +5,9 @@ on:
 
 jobs:
   integration-tests:
-    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@feat/microk8s
+    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
+      pre-run-script: tests/integration/pre_run_script.sh
       tmate-debug: true
       tmate-timeout: 45
