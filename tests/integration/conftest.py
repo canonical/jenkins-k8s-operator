@@ -3,8 +3,6 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
-# subprocess module is required to bootstrap controllers for testing.
-import subprocess  # nosec
 import textwrap
 import typing
 from random import choices
@@ -16,7 +14,6 @@ import pytest_asyncio
 from juju.action import Action
 from juju.application import Application
 from juju.client._definitions import FullStatus, UnitStatus
-from juju.client.jujudata import FileJujuData
 from juju.model import Controller, Model
 from juju.unit import Unit
 from pytest import FixtureRequest

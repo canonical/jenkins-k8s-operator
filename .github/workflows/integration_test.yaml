@@ -9,5 +9,3 @@ jobs:
     secrets: inherit
     with:
       pre-run-script: tests/integration/pre_run_script.sh
-      tmate-debug: true
-      tmate-timeout: 45
