@@ -6,7 +6,8 @@
 # Pre-run script for integration test operator-workflows action.
 # https://github.com/canonical/operator-workflows/blob/main/.github/workflows/integration_test.yaml
 
-# Jenkins machine charm is deployed on lxd and Jenkins agent charm is deployed on microk8s.
+# Jenkins machine agent charm is deployed on lxd and Jenkins-k8s server charm is deployed on
+# microk8s.
 
 TESTING_MODEL="$(juju switch)"
 
