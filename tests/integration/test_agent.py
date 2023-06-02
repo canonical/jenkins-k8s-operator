@@ -69,10 +69,10 @@ async def test_jenkins_machine_agent_relation(
     act: when the relation is setup through an offer.
     assert: the relation succeeds and the agent is able to run jobs successfully.
     """
-    controller_name = model_name = jenkins_machine_agent.model.name
+    model_name = jenkins_machine_agent.model.name
     await model.relate(
         f"{application.name}:agent",
-        f"{controller_name}:admin/{model_name}.{jenkins_machine_agent.name}",
+        f"localhost:admin/{model_name}.{jenkins_machine_agent.name}",
     )
     await model.wait_for_idle(status="active", timeout=1200)
 
