@@ -141,7 +141,7 @@ async def machine_model_fixture(
     request: pytest.FixtureRequest, machine_controller: Controller
 ) -> typing.AsyncGenerator[Model, None]:
     """The machine model for jenkins agent machine charm."""
-    machine_model_name = secrets.token_hex(2)
+    machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
     model = await machine_controller.add_model(machine_model_name)
 
     yield model
