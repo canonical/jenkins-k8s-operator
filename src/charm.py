@@ -65,6 +65,8 @@ class JenkinsK8SOperatorCharm(CharmBase):
                     "startup": "enabled",
                     # TypedDict and Dict[str,str] are not compatible.
                     "environment": typing.cast(typing.Dict[str, str], jenkins_env),
+                    "user": jenkins.USER,
+                    "group": jenkins.GROUP,
                 },
             },
             "checks": {

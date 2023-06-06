@@ -37,6 +37,9 @@ REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
 ]
 
+USER = "jenkins"
+GROUP = "jenkins"
+
 BUILT_IN_NODE_NAME = "Built-In Node"
 
 
@@ -191,8 +194,22 @@ def _unlock_wizard(connectable_container: ops.Container) -> None:
         connectable_container: The connectable Jenkins workload container.
     """
     version = get_version()
-    connectable_container.push(LAST_EXEC_VERSION_PATH, version, encoding="utf-8", make_dirs=True)
-    connectable_container.push(WIZARD_VERSION_PATH, version, encoding="utf-8", make_dirs=True)
+    connectable_container.push(
+        LAST_EXEC_VERSION_PATH,
+        version,
+        encoding="utf-8",
+        make_dirs=True,
+        user=USER,
+        group=GROUP,
+    )
+    connectable_container.push(
+        WIZARD_VERSION_PATH,
+        version,
+        encoding="utf-8",
+        make_dirs=True,
+        user=USER,
+        group=GROUP,
+    )
 
 
 def _install_config(connectable_container: ops.Container) -> None:
@@ -202,7 +219,7 @@ def _install_config(connectable_container: ops.Container) -> None:
         connectable_container: The connectable Jenkins workload container.
     """
     with open("templates/jenkins-config.xml", encoding="utf-8") as jenkins_config_file:
-        connectable_container.push(CONFIG_FILE_PATH, jenkins_config_file)
+        connectable_container.push(CONFIG_FILE_PATH, jenkins_config_file, user=USER, group=GROUP)
 
 
 def _install_plugins(connectable_container: ops.Container) -> None:
@@ -231,6 +248,8 @@ def _install_plugins(connectable_container: ops.Container) -> None:
         ],
         working_dir=str(WAR_PATH),
         timeout=600,
+        user=USER,
+        group=GROUP,
     )
     try:
         proc.wait_output()
