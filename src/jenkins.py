@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 WEB_PORT = 8080
 WEB_URL = f"http://localhost:{WEB_PORT}"
+LOGIN_URL = f"{WEB_URL}/login?from=%2F"
 HOME_PATH = Path("/var/jenkins")
 WAR_PATH = Path("/srv/jenkins/")
 # Path to initial Jenkins password file

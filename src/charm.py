@@ -61,7 +61,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
                 self.state.jenkins_service_name: {
                     "override": "replace",
                     "summary": "jenkins",
-                    "command": "java -Djava.awt.headless=true -jar /srv/jenkins/jenkins.war",
+                    "command": "java -Djava.awt.headless=true -Dhudson.model.UpdateCenter.never=true -jar /srv/jenkins/jenkins.war",
                     "startup": "enabled",
                     # TypedDict and Dict[str,str] are not compatible.
                     "environment": typing.cast(typing.Dict[str, str], jenkins_env),
@@ -73,7 +73,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
                 "online": {
                     "override": "replace",
                     "level": "ready",
-                    "http": {"url": jenkins.WEB_URL},
+                    "http": {"url": jenkins.LOGIN_URL},
                     "period": "30s",
                     "threshold": 5,
                 }
