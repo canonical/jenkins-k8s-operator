@@ -9,6 +9,7 @@ import typing
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
+from xml.etree import ElementTree
 
 import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
@@ -42,6 +43,8 @@ USER = "jenkins"
 GROUP = "jenkins"
 
 BUILT_IN_NODE_NAME = "Built-In Node"
+# The Jenkins stable version RSS feed URL
+RSS_FEED_URL = "https://www.jenkins.io/changelog-stable/rss.xml"
 
 
 class JenkinsError(Exception):
@@ -58,6 +61,10 @@ class JenkinsBootstrapError(JenkinsError):
 
 class ValidationError(Exception):
     """An unexpected data is encountered."""
+
+
+class JenkinsNetworkError(JenkinsError):
+    """An error occurred communicating with the upstream Jenkins server."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -319,6 +326,7 @@ def get_node_secret(
             f'println(jenkins.model.Jenkins.getInstance().getComputer("{node_name}").getJnlpMac())'
         ).strip()
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to run get_node_secret groovy script, %s", exc)
         raise JenkinsError("Failed to run groovy script getting node secret.") from exc
 
 
@@ -348,4 +356,95 @@ def add_agent_node(
     except jenkinsapi.custom_exceptions.AlreadyExists:
         pass
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to add agent node, %s", exc)
         raise JenkinsError("Failed to add agent node.") from exc
+
+
+def _get_major_minor_version(version: str) -> str:
+    """Extract the major.minor version from semantic version string.
+
+    Args:
+        version: The semantic version.
+    """
+    return ".".join(version.split(".")[0:2])
+
+
+def _fetch_versions_from_rss() -> typing.Iterable[str]:
+    """Fetch and extract Jenkins versions from the stable RSS feed."""
+    try:
+        res = requests.get(RSS_FEED_URL, timeout=30)
+        res.raise_for_status()
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        requests.exceptions.HTTPError,
+    ) as exc:
+        logger.error(f"Failed to fetch latest RSS feed, {exc=!r}")
+        raise JenkinsNetworkError("Failed to fetch RSS feed.") from exc
+
+    xml_tree = ElementTree.fromstring(res.content)
+    versions = (
+        item.find("title").text.removeprefix("Jenkins ")
+        for item in xml_tree.findall("./channel/item")
+    )
+    return versions
+
+
+def get_latest_patch_version(current_version: str) -> str:
+    """Get the latest lts patch version matching with the current version.
+
+    Args:
+        current_version: Current LTS semantic version.
+
+    Returns:
+        The latest patched version available.
+    """
+    try:
+        versions = _fetch_versions_from_rss()
+    except JenkinsNetworkError as exc:
+        raise exc
+
+    maj_min_version = _get_major_minor_version(current_version)
+    for version in versions:
+        if version.startswith(maj_min_version):
+            return version
+
+    raise ValidationError(
+        f"No matching version with {current_version} found from stable RSS feed."
+    )
+
+
+def download_stable_war(connectable_container: ops.Container, version: str):
+    """Download and replace the war executable.
+
+    Args:
+        connectable_container: The Jenkins container with jenkins.war executable.
+        version: Desired version of the war to download.
+    """
+    try:
+        res = requests.get(f"https://get.jenkins.io/war-stable/{version}/jenkins.war", timeout=300)
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        requests.exceptions.HTTPError,
+    ) as exc:
+        logger.error("Failed to download Jenkins war executable, %s", exc)
+        raise JenkinsNetworkError(f"Failed to download Jenkins war version {version}") from exc
+    connectable_container.push(
+        WAR_PATH / "jenkins.war", res.content, encoding="utf-8", user=USER, group=GROUP
+    )
+
+
+def safe_restart(credentials: Credentials, client: jenkinsapi.jenkins.Jenkins | None = None):
+    """Safely restart Jenkins server after all jobs are done executing.
+
+    Args:
+        credentials: The credentials of a Jenkins user with access to the Jenkins API.
+        client: The API client used to communicate with the Jenkins server.
+    """
+    client = client if client is not None else _get_client(credentials)
+    try:
+        client.safe_restart(wait_for_reboot=True)
+    except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to restart Jenkins, %s", exc)
+        raise JenkinsError("Failed to restart Jenkins safely.") from exc

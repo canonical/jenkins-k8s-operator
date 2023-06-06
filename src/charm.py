@@ -8,7 +8,7 @@
 import logging
 import typing
 
-from ops.charm import ActionEvent, CharmBase, PebbleReadyEvent
+from ops.charm import ActionEvent, CharmBase, PebbleReadyEvent, UpdateStatusEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.pebble import Layer
@@ -39,6 +39,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         self.agent_observer = agent.Observer(self, self.state)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
+        self.framework.observe(self.on.update_status, self._on_update_status)
 
     @property
     def _jenkins_container(self) -> Container:
@@ -116,6 +117,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
             self.unit.status = BlockedStatus("Error installling plugins.")
             return
 
+        self.unit.set_workload_version(jenkins.get_version())
         self.unit.status = ActiveStatus()
 
     def _on_get_admin_password(self, event: ActionEvent) -> None:
@@ -129,6 +131,32 @@ class JenkinsK8SOperatorCharm(CharmBase):
             return
         credentials = jenkins.get_admin_credentials(self._jenkins_container)
         event.set_results({"password": credentials.password})
+
+    def _on_update_status(self, _: UpdateStatusEvent) -> None:
+        """Handle update status event.
+
+        On Update status:
+        1. Update Jenkins patch LTS version if available.
+        2. Update apt packages if available.
+        """
+        self.unit.status = ActiveStatus("Checking for updates.")
+
+        version = jenkins.get_version()
+        latest_patch_version = jenkins.get_latest_patch_version(version)
+        if latest_patch_version == version:
+            self.unit.status = ActiveStatus()
+            return
+
+        self.unit.status = MaintenanceStatus("Updating Jenkins.")
+        try:
+            jenkins.download_stable_war(self._jenkins_container)
+            credentials = jenkins.get_admin_credentials(self._jenkins_container)
+            jenkins.safe_restart(credentials)
+        except (jenkins.JenkinsNetworkError, jenkins.JenkinsError) as exc:
+            logger.error(f"Failed to update Jenkins. {exc=!r}")
+
+        self.unit.set_workload_version(latest_patch_version)
+        self.unit.status = ActiveStatus()
 
 
 if __name__ == "__main__":  # pragma: nocover
