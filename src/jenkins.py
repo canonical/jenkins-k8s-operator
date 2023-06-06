@@ -9,7 +9,10 @@ import typing
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
-from xml.etree import ElementTree
+
+# The only XML getting parsed is from Jenkins RSS feed which is a trusted source hence the stdlib
+# xml parser can be used.
+from xml.etree import ElementTree  # nosec
 
 import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
@@ -365,12 +368,22 @@ def _get_major_minor_version(version: str) -> str:
 
     Args:
         version: The semantic version.
+
+    Returns:
+        The version without patch version, i.e. <major>.<minor>
     """
     return ".".join(version.split(".")[0:2])
 
 
 def _fetch_versions_from_rss() -> typing.Iterable[str]:
-    """Fetch and extract Jenkins versions from the stable RSS feed."""
+    """Fetch and extract Jenkins versions from the stable RSS feed.
+
+    Returns:
+        The jenkins versions from the RSS feed.
+
+    Raises:
+        JenkinsNetworkError: if there was an error fetching the RSS feed.
+    """
     try:
         res = requests.get(RSS_FEED_URL, timeout=30)
         res.raise_for_status()
@@ -379,13 +392,16 @@ def _fetch_versions_from_rss() -> typing.Iterable[str]:
         requests.exceptions.Timeout,
         requests.exceptions.HTTPError,
     ) as exc:
-        logger.error(f"Failed to fetch latest RSS feed, {exc=!r}")
+        logger.error("Failed to fetch latest RSS feed, %s", exc)
         raise JenkinsNetworkError("Failed to fetch RSS feed.") from exc
 
-    xml_tree = ElementTree.fromstring(res.content)
+    # jenkins xml is a trusted source, hence it can be parsed using stdlib
+    xml_tree = ElementTree.fromstring(res.content)  # nosec
+    # mypy doesn't understand that None type is not possible.
     versions = (
-        item.find("title").text.removeprefix("Jenkins ")
+        item.find("title").text.removeprefix("Jenkins ")  # type: ignore
         for item in xml_tree.findall("./channel/item")
+        if item.find("title") is not None and item.find("title").text is not None  # type: ignore
     )
     return versions
 
@@ -398,11 +414,15 @@ def get_latest_patch_version(current_version: str) -> str:
 
     Returns:
         The latest patched version available.
+
+    Raises:
+        JenkinsNetworkError: if there was an error fetching the LTS RSS feed.
+        ValidationError: if the RSS feed contains no matching LTS version.
     """
     try:
         versions = _fetch_versions_from_rss()
     except JenkinsNetworkError as exc:
-        raise exc
+        raise JenkinsNetworkError("Failed to fetch LTS versions from RSS feed.") from exc
 
     maj_min_version = _get_major_minor_version(current_version)
     for version in versions:
@@ -414,12 +434,15 @@ def get_latest_patch_version(current_version: str) -> str:
     )
 
 
-def download_stable_war(connectable_container: ops.Container, version: str):
+def download_stable_war(connectable_container: ops.Container, version: str) -> None:
     """Download and replace the war executable.
 
     Args:
         connectable_container: The Jenkins container with jenkins.war executable.
         version: Desired version of the war to download.
+
+    Raises:
+        JenkinsNetworkError: if there was an error fetching the jenkins.war executable.
     """
     try:
         res = requests.get(f"https://get.jenkins.io/war-stable/{version}/jenkins.war", timeout=300)
@@ -435,12 +458,17 @@ def download_stable_war(connectable_container: ops.Container, version: str):
     )
 
 
-def safe_restart(credentials: Credentials, client: jenkinsapi.jenkins.Jenkins | None = None):
+def safe_restart(
+    credentials: Credentials, client: jenkinsapi.jenkins.Jenkins | None = None
+) -> None:
     """Safely restart Jenkins server after all jobs are done executing.
 
     Args:
         credentials: The credentials of a Jenkins user with access to the Jenkins API.
         client: The API client used to communicate with the Jenkins server.
+
+    Raises:
+        JenkinsError: if there was an API error calling safe restart.
     """
     client = client if client is not None else _get_client(credentials)
     try:

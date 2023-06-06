@@ -62,7 +62,8 @@ class JenkinsK8SOperatorCharm(CharmBase):
                 self.state.jenkins_service_name: {
                     "override": "replace",
                     "summary": "jenkins",
-                    "command": "java -Djava.awt.headless=true -Dhudson.model.UpdateCenter.never=true -jar /srv/jenkins/jenkins.war",
+                    "command": "java -Djava.awt.headless=true "
+                    "-Dhudson.model.UpdateCenter.never=true -jar /srv/jenkins/jenkins.war",
                     "startup": "enabled",
                     # TypedDict and Dict[str,str] are not compatible.
                     "environment": typing.cast(typing.Dict[str, str], jenkins_env),
@@ -149,11 +150,11 @@ class JenkinsK8SOperatorCharm(CharmBase):
 
         self.unit.status = MaintenanceStatus("Updating Jenkins.")
         try:
-            jenkins.download_stable_war(self._jenkins_container)
+            jenkins.download_stable_war(self._jenkins_container, version)
             credentials = jenkins.get_admin_credentials(self._jenkins_container)
             jenkins.safe_restart(credentials)
         except (jenkins.JenkinsNetworkError, jenkins.JenkinsError) as exc:
-            logger.error(f"Failed to update Jenkins. {exc=!r}")
+            logger.error("Failed to update Jenkins. %s", exc)
 
         self.unit.set_workload_version(latest_patch_version)
         self.unit.status = ActiveStatus()

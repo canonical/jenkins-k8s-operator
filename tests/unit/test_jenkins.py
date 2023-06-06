@@ -390,3 +390,143 @@ def test_agent_meta__validate(invalid_meta: jenkins.AgentMeta, expected_err_mess
         invalid_meta.validate()
 
     assert expected_err_message in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "version,expected_major_minor",
+    [
+        pytest.param("2.289.4", "2.289", id="semantic version"),
+        pytest.param("2.289", "2.289", id="semantic version w/o patch version"),
+    ],
+)
+def test_get_major_minor_version(version: str, expected_major_minor: str):
+    """
+    arrange: given valid version strings.
+    act: when _get_major_minor_version is called.
+    assert: the major and minor version is extracted.
+    """
+    result = jenkins._get_major_minor_version(version)
+
+    assert expected_major_minor == result
+
+
+def test_fetch_versions_from_rss_failure(monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given a failing request to the Jenkins RSS feed.
+    act: when _fetch_versions_from_rss is called.
+    assert: a JenkinsNetworkError is raised.
+    """
+    monkeypatch.setattr(requests, "get", ConnectionExceptionPatch)
+
+    with pytest.raises(jenkins.JenkinsNetworkError):
+        jenkins._fetch_versions_from_rss()
+
+
+def test_fetch_versions_from_rss(
+    monkeypatch: pytest.MonkeyPatch, rss_feed: bytes, current_version: str, patched_version: str
+):
+    """
+    arrange: given a mocked requests that returns a successful rss feed response.
+    act: when _fetch_versions_from_rss is called.
+    assert: Jenkins versions are extracted from the RSS feed.
+    """
+    mock_rss_response = unittest.mock.MagicMock(spec=requests.Response)
+    mock_rss_response.content = rss_feed
+    monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
+
+    expected = [patched_version, current_version]
+    result = list(jenkins._fetch_versions_from_rss())
+
+    assert result == expected
+
+
+def test_get_latest_patch_version_failure(monkeypatch: pytest.MonkeyPatch, current_version: str):
+    """
+    arrange: given a monkey patched _fetch_versions_from_rss function that raises an exception.
+    act: when get_latest_patch_version is called
+    assert: JenkinsNetworkError is re-raised.
+    """
+    mock_fetch_version = unittest.mock.MagicMock(spec=jenkins._fetch_versions_from_rss)
+    mock_fetch_version.side_effect = jenkins.JenkinsNetworkError()
+    monkeypatch.setattr(jenkins, "_fetch_versions_from_rss", mock_fetch_version)
+
+    with pytest.raises(jenkins.JenkinsNetworkError):
+        jenkins.get_latest_patch_version(current_version)
+
+
+def test_get_latest_patch_version(
+    monkeypatch: pytest.MonkeyPatch, rss_feed: bytes, current_version: str, patched_version: str
+):
+    """
+    arrange: given a monkeypatched requests that returns a mock rss feed results.
+    act: when get_latest_patch_version is called.
+    assert: the latest patch version is returned.
+    """
+    mock_rss_response = unittest.mock.MagicMock(spec=requests.Response)
+    mock_rss_response.content = rss_feed
+    monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
+
+    result = jenkins.get_latest_patch_version(current_version)
+
+    assert result == patched_version
+
+
+def test_download_stable_war_failure(monkeypatch: pytest.MonkeyPatch, current_version: str):
+    """
+    arrange: given a monkeypatched requests that raises a ConnectionError.
+    act: when download_stable_war is called.
+    assert: JenkinsNetworkError is raised.
+    """
+    monkeypatch.setattr(requests, "get", ConnectionExceptionPatch)
+    connectable_container = unittest.mock.MagicMock(spec=Container)
+
+    with pytest.raises(jenkins.JenkinsNetworkError):
+        jenkins.download_stable_war(connectable_container, current_version)
+
+
+def test_download_stable_war(monkeypatch: pytest.MonkeyPatch, current_version: str):
+    """
+    arrange: given a monkeypatched get request that returns a mocked war response.
+    act: when download_stable_war is called.
+    assert: The jenkins.war is pushed to the mocked container.
+    """
+    mock_download_response = unittest.mock.MagicMock(spec=requests.Response)
+    mock_download_response.content = b"mock war content"
+    monkeypatch.setattr(requests, "get", lambda *_, **__: mock_download_response)
+    connectable_container = unittest.mock.MagicMock(spec=Container)
+
+    jenkins.download_stable_war(connectable_container, current_version)
+
+    connectable_container.push.assert_called_once_with(
+        jenkins.WAR_PATH / "jenkins.war",
+        mock_download_response.content,
+        encoding="utf-8",
+        user=jenkins.USER,
+        group=jenkins.GROUP,
+    )
+
+
+def test_safe_restart_failure(admin_credentials: jenkins.Credentials):
+    """
+    arrange: given a mocked Jenkins API client that raises JenkinsAPIException.
+    act: when safe_restart is called.
+    assert: JenkinsError is raised.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.safe_restart.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
+
+    with pytest.raises(jenkins.JenkinsError):
+        jenkins.safe_restart(admin_credentials, client=mock_client)
+
+
+def test_safe_restart(admin_credentials: jenkins.Credentials):
+    """
+    arrange: given a mocked Jenkins API client that does not raise an exception.
+    act: when safe_restart is called.
+    assert: No exception is raised.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+
+    jenkins.safe_restart(admin_credentials, client=mock_client)
+
+    mock_client.safe_restart.assert_called_once_with(wait_for_reboot=True)
