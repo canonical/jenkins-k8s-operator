@@ -62,8 +62,9 @@ class JenkinsK8SOperatorCharm(CharmBase):
                 self.state.jenkins_service_name: {
                     "override": "replace",
                     "summary": "jenkins",
-                    "command": "java -Djava.awt.headless=true "
-                    "-Dhudson.model.UpdateCenter.never=true -jar /srv/jenkins/jenkins.war",
+                    "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
+                    f"-D{jenkins.SYSTEM_PROPERTY_DISABLE_AUTO_UPDATE} "
+                    f"-jar {jenkins.WAR_PATH}/jenkins.war",
                     "startup": "enabled",
                     # TypedDict and Dict[str,str] are not compatible.
                     "environment": typing.cast(typing.Dict[str, str], jenkins_env),
