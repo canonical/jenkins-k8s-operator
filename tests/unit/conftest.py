@@ -17,7 +17,7 @@ from ops.testing import Harness
 from charm import JenkinsK8SOperatorCharm
 from jenkins import PASSWORD_FILE_PATH, PLUGINS_PATH, REQUIRED_PLUGINS, Credentials
 
-from .types_ import HarnessWithContainer
+from .types_ import HarnessWithContainer, Versions
 
 ROCKCRAFT_YAML = yaml.safe_load(Path("jenkins_rock/rockcraft.yaml").read_text(encoding="utf-8"))
 
@@ -249,8 +249,22 @@ def patched_version_fixture():
     return "2.401.2"
 
 
+@pytest.fixture(scope="function", name="minor_updated_version")
+def minor_update_version_fixture():
+    """The Jenkins version with incremented minor version."""
+    return "2.503.1"
+
+
+@pytest.fixture(scope="function", name="versions")
+def versions_fixture(current_version: str, patched_version: str, minor_updated_version: str):
+    """Wrapper for current and patched version to reduce number of fixture arguments."""
+    return Versions(
+        current=current_version, patched=patched_version, minor_update=minor_updated_version
+    )
+
+
 @pytest.fixture(scope="function", name="rss_feed")
-def rss_feed_fixture(current_version: str, patched_version: str):
+def rss_feed_fixture(current_version: str, patched_version: str, minor_updated_version: str):
     """The Jenkins stable release RSS feed."""
     return f"""<rss version='2.0' xmlns:atom='http://www.w3.org/2005/Atom'
         xmlns:content='https://purl.org/rss/1.0/modules/content/'>
@@ -269,6 +283,21 @@ def rss_feed_fixture(current_version: str, patched_version: str):
             <lastBuildDate>
                 Tue, 6 Jun 2023 00:00:00 +0000
             </lastBuildDate>
+            <item>
+                <title>Jenkins {minor_updated_version}</title>
+                <link>
+                https://jenkins.io/changelog-stable//#v{minor_updated_version}
+                </link>
+                <description>
+                    current description
+                </description>
+                <guid isPermaLink='false'>
+                    jenkins-{minor_updated_version}
+                </guid>
+                <pubDate>
+                    Wed, 31 May 2023 00:00:00 +0000
+                </pubDate>
+            </item>
             <item>
                 <title>Jenkins {patched_version}</title>
                 <link>

@@ -22,7 +22,7 @@ from ops.pebble import ExecError, ExecProcess
 import jenkins
 
 from .helpers import ConnectionExceptionPatch
-from .types_ import HarnessWithContainer
+from .types_ import HarnessWithContainer, Versions
 
 
 def test__is_ready_connection_exception(monkeypatch: pytest.MonkeyPatch):
@@ -423,7 +423,7 @@ def test_fetch_versions_from_rss_failure(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_fetch_versions_from_rss(
-    monkeypatch: pytest.MonkeyPatch, rss_feed: bytes, current_version: str, patched_version: str
+    monkeypatch: pytest.MonkeyPatch, rss_feed: bytes, versions: Versions
 ):
     """
     arrange: given a mocked requests that returns a successful rss feed response.
@@ -434,7 +434,7 @@ def test_fetch_versions_from_rss(
     mock_rss_response.content = rss_feed
     monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
 
-    expected = [patched_version, current_version]
+    expected = [versions.minor_update, versions.patched, versions.current]
     result = list(jenkins._fetch_versions_from_rss())
 
     assert result == expected
@@ -451,6 +451,44 @@ def test_get_latest_patch_version_failure(monkeypatch: pytest.MonkeyPatch, curre
     monkeypatch.setattr(jenkins, "_fetch_versions_from_rss", mock_fetch_version)
 
     with pytest.raises(jenkins.JenkinsNetworkError):
+        jenkins.get_latest_patch_version(current_version)
+
+
+def test_get_latest_patch_version_invalid_rss(
+    monkeypatch: pytest.MonkeyPatch, current_version: str
+):
+    """
+    arrange: given monkeypatched _fetch_versions_from_rss that returns an invalid feed.
+    act: when get_latest_patch_version is called.
+    assert: ValidationError is raised.
+    """
+    mock_rss_response = unittest.mock.MagicMock(spec=requests.Response)
+    mock_rss_response.content = b"invalid rss"
+    monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
+
+    with pytest.raises(jenkins.ValidationError):
+        jenkins.get_latest_patch_version(current_version)
+
+
+def test_get_latest_patch_version_missing_version_rss(
+    monkeypatch: pytest.MonkeyPatch, current_version: str, minor_updated_version: str
+):
+    """
+    arrange: given monkeypatched _fetch_versions_from_rss that returns a feed without current ver.
+    act: when get_latest_patch_version is called.
+    assert: ValidationError is raised.
+    """
+    mock_rss_response = unittest.mock.MagicMock(spec=requests.Response)
+    mock_rss_response.content = f"""<rss>
+            <channel>
+                <item><title>{minor_updated_version}</title></item>
+            </channel>
+        </rss>""".encode(
+        encoding="utf-8"
+    )
+    monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
+
+    with pytest.raises(jenkins.ValidationError):
         jenkins.get_latest_patch_version(current_version)
 
 

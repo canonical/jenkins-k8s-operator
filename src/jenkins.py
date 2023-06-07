@@ -388,6 +388,7 @@ def _fetch_versions_from_rss() -> typing.Iterable[str]:
 
     Raises:
         JenkinsNetworkError: if there was an error fetching the RSS feed.
+        ValidationError: if an invalid RSS feed was received.
     """
     try:
         res = requests.get(RSS_FEED_URL, timeout=30)
@@ -400,14 +401,21 @@ def _fetch_versions_from_rss() -> typing.Iterable[str]:
         logger.error("Failed to fetch latest RSS feed, %s", exc)
         raise JenkinsNetworkError("Failed to fetch RSS feed.") from exc
 
-    # jenkins xml is a trusted source, hence it can be parsed using stdlib
-    xml_tree = ElementTree.fromstring(res.content)  # nosec
+    try:
+        # jenkins xml is a trusted source, hence it can be parsed using stdlib
+        xml_tree = ElementTree.fromstring(res.content)  # nosec
+    except ElementTree.ParseError as exc:
+        logger.error("Invalid RSS feed, %s", exc)
+        raise ValidationError("Invalid RSS feed.") from exc
+
+    items = xml_tree.findall("./channel/item")
     # mypy doesn't understand that None type is not possible.
-    versions = (
-        item.find("title").text.removeprefix("Jenkins ")  # type: ignore
-        for item in xml_tree.findall("./channel/item")
+    titles = (
+        item.find("title").text  # type: ignore
+        for item in items
         if item.find("title") is not None and item.find("title").text is not None  # type: ignore
     )
+    versions = (title.removeprefix("Jenkins ") for title in titles)  # type: ignore
     return versions
 
 
