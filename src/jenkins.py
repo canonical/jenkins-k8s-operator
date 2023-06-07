@@ -49,10 +49,10 @@ BUILT_IN_NODE_NAME = "Built-In Node"
 # The Jenkins stable version RSS feed URL
 RSS_FEED_URL = "https://www.jenkins.io/changelog-stable/rss.xml"
 
-# Java system property to run Jenkins in headless mode
-SYSTEM_PROPERTY_HEADLESS = "java.awt.headless=true"
 # Java system property to disable auto fetching updates in Update Center
 SYSTEM_PROPERTY_DISABLE_AUTO_UPDATE = "hudson.model.UpdateCenter.never=true"
+# Java system property to run Jenkins in headless mode
+SYSTEM_PROPERTY_HEADLESS = "java.awt.headless=true"
 
 
 class JenkinsError(Exception):
