@@ -151,7 +151,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
 
         self.unit.status = MaintenanceStatus("Updating Jenkins.")
         try:
-            jenkins.download_stable_war(self._jenkins_container, version)
+            jenkins.download_stable_war(self._jenkins_container, latest_patch_version)
             credentials = jenkins.get_admin_credentials(self._jenkins_container)
             jenkins.safe_restart(credentials)
         except (jenkins.JenkinsNetworkError, jenkins.JenkinsError) as exc:
