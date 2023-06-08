@@ -63,7 +63,6 @@ class JenkinsK8SOperatorCharm(CharmBase):
                     "override": "replace",
                     "summary": "jenkins",
                     "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
-                    f"-D{jenkins.SYSTEM_PROPERTY_DISABLE_AUTO_UPDATE} "
                     f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war",
                     "startup": "enabled",
                     # TypedDict and Dict[str,str] are not compatible.

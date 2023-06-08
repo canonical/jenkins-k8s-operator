@@ -34,12 +34,15 @@ LAST_EXEC_VERSION_PATH = HOME_PATH / Path("jenkins.install.InstallUtil.lastExecV
 WIZARD_VERSION_PATH = HOME_PATH / Path("jenkins.install.UpgradeWizard.state")
 # The Jenkins bootstrapping config path
 CONFIG_FILE_PATH = HOME_PATH / "config.xml"
+# The Jenkins configuration-as-code plugin default config path
+JCASC_CONFIG_FILE_PATH = HOME_PATH / "jenkins.yaml"
 # The Jenkins plugins installation directory
 PLUGINS_PATH = HOME_PATH / "plugins"
 
 # The plugins that are required for Jenkins to work
 REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
+    "configuration-as-code",  # required to disable automatic jenkins update messages
 ]
 
 USER = "jenkins"
@@ -51,8 +54,6 @@ RSS_FEED_URL = "https://www.jenkins.io/changelog-stable/rss.xml"
 # The Jenkins WAR downloads page
 WAR_DOWNLOAD_URL = "https://updates.jenkins.io/download/war"
 
-# Java system property to disable auto fetching updates in Update Center
-SYSTEM_PROPERTY_DISABLE_AUTO_UPDATE = "hudson.model.UpdateCenter.never=true"
 # Java system property to run Jenkins in headless mode
 SYSTEM_PROPERTY_HEADLESS = "java.awt.headless=true"
 
@@ -182,9 +183,11 @@ class Environment(typing.TypedDict):
 
     Attrs:
         JENKINS_HOME: The Jenkins home directory.
+        CASC_JENKINS_CONFIG: The Jenkins configuration-as-code plugin config path.
     """
 
     JENKINS_HOME: str
+    CASC_JENKINS_CONFIG: str
 
 
 def calculate_env() -> Environment:
@@ -193,7 +196,9 @@ def calculate_env() -> Environment:
     Returns:
         The dictionary mapping of environment variables for the Jenkins service.
     """
-    return Environment(JENKINS_HOME=str(HOME_PATH))
+    return Environment(
+        JENKINS_HOME=str(HOME_PATH), CASC_JENKINS_CONFIG=str(JCASC_CONFIG_FILE_PATH)
+    )
 
 
 def get_version() -> str:
@@ -230,7 +235,7 @@ def _unlock_wizard(connectable_container: ops.Container) -> None:
     )
 
 
-def _install_config(connectable_container: ops.Container) -> None:
+def _install_configs(connectable_container: ops.Container) -> None:
     """Install jenkins-config.xml.
 
     Args:
@@ -238,6 +243,10 @@ def _install_config(connectable_container: ops.Container) -> None:
     """
     with open("templates/jenkins-config.xml", encoding="utf-8") as jenkins_config_file:
         connectable_container.push(CONFIG_FILE_PATH, jenkins_config_file, user=USER, group=GROUP)
+    with open("templates/jenkins.yaml", encoding="utf-8") as jenkins_casc_config_file:
+        connectable_container.push(
+            JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file, user=USER, group=GROUP
+        )
 
 
 def _install_plugins(connectable_container: ops.Container) -> None:
@@ -288,7 +297,7 @@ def bootstrap(
         JenkinsBootstrapError: if there was an error installing given plugins or required plugins.
     """
     _unlock_wizard(connectable_container)
-    _install_config(connectable_container)
+    _install_configs(connectable_container)
     try:
         _install_plugins(connectable_container)
     except JenkinsPluginError as exc:

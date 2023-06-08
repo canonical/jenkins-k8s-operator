@@ -137,7 +137,10 @@ def test_calculate_env():
     """
     env = jenkins.calculate_env()
 
-    assert env == {"JENKINS_HOME": str(jenkins.HOME_PATH)}
+    assert env == {
+        "JENKINS_HOME": str(jenkins.HOME_PATH),
+        "CASC_JENKINS_CONFIG": str(jenkins.JCASC_CONFIG_FILE_PATH),
+    }
 
 
 def test_get_version(
@@ -186,7 +189,7 @@ def test__install_config(harness_container: HarnessWithContainer):
     act: when _install_config is called.
     assert: jenkins configuration file is generated.
     """
-    jenkins._install_config(harness_container.container)
+    jenkins._install_configs(harness_container.container)
 
     config_xml = str(
         harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
