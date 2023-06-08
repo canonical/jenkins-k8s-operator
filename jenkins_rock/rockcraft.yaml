@@ -46,9 +46,10 @@ parts:
       # Use jenkins war rather than apt install for easier Jenkins version control.
       cd ${CRAFT_PART_INSTALL}/srv/jenkins
       curl -sLO https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/${JENKINS_PLUGIN_MANAGER_VERSION}/jenkins-plugin-manager-${JENKINS_PLUGIN_MANAGER_VERSION}.jar
-      curl -sLO https://mirrors.jenkins.io/war/${JENKINS_VERSION}/jenkins.war
+      curl -sLO https://updates.jenkins.io/download/war/${JENKINS_VERSION}/jenkins.war
       jarsigner -verify -verbose jenkins.war
     override-prime: |
       craftctl default  
       /bin/bash -c "mkdir -p --mode=775 {srv/jenkins/,etc/default/jenkins/,var/jenkins}"
       /bin/bash -c "chown -R 2000:2000 {srv/jenkins,etc/default/jenkins/,var/jenkins}"
+ 
