@@ -48,6 +48,8 @@ GROUP = "jenkins"
 BUILT_IN_NODE_NAME = "Built-In Node"
 # The Jenkins stable version RSS feed URL
 RSS_FEED_URL = "https://www.jenkins.io/changelog-stable/rss.xml"
+# The Jenkins WAR downloads page
+WAR_DOWNLOAD_URL = "https://updates.jenkins.io/download/war"
 
 # Java system property to disable auto fetching updates in Update Center
 SYSTEM_PROPERTY_DISABLE_AUTO_UPDATE = "hudson.model.UpdateCenter.never=true"
@@ -458,7 +460,8 @@ def download_stable_war(connectable_container: ops.Container, version: str) -> N
         JenkinsNetworkError: if there was an error fetching the jenkins.war executable.
     """
     try:
-        res = requests.get(f"https://get.jenkins.io/war-stable/{version}/jenkins.war", timeout=300)
+        res = requests.get(f"{WAR_DOWNLOAD_URL}/{version}/jenkins.war", timeout=300)
+        res.raise_for_status()
     except (
         requests.exceptions.ConnectionError,
         requests.exceptions.Timeout,
