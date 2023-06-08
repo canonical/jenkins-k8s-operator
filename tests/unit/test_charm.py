@@ -210,6 +210,6 @@ def test__on_update_status_update(
     jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
-    mock_download.assert_called_once_with(harness_container.container, current_version)
+    mock_download.assert_called_once_with(harness_container.container, patched_version)
     mock_safe_restart.assert_called_once()
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME

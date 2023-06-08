@@ -182,7 +182,7 @@ def jenkins_version_fixture() -> str:
 async def latest_jenkins_lts_version_fixture(jenkins_version: str) -> str:
     """The latest LTS version of the current Jenkins version."""
     # get RSS feed
-    rss_feed_response = requests.get(jenkins.RSS_FEED_URL)
+    rss_feed_response = requests.get(jenkins.RSS_FEED_URL, timeout=10)
     assert rss_feed_response.status_code == 200, "Failed to fetch RSS feed."
     rss_xml = str(rss_feed_response.content, encoding="utf-8")
     # extract all version strings from feed

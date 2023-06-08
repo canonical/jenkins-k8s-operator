@@ -37,17 +37,24 @@ async def test_jenkins_automatic_update(
     act: update status hook is triggered.
     assert: The latest LTS Jenkins version is set as workload version.
     """
+    # get original application workload version
     status: client.FullStatus = await model.get_status()
-    app_status: client.ApplicationStatus = status.applications.get(application.name)
+    app_status = status.applications.get(application.name)
+    assert app_status, "application status not found."
     original_workload_version = app_status.workload_version
 
+    # patch model and wait for update-status-hook trigger
     await model.set_config({"update-status-hook-interval": "10s"})
     time.sleep(15)
     await model.wait_for_idle(status="active")
-    status: client.FullStatus = await model.get_status()
-    app_status: client.ApplicationStatus = status.applications.get(application.name)
+
+    # get patched application workload version
+    patched_status: client.FullStatus = await model.get_status()
+    patched_app_status = patched_status.applications.get(application.name)
+    assert patched_app_status, "patched application status not found."
 
     assert original_workload_version == jenkins_version
-    assert app_status.workload_version == latest_jenkins_lts_version
+    assert patched_app_status.workload_version == latest_jenkins_lts_version
 
+    # reset model hook interval
     await model.set_config({"update-status-hook-interval": "5m"})
