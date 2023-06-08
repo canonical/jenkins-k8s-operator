@@ -150,15 +150,17 @@ class JenkinsK8SOperatorCharm(CharmBase):
             return
 
         self.unit.status = MaintenanceStatus("Updating Jenkins.")
+        error = ""
         try:
             jenkins.download_stable_war(self._jenkins_container, latest_patch_version)
             credentials = jenkins.get_admin_credentials(self._jenkins_container)
             jenkins.safe_restart(credentials)
         except (jenkins.JenkinsNetworkError, jenkins.JenkinsError) as exc:
+            error = "Failed to update Jenkins. See log for more details."
             logger.error("Failed to update Jenkins. %s", exc)
 
         self.unit.set_workload_version(latest_patch_version)
-        self.unit.status = ActiveStatus()
+        self.unit.status = ActiveStatus(error)
 
 
 if __name__ == "__main__":  # pragma: nocover
