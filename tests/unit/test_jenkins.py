@@ -536,7 +536,7 @@ def test_download_stable_war(monkeypatch: pytest.MonkeyPatch, current_version: s
     jenkins.download_stable_war(connectable_container, current_version)
 
     connectable_container.push.assert_called_once_with(
-        jenkins.WAR_PATH / "jenkins.war",
+        jenkins.EXECUTABLES_PATH / "jenkins.war",
         mock_download_response.content,
         encoding="utf-8",
         user=jenkins.USER,

@@ -25,7 +25,7 @@ WEB_PORT = 8080
 WEB_URL = f"http://localhost:{WEB_PORT}"
 LOGIN_URL = f"{WEB_URL}/login?from=%2F"
 HOME_PATH = Path("/var/jenkins")
-WAR_PATH = Path("/srv/jenkins/")
+EXECUTABLES_PATH = Path("/srv/jenkins/")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = HOME_PATH / "secrets/initialAdminPassword"
 # Path to last executed Jenkins version file, required to override wizard installation
@@ -264,7 +264,7 @@ def _install_plugins(connectable_container: ops.Container) -> None:
             "-p",
             plugins,
         ],
-        working_dir=str(WAR_PATH),
+        working_dir=str(EXECUTABLES_PATH),
         timeout=600,
         user=USER,
         group=GROUP,
@@ -470,7 +470,7 @@ def download_stable_war(connectable_container: ops.Container, version: str) -> N
         logger.error("Failed to download Jenkins war executable, %s", exc)
         raise JenkinsNetworkError(f"Failed to download Jenkins war version {version}") from exc
     connectable_container.push(
-        WAR_PATH / "jenkins.war", res.content, encoding="utf-8", user=USER, group=GROUP
+        EXECUTABLES_PATH / "jenkins.war", res.content, encoding="utf-8", user=USER, group=GROUP
     )
 
 
