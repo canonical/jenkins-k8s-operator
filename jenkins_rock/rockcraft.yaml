@@ -52,4 +52,3 @@ parts:
       craftctl default  
       /bin/bash -c "mkdir -p --mode=775 {srv/jenkins/,etc/default/jenkins/,var/jenkins}"
       /bin/bash -c "chown -R 2000:2000 {srv/jenkins,etc/default/jenkins/,var/jenkins}"
- 
