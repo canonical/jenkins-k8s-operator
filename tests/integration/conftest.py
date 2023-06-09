@@ -138,12 +138,14 @@ async def machine_controller_fixture() -> Controller:
     controller = Controller()
     await controller.connect_controller("localhost")
 
-    return controller
+    yield controller
+
+    await controller.disconnect()
 
 
 @pytest_asyncio.fixture(scope="module", name="machine_model")
 async def machine_model_fixture(
-    request: pytest.FixtureRequest, machine_controller: Controller
+    machine_controller: Controller,
 ) -> typing.AsyncGenerator[Model, None]:
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
@@ -151,9 +153,6 @@ async def machine_model_fixture(
 
     yield model
 
-    if not request.config.option.keep_models:
-        await machine_controller.destroy_models(model.name, force=True)
-        # Disconnection is required for the coroutine tasks to finish.
     await model.disconnect()
 
 
