@@ -15,7 +15,7 @@ from ops.pebble import Layer
 
 import agent
 import jenkins
-from state import CharmConfigInvalidError, State
+from state import State
 
 if typing.TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
@@ -34,11 +34,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
             args: Arguments to initialize the char base.
         """
         super().__init__(*args)
-        try:
-            self.state = State.from_charm(self.config)
-        except CharmConfigInvalidError as exc:
-            self.unit.status = BlockedStatus(exc.msg)
-            return
+        self.state = State.from_charm()
 
         self.agent_observer = agent.Observer(self, self.state)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
@@ -144,11 +140,8 @@ class JenkinsK8SOperatorCharm(CharmBase):
         1. Update Jenkins patch LTS version if available.
         2. Update apt packages if available.
         """
-        if self.state.update_time_range and not self.state.update_time_range.check_now():
-            self.unit.status = ActiveStatus()
-            return
-
         self.unit.status = ActiveStatus("Checking for updates.")
+
         version = jenkins.get_version()
         latest_patch_version = jenkins.get_latest_patch_version(version)
         if latest_patch_version == version:

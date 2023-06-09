@@ -17,29 +17,10 @@ from ops.charm import ActionEvent, PebbleReadyEvent, UpdateStatusEvent
 from ops.model import ActiveStatus, BlockedStatus, StatusBase
 
 import jenkins
-import state
 from charm import JenkinsK8SOperatorCharm
 
 from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME
 from .types_ import HarnessWithContainer, Versions
-
-
-@pytest.mark.parametrize(
-    "charm_config", [pytest.param({"update-time-range": "-2"}, id="invalid update-time-range")]
-)
-def test_charm_invalid_config(
-    harness_container: HarnessWithContainer, charm_config: dict[str, str]
-):
-    """
-    arrange: given an invalid charm config.
-    act: when the charm is initialized.
-    assert: the charm should fall into BlockedStatus.
-    """
-    harness_container.harness.update_config(charm_config)
-    harness_container.harness.begin()
-
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
-    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
 def test__on_jenkins_pebble_ready_no_container(harness_container: HarnessWithContainer):
@@ -204,31 +185,6 @@ def test__on_update_status_error(
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
     assert "Failed to update Jenkins." in caplog.text
     caplog.clear()
-
-
-def test__on_update_status_not_in_time_range(
-    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
-):
-    """
-    arrange: given a charm with update-time-range 0-23 and monkeypatched datetime with hour 23.
-    act: when update_status action is triggered.
-    assert: no action is taken and the charm remains active.
-    """
-    mock_download_func = MagicMock(spec=jenkins.download_stable_war)
-    mock_datetime = MagicMock(spec=state.datetime)
-    test_time = state.datetime(2023, 1, 1, 23)
-    mock_datetime.utcnow.return_value = test_time
-    monkeypatch.setattr(state, "datetime", mock_datetime)
-    monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
-    mock_event = MagicMock(spec=UpdateStatusEvent)
-    harness_container.harness.update_config({"update-time-range": "00-23"})
-    harness_container.harness.begin()
-
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
-    jenkins_charm._on_update_status(mock_event)
-
-    mock_download_func.assert_not_called()
-    assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
 
 
 def test__on_update_status_update(
