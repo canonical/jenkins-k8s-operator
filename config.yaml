@@ -1,0 +1,11 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+options:
+  update-time-range:
+    type: string
+    description: >
+      A preferred update time in 24 hour format in UTC for the Jenkins LTS patch update to take
+      place if available. Leaving the value empty will let the charm update whenever there is an
+      update available.
+    default: ""
