@@ -133,7 +133,7 @@ def gen_jenkins_test_job_xml_fixture() -> typing.Callable[[str], str]:
 
 
 @pytest_asyncio.fixture(scope="module", name="machine_controller")
-async def machine_controller_fixture() -> Controller:
+async def machine_controller_fixture() -> typing.AsyncGenerator[Controller, None]:
     """The lxd controller."""
     controller = Controller()
     await controller.connect_controller("localhost")
