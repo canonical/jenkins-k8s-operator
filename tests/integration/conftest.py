@@ -42,7 +42,9 @@ def jenkins_image_fixture(request: FixtureRequest) -> str:
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
-async def application_fixture(ops_test: OpsTest, model: Model, jenkins_image: str) -> Application:
+async def application_fixture(
+    ops_test: OpsTest, model: Model, jenkins_image: str
+) -> typing.AsyncGenerator[Application, None]:
     """Build and deploy the charm."""
     # Build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
@@ -52,7 +54,9 @@ async def application_fixture(ops_test: OpsTest, model: Model, jenkins_image: st
     application = await model.deploy(charm, resources=resources, series="jammy")
     await model.wait_for_idle(apps=[application.name], status="active", raise_on_blocked=True)
 
-    return application
+    yield application
+
+    await model.remove_application(application.name, block_until_done=True)
 
 
 @pytest_asyncio.fixture(scope="module", name="unit_ip")
