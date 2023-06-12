@@ -451,7 +451,9 @@ def get_latest_patch_version(current_version: str) -> str:
 
     maj_min_version = _get_major_minor_version(current_version)
     matching_versions = (version for version in versions if version.startswith(maj_min_version))
-    sorted_versions = sorted(matching_versions, reverse=True)
+    sorted_versions = sorted(
+        matching_versions, reverse=True, key=lambda x: tuple(map(int, x.split(".")))
+    )
 
     if len(sorted_versions) == 0:
         raise ValidationError(
