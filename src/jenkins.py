@@ -450,13 +450,14 @@ def get_latest_patch_version(current_version: str) -> str:
         raise
 
     maj_min_version = _get_major_minor_version(current_version)
-    for version in versions:
-        if version.startswith(maj_min_version):
-            return version
+    matching_versions = (version for version in versions if version.startswith(maj_min_version))
+    sorted_versions = sorted(matching_versions, reverse=True)
 
-    raise ValidationError(
-        f"No matching version with {current_version} found from stable RSS feed."
-    )
+    if len(sorted_versions) == 0:
+        raise ValidationError(
+            f"No matching version with {current_version} found from stable RSS feed."
+        )
+    return sorted_versions[0]
 
 
 def download_stable_war(connectable_container: ops.Container, version: str) -> None:
