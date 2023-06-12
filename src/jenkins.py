@@ -445,8 +445,9 @@ def get_latest_patch_version(current_version: str) -> str:
     """
     try:
         versions = _fetch_versions_from_rss()
-    except JenkinsNetworkError as exc:
-        raise JenkinsNetworkError("Failed to fetch LTS versions from RSS feed.") from exc
+    except (JenkinsNetworkError, ValidationError) as exc:
+        logger.error("Failed to fetch Jenkins versions from rss, %s", exc)
+        raise
 
     maj_min_version = _get_major_minor_version(current_version)
     for version in versions:
@@ -497,7 +498,12 @@ def safe_restart(
     """
     client = client if client is not None else _get_client(credentials)
     try:
-        client.safe_restart(wait_for_reboot=True)
-    except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        response = client.safe_restart(wait_for_reboot=True)
+        response.raise_for_status()
+    except (
+        jenkinsapi.custom_exceptions.JenkinsAPIException,
+        requests.exceptions.HTTPError,
+        requests.exceptions.ConnectionError,
+    ) as exc:
         logger.error("Failed to restart Jenkins, %s", exc)
         raise JenkinsError("Failed to restart Jenkins safely.") from exc

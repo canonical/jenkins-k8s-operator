@@ -213,7 +213,7 @@ def harness_container_fixture(harness: Harness, container: Container) -> Harness
 def raise_exception_fixture():
     """The mock function for patching."""
 
-    def raise_exception(*_args, exception: Exception, **_kwargs):
+    def raise_exception(exception: Exception):
         """Raise exception function for monkeypatching.
 
         Args:
