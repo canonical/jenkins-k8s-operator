@@ -189,7 +189,8 @@ class JenkinsK8SOperatorCharm(CharmBase):
         credentials = jenkins.get_admin_credentials(self._jenkins_container)
         try:
             jenkins.safe_restart(credentials)
-        except jenkins.JenkinsError as exc:
+            jenkins.wait_ready()
+        except (jenkins.JenkinsError, TimeoutError) as exc:
             logger.error("Failed to safely restart Jenkins. %s", exc)
             self.unit.status = BlockedStatus("Update restart failed. See logs for more detail.")
             return

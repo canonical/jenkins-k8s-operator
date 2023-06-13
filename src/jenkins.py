@@ -501,8 +501,7 @@ def safe_restart(
     """
     client = client if client is not None else _get_client(credentials)
     try:
-        response = client.safe_restart(wait_for_reboot=True)
-        response.raise_for_status()
+        client.safe_restart(wait_for_reboot=True)
     except (
         jenkinsapi.custom_exceptions.JenkinsAPIException,
         requests.exceptions.HTTPError,

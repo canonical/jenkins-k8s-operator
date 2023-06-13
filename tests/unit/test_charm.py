@@ -328,6 +328,7 @@ def test__on_update_status_update(
     monkeypatch.setattr(jenkins, "get_latest_patch_version", lambda *_, **__: patched_version)
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download)
     monkeypatch.setattr(jenkins, "safe_restart", mock_safe_restart)
+    monkeypatch.setattr(jenkins, "wait_ready", lambda: None)
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
