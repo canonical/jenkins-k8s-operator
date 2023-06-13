@@ -8,7 +8,8 @@
 import logging
 import typing
 
-from ops.charm import ActionEvent, CharmBase, PebbleReadyEvent
+import requests
+from ops.charm import ActionEvent, CharmBase, PebbleReadyEvent, UpdateStatusEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.pebble import Layer
@@ -39,6 +40,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         self.agent_observer = agent.Observer(self, self.state)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
+        self.framework.observe(self.on.update_status, self._on_update_status)
 
     @property
     def _jenkins_container(self) -> Container:
@@ -61,7 +63,8 @@ class JenkinsK8SOperatorCharm(CharmBase):
                 self.state.jenkins_service_name: {
                     "override": "replace",
                     "summary": "jenkins",
-                    "command": "java -Djava.awt.headless=true -jar /srv/jenkins/jenkins.war",
+                    "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
+                    f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war",
                     "startup": "enabled",
                     # TypedDict and Dict[str,str] are not compatible.
                     "environment": typing.cast(typing.Dict[str, str], jenkins_env),
@@ -73,7 +76,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
                 "online": {
                     "override": "replace",
                     "level": "ready",
-                    "http": {"url": jenkins.WEB_URL},
+                    "http": {"url": jenkins.LOGIN_URL},
                     "period": "30s",
                     "threshold": 5,
                 }
@@ -116,6 +119,18 @@ class JenkinsK8SOperatorCharm(CharmBase):
             self.unit.status = BlockedStatus("Error installling plugins.")
             return
 
+        try:
+            version = jenkins.get_version()
+        except (
+            requests.HTTPError,
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+        ) as exc:
+            logger.error("Failed to get Jenkins version, %s", exc)
+            self.unit.status = BlockedStatus("Failed to get Jenkins version.")
+            return
+
+        self.unit.set_workload_version(version)
         self.unit.status = ActiveStatus()
 
     def _on_get_admin_password(self, event: ActionEvent) -> None:
@@ -129,6 +144,59 @@ class JenkinsK8SOperatorCharm(CharmBase):
             return
         credentials = jenkins.get_admin_credentials(self._jenkins_container)
         event.set_results({"password": credentials.password})
+
+    def _on_update_status(self, _: UpdateStatusEvent) -> None:
+        """Handle update status event.
+
+        On Update status:
+        1. Update Jenkins patch LTS version if available.
+        2. Update apt packages if available.
+        """
+        self.unit.status = ActiveStatus("Checking for updates.")
+
+        try:
+            version = jenkins.get_version()
+        except (
+            requests.HTTPError,
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+        ) as exc:
+            logger.error("Failed to get Jenkins version, %s", exc)
+            self.unit.status = BlockedStatus("Jenkins unhealthy. See logs for more detail.")
+            return
+
+        try:
+            latest_patch_version = jenkins.get_latest_patch_version(version)
+        except (jenkins.JenkinsNetworkError, jenkins.ValidationError) as exc:
+            logger.error("Failed to get latest patch version, %s", exc)
+            self.unit.status = ActiveStatus("Failed to get patch. See logs for more detail.")
+            return
+
+        if latest_patch_version == version:
+            self.unit.status = ActiveStatus()
+            return
+
+        self.unit.status = MaintenanceStatus("Updating Jenkins.")
+        try:
+            jenkins.download_stable_war(self._jenkins_container, latest_patch_version)
+        except jenkins.JenkinsNetworkError as exc:
+            logger.error("Failed to download Jenkins war. %s", exc)
+            self.unit.status = ActiveStatus(
+                "Failed to download executable. See logs for more detail."
+            )
+            return
+
+        credentials = jenkins.get_admin_credentials(self._jenkins_container)
+        try:
+            jenkins.safe_restart(credentials)
+            jenkins.wait_ready()
+        except (jenkins.JenkinsError, TimeoutError) as exc:
+            logger.error("Failed to safely restart Jenkins. %s", exc)
+            self.unit.status = BlockedStatus("Update restart failed. See logs for more detail.")
+            return
+
+        self.unit.set_workload_version(latest_patch_version)
+        self.unit.status = ActiveStatus()
 
 
 if __name__ == "__main__":  # pragma: nocover

@@ -17,7 +17,7 @@ from ops.testing import Harness
 from charm import JenkinsK8SOperatorCharm
 from jenkins import PASSWORD_FILE_PATH, PLUGINS_PATH, REQUIRED_PLUGINS, Credentials
 
-from .types_ import HarnessWithContainer
+from .types_ import HarnessWithContainer, Versions
 
 ROCKCRAFT_YAML = yaml.safe_load(Path("jenkins_rock/rockcraft.yaml").read_text(encoding="utf-8"))
 
@@ -213,7 +213,7 @@ def harness_container_fixture(harness: Harness, container: Container) -> Harness
 def raise_exception_fixture():
     """The mock function for patching."""
 
-    def raise_exception(*_args, exception: Exception, **_kwargs):
+    def raise_exception(exception: Exception):
         """Raise exception function for monkeypatching.
 
         Args:
@@ -235,3 +235,101 @@ def agent_relation_data_fixture():
         "labels": "x84_64",
         "slavehost": "http://sample-address:8080",
     }
+
+
+@pytest.fixture(scope="function", name="current_version")
+def current_version_fixture():
+    """The current Jenkins version."""
+    return "2.401.1"
+
+
+@pytest.fixture(scope="function", name="patched_version")
+def patched_version_fixture():
+    """The patched Jenkins version."""
+    return "2.401.2"
+
+
+@pytest.fixture(scope="function", name="minor_updated_version")
+def minor_update_version_fixture():
+    """The Jenkins version with incremented minor version."""
+    return "2.503.1"
+
+
+@pytest.fixture(scope="function", name="versions")
+def versions_fixture(current_version: str, patched_version: str, minor_updated_version: str):
+    """Wrapper for current and patched version to reduce number of fixture arguments."""
+    return Versions(
+        current=current_version, patched=patched_version, minor_update=minor_updated_version
+    )
+
+
+@pytest.fixture(scope="function", name="rss_feed")
+def rss_feed_fixture(current_version: str, patched_version: str, minor_updated_version: str):
+    """The Jenkins stable release RSS feed."""
+    return f"""<rss version='2.0' xmlns:atom='http://www.w3.org/2005/Atom'
+        xmlns:content='https://purl.org/rss/1.0/modules/content/'>
+        <channel>
+            <title>
+                Jenkins LTS Changelog
+            </title>
+            <link>
+                https://jenkins.io/changelog-stable
+            </link>
+            <atom:link href='https://www.jenkins.io/changelog-stable/rss.xml' rel='self'
+                type='application/rss+xml'></atom:link>
+            <description>
+                Changelog for Jenkins LTS releases
+            </description>
+            <lastBuildDate>
+                Tue, 6 Jun 2023 00:00:00 +0000
+            </lastBuildDate>
+            <item>
+                <title>Jenkins {minor_updated_version}</title>
+                <link>
+                https://jenkins.io/changelog-stable//#v{minor_updated_version}
+                </link>
+                <description>
+                    current description
+                </description>
+                <guid isPermaLink='false'>
+                    jenkins-{minor_updated_version}
+                </guid>
+                <pubDate>
+                    Wed, 31 May 2023 00:00:00 +0000
+                </pubDate>
+            </item>
+            <item>
+                <title>Jenkins {patched_version}</title>
+                <link>
+                https://jenkins.io/changelog-stable//#v{patched_version}
+                </link>
+                <description>
+                    patch description
+                </description>
+                <guid isPermaLink='false'>
+                    jenkins-{patched_version}
+                </guid>
+                <pubDate>
+                    Wed, 31 May 2023 00:00:00 +0000
+                </pubDate>
+            </item>
+            <item>
+                <title>Jenkins {current_version}</title>
+                <link>
+                https://jenkins.io/changelog-stable//#v{current_version}
+                </link>
+                <description>
+                    current description
+                </description>
+                <guid isPermaLink='false'>
+                    jenkins-{current_version}
+                </guid>
+                <pubDate>
+                    Wed, 31 May 2023 00:00:00 +0000
+                </pubDate>
+            </item>
+        </channel>
+    </rss>
+    """.encode(
+        encoding="utf-8"
+    )

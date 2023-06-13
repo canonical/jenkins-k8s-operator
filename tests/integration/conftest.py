@@ -3,6 +3,7 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+import re
 import secrets
 import textwrap
 import typing
@@ -10,6 +11,8 @@ import typing
 import jenkinsapi.jenkins
 import pytest
 import pytest_asyncio
+import requests
+import yaml
 from juju.action import Action
 from juju.application import Application
 from juju.client._definitions import FullStatus, UnitStatus
@@ -17,6 +20,8 @@ from juju.model import Controller, Model
 from juju.unit import Unit
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
+
+import jenkins
 
 
 @pytest.fixture(scope="module", name="model")
@@ -37,7 +42,9 @@ def jenkins_image_fixture(request: FixtureRequest) -> str:
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
-async def application_fixture(ops_test: OpsTest, model: Model, jenkins_image: str) -> Application:
+async def application_fixture(
+    ops_test: OpsTest, model: Model, jenkins_image: str
+) -> typing.AsyncGenerator[Application, None]:
     """Build and deploy the charm."""
     # Build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
@@ -47,7 +54,9 @@ async def application_fixture(ops_test: OpsTest, model: Model, jenkins_image: st
     application = await model.deploy(charm, resources=resources, series="jammy")
     await model.wait_for_idle(apps=[application.name], status="active", raise_on_blocked=True)
 
-    return application
+    yield application
+
+    await model.remove_application(application.name, block_until_done=True)
 
 
 @pytest_asyncio.fixture(scope="module", name="unit_ip")
@@ -128,17 +137,19 @@ def gen_jenkins_test_job_xml_fixture() -> typing.Callable[[str], str]:
 
 
 @pytest_asyncio.fixture(scope="module", name="machine_controller")
-async def machine_controller_fixture() -> Controller:
+async def machine_controller_fixture() -> typing.AsyncGenerator[Controller, None]:
     """The lxd controller."""
     controller = Controller()
     await controller.connect_controller("localhost")
 
-    return controller
+    yield controller
+
+    await controller.disconnect()
 
 
 @pytest_asyncio.fixture(scope="module", name="machine_model")
 async def machine_model_fixture(
-    request: pytest.FixtureRequest, machine_controller: Controller
+    machine_controller: Controller,
 ) -> typing.AsyncGenerator[Model, None]:
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
@@ -146,9 +157,6 @@ async def machine_model_fixture(
 
     yield model
 
-    if not request.config.option.keep_models:
-        await machine_controller.destroy_models(model.name, force=True)
-        # Disconnection is required for the coroutine tasks to finish.
     await model.disconnect()
 
 
@@ -163,3 +171,29 @@ async def jenkins_machine_agent_fixture(machine_model: Model) -> Application:
     await machine_model.wait_for_idle(apps=[app.name], status="blocked", timeout=1200)
 
     return app
+
+
+@pytest.fixture(scope="module", name="jenkins_version")
+def jenkins_version_fixture() -> str:
+    """The currently installed Jenkins version from rock image."""
+    with open("jenkins_rock/rockcraft.yaml", encoding="utf-8") as rockcraft_yaml_file:
+        rockcraft_yaml = yaml.safe_load(rockcraft_yaml_file)
+        return str(rockcraft_yaml["parts"]["jenkins"]["build-environment"][0]["JENKINS_VERSION"])
+
+
+@pytest_asyncio.fixture(scope="module", name="latest_jenkins_lts_version")
+async def latest_jenkins_lts_version_fixture(jenkins_version: str) -> str:
+    """The latest LTS version of the current Jenkins version."""
+    # get RSS feed
+    rss_feed_response = requests.get(jenkins.RSS_FEED_URL, timeout=10)
+    assert rss_feed_response.status_code == 200, "Failed to fetch RSS feed."
+    rss_xml = str(rss_feed_response.content, encoding="utf-8")
+    # extract all version strings from feed
+    pattern = r"\d+\.\d+\.\d+"
+    matches = re.findall(pattern, rss_xml)
+    # find first matching version starting with same <major>.<minor> version, the rss feed is
+    # sorted by latest first.
+    current_major_minor = ".".join(jenkins_version.split(".")[:2])
+    matched_latest_version = next((v for v in matches if v.startswith(current_major_minor)), None)
+    assert matched_latest_version is not None, "Failed to find a matching LTS version."
+    return matched_latest_version

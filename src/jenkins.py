@@ -10,6 +10,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
 
+# The only XML getting parsed is from Jenkins RSS feed which is a trusted source hence the stdlib
+# xml parser can be used.
+from xml.etree import ElementTree  # nosec
+
 import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
 import ops
@@ -19,8 +23,9 @@ logger = logging.getLogger(__name__)
 
 WEB_PORT = 8080
 WEB_URL = f"http://localhost:{WEB_PORT}"
+LOGIN_URL = f"{WEB_URL}/login?from=%2F"
 HOME_PATH = Path("/var/jenkins")
-WAR_PATH = Path("/srv/jenkins/")
+EXECUTABLES_PATH = Path("/srv/jenkins/")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = HOME_PATH / "secrets/initialAdminPassword"
 # Path to last executed Jenkins version file, required to override wizard installation
@@ -29,18 +34,28 @@ LAST_EXEC_VERSION_PATH = HOME_PATH / Path("jenkins.install.InstallUtil.lastExecV
 WIZARD_VERSION_PATH = HOME_PATH / Path("jenkins.install.UpgradeWizard.state")
 # The Jenkins bootstrapping config path
 CONFIG_FILE_PATH = HOME_PATH / "config.xml"
+# The Jenkins configuration-as-code plugin default config path
+JCASC_CONFIG_FILE_PATH = HOME_PATH / "jenkins.yaml"
 # The Jenkins plugins installation directory
 PLUGINS_PATH = HOME_PATH / "plugins"
 
 # The plugins that are required for Jenkins to work
 REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
+    "configuration-as-code",  # required to disable automatic jenkins update messages
 ]
 
 USER = "jenkins"
 GROUP = "jenkins"
 
 BUILT_IN_NODE_NAME = "Built-In Node"
+# The Jenkins stable version RSS feed URL
+RSS_FEED_URL = "https://www.jenkins.io/changelog-stable/rss.xml"
+# The Jenkins WAR downloads page
+WAR_DOWNLOAD_URL = "https://updates.jenkins.io/download/war"
+
+# Java system property to run Jenkins in headless mode
+SYSTEM_PROPERTY_HEADLESS = "java.awt.headless=true"
 
 
 class JenkinsError(Exception):
@@ -57,6 +72,10 @@ class JenkinsBootstrapError(JenkinsError):
 
 class ValidationError(Exception):
     """An unexpected data is encountered."""
+
+
+class JenkinsNetworkError(JenkinsError):
+    """An error occurred communicating with the upstream Jenkins server."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -164,9 +183,11 @@ class Environment(typing.TypedDict):
 
     Attrs:
         JENKINS_HOME: The Jenkins home directory.
+        CASC_JENKINS_CONFIG: The Jenkins configuration-as-code plugin config path.
     """
 
     JENKINS_HOME: str
+    CASC_JENKINS_CONFIG: str
 
 
 def calculate_env() -> Environment:
@@ -175,7 +196,9 @@ def calculate_env() -> Environment:
     Returns:
         The dictionary mapping of environment variables for the Jenkins service.
     """
-    return Environment(JENKINS_HOME=str(HOME_PATH))
+    return Environment(
+        JENKINS_HOME=str(HOME_PATH), CASC_JENKINS_CONFIG=str(JCASC_CONFIG_FILE_PATH)
+    )
 
 
 def get_version() -> str:
@@ -212,7 +235,7 @@ def _unlock_wizard(connectable_container: ops.Container) -> None:
     )
 
 
-def _install_config(connectable_container: ops.Container) -> None:
+def _install_configs(connectable_container: ops.Container) -> None:
     """Install jenkins-config.xml.
 
     Args:
@@ -220,6 +243,10 @@ def _install_config(connectable_container: ops.Container) -> None:
     """
     with open("templates/jenkins-config.xml", encoding="utf-8") as jenkins_config_file:
         connectable_container.push(CONFIG_FILE_PATH, jenkins_config_file, user=USER, group=GROUP)
+    with open("templates/jenkins.yaml", encoding="utf-8") as jenkins_casc_config_file:
+        connectable_container.push(
+            JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file, user=USER, group=GROUP
+        )
 
 
 def _install_plugins(connectable_container: ops.Container) -> None:
@@ -246,7 +273,7 @@ def _install_plugins(connectable_container: ops.Container) -> None:
             "-p",
             plugins,
         ],
-        working_dir=str(WAR_PATH),
+        working_dir=str(EXECUTABLES_PATH),
         timeout=600,
         user=USER,
         group=GROUP,
@@ -270,7 +297,7 @@ def bootstrap(
         JenkinsBootstrapError: if there was an error installing given plugins or required plugins.
     """
     _unlock_wizard(connectable_container)
-    _install_config(connectable_container)
+    _install_configs(connectable_container)
     try:
         _install_plugins(connectable_container)
     except JenkinsPluginError as exc:
@@ -318,6 +345,7 @@ def get_node_secret(
             f'println(jenkins.model.Jenkins.getInstance().getComputer("{node_name}").getJnlpMac())'
         ).strip()
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to run get_node_secret groovy script, %s", exc)
         raise JenkinsError("Failed to run groovy script getting node secret.") from exc
 
 
@@ -347,4 +375,137 @@ def add_agent_node(
     except jenkinsapi.custom_exceptions.AlreadyExists:
         pass
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to add agent node, %s", exc)
         raise JenkinsError("Failed to add agent node.") from exc
+
+
+def _get_major_minor_version(version: str) -> str:
+    """Extract the major.minor version from semantic version string.
+
+    Args:
+        version: The semantic version.
+
+    Returns:
+        The version without patch version, i.e. <major>.<minor>
+    """
+    return ".".join(version.split(".")[0:2])
+
+
+def _fetch_versions_from_rss() -> typing.Iterable[str]:
+    """Fetch and extract Jenkins versions from the stable RSS feed.
+
+    Returns:
+        The jenkins versions from the RSS feed.
+
+    Raises:
+        JenkinsNetworkError: if there was an error fetching the RSS feed.
+        ValidationError: if an invalid RSS feed was received.
+    """
+    try:
+        res = requests.get(RSS_FEED_URL, timeout=30)
+        res.raise_for_status()
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        requests.exceptions.HTTPError,
+    ) as exc:
+        logger.error("Failed to fetch latest RSS feed, %s", exc)
+        raise JenkinsNetworkError("Failed to fetch RSS feed.") from exc
+
+    try:
+        # jenkins xml is a trusted source, hence it can be parsed using stdlib
+        xml_tree = ElementTree.fromstring(res.content)  # nosec
+    except ElementTree.ParseError as exc:
+        logger.error("Invalid RSS feed, %s", exc)
+        raise ValidationError("Invalid RSS feed.") from exc
+
+    items = xml_tree.findall("./channel/item")
+    # mypy doesn't understand that None type is not possible.
+    titles = (
+        item.find("title").text  # type: ignore
+        for item in items
+        if item.find("title") is not None and item.find("title").text is not None  # type: ignore
+    )
+    versions = (title.removeprefix("Jenkins ") for title in titles)  # type: ignore
+    return versions
+
+
+def get_latest_patch_version(current_version: str) -> str:
+    """Get the latest lts patch version matching with the current version.
+
+    Args:
+        current_version: Current LTS semantic version.
+
+    Returns:
+        The latest patched version available.
+
+    Raises:
+        JenkinsNetworkError: if there was an error fetching the LTS RSS feed.
+        ValidationError: if the RSS feed contains no matching LTS version.
+    """
+    try:
+        versions = _fetch_versions_from_rss()
+    except (JenkinsNetworkError, ValidationError) as exc:
+        logger.error("Failed to fetch Jenkins versions from rss, %s", exc)
+        raise
+
+    maj_min_version = _get_major_minor_version(current_version)
+    matching_versions = (version for version in versions if version.startswith(maj_min_version))
+    sorted_versions = sorted(
+        matching_versions, reverse=True, key=lambda x: tuple(map(int, x.split(".")))
+    )
+
+    if len(sorted_versions) == 0:
+        raise ValidationError(
+            f"No matching version with {current_version} found from stable RSS feed."
+        )
+    return sorted_versions[0]
+
+
+def download_stable_war(connectable_container: ops.Container, version: str) -> None:
+    """Download and replace the war executable.
+
+    Args:
+        connectable_container: The Jenkins container with jenkins.war executable.
+        version: Desired version of the war to download.
+
+    Raises:
+        JenkinsNetworkError: if there was an error fetching the jenkins.war executable.
+    """
+    try:
+        res = requests.get(f"{WAR_DOWNLOAD_URL}/{version}/jenkins.war", timeout=300)
+        res.raise_for_status()
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        requests.exceptions.HTTPError,
+    ) as exc:
+        logger.error("Failed to download Jenkins war executable, %s", exc)
+        raise JenkinsNetworkError(f"Failed to download Jenkins war version {version}") from exc
+    connectable_container.push(
+        EXECUTABLES_PATH / "jenkins.war", res.content, encoding="utf-8", user=USER, group=GROUP
+    )
+
+
+def safe_restart(
+    credentials: Credentials, client: jenkinsapi.jenkins.Jenkins | None = None
+) -> None:
+    """Safely restart Jenkins server after all jobs are done executing.
+
+    Args:
+        credentials: The credentials of a Jenkins user with access to the Jenkins API.
+        client: The API client used to communicate with the Jenkins server.
+
+    Raises:
+        JenkinsError: if there was an API error calling safe restart.
+    """
+    client = client if client is not None else _get_client(credentials)
+    try:
+        client.safe_restart(wait_for_reboot=True)
+    except (
+        jenkinsapi.custom_exceptions.JenkinsAPIException,
+        requests.exceptions.HTTPError,
+        requests.exceptions.ConnectionError,
+    ) as exc:
+        logger.error("Failed to restart Jenkins, %s", exc)
+        raise JenkinsError("Failed to restart Jenkins safely.") from exc

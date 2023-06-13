@@ -30,7 +30,6 @@ source: https://github.com/canonical/jenkins-k8s-operator
 tags:
   - application_development
   - ops
-subordinate: false
 containers:
   jenkins:
     resource: jenkins-image
