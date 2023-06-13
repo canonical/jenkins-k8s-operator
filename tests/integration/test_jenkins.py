@@ -10,7 +10,7 @@ from juju.application import Application
 from juju.client import client
 from juju.model import Model
 
-from .helpers import assert_substrings_not_in_string
+from .substrings import assert_substrings_not_in_string
 
 
 async def test_jenkins_update_ui_disabled(
