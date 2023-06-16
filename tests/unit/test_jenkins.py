@@ -547,6 +547,86 @@ def test_download_stable_war(monkeypatch: pytest.MonkeyPatch, current_version: s
     )
 
 
+@pytest.mark.parametrize(
+    "response_status",
+    [
+        pytest.param(200, id="Jenkins healthy"),
+        pytest.param(404, id="Not found response"),
+    ],
+)
+def test__wait_jenkins_job_shutdown_false(response_status: int):
+    """
+    arrange: given a mocked Jenkins client that returns any other status code apart from 503.
+    act: when _is_shutdown is called.
+    assert: False is returned.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_requester = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Requester)
+    mock_response = unittest.mock.MagicMock(requests.Response)
+    mock_client.requester = mock_requester
+    mock_requester.get_url.return_value = mock_response
+    mock_response.status_code = response_status
+
+    assert not jenkins._is_shutdown(mock_client)
+
+
+def test__is_shutdown_connection_error():
+    """
+    arrange: given a mocked Jenkins client that raises a ConnectionError.
+    act: when _is_shutdown is called.
+    assert: True is returned.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_requester = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Requester)
+    mock_client.requester = mock_requester
+    mock_requester.get_url.side_effect = requests.ConnectionError
+
+    assert jenkins._is_shutdown(mock_client)
+
+
+def test__is_shutdown_service_unavailable():
+    """
+    arrange: given a mocked Jenkins client that raises a service unavailable status.
+    act: when _is_shutdown is called.
+    assert: True is returned.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_requester = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Requester)
+    mock_response = unittest.mock.MagicMock(requests.Response)
+    mock_client.requester = mock_requester
+    mock_requester.get_url.return_value = mock_response
+    mock_response.status_code = 503
+
+    assert jenkins._is_shutdown(mock_client)
+
+
+def test__wait_jenkins_job_shutdown_timeout(monkeypatch: pytest.MonkeyPatch, raise_exception):
+    """
+    arrange: given a patched _is_shutdown request that raises a TimeoutError.
+    act: when _wait_jenkins_job_shutdown is called.
+    assert: TimeoutError is raised.
+    """
+    monkeypatch.setattr(
+        jenkins, "_is_shutdown", lambda *_args, **kwargs: raise_exception(TimeoutError)
+    )
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+
+    with pytest.raises(TimeoutError):
+        jenkins._wait_jenkins_job_shutdown(mock_client)
+
+
+def test__wait_jenkins_job_shutdown(monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given a patched _is_shutdown request that returns True.
+    act: when _wait_jenkins_job_shutdown is called.
+    assert: No exceptions are raised.
+    """
+    monkeypatch.setattr(jenkins, "_is_shutdown", lambda *_args, **kwargs: True)
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+
+    jenkins._wait_jenkins_job_shutdown(mock_client)
+
+
 def test_safe_restart_failure(admin_credentials: jenkins.Credentials):
     """
     arrange: given a mocked Jenkins API client that raises JenkinsAPIException.
@@ -560,14 +640,15 @@ def test_safe_restart_failure(admin_credentials: jenkins.Credentials):
         jenkins.safe_restart(admin_credentials, client=mock_client)
 
 
-def test_safe_restart(admin_credentials: jenkins.Credentials):
+def test_safe_restart(admin_credentials: jenkins.Credentials, monkeypatch: pytest.MonkeyPatch):
     """
     arrange: given a mocked Jenkins API client that does not raise an exception.
     act: when safe_restart is called.
     assert: No exception is raised.
     """
+    monkeypatch.setattr(jenkins, "_wait_jenkins_job_shutdown", lambda *_args, **_kwargs: None)
     mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
     jenkins.safe_restart(admin_credentials, client=mock_client)
 
-    mock_client.safe_restart.assert_called_once_with(wait_for_reboot=True)
+    mock_client.safe_restart.assert_called_once_with(wait_for_reboot=False)
