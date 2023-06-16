@@ -4,6 +4,7 @@
 """Functions to operate Jenkins."""
 
 import dataclasses
+import functools
 import logging
 import typing
 from datetime import datetime, timedelta
@@ -114,6 +115,27 @@ class AgentMeta:
             ) from exc
 
 
+def _wait_for(func: typing.Callable, timeout: int = 300, check_interval: int = 10) -> None:
+    """Wait for function execution to become truthy.
+
+    Args:
+        func: A function execution to wait to become truthy.
+        timeout: Time in seconds to wait for function to become truthy.
+        check_interval: Time in seconds to wait between ready checks.
+    """
+    start_time = now = datetime.now()
+    min_wait_seconds = timedelta(seconds=timeout)
+    while now - start_time < min_wait_seconds:
+        if func():
+            break
+        now = datetime.now()
+        sleep(check_interval)
+    else:
+        if func():
+            return
+        raise TimeoutError()
+
+
 def _is_ready() -> bool:
     """Check if Jenkins webserver is ready.
 
@@ -136,16 +158,9 @@ def wait_ready(timeout: int = 300, check_interval: int = 10) -> None:
     Raises:
         TimeoutError: if Jenkins status check did not pass within the timeout duration.
     """
-    start_time = now = datetime.now()
-    min_wait_seconds = timedelta(seconds=timeout)
-    while now - start_time < min_wait_seconds:
-        if _is_ready():
-            break
-        now = datetime.now()
-        sleep(check_interval)
-    else:
-        if _is_ready():
-            return
+    try:
+        _wait_for(_is_ready, timeout=timeout, check_interval=check_interval)
+    except TimeoutError:
         raise TimeoutError("Timed out waiting for Jenkins to become ready.")
 
 
@@ -487,6 +502,36 @@ def download_stable_war(connectable_container: ops.Container, version: str) -> N
     )
 
 
+def _is_shutdown(client: jenkinsapi.jenkins.Jenkins):
+    """Return status of Jenkins whether it is shutting down.
+
+    Args:
+        client: The API client used to communicate with the Jenkins server.
+    """
+    try:
+        res = client.requester.get_url(WEB_URL)
+    except (requests.HTTPError, requests.ConnectionError):
+        # If jenkins returns 503 or is unavaiable to connect
+        # it is shutting down.
+        return True
+    if res.status_code == 200 and "Jenkins is going to shut down" in str(
+        res.content, encoding="utf-8"
+    ):
+        return False
+
+
+def _wait_jenkins_job_shutdown(client: jenkinsapi.jenkins.Jenkins):
+    """Wait for jenkins to finish the job and shutdown.
+
+    Args:
+        client: The API client used to communicate with the Jenkins server.
+    """
+    try:
+        _wait_for(functools.partial(_is_shutdown, client), timeout=300, check_interval=1)
+    except TimeoutError:
+        raise TimeoutError("Timed out waiting for Jenkins to be shutdown.")
+
+
 def safe_restart(
     credentials: Credentials, client: jenkinsapi.jenkins.Jenkins | None = None
 ) -> None:
@@ -503,9 +548,10 @@ def safe_restart(
     try:
         client.safe_restart(wait_for_reboot=True)
     except (
-        jenkinsapi.custom_exceptions.JenkinsAPIException,
         requests.exceptions.HTTPError,
         requests.exceptions.ConnectionError,
     ) as exc:
         logger.error("Failed to restart Jenkins, %s", exc)
         raise JenkinsError("Failed to restart Jenkins safely.") from exc
+    except jenkinsapi.custom_exceptions.JenkinsAPIException:
+        _wait_jenkins_job_shutdown(client)
