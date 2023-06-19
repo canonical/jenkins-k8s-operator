@@ -115,7 +115,9 @@ class AgentMeta:
             ) from exc
 
 
-def _wait_for(func: typing.Callable, timeout: int = 300, check_interval: int = 10) -> None:
+def _wait_for(
+    func: typing.Callable[[], typing.Any], timeout: int = 300, check_interval: int = 10
+) -> None:
     """Wait for function execution to become truthy.
 
     Args:
