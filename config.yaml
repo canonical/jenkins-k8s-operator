@@ -7,5 +7,5 @@ options:
     description: >
       A preferred update time in 24 hour format in UTC for the Jenkins LTS patch update to take
       place if available. Leaving the value empty will let the charm update whenever there is an
-      update available.
+      update available. e.g. 03-05 will allow updates to take place from 3AM UTC to 5AM UTC.
     default: ""

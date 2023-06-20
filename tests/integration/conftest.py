@@ -23,6 +23,8 @@ from pytest_operator.plugin import OpsTest
 
 import jenkins
 
+from .types_ import ModelAppUnit
+
 
 @pytest.fixture(scope="module", name="model")
 def model_fixture(ops_test: OpsTest) -> Model:
@@ -197,3 +199,21 @@ async def latest_jenkins_lts_version_fixture(jenkins_version: str) -> str:
     matched_latest_version = next((v for v in matches if v.startswith(current_major_minor)), None)
     assert matched_latest_version is not None, "Failed to find a matching LTS version."
     return matched_latest_version
+
+
+@pytest.fixture(scope="module", name="freeze_time")
+def freeze_time_fixture() -> str:
+    """The time string to freeze the charm time."""
+    return "2012-01-14 15:00:00"
+
+
+@pytest.fixture(scope="module", name="unit")
+def unit_fixture(application: Application) -> Unit:
+    """The Jenkins-k8s charm application unit."""
+    return application.units[0]
+
+
+@pytest.fixture(scope="module", name="model_app_unit")
+def model_app_unit_fixture(model: Model, application: Application, unit: Unit):
+    """The packaged model, application, unit of Jenkins to reduce number of parameters in tests."""
+    return ModelAppUnit(model=model, app=application, unit=unit)
