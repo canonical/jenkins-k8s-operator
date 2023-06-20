@@ -16,7 +16,7 @@ from ops.pebble import Layer
 
 import agent
 import jenkins
-from state import State
+from state import CharmConfigInvalidError, State
 
 if typing.TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
@@ -35,7 +35,11 @@ class JenkinsK8SOperatorCharm(CharmBase):
             args: Arguments to initialize the char base.
         """
         super().__init__(*args)
-        self.state = State.from_charm()
+        try:
+            self.state = State.from_charm(self.config)
+        except CharmConfigInvalidError as exc:
+            self.unit.status = BlockedStatus(exc.msg)
+            return
 
         self.agent_observer = agent.Observer(self, self.state)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
@@ -145,15 +149,19 @@ class JenkinsK8SOperatorCharm(CharmBase):
         credentials = jenkins.get_admin_credentials(self._jenkins_container)
         event.set_results({"password": credentials.password})
 
-    def _on_update_status(self, _: UpdateStatusEvent) -> None:
+    # The controller function has many branching logic and hence the C901 - too complex is ignored.
+    def _on_update_status(self, _: UpdateStatusEvent) -> None:  # noqa: C901
         """Handle update status event.
 
         On Update status:
         1. Update Jenkins patch LTS version if available.
         2. Update apt packages if available.
         """
-        self.unit.status = ActiveStatus("Checking for updates.")
+        if self.state.update_time_range and not self.state.update_time_range.check_now():
+            self.unit.status = ActiveStatus()
+            return
 
+        self.unit.status = ActiveStatus("Checking for updates.")
         try:
             version = jenkins.get_version()
         except (
