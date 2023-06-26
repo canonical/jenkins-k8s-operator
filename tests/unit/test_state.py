@@ -30,7 +30,7 @@ def test_update_time_range_invalid_time(time_range: str):
     assert: ValueError is raised.
     """
     with pytest.raises(ValueError):
-        state.UpdateTimeRange.from_str(time_range)
+        state.TimeRange.from_str(time_range)
 
 
 @pytest.mark.parametrize(
@@ -46,9 +46,7 @@ def test_update_time_range_empty_str(time_range):
     act: when UpdateTimeRange class is instantiated through from_string method.
     assert: None is returned.
     """
-    assert (
-        state.UpdateTimeRange.from_str(time_range) is None
-    ), "Time range should not be instantiated."
+    assert state.TimeRange.from_str(time_range) is None, "Time range should not be instantiated."
 
 
 @pytest.mark.parametrize(
@@ -66,7 +64,7 @@ def test_update_time_range_valid_time(time_range: str, expected_range: tuple[int
     act: when UpdateTimeRange class is instantiated through from_string method.
     assert: no exceptions are raised.
     """
-    update_time_range = state.UpdateTimeRange.from_str(time_range)
+    update_time_range = state.TimeRange.from_str(time_range)
     assert update_time_range, "Expected time range to not be None."
 
     assert update_time_range.start == expected_range[0], "Unexpected start time."
@@ -96,7 +94,7 @@ def test_update_time_range_check_now(
     mock_datetime.utcnow.return_value = test_time
     monkeypatch.setattr(state, "datetime", mock_datetime)
 
-    update_time_range = state.UpdateTimeRange.from_str(time_range)
+    update_time_range = state.TimeRange.from_str(time_range)
     assert update_time_range, "Expected time range to not be None."
 
     assert update_time_range.check_now() == expected_result

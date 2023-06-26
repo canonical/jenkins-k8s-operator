@@ -6,7 +6,7 @@ import dataclasses
 import logging
 import typing
 
-from timerange import UpdateTimeRange
+from timerange import TimeRange
 
 if typing.TYPE_CHECKING:
     from charm import JenkinsK8SOperatorCharm
@@ -43,7 +43,7 @@ class State:
         update_time_range: Time range to allow Jenkins to update version.
     """
 
-    update_time_range: typing.Optional[UpdateTimeRange]
+    update_time_range: typing.Optional[TimeRange]
     jenkins_service_name: str = "jenkins"
 
     @classmethod
@@ -61,7 +61,7 @@ class State:
         """
         time_range_str = charm.config.get("update-time-range")
         try:
-            update_time_range = UpdateTimeRange.from_str(time_range_str)
+            update_time_range = TimeRange.from_str(time_range_str)
         except ValueError as exc:
             logger.error("Invalid config value for update-time-range, %s", exc)
             raise CharmConfigInvalidError("Invalid config value for update-time-range.") from exc

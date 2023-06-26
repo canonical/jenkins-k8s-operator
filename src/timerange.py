@@ -5,10 +5,14 @@
 import typing
 from datetime import datetime
 
-from pydantic import BaseModel, ValidationError, root_validator
+from pydantic import BaseModel, Field, ValidationError, root_validator
 
 
-class UpdateTimeRange(BaseModel):
+class InvalidTimeRangeError(Exception):
+    """Represents an invalid time range."""
+
+
+class TimeRange(BaseModel):
     """Time range to allow Jenkins to update version.
 
     Attrs:
@@ -16,13 +20,13 @@ class UpdateTimeRange(BaseModel):
         end: Hour to allow updates until in UTC time, in 24 hour format.
     """
 
-    start: int
-    end: int
+    start: int = Field(ge=0, lt=24)
+    end: int = Field(ge=0, lt=24)
 
     # Pflake8 & pylint don't quite understand that this is a classmethod using Pydantic.
     @root_validator
     def validate_range(  # pylint: disable=no-self-argument
-        cls: "UpdateTimeRange", values: dict  # noqa: N805
+        cls: "TimeRange", values: dict  # noqa: N805
     ) -> dict:
         """Validate the time range.
 
@@ -38,14 +42,12 @@ class UpdateTimeRange(BaseModel):
         # it is okay to cast it since the field level validation has ran before root validation.
         start = typing.cast(int, values["start"])
         end = typing.cast(int, values["end"])
-        if start < 0 or start > 23 or end < 0 or end > 23:
-            raise ValueError("Time range out of 24 hour bounds.")
         if start == end:
             raise ValueError("Time range cannot be equal. Minimum 1 hour range is required.")
         return values
 
     @classmethod
-    def from_str(cls, time_range: typing.Optional[str]) -> typing.Optional["UpdateTimeRange"]:
+    def from_str(cls, time_range: typing.Optional[str]) -> typing.Optional["TimeRange"]:
         """Instantiate the class from string time range.
 
         Args:
@@ -63,9 +65,13 @@ class UpdateTimeRange(BaseModel):
         try:
             (start_hour, end_hour) = (int(hour) for hour in time_range.split("-"))
             update_range = cls(start=start_hour, end=end_hour)
-        except (ValueError, ValidationError) as exc:
-            raise ValueError(
-                f"Invalid time range {time_range}, time range must be in 24H format"
+        except ValueError as exc:
+            raise InvalidTimeRangeError(
+                f"Invalid time range {time_range}, time range must be an integer."
+            ) from exc
+        except ValidationError as exc:
+            raise InvalidTimeRangeError(
+                f"Invalid time range {time_range}, time range must be between 0-23"
             ) from exc
         return update_range
 
