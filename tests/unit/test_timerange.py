@@ -13,6 +13,7 @@ import timerange
 @pytest.mark.parametrize(
     "time_range",
     [
+        pytest.param("-1-0", id="invalid time range"),
         pytest.param("-1-3", id="negative time range"),
         pytest.param("00-24", id="Out of 24H scale"),
         pytest.param("23", id="Not a range"),
@@ -36,10 +37,11 @@ def test_update_time_range_invalid_time(time_range: str):
 @pytest.mark.parametrize(
     "time_range, expected_range",
     [
-        pytest.param("0-3", (0, 3), id="valid time range single digits"),
+        pytest.param("0-1", (0, 3), id="valid time range single digits"),
         pytest.param("00-03", (0, 3), id="valid time range single digits"),
         pytest.param("21-3", (21, 3), id="overnight"),
         pytest.param("21-03", (21, 3), id="overnight double digit"),
+        pytest.param("23-00", (21, 3), id="midnight edge probe"),
     ],
 )
 def test_update_time_range_valid_time(time_range: str, expected_range: tuple[int, int]):
@@ -58,11 +60,13 @@ def test_update_time_range_valid_time(time_range: str, expected_range: tuple[int
 @pytest.mark.parametrize(
     "patch_hour,time_range,expected_result",
     [
+        pytest.param(2, "3-5", False, id="before start hour"),
         pytest.param(3, "3-5", True, id="start hour"),
         pytest.param(4, "3-5", True, id="between start-end"),
         pytest.param(5, "3-5", False, id="end hour"),
         pytest.param(0, "23-1", True, id="overnight midnight"),
-        pytest.param(1, "23-1", False, id="out of overnight range"),
+        pytest.param(1, "23-1", False, id="out of overnight range(edge)"),
+        pytest.param(2, "23-1", False, id="out of overnight range(after)"),
     ],
 )
 def test_update_time_range_check_now(
