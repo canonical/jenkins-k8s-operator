@@ -8,7 +8,6 @@
 import logging
 import typing
 
-import requests
 from ops.charm import ActionEvent, CharmBase, PebbleReadyEvent, UpdateStatusEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
@@ -125,11 +124,7 @@ class JenkinsK8sOperatorCharm(CharmBase):
 
         try:
             version = jenkins.get_version()
-        except (
-            requests.HTTPError,
-            requests.exceptions.Timeout,
-            requests.exceptions.ConnectionError,
-        ) as exc:
+        except jenkins.JenkinsError as exc:
             logger.error("Failed to get Jenkins version, %s", exc)
             self.unit.status = BlockedStatus("Failed to get Jenkins version.")
             return
@@ -149,8 +144,7 @@ class JenkinsK8sOperatorCharm(CharmBase):
         credentials = jenkins.get_admin_credentials(self._jenkins_container)
         event.set_results({"password": credentials.password})
 
-    # The controller function has many branching logic and hence the C901 - too complex is ignored.
-    def _on_update_status(self, _: UpdateStatusEvent) -> None:  # noqa: C901
+    def _on_update_status(self, _: UpdateStatusEvent) -> None:
         """Handle update status event.
 
         On Update status:
@@ -163,24 +157,13 @@ class JenkinsK8sOperatorCharm(CharmBase):
 
         self.unit.status = ActiveStatus("Checking for updates.")
         try:
-            version = jenkins.get_version()
-        except (
-            requests.HTTPError,
-            requests.exceptions.Timeout,
-            requests.exceptions.ConnectionError,
-        ) as exc:
-            logger.error("Failed to get Jenkins version, %s", exc)
-            self.unit.status = BlockedStatus("Jenkins unhealthy. See logs for more detail.")
+            latest_patch_version = jenkins.get_updatable_version()
+        except jenkins.JenkinsUpdateError as exc:
+            logger.error("Failed to get Jenkins updates, %s", exc)
+            self.unit.status = ActiveStatus("Failed to get Jenkins patch version.")
             return
 
-        try:
-            latest_patch_version = jenkins.get_latest_patch_version(version)
-        except (jenkins.JenkinsNetworkError, jenkins.ValidationError) as exc:
-            logger.error("Failed to get latest patch version, %s", exc)
-            self.unit.status = ActiveStatus("Failed to get patch. See logs for more detail.")
-            return
-
-        if latest_patch_version == version:
+        if not latest_patch_version:
             self.unit.status = ActiveStatus()
             return
 
@@ -189,9 +172,7 @@ class JenkinsK8sOperatorCharm(CharmBase):
             jenkins.download_stable_war(self._jenkins_container, latest_patch_version)
         except jenkins.JenkinsNetworkError as exc:
             logger.error("Failed to download Jenkins war. %s", exc)
-            self.unit.status = ActiveStatus(
-                "Failed to download executable. See logs for more detail."
-            )
+            self.unit.status = ActiveStatus("Failed to download executable.")
             return
 
         credentials = jenkins.get_admin_credentials(self._jenkins_container)
@@ -200,7 +181,7 @@ class JenkinsK8sOperatorCharm(CharmBase):
             jenkins.wait_ready()
         except (jenkins.JenkinsError, TimeoutError) as exc:
             logger.error("Failed to safely restart Jenkins. %s", exc)
-            self.unit.status = BlockedStatus("Update restart failed. See logs for more detail.")
+            self.unit.status = BlockedStatus("Update restart failed.")
             return
 
         self.unit.set_workload_version(latest_patch_version)

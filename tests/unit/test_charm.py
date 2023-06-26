@@ -83,20 +83,11 @@ def test__on_jenkins_pebble_ready_error(
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
-@pytest.mark.parametrize(
-    "exception",
-    [
-        pytest.param(requests.HTTPError, id="HTTPError"),
-        pytest.param(requests.exceptions.Timeout, id="TimeoutError"),
-        pytest.param(requests.exceptions.ConnectionError, id="ConnectionError"),
-    ],
-)
 def test__on_jenkins_pebble_ready_get_version_error(
     harness_container: HarnessWithContainer,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
     raise_exception: Callable,
-    exception: Exception,
 ):
     """
     arrange: given a patched jenkins.get_version function that raises an exception.
@@ -104,7 +95,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     assert: the unit status should be in BlockedStatus.
     """
     # speed up waiting by changing default argument values
-    monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(exception))
+    monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(jenkins.JenkinsError))
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args: None)
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=200))
@@ -194,7 +185,7 @@ def test__on_update_status_no_action(
     """
     mock_download_func = MagicMock(spec=jenkins.download_stable_war)
     monkeypatch.setattr(jenkins, "get_version", lambda: current_version)
-    monkeypatch.setattr(jenkins, "get_latest_patch_version", lambda *_, **__: current_version)
+    monkeypatch.setattr(jenkins, "_get_latest_patch_version", lambda *_, **__: current_version)
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
@@ -206,57 +197,20 @@ def test__on_update_status_no_action(
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
 
 
-@pytest.mark.parametrize(
-    "exception",
-    [
-        pytest.param(requests.HTTPError, id="HTTPError"),
-        pytest.param(requests.exceptions.Timeout, id="TimeoutError"),
-        pytest.param(requests.exceptions.ConnectionError, id="ConnectionError"),
-    ],
-)
-def test__on_update_status_get_version_error(
+def test__on_update_status_get_updatable_version_error(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
     raise_exception: Callable,
-    exception: Exception,
 ):
     """
-    arrange: given monkeypatched get_version that raises an HTTP exception.
+    arrange: given monkeypatched get_updatable_version that raises jenkins exceptions.
     act: when update_status action is triggered.
-    assert: the charm falls into BlockedStatus since Jenkins service is not functioning.
+    assert: the charm falls into ActiveStatus with a warning message.
     """
-    monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(exception))
-    mock_event = MagicMock(spec=UpdateStatusEvent)
-    harness_container.harness.begin()
-
-    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    jenkins_charm._on_update_status(mock_event)
-
-    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
-
-
-@pytest.mark.parametrize(
-    "exception",
-    [
-        pytest.param(jenkins.JenkinsNetworkError, id="JenkinsNetworkError"),
-        pytest.param(jenkins.ValidationError, id="ValidationError"),
-    ],
-)
-def test__on_update_status_get_latest_patch_version_error(
-    harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
-    raise_exception: Callable,
-    exception: Exception,
-    versions: Versions,
-):
-    """
-    arrange: given monkeypatched get_latest_patch_version that raises jenkins exceptions.
-    act: when update_status action is triggered.
-    assert: the charm falls into ActiveStatus since the service should still be functioning.
-    """
-    monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
     monkeypatch.setattr(
-        jenkins, "get_latest_patch_version", lambda *_args, **_kwargs: raise_exception(exception)
+        jenkins,
+        "get_updatable_version",
+        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsUpdateError),
     )
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
@@ -265,6 +219,7 @@ def test__on_update_status_get_latest_patch_version_error(
     jenkins_charm._on_update_status(mock_event)
 
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+    assert jenkins_charm.unit.status.message, "The status message should not be empty."
 
 
 def test__on_update_status_dowload_stable_war_error(
@@ -280,7 +235,7 @@ def test__on_update_status_dowload_stable_war_error(
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
     monkeypatch.setattr(
-        jenkins, "get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
     )
     monkeypatch.setattr(
         jenkins,
@@ -309,7 +264,7 @@ def test__on_update_status_safe_restart_error(
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
     monkeypatch.setattr(
-        jenkins, "get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
     )
     monkeypatch.setattr(
         jenkins,
@@ -344,7 +299,7 @@ def test__on_update_status_update(
     mock_download = MagicMock(spec=jenkins.download_stable_war)
     mock_safe_restart = MagicMock(spec=jenkins.safe_restart)
     monkeypatch.setattr(jenkins, "get_version", lambda: current_version)
-    monkeypatch.setattr(jenkins, "get_latest_patch_version", lambda *_, **__: patched_version)
+    monkeypatch.setattr(jenkins, "_get_latest_patch_version", lambda *_, **__: patched_version)
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download)
     monkeypatch.setattr(jenkins, "safe_restart", mock_safe_restart)
     monkeypatch.setattr(jenkins, "wait_ready", lambda: None)

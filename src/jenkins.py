@@ -79,6 +79,10 @@ class JenkinsNetworkError(JenkinsError):
     """An error occurred communicating with the upstream Jenkins server."""
 
 
+class JenkinsUpdateError(JenkinsError):
+    """An error occurred trying to update Jenkins."""
+
+
 @dataclasses.dataclass(frozen=True)
 class AgentMeta:
     """Metadata for registering Jenkins Agent.
@@ -224,10 +228,20 @@ def calculate_env() -> Environment:
 def get_version() -> str:
     """Get the Jenkins server version.
 
+    Raises:
+        JenkinsError: if Jenkins is unreachable.
+
     Returns:
         The Jenkins server version.
     """
-    return requests.get(WEB_URL, timeout=10).headers["X-Jenkins"]
+    try:
+        return requests.get(WEB_URL, timeout=10).headers["X-Jenkins"]
+    except (
+        requests.exceptions.Timeout,
+        requests.exceptions.ConnectionError,
+    ) as exc:
+        logger.error("Failed to get Jenkins version, %s", exc)
+        raise JenkinsError("Failed to get Jenkins version.") from exc
 
 
 def _unlock_wizard(connectable_container: ops.Container) -> None:
@@ -450,7 +464,7 @@ def _fetch_versions_from_rss() -> typing.Iterable[str]:
     return versions
 
 
-def get_latest_patch_version(current_version: str) -> str:
+def _get_latest_patch_version(current_version: str) -> str:
     """Get the latest lts patch version matching with the current version.
 
     Args:
@@ -480,6 +494,32 @@ def get_latest_patch_version(current_version: str) -> str:
             f"No matching version with {current_version} found from stable RSS feed."
         )
     return sorted_versions[0]
+
+
+def get_updatable_version() -> str | None:
+    """Get version to update to if available.
+
+    Raises:
+        JenkinsUpdateError: if there was an error trying to determine next Jenkins update version.
+
+    Returns:
+        Patched version string if the update is available. None if latest version is applied.
+    """
+    try:
+        current_version = get_version()
+    except JenkinsError as exc:
+        logger.error("Failed to get Jenkins version while fetching update, %s", exc)
+        raise JenkinsUpdateError("Failed to get Jenkins version.") from exc
+
+    try:
+        latest_version = _get_latest_patch_version(current_version=current_version)
+    except (JenkinsNetworkError, ValidationError) as exc:
+        logger.error("Failed to fetch latest patch version info, %s", exc)
+        raise JenkinsUpdateError("Failed to fetch latest patch version info.") from exc
+
+    if current_version == latest_version:
+        return None
+    return latest_version
 
 
 def download_stable_war(connectable_container: ops.Container, version: str) -> None:

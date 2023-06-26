@@ -28,10 +28,9 @@ def test_state_invalid_time_config(harness: Harness):
     "time_range",
     [
         pytest.param("", id="empty string"),
-        pytest.param(None, id="None"),
     ],
 )
-def test_no_time_range_config(time_range: typing.Optional[str], harness: Harness):
+def test_no_time_range_config(time_range: str, harness: Harness):
     """
     arrange: given an empty time range config value.
     act: when state is instantiated.

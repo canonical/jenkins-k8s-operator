@@ -37,11 +37,11 @@ def test_update_time_range_invalid_time(time_range: str):
 @pytest.mark.parametrize(
     "time_range, expected_range",
     [
-        pytest.param("0-1", (0, 3), id="valid time range single digits"),
         pytest.param("00-03", (0, 3), id="valid time range single digits"),
+        pytest.param("0-1", (0, 1), id="valid time range single digits(single hour)"),
         pytest.param("21-3", (21, 3), id="overnight"),
         pytest.param("21-03", (21, 3), id="overnight double digit"),
-        pytest.param("23-00", (21, 3), id="midnight edge probe"),
+        pytest.param("23-00", (23, 0), id="midnight edge probe"),
     ],
 )
 def test_update_time_range_valid_time(time_range: str, expected_range: tuple[int, int]):

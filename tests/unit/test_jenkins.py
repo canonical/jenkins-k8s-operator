@@ -143,6 +143,29 @@ def test_calculate_env():
     }
 
 
+@pytest.mark.parametrize(
+    "exception",
+    [
+        pytest.param(requests.exceptions.Timeout, id="Timeout"),
+        pytest.param(requests.exceptions.ConnectionError, id="Connection"),
+    ],
+)
+def test_get_version_error(
+    monkeypatch: pytest.MonkeyPatch, raise_exception: typing.Callable, exception: Exception
+):
+    """
+    arrange: given a monkeypatched request that raises exceptions.
+    act: when a request is sent to Jenkins server.
+    assert: JenkinsError exception is raised.
+    """
+    monkeypatch.setattr(
+        jenkins.requests, "get", lambda *_args, **_kwargs: raise_exception(exception)
+    )
+
+    with pytest.raises(jenkins.JenkinsError):
+        jenkins.get_version()
+
+
 def test_get_version(
     monkeypatch: pytest.MonkeyPatch,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
@@ -454,7 +477,7 @@ def test_get_latest_patch_version_failure(monkeypatch: pytest.MonkeyPatch, curre
     monkeypatch.setattr(jenkins, "_fetch_versions_from_rss", mock_fetch_version)
 
     with pytest.raises(jenkins.JenkinsNetworkError):
-        jenkins.get_latest_patch_version(current_version)
+        jenkins._get_latest_patch_version(current_version)
 
 
 def test_get_latest_patch_version_invalid_rss(
@@ -470,7 +493,7 @@ def test_get_latest_patch_version_invalid_rss(
     monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
 
     with pytest.raises(jenkins.ValidationError):
-        jenkins.get_latest_patch_version(current_version)
+        jenkins._get_latest_patch_version(current_version)
 
 
 def test_get_latest_patch_version_missing_version_rss(
@@ -492,10 +515,10 @@ def test_get_latest_patch_version_missing_version_rss(
     monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
 
     with pytest.raises(jenkins.ValidationError):
-        jenkins.get_latest_patch_version(current_version)
+        jenkins._get_latest_patch_version(current_version)
 
 
-def test_get_latest_patch_version(
+def test__get_latest_patch_version(
     monkeypatch: pytest.MonkeyPatch, rss_feed: bytes, current_version: str, patched_version: str
 ):
     """
@@ -507,9 +530,81 @@ def test_get_latest_patch_version(
     mock_rss_response.content = rss_feed
     monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
 
-    result = jenkins.get_latest_patch_version(current_version)
+    result = jenkins._get_latest_patch_version(current_version)
 
     assert result == patched_version
+
+
+def test_get_updatable_version_get_version_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    raise_exception: typing.Callable,
+):
+    """
+    arrange: given a monkeypatched get_version that returns an exception.
+    act: when get_update_version is called.
+    assert: JenkinsUpdateError is raised.
+    """
+    monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(jenkins.JenkinsError))
+
+    with pytest.raises(jenkins.JenkinsUpdateError):
+        jenkins.get_updatable_version()
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        pytest.param(jenkins.JenkinsNetworkError, id="JenkinsNetworkError"),
+        pytest.param(jenkins.ValidationError, id="ValidationError"),
+    ],
+)
+def test_get_updatable_version__get_latest_patch_version_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    raise_exception: typing.Callable,
+    exception: Exception,
+    versions: Versions,
+):
+    """
+    arrange: given a monkeypatched _get_latest_patch_version that returns an exception.
+    act: when get_update_version is called.
+    assert: JenkinsUpdateError is raised.
+    """
+    monkeypatch.setattr(jenkins, "get_version", lambda *_args, **_kwargs: versions.current)
+    monkeypatch.setattr(
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: raise_exception(exception)
+    )
+
+    with pytest.raises(jenkins.JenkinsUpdateError):
+        jenkins.get_updatable_version()
+
+
+def test_get_updatable_version_up_to_date(monkeypatch: pytest.MonkeyPatch, versions: Versions):
+    """
+    arrange: given monkeypatched version fetching functions that returns latest versions.
+    act: when get_update_version is called.
+    assert: no update value should be returned.
+    """
+    monkeypatch.setattr(jenkins, "get_version", lambda *_args, **_kwargs: versions.patched)
+    monkeypatch.setattr(
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
+    )
+
+    assert not jenkins.get_updatable_version(), "Updates should not be available."
+
+
+def test_get_updatable_version(monkeypatch: pytest.MonkeyPatch, versions: Versions):
+    """
+    arrange: given monkeypatched _get_latest_patch_version that returns latest patch version.
+    act: when get_update_version is called.
+    assert: patched version should be returned.
+    """
+    monkeypatch.setattr(jenkins, "get_version", lambda *_args, **_kwargs: versions.current)
+    monkeypatch.setattr(
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
+    )
+
+    assert (
+        jenkins.get_updatable_version() == versions.patched
+    ), "Latest patch version should be returned."
 
 
 def test_download_stable_war_failure(monkeypatch: pytest.MonkeyPatch, current_version: str):
