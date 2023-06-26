@@ -16,8 +16,8 @@ from ops.charm import ActionEvent, PebbleReadyEvent, UpdateStatusEvent
 from ops.model import ActiveStatus, BlockedStatus, StatusBase
 
 import jenkins
-import state
-from charm import JenkinsK8SOperatorCharm
+import timerange
+from charm import JenkinsK8sOperatorCharm
 
 from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME
 from .types_ import HarnessWithContainer, Versions
@@ -37,7 +37,7 @@ def test___init___invailid_config(
     harness_container.harness.update_config(charm_config)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
@@ -48,7 +48,7 @@ def test__on_jenkins_pebble_ready_no_container(harness_container: HarnessWithCon
     assert: the event should be deferred.
     """
     harness_container.harness.begin()
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     mock_event = MagicMock(spec=PebbleReadyEvent)
     mock_event.workload = None
 
@@ -79,7 +79,7 @@ def test__on_jenkins_pebble_ready_error(
 
     harness_container.harness.begin_with_initial_hooks()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
@@ -111,7 +111,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
 
     harness_container.harness.begin_with_initial_hooks()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
@@ -141,7 +141,7 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
 
     harness_container.harness.begin_with_initial_hooks()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert (
         jenkins_charm.unit.status.name == expected_status.name
     ), f"unit should be in {expected_status}"
@@ -161,7 +161,7 @@ def test__on_get_admin_password_action_container_not_ready(
     mock_event = MagicMock(spec=ActionEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_get_admin_password(mock_event)
 
     assert mock_event.defer.called_once()
@@ -178,7 +178,7 @@ def test__on_get_admin_password_action(
     mock_event = MagicMock(spec=ActionEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_get_admin_password(mock_event)
 
     mock_event.set_results.assert_called_once_with({"password": admin_credentials.password})
@@ -199,7 +199,7 @@ def test__on_update_status_no_action(
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     mock_download_func.assert_not_called()
@@ -229,7 +229,7 @@ def test__on_update_status_get_version_error(
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
@@ -261,7 +261,7 @@ def test__on_update_status_get_latest_patch_version_error(
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
@@ -290,7 +290,7 @@ def test__on_update_status_dowload_stable_war_error(
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
@@ -324,7 +324,7 @@ def test__on_update_status_safe_restart_error(
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
@@ -351,7 +351,7 @@ def test__on_update_status_update(
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     mock_download.assert_called_once_with(harness_container.container, patched_version)
@@ -368,16 +368,16 @@ def test__on_update_status_not_in_time_range(
     assert: no action is taken and the charm remains active.
     """
     mock_download_func = MagicMock(spec=jenkins.download_stable_war)
-    mock_datetime = MagicMock(spec=state.datetime)
-    test_time = state.datetime(2023, 1, 1, 23)
+    mock_datetime = MagicMock(spec=timerange.datetime)
+    test_time = timerange.datetime(2023, 1, 1, 23)
     mock_datetime.utcnow.return_value = test_time
-    monkeypatch.setattr(state, "datetime", mock_datetime)
+    monkeypatch.setattr(timerange, "datetime", mock_datetime)
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.update_config({"update-time-range": "00-23"})
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     mock_download_func.assert_not_called()

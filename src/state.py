@@ -6,19 +6,19 @@ import dataclasses
 import logging
 import typing
 
-from timerange import TimeRange
+from timerange import InvalidTimeRangeError, Range
 
 if typing.TYPE_CHECKING:
-    from charm import JenkinsK8SOperatorCharm
+    from charm import JenkinsK8sOperatorCharm  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
 
-class CharmStateBaseException(Exception):
+class CharmStateBaseError(Exception):
     """Represents error with charm state."""
 
 
-class CharmConfigInvalidError(CharmStateBaseException):
+class CharmConfigInvalidError(CharmStateBaseError):
     """Exception raised when a charm configuration is found to be invalid.
 
     Attrs:
@@ -43,15 +43,15 @@ class State:
         update_time_range: Time range to allow Jenkins to update version.
     """
 
-    update_time_range: typing.Optional[TimeRange]
+    update_time_range: typing.Optional[Range]
     jenkins_service_name: str = "jenkins"
 
     @classmethod
-    def from_charm(cls, charm: "JenkinsK8SOperatorCharm") -> "State":
+    def from_charm(cls, charm: "JenkinsK8sOperatorCharm") -> "State":
         """Initialize the state from charm.
 
         Args:
-            config: The charm configuration mapping.
+            charm: The charm root JenkinsK8SOperatorCharm.
 
         Returns:
             Current state of Jenkins.
@@ -60,10 +60,15 @@ class State:
             CharmConfigInvalidError: if invalid state values were encountered.
         """
         time_range_str = charm.config.get("update-time-range")
-        try:
-            update_time_range = TimeRange.from_str(time_range_str)
-        except ValueError as exc:
-            logger.error("Invalid config value for update-time-range, %s", exc)
-            raise CharmConfigInvalidError("Invalid config value for update-time-range.") from exc
+        if time_range_str:
+            try:
+                update_time_range = Range.from_str(time_range_str)
+            except InvalidTimeRangeError as exc:
+                logger.error("Invalid config value for update-time-range, %s", exc)
+                raise CharmConfigInvalidError(
+                    "Invalid config value for update-time-range."
+                ) from exc
+        else:
+            update_time_range = None
 
         return cls(update_time_range=update_time_range)

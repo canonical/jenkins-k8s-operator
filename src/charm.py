@@ -25,7 +25,7 @@ if typing.TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class JenkinsK8SOperatorCharm(CharmBase):
+class JenkinsK8sOperatorCharm(CharmBase):
     """Charm Jenkins."""
 
     def __init__(self, *args: typing.Any):
@@ -208,4 +208,4 @@ class JenkinsK8SOperatorCharm(CharmBase):
 
 
 if __name__ == "__main__":  # pragma: nocover
-    main(JenkinsK8SOperatorCharm)
+    main(JenkinsK8sOperatorCharm)

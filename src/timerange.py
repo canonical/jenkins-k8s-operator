@@ -12,7 +12,7 @@ class InvalidTimeRangeError(Exception):
     """Represents an invalid time range."""
 
 
-class TimeRange(BaseModel):
+class Range(BaseModel):
     """Time range to allow Jenkins to update version.
 
     Attrs:
@@ -20,13 +20,13 @@ class TimeRange(BaseModel):
         end: Hour to allow updates until in UTC time, in 24 hour format.
     """
 
-    start: int = Field(ge=0, lt=24)
-    end: int = Field(ge=0, lt=24)
+    start: int = Field(..., ge=0, lt=24)
+    end: int = Field(..., ge=0, lt=24)
 
     # Pflake8 & pylint don't quite understand that this is a classmethod using Pydantic.
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_range(  # pylint: disable=no-self-argument
-        cls: "TimeRange", values: dict  # noqa: N805
+        cls: "Range", values: dict  # noqa: N805
     ) -> dict:
         """Validate the time range.
 
@@ -47,28 +47,26 @@ class TimeRange(BaseModel):
         return values
 
     @classmethod
-    def from_str(cls, time_range: typing.Optional[str]) -> typing.Optional["TimeRange"]:
+    def from_str(cls, time_range: str) -> "Range":
         """Instantiate the class from string time range.
 
         Args:
             time_range: The time range string in H(H)-H(H) format, in UTC.
 
         Raises:
-            ValueError: if invalid time range was given.
+            InvalidTimeRangeError: if invalid time range was given.
 
         Returns:
             UpdateTimeRange: if a valid time range was given.
-            None: if the input time range value is None or empty.
         """
-        if not time_range:
-            return None
         try:
             (start_hour, end_hour) = (int(hour) for hour in time_range.split("-"))
-            update_range = cls(start=start_hour, end=end_hour)
         except ValueError as exc:
             raise InvalidTimeRangeError(
                 f"Invalid time range {time_range}, time range must be an integer."
             ) from exc
+        try:
+            update_range = cls(start=start_hour, end=end_hour)
         except ValidationError as exc:
             raise InvalidTimeRangeError(
                 f"Invalid time range {time_range}, time range must be between 0-23"
@@ -86,5 +84,4 @@ class TimeRange(BaseModel):
         if self.start > self.end:
             return self.start <= current_hour or current_hour < self.end
         # If the range doesn't cross midnight
-        else:
-            return self.start <= current_hour < self.end
+        return self.start <= current_hour < self.end
