@@ -9,6 +9,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ValidationError, root_validator
 
+if typing.TYPE_CHECKING:
+    from charm import JenkinsK8SOperatorCharm
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,7 +121,7 @@ class State:
     jenkins_service_name: str = "jenkins"
 
     @classmethod
-    def from_charm(cls, config: typing.Mapping[str, str]) -> "State":
+    def from_charm(cls, charm: "JenkinsK8SOperatorCharm") -> "State":
         """Initialize the state from charm.
 
         Args:
@@ -130,7 +133,7 @@ class State:
         Raises:
             CharmConfigInvalidError: if invalid state values were encountered.
         """
-        time_range_str = config.get("update-time-range")
+        time_range_str = charm.config.get("update-time-range")
         try:
             update_time_range = UpdateTimeRange.from_str(time_range_str)
         except ValueError as exc:

@@ -36,7 +36,7 @@ class JenkinsK8SOperatorCharm(CharmBase):
         """
         super().__init__(*args)
         try:
-            self.state = State.from_charm(self.config)
+            self.state = State.from_charm(self)
         except CharmConfigInvalidError as exc:
             self.unit.status = BlockedStatus(exc.msg)
             return
