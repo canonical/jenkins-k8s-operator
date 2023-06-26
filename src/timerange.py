@@ -76,10 +76,9 @@ class UpdateTimeRange(BaseModel):
             True if within bounds, False otherwise.
         """
         current_hour = datetime.utcnow().time().hour
-        if self.start <= current_hour < self.end:
-            return True
-        if self.end < self.start:
-            if self.end <= current_hour < self.start:
-                return False
-            return True
-        return False
+        # If the range crosses midnight
+        if self.start > self.end:
+            return self.start <= current_hour or current_hour < self.end
+        # If the range doesn't cross midnight
+        else:
+            return self.start <= current_hour < self.end
