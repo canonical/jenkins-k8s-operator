@@ -6,10 +6,9 @@ import dataclasses
 import logging
 import typing
 
-from timerange import InvalidTimeRangeError, Range
+from ops.charm import CharmBase
 
-if typing.TYPE_CHECKING:
-    from charm import JenkinsK8sOperatorCharm  # pragma: no cover
+from timerange import InvalidTimeRangeError, Range
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,7 @@ class State:
     jenkins_service_name: str = "jenkins"
 
     @classmethod
-    def from_charm(cls, charm: "JenkinsK8sOperatorCharm") -> "State":
+    def from_charm(cls, charm: CharmBase) -> "State":
         """Initialize the state from charm.
 
         Args:
