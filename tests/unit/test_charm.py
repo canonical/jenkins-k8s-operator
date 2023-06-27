@@ -16,10 +16,29 @@ from ops.charm import ActionEvent, PebbleReadyEvent, UpdateStatusEvent
 from ops.model import ActiveStatus, BlockedStatus, StatusBase
 
 import jenkins
-from charm import JenkinsK8SOperatorCharm
+import timerange
+from charm import JenkinsK8sOperatorCharm
 
 from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME
 from .types_ import HarnessWithContainer, Versions
+
+
+@pytest.mark.parametrize(
+    "charm_config", [pytest.param({"update-time-range": "-2"}, id="invalid update-time-range")]
+)
+def test___init___invailid_config(
+    harness_container: HarnessWithContainer, charm_config: dict[str, str]
+):
+    """
+    arrange: given an invalid charm configuration.
+    act: when the Jenkins charm is initialized.
+    assert: the charm falls into blocked status.
+    """
+    harness_container.harness.update_config(charm_config)
+    harness_container.harness.begin()
+
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
 def test__on_jenkins_pebble_ready_no_container(harness_container: HarnessWithContainer):
@@ -29,7 +48,7 @@ def test__on_jenkins_pebble_ready_no_container(harness_container: HarnessWithCon
     assert: the event should be deferred.
     """
     harness_container.harness.begin()
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     mock_event = MagicMock(spec=PebbleReadyEvent)
     mock_event.workload = None
 
@@ -60,24 +79,15 @@ def test__on_jenkins_pebble_ready_error(
 
     harness_container.harness.begin_with_initial_hooks()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
-@pytest.mark.parametrize(
-    "exception",
-    [
-        pytest.param(requests.HTTPError, id="HTTPError"),
-        pytest.param(requests.exceptions.Timeout, id="TimeoutError"),
-        pytest.param(requests.exceptions.ConnectionError, id="ConnectionError"),
-    ],
-)
 def test__on_jenkins_pebble_ready_get_version_error(
     harness_container: HarnessWithContainer,
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
     raise_exception: Callable,
-    exception: Exception,
 ):
     """
     arrange: given a patched jenkins.get_version function that raises an exception.
@@ -85,14 +95,14 @@ def test__on_jenkins_pebble_ready_get_version_error(
     assert: the unit status should be in BlockedStatus.
     """
     # speed up waiting by changing default argument values
-    monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(exception))
+    monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(jenkins.JenkinsError))
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args: None)
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=200))
 
     harness_container.harness.begin_with_initial_hooks()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
@@ -122,7 +132,7 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
 
     harness_container.harness.begin_with_initial_hooks()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert (
         jenkins_charm.unit.status.name == expected_status.name
     ), f"unit should be in {expected_status}"
@@ -142,7 +152,7 @@ def test__on_get_admin_password_action_container_not_ready(
     mock_event = MagicMock(spec=ActionEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_get_admin_password(mock_event)
 
     assert mock_event.defer.called_once()
@@ -159,7 +169,7 @@ def test__on_get_admin_password_action(
     mock_event = MagicMock(spec=ActionEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_get_admin_password(mock_event)
 
     mock_event.set_results.assert_called_once_with({"password": admin_credentials.password})
@@ -175,77 +185,41 @@ def test__on_update_status_no_action(
     """
     mock_download_func = MagicMock(spec=jenkins.download_stable_war)
     monkeypatch.setattr(jenkins, "get_version", lambda: current_version)
-    monkeypatch.setattr(jenkins, "get_latest_patch_version", lambda *_, **__: current_version)
+    monkeypatch.setattr(jenkins, "_get_latest_patch_version", lambda *_, **__: current_version)
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     mock_download_func.assert_not_called()
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
 
 
-@pytest.mark.parametrize(
-    "exception",
-    [
-        pytest.param(requests.HTTPError, id="HTTPError"),
-        pytest.param(requests.exceptions.Timeout, id="TimeoutError"),
-        pytest.param(requests.exceptions.ConnectionError, id="ConnectionError"),
-    ],
-)
-def test__on_update_status_get_version_error(
+def test__on_update_status_get_updatable_version_error(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
     raise_exception: Callable,
-    exception: Exception,
 ):
     """
-    arrange: given monkeypatched get_version that raises an HTTP exception.
+    arrange: given monkeypatched get_updatable_version that raises jenkins exceptions.
     act: when update_status action is triggered.
-    assert: the charm falls into BlockedStatus since Jenkins service is not functioning.
+    assert: the charm falls into ActiveStatus with a warning message.
     """
-    monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(exception))
-    mock_event = MagicMock(spec=UpdateStatusEvent)
-    harness_container.harness.begin()
-
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
-    jenkins_charm._on_update_status(mock_event)
-
-    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
-
-
-@pytest.mark.parametrize(
-    "exception",
-    [
-        pytest.param(jenkins.JenkinsNetworkError, id="JenkinsNetworkError"),
-        pytest.param(jenkins.ValidationError, id="ValidationError"),
-    ],
-)
-def test__on_update_status_get_latest_patch_version_error(
-    harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
-    raise_exception: Callable,
-    exception: Exception,
-    versions: Versions,
-):
-    """
-    arrange: given monkeypatched get_latest_patch_version that raises jenkins exceptions.
-    act: when update_status action is triggered.
-    assert: the charm falls into ActiveStatus since the service should still be functioning.
-    """
-    monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
     monkeypatch.setattr(
-        jenkins, "get_latest_patch_version", lambda *_args, **_kwargs: raise_exception(exception)
+        jenkins,
+        "get_updatable_version",
+        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsUpdateError),
     )
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+    assert jenkins_charm.unit.status.message, "The status message should not be empty."
 
 
 def test__on_update_status_dowload_stable_war_error(
@@ -261,7 +235,7 @@ def test__on_update_status_dowload_stable_war_error(
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
     monkeypatch.setattr(
-        jenkins, "get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
     )
     monkeypatch.setattr(
         jenkins,
@@ -271,7 +245,7 @@ def test__on_update_status_dowload_stable_war_error(
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
@@ -290,7 +264,7 @@ def test__on_update_status_safe_restart_error(
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
     monkeypatch.setattr(
-        jenkins, "get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
     )
     monkeypatch.setattr(
         jenkins,
@@ -305,7 +279,7 @@ def test__on_update_status_safe_restart_error(
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
@@ -325,16 +299,41 @@ def test__on_update_status_update(
     mock_download = MagicMock(spec=jenkins.download_stable_war)
     mock_safe_restart = MagicMock(spec=jenkins.safe_restart)
     monkeypatch.setattr(jenkins, "get_version", lambda: current_version)
-    monkeypatch.setattr(jenkins, "get_latest_patch_version", lambda *_, **__: patched_version)
+    monkeypatch.setattr(jenkins, "_get_latest_patch_version", lambda *_, **__: patched_version)
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download)
     monkeypatch.setattr(jenkins, "safe_restart", mock_safe_restart)
     monkeypatch.setattr(jenkins, "wait_ready", lambda: None)
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     mock_download.assert_called_once_with(harness_container.container, patched_version)
     mock_safe_restart.assert_called_once()
+    assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+
+
+def test__on_update_status_not_in_time_range(
+    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given a charm with update-time-range 0-23 and monkeypatched datetime with hour 23.
+    act: when update_status action is triggered.
+    assert: no action is taken and the charm remains active.
+    """
+    mock_download_func = MagicMock(spec=jenkins.download_stable_war)
+    mock_datetime = MagicMock(spec=timerange.datetime)
+    test_time = timerange.datetime(2023, 1, 1, 23)
+    mock_datetime.utcnow.return_value = test_time
+    monkeypatch.setattr(timerange, "datetime", mock_datetime)
+    monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
+    mock_event = MagicMock(spec=UpdateStatusEvent)
+    harness_container.harness.update_config({"update-time-range": "00-23"})
+    harness_container.harness.begin()
+
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    jenkins_charm._on_update_status(mock_event)
+
+    mock_download_func.assert_not_called()
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME

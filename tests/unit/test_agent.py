@@ -16,7 +16,7 @@ from ops.charm import PebbleReadyEvent
 
 import charm
 import jenkins
-from charm import JenkinsK8SOperatorCharm
+from charm import JenkinsK8sOperatorCharm
 
 from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME, MAINTENANCE_STATUS_NAME
 from .types_ import HarnessWithContainer
@@ -32,7 +32,7 @@ def test__on_agent_relation_joined_no_container(harness_container: HarnessWithCo
         harness_container.harness.model.unit.containers["jenkins"], False
     )
     harness_container.harness.begin()
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     mock_event = MagicMock(spec=PebbleReadyEvent)
 
     jenkins_charm.agent_observer._on_agent_relation_joined(mock_event)
@@ -54,7 +54,7 @@ def test__on_agent_relation_joined_relation_data_not_set(harness_container: Harn
     relation = harness_container.harness.charm.model.get_relation("agent", relation_id)
     harness_container.harness.charm.on["agent"].relation_joined.emit(relation)
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
 
 
@@ -103,7 +103,7 @@ def test__on_agent_relation_joined_relation_data_not_valid(
         unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
     )
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
     assert jenkins_charm.unit.status.message == "Invalid agent relation data."
 
@@ -145,7 +145,7 @@ def test__on_agent_relation_joined_client_error(
         unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
     )
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
     assert "Jenkins API exception." in jenkins_charm.unit.status.message
 
@@ -189,5 +189,5 @@ def test__on_agent_relation_joined(
         unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
     )
 
-    jenkins_charm = cast(JenkinsK8SOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME

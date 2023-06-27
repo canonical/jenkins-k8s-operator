@@ -23,6 +23,8 @@ from pytest_operator.plugin import OpsTest
 
 import jenkins
 
+from .types_ import ModelAppUnit
+
 
 @pytest.fixture(scope="module", name="model")
 def model_fixture(ops_test: OpsTest) -> Model:
@@ -197,3 +199,69 @@ async def latest_jenkins_lts_version_fixture(jenkins_version: str) -> str:
     matched_latest_version = next((v for v in matches if v.startswith(current_major_minor)), None)
     assert matched_latest_version is not None, "Failed to find a matching LTS version."
     return matched_latest_version
+
+
+@pytest.fixture(scope="module", name="freeze_time")
+def freeze_time_fixture() -> str:
+    """The time string to freeze the charm time."""
+    return "2022-01-01 15:00:00"
+
+
+@pytest.fixture(scope="module", name="unit")
+def unit_fixture(application: Application) -> Unit:
+    """The Jenkins-k8s charm application unit."""
+    return application.units[0]
+
+
+@pytest.fixture(scope="module", name="model_app_unit")
+def model_app_unit_fixture(model: Model, application: Application, unit: Unit):
+    """The packaged model, application, unit of Jenkins to reduce number of parameters in tests."""
+    return ModelAppUnit(model=model, app=application, unit=unit)
+
+
+@pytest_asyncio.fixture(scope="function", name="update_time_range_app")
+async def update_time_range_app_fixture(application: Application):
+    """Application with update-time-range configured."""
+    await application.set_config({"update-time-range": "03-05"})
+
+    yield application
+
+    await application.reset_config(["update-time-range"])
+
+
+@pytest_asyncio.fixture(scope="function", name="libfaketime_unit")
+async def libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit):
+    """Unit with libfaketime installed."""
+    await ops_test.juju("run", "--unit", f"{unit.name}", "--", "apt", "update")
+    await ops_test.juju(
+        "run", "--unit", f"{unit.name}", "--", "apt", "install", "-y", "libfaketime"
+    )
+
+    return unit
+
+
+@pytest.fixture(scope="function", name="timerange_model_app_unit")
+def timerange_model_app_unit_fixture(
+    model: Model, update_time_range_app: Application, libfaketime_unit: Unit
+):
+    """The packaged model, application, unit of Jenkins to reduce number of parameters in tests."""
+    return ModelAppUnit(model=model, app=update_time_range_app, unit=libfaketime_unit)
+
+
+@pytest.fixture(scope="function", name="libfaketime_env")
+def libfaketime_env_fixture(freeze_time: str) -> typing.Iterable[str]:
+    """The environment variables for using libfaketime."""
+    return (
+        'LD_PRELOAD="/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1"',
+        f'FAKETIME="@{freeze_time}"',
+    )
+
+
+@pytest.fixture(scope="function", name="update_status_env")
+def update_status_env_fixture(model: Model, unit: Unit) -> typing.Iterable[str]:
+    """The environment variables for executing Juju hooks."""
+    return (
+        "JUJU_DISPATCH_PATH=hooks/update-status",
+        f"JUJU_MODEL_NAME={model.name}",
+        f"JUJU_UNIT_NAME={unit.name}",
+    )

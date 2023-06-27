@@ -14,7 +14,7 @@ from ops.model import Container
 from ops.pebble import ExecError
 from ops.testing import Harness
 
-from charm import JenkinsK8SOperatorCharm
+from charm import JenkinsK8sOperatorCharm
 from jenkins import PASSWORD_FILE_PATH, PLUGINS_PATH, REQUIRED_PLUGINS, Credentials
 
 from .types_ import HarnessWithContainer, Versions
@@ -25,7 +25,7 @@ ROCKCRAFT_YAML = yaml.safe_load(Path("jenkins_rock/rockcraft.yaml").read_text(en
 @pytest.fixture(scope="function", name="harness")
 def harness_fixture():
     """Enable ops test framework harness."""
-    harness = Harness(JenkinsK8SOperatorCharm)
+    harness = Harness(JenkinsK8sOperatorCharm)
     yield harness
     harness.cleanup()
 
