@@ -82,6 +82,6 @@ class Range(BaseModel):
         current_hour = datetime.utcnow().time().hour
         # If the range crosses midnight
         if self.start > self.end:
-            return self.start <= current_hour or current_hour < self.end
+            return current_hour >= self.start or current_hour < self.end
         # If the range doesn't cross midnight
         return self.start <= current_hour < self.end
