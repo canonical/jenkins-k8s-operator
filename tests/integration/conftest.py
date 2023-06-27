@@ -229,7 +229,7 @@ async def update_time_range_app_fixture(application: Application):
     await application.reset_config(["update-time-range"])
 
 
-@pytest_asyncio.fixture(scope="module", name="libfaketime_unit")
+@pytest_asyncio.fixture(scope="function", name="libfaketime_unit")
 async def libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit):
     """Unit with libfaketime installed."""
     await ops_test.juju("run", "--unit", f"{unit.name}", "--", "apt", "update")
@@ -240,7 +240,7 @@ async def libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit):
     return unit
 
 
-@pytest.fixture(scope="module", name="timerange_model_app_unit")
+@pytest.fixture(scope="function", name="timerange_model_app_unit")
 def timerange_model_app_unit_fixture(
     model: Model, update_time_range_app: Application, libfaketime_unit: Unit
 ):
@@ -248,7 +248,7 @@ def timerange_model_app_unit_fixture(
     return ModelAppUnit(model=model, app=update_time_range_app, unit=libfaketime_unit)
 
 
-@pytest.fixture(scope="module", name="libfaketime_env")
+@pytest.fixture(scope="function", name="libfaketime_env")
 def libfaketime_env_fixture(freeze_time: str) -> typing.Iterable[str]:
     """The environment variables for using libfaketime."""
     return (
@@ -257,7 +257,7 @@ def libfaketime_env_fixture(freeze_time: str) -> typing.Iterable[str]:
     )
 
 
-@pytest.fixture(scope="module", name="update_status_env")
+@pytest.fixture(scope="function", name="update_status_env")
 def update_status_env_fixture(model: Model, unit: Unit) -> typing.Iterable[str]:
     """The environment variables for executing Juju hooks."""
     return (
