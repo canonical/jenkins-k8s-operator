@@ -1,3 +1,5 @@
+Generated using: `pydoc-markdown -I src --render-toc > pydoc-markdown.md`
+
 # Table of Contents
 
 * [state](#state)
