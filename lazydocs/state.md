@@ -25,7 +25,11 @@ Represents error with charm state.
 ## <kbd>class</kbd> `CharmConfigInvalidError`
 Exception raised when a charm configuration is found to be invalid. 
 
-Attrs:  msg: Explanation of the error. 
+
+
+**Attributes:**
+ 
+ - <b>`msg`</b>:  Explanation of the error. 
 
 <a href="../src/state.py#L27"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
@@ -54,7 +58,12 @@ Initialize a new instance of the CharmConfigInvalidError exception.
 ## <kbd>class</kbd> `State`
 The Jenkins k8s operator charm state. 
 
-Attrs:  jenkins_service_name: The Jenkins service name. Note that the container name is the same.  update_time_range: Time range to allow Jenkins to update version. 
+
+
+**Attributes:**
+ 
+ - <b>`jenkins_service_name`</b>:  The Jenkins service name. Note that the container name is the same. 
+ - <b>`update_time_range`</b>:  Time range to allow Jenkins to update version. 
 
 <a href="../<string>"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 

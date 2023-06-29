@@ -87,7 +87,7 @@ class JenkinsUpdateError(JenkinsError):
 class AgentMeta:
     """Metadata for registering Jenkins Agent.
 
-    Attrs:
+    Attributes:
         executors: Number of executors of the agent in string format.
         labels: Comma separated list of labels to be assigned to the agent.
         slavehost: The host name of the agent.
@@ -177,7 +177,7 @@ def wait_ready(timeout: int = 300, check_interval: int = 10) -> None:
 class Credentials:
     """Information needed to log into Jenkins.
 
-    Attrs:
+    Attributes:
         username: The Jenkins account username used to log into Jenkins.
         password: The Jenkins account password used to log into Jenkins.
     """
@@ -205,7 +205,7 @@ def get_admin_credentials(connectable_container: ops.Container) -> Credentials:
 class Environment(typing.TypedDict):
     """Dictionary mapping of Jenkins environment variables.
 
-    Attrs:
+    Attributes:
         JENKINS_HOME: The Jenkins home directory.
         CASC_JENKINS_CONFIG: The Jenkins configuration-as-code plugin config path.
     """

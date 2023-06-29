@@ -69,7 +69,7 @@ class CharmConfigInvalidError(CharmStateBaseError)
 
 Exception raised when a charm configuration is found to be invalid.
 
-Attrs:
+Attributes:
     msg: Explanation of the error.
 
 <a id="state.CharmConfigInvalidError.__init__"></a>
@@ -97,7 +97,7 @@ class State()
 
 The Jenkins k8s operator charm state.
 
-Attrs:
+Attributes:
     jenkins_service_name: The Jenkins service name. Note that the container name is the same.
     update_time_range: Time range to allow Jenkins to update version.
 
@@ -152,7 +152,7 @@ class Range(BaseModel)
 
 Time range to allow Jenkins to update version.
 
-Attrs:
+Attributes:
     start: Hour to allow updates from in UTC time, in 24 hour format.
     end: Hour to allow updates until in UTC time, in 24 hour format.
 
@@ -266,7 +266,7 @@ class AgentRelationData(typing.TypedDict)
 
 Relation data required for adding the Jenkins agent.
 
-Attrs:
+Attributes:
     url: The Jenkins server url.
     secret: The secret for agent node.
 
@@ -372,7 +372,7 @@ class AgentMeta()
 
 Metadata for registering Jenkins Agent.
 
-Attrs:
+Attributes:
     executors: Number of executors of the agent in string format.
     labels: Comma separated list of labels to be assigned to the agent.
     slavehost: The host name of the agent.
@@ -422,7 +422,7 @@ class Credentials()
 
 Information needed to log into Jenkins.
 
-Attrs:
+Attributes:
     username: The Jenkins account username used to log into Jenkins.
     password: The Jenkins account password used to log into Jenkins.
 
@@ -455,7 +455,7 @@ class Environment(typing.TypedDict)
 
 Dictionary mapping of Jenkins environment variables.
 
-Attrs:
+Attributes:
     JENKINS_HOME: The Jenkins home directory.
     CASC_JENKINS_CONFIG: The Jenkins configuration-as-code plugin config path.
 

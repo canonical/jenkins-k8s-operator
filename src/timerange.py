@@ -15,7 +15,7 @@ class InvalidTimeRangeError(Exception):
 class Range(BaseModel):
     """Time range to allow Jenkins to update version.
 
-    Attrs:
+    Attributes:
         start: Hour to allow updates from in UTC time, in 24 hour format.
         end: Hour to allow updates until in UTC time, in 24 hour format.
     """

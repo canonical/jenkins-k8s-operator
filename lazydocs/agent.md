@@ -14,7 +14,12 @@ The Jenkins agent relation observer.
 ## <kbd>class</kbd> `AgentRelationData`
 Relation data required for adding the Jenkins agent. 
 
-Attrs:  url: The Jenkins server url.  secret: The secret for agent node. 
+
+
+**Attributes:**
+ 
+ - <b>`url`</b>:  The Jenkins server url. 
+ - <b>`secret`</b>:  The secret for agent node. 
 
 
 

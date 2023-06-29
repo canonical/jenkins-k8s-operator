@@ -352,7 +352,13 @@ An error occurred trying to update Jenkins.
 ## <kbd>class</kbd> `AgentMeta`
 Metadata for registering Jenkins Agent. 
 
-Attrs:  executors: Number of executors of the agent in string format.  labels: Comma separated list of labels to be assigned to the agent.  slavehost: The host name of the agent. 
+
+
+**Attributes:**
+ 
+ - <b>`executors`</b>:  Number of executors of the agent in string format. 
+ - <b>`labels`</b>:  Comma separated list of labels to be assigned to the agent. 
+ - <b>`slavehost`</b>:  The host name of the agent. 
 
 <a href="../<string>"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
@@ -395,7 +401,12 @@ Validate the agent metadata.
 ## <kbd>class</kbd> `Credentials`
 Information needed to log into Jenkins. 
 
-Attrs:  username: The Jenkins account username used to log into Jenkins.  password: The Jenkins account password used to log into Jenkins. 
+
+
+**Attributes:**
+ 
+ - <b>`username`</b>:  The Jenkins account username used to log into Jenkins. 
+ - <b>`password`</b>:  The Jenkins account password used to log into Jenkins. 
 
 <a href="../<string>"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
@@ -420,7 +431,12 @@ __init__(username: str, password: str) → None
 ## <kbd>class</kbd> `Environment`
 Dictionary mapping of Jenkins environment variables. 
 
-Attrs:  JENKINS_HOME: The Jenkins home directory.  CASC_JENKINS_CONFIG: The Jenkins configuration-as-code plugin config path. 
+
+
+**Attributes:**
+ 
+ - <b>`JENKINS_HOME`</b>:  The Jenkins home directory. 
+ - <b>`CASC_JENKINS_CONFIG`</b>:  The Jenkins configuration-as-code plugin config path. 
 
 
 

@@ -14,7 +14,7 @@ from juju.unit import Unit
 class ModelAppUnit:
     """The model, application, unit wrapper dataclass.
 
-    Attrs:
+    Attributes:
         model: The model under test.
         app: The jenkins application under test.
         unit: The jenkins application unit under test.

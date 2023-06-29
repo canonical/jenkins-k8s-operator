@@ -20,7 +20,7 @@ class CharmStateBaseError(Exception):
 class CharmConfigInvalidError(CharmStateBaseError):
     """Exception raised when a charm configuration is found to be invalid.
 
-    Attrs:
+    Attributes:
         msg: Explanation of the error.
     """
 
@@ -37,7 +37,7 @@ class CharmConfigInvalidError(CharmStateBaseError):
 class State:
     """The Jenkins k8s operator charm state.
 
-    Attrs:
+    Attributes:
         jenkins_service_name: The Jenkins service name. Note that the container name is the same.
         update_time_range: Time range to allow Jenkins to update version.
     """
