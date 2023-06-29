@@ -1,5 +1,3 @@
-Generated using: `pydoc-markdown -I src --render-toc > pydoc-markdown.md`
-
 # Table of Contents
 
 * [state](#state)
@@ -69,8 +67,9 @@ class CharmConfigInvalidError(CharmStateBaseError)
 
 Exception raised when a charm configuration is found to be invalid.
 
-Attributes:
-    msg: Explanation of the error.
+**Attributes**:
+
+- `msg` - Explanation of the error.
 
 <a id="state.CharmConfigInvalidError.__init__"></a>
 
@@ -97,9 +96,10 @@ class State()
 
 The Jenkins k8s operator charm state.
 
-Attributes:
-    jenkins_service_name: The Jenkins service name. Note that the container name is the same.
-    update_time_range: Time range to allow Jenkins to update version.
+**Attributes**:
+
+- `jenkins_service_name` - The Jenkins service name. Note that the container name is the same.
+- `update_time_range` - Time range to allow Jenkins to update version.
 
 <a id="state.State.from_charm"></a>
 
@@ -152,9 +152,10 @@ class Range(BaseModel)
 
 Time range to allow Jenkins to update version.
 
-Attributes:
-    start: Hour to allow updates from in UTC time, in 24 hour format.
-    end: Hour to allow updates until in UTC time, in 24 hour format.
+**Attributes**:
+
+- `start` - Hour to allow updates from in UTC time, in 24 hour format.
+- `end` - Hour to allow updates until in UTC time, in 24 hour format.
 
 <a id="timerange.Range.validate_range"></a>
 
@@ -266,9 +267,10 @@ class AgentRelationData(typing.TypedDict)
 
 Relation data required for adding the Jenkins agent.
 
-Attributes:
-    url: The Jenkins server url.
-    secret: The secret for agent node.
+**Attributes**:
+
+- `url` - The Jenkins server url.
+- `secret` - The secret for agent node.
 
 <a id="agent.Observer"></a>
 
@@ -372,10 +374,11 @@ class AgentMeta()
 
 Metadata for registering Jenkins Agent.
 
-Attributes:
-    executors: Number of executors of the agent in string format.
-    labels: Comma separated list of labels to be assigned to the agent.
-    slavehost: The host name of the agent.
+**Attributes**:
+
+- `executors` - Number of executors of the agent in string format.
+- `labels` - Comma separated list of labels to be assigned to the agent.
+- `slavehost` - The host name of the agent.
 
 <a id="jenkins.AgentMeta.validate"></a>
 
@@ -422,9 +425,10 @@ class Credentials()
 
 Information needed to log into Jenkins.
 
-Attributes:
-    username: The Jenkins account username used to log into Jenkins.
-    password: The Jenkins account password used to log into Jenkins.
+**Attributes**:
+
+- `username` - The Jenkins account username used to log into Jenkins.
+- `password` - The Jenkins account password used to log into Jenkins.
 
 <a id="jenkins.get_admin_credentials"></a>
 
@@ -455,9 +459,10 @@ class Environment(typing.TypedDict)
 
 Dictionary mapping of Jenkins environment variables.
 
-Attributes:
-    JENKINS_HOME: The Jenkins home directory.
-    CASC_JENKINS_CONFIG: The Jenkins configuration-as-code plugin config path.
+**Attributes**:
+
+- `JENKINS_HOME` - The Jenkins home directory.
+- `CASC_JENKINS_CONFIG` - The Jenkins configuration-as-code plugin config path.
 
 <a id="jenkins.calculate_env"></a>
 
