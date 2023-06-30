@@ -33,3 +33,11 @@ Thinking about using the Jenkins-k8s Operator for your next project?
 
 For further details,
 [see the charm's detailed documentation](https://charmhub.io/jenkins-k8s/docs).
+
+## Generating src docs
+
+Run the following command:
+
+```bash
+echo -e "tox -e src-docs\n" > .git/hooks/pre-commit
+```
