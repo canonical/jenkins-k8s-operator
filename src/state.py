@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class CharmStateBaseError(Exception):
-    """Represents error with charm state."""
+    """Represents an error with charm state."""
 
 
 class CharmConfigInvalidError(CharmStateBaseError):

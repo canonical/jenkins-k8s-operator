@@ -41,7 +41,7 @@ Initialize a new instance of the CharmConfigInvalidError exception.
 ---
 
 ## <kbd>class</kbd> `CharmStateBaseError`
-Represents error with charm state. 
+Represents an error with charm state. 
 
 
 
