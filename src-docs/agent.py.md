@@ -2,14 +2,12 @@
 
 <a href="../src/agent.py#L0"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-# <kbd>module</kbd> `agent`
+# <kbd>module</kbd> `agent.py`
 The Jenkins agent relation observer. 
 
 
 
 ---
-
-<a href="../src/agent.py#L18"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>class</kbd> `AgentRelationData`
 Relation data required for adding the Jenkins agent. 
@@ -27,14 +25,12 @@ Relation data required for adding the Jenkins agent.
 
 ---
 
-<a href="../src/agent.py#L30"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
 ## <kbd>class</kbd> `Observer`
 The Jenkins agent relation observer. 
 
 <a href="../src/agent.py#L33"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-### <kbd>method</kbd> `__init__`
+### <kbd>function</kbd> `__init__`
 
 ```python
 __init__(charm: CharmBase, state: State)
@@ -59,8 +55,3 @@ Shortcut for more simple access the model.
 
 
 
-
-
----
-
-_This file was automatically generated via [lazydocs](https://github.com/ml-tooling/lazydocs)._

@@ -2,21 +2,19 @@
 
 <a href="../src/charm.py#L0"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-# <kbd>module</kbd> `charm`
+# <kbd>module</kbd> `charm.py`
 Charm Jenkins. 
 
 
 
 ---
 
-<a href="../src/charm.py#L27"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
 ## <kbd>class</kbd> `JenkinsK8sOperatorCharm`
 Charm Jenkins. 
 
 <a href="../src/charm.py#L30"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-### <kbd>method</kbd> `__init__`
+### <kbd>function</kbd> `__init__`
 
 ```python
 __init__(*args: Any)
@@ -70,8 +68,3 @@ Unit that this execution is responsible for.
 
 
 
-
-
----
-
-_This file was automatically generated via [lazydocs](https://github.com/ml-tooling/lazydocs)._

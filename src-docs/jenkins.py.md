@@ -2,12 +2,11 @@
 
 <a href="../src/jenkins.py#L0"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-# <kbd>module</kbd> `jenkins`
+# <kbd>module</kbd> `jenkins.py`
 Functions to operate Jenkins. 
 
 **Global Variables**
 ---------------
-- **jenkinsapi**
 - **WEB_PORT**
 - **WEB_URL**
 - **LOGIN_URL**
@@ -281,74 +280,6 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-<a href="../src/jenkins.py#L62"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>class</kbd> `JenkinsError`
-Base exception for Jenkins errors. 
-
-
-
-
-
----
-
-<a href="../src/jenkins.py#L66"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>class</kbd> `JenkinsPluginError`
-An error occurred installing Jenkins plugin. 
-
-
-
-
-
----
-
-<a href="../src/jenkins.py#L70"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>class</kbd> `JenkinsBootstrapError`
-An error occurred during the bootstrapping process. 
-
-
-
-
-
----
-
-<a href="../src/jenkins.py#L74"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>class</kbd> `ValidationError`
-An unexpected data is encountered. 
-
-
-
-
-
----
-
-<a href="../src/jenkins.py#L78"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>class</kbd> `JenkinsNetworkError`
-An error occurred communicating with the upstream Jenkins server. 
-
-
-
-
-
----
-
-<a href="../src/jenkins.py#L82"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>class</kbd> `JenkinsUpdateError`
-An error occurred trying to update Jenkins. 
-
-
-
-
-
----
-
-<a href="../src/jenkins.py#L86"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
 ## <kbd>class</kbd> `AgentMeta`
 Metadata for registering Jenkins Agent. 
 
@@ -360,18 +291,6 @@ Metadata for registering Jenkins Agent.
  - <b>`labels`</b>:  Comma separated list of labels to be assigned to the agent. 
  - <b>`slavehost`</b>:  The host name of the agent. 
 
-<a href="../<string>"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-### <kbd>method</kbd> `__init__`
-
-```python
-__init__(executors: str, labels: str, slavehost: str) → None
-```
-
-
-
-
-
 
 
 
@@ -379,7 +298,7 @@ __init__(executors: str, labels: str, slavehost: str) → None
 
 <a href="../src/jenkins.py#L100"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-### <kbd>method</kbd> `validate`
+### <kbd>function</kbd> `validate`
 
 ```python
 validate() → None
@@ -396,8 +315,6 @@ Validate the agent metadata.
 
 ---
 
-<a href="../src/jenkins.py#L176"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
 ## <kbd>class</kbd> `Credentials`
 Information needed to log into Jenkins. 
 
@@ -408,25 +325,11 @@ Information needed to log into Jenkins.
  - <b>`username`</b>:  The Jenkins account username used to log into Jenkins. 
  - <b>`password`</b>:  The Jenkins account password used to log into Jenkins. 
 
-<a href="../<string>"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-### <kbd>method</kbd> `__init__`
-
-```python
-__init__(username: str, password: str) → None
-```
-
-
-
-
-
 
 
 
 
 ---
-
-<a href="../src/jenkins.py#L205"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>class</kbd> `Environment`
 Dictionary mapping of Jenkins environment variables. 
@@ -442,8 +345,57 @@ Dictionary mapping of Jenkins environment variables.
 
 
 
+---
+
+## <kbd>class</kbd> `JenkinsBootstrapError`
+An error occurred during the bootstrapping process. 
+
+
+
 
 
 ---
 
-_This file was automatically generated via [lazydocs](https://github.com/ml-tooling/lazydocs)._
+## <kbd>class</kbd> `JenkinsError`
+Base exception for Jenkins errors. 
+
+
+
+
+
+---
+
+## <kbd>class</kbd> `JenkinsNetworkError`
+An error occurred communicating with the upstream Jenkins server. 
+
+
+
+
+
+---
+
+## <kbd>class</kbd> `JenkinsPluginError`
+An error occurred installing Jenkins plugin. 
+
+
+
+
+
+---
+
+## <kbd>class</kbd> `JenkinsUpdateError`
+An error occurred trying to update Jenkins. 
+
+
+
+
+
+---
+
+## <kbd>class</kbd> `ValidationError`
+An unexpected data is encountered. 
+
+
+
+
+
