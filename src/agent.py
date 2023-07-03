@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class AgentRelationData(typing.TypedDict):
     """Relation data required for adding the Jenkins agent.
 
-    Attrs:
+    Attributes:
         url: The Jenkins server url.
         secret: The secret for agent node.
     """

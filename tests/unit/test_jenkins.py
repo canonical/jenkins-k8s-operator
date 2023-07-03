@@ -85,7 +85,7 @@ def test_wait_ready_last_successful_check(monkeypatch: pytest.MonkeyPatch, jenki
     class MockedResponse(requests.Response):
         """Mocked requests.Response that returns successful status code on 3rd instantiation.
 
-        Attrs:
+        Attributes:
             num_called: Number of times the class has been instantiated.
         """
 
