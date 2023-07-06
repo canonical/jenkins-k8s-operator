@@ -5,9 +5,7 @@
 import logging
 import typing
 
-from ops.charm import CharmBase, RelationJoinedEvent
-from ops.framework import Object
-from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
+import ops
 
 import jenkins
 from state import AGENT_RELATION, SLAVE_RELATION, State
@@ -27,10 +25,10 @@ class AgentRelationData(typing.TypedDict):
     secret: str
 
 
-class Observer(Object):
+class Observer(ops.Object):
     """The Jenkins agent relation observer."""
 
-    def __init__(self, charm: CharmBase, state: State):
+    def __init__(self, charm: ops.CharmBase, state: State):
         """Initialize the observer and register event handlers.
 
         Args:
@@ -49,11 +47,11 @@ class Observer(Object):
         )
 
     @property
-    def _jenkins_container(self) -> Container:
+    def _jenkins_container(self) -> ops.Container:
         """The Jenkins workload container."""
         return self.charm.unit.get_container(self.state.jenkins_service_name)
 
-    def _on_slave_relation_joined(self, event: RelationJoinedEvent) -> None:
+    def _on_slave_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
         """Handle slave relation joined event.
 
         Args:
@@ -78,10 +76,10 @@ class Observer(Object):
             agent_meta.validate()
         except jenkins.ValidationError as exc:
             logger.error("Invalid agent relation data. %s", exc)
-            self.charm.unit.status = BlockedStatus("Invalid agent relation data.")
+            self.charm.unit.status = ops.BlockedStatus("Invalid agent relation data.")
             return
 
-        self.charm.unit.status = MaintenanceStatus("Adding agent node.")
+        self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         credentials = jenkins.get_admin_credentials(self._jenkins_container)
         try:
             jenkins.add_agent_node(
@@ -90,7 +88,7 @@ class Observer(Object):
             )
             secret = jenkins.get_node_secret(credentials=credentials, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
-            self.charm.unit.status = BlockedStatus(f"Jenkins API exception. {exc=!r}")
+            self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
         # This is to avoid the None type.
@@ -99,9 +97,9 @@ class Observer(Object):
         event.relation.data[self.model.unit].update(
             AgentRelationData(url=f"http://{host}:{jenkins.WEB_PORT}", secret=secret)
         )
-        self.charm.unit.status = ActiveStatus()
+        self.charm.unit.status = ops.ActiveStatus()
 
-    def _on_agent_relation_joined(self, event: RelationJoinedEvent) -> None:
+    def _on_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
         """Handle agent relation joined event.
 
         Args:
@@ -126,10 +124,10 @@ class Observer(Object):
             agent_meta.validate()
         except jenkins.ValidationError as exc:
             logger.error("Invalid agent relation data. %s", exc)
-            self.charm.unit.status = BlockedStatus("Invalid agent relation data.")
+            self.charm.unit.status = ops.BlockedStatus("Invalid agent relation data.")
             return
 
-        self.charm.unit.status = MaintenanceStatus("Adding agent node.")
+        self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         credentials = jenkins.get_admin_credentials(self._jenkins_container)
         try:
             jenkins.add_agent_node(
@@ -138,7 +136,7 @@ class Observer(Object):
             )
             secret = jenkins.get_node_secret(credentials=credentials, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
-            self.charm.unit.status = BlockedStatus(f"Jenkins API exception. {exc=!r}")
+            self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
         # This is to avoid the None type.
@@ -150,4 +148,5 @@ class Observer(Object):
                 f"{agent_meta.name}_secret": secret,
             }
         )
-        self.charm.unit.status = ActiveStatus()
+        self.charm.unit.status = ops.ActiveStatus()
+
