@@ -31,7 +31,7 @@ class JenkinsK8sOperatorCharm(CharmBase):
         """Initialize the charm and register event handlers.
 
         Args:
-            args: Arguments to initialize the char base.
+            args: Arguments to initialize the charm base.
         """
         super().__init__(*args)
         try:

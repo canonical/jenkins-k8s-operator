@@ -95,7 +95,7 @@ class AgentMeta:
 
     executors: str
     labels: str
-    slavehost: str
+    name: str
 
     def validate(self) -> None:
         """Validate the agent metadata.
@@ -401,9 +401,9 @@ def add_agent_node(
     client = client if client is not None else _get_client(credentials)
     try:
         client.create_node(
-            name=agent_meta.slavehost,
+            name=agent_meta.name,
             num_executors=int(agent_meta.executors),
-            node_description=agent_meta.slavehost,
+            node_description=agent_meta.name,
             labels=agent_meta.labels,
         )
     except jenkinsapi.custom_exceptions.AlreadyExists:

@@ -35,7 +35,7 @@ def test__on_agent_relation_joined_no_container(harness_container: HarnessWithCo
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     mock_event = MagicMock(spec=PebbleReadyEvent)
 
-    jenkins_charm.agent_observer._on_agent_relation_joined(mock_event)
+    jenkins_charm.agent_observer._on_slave_relation_joined(mock_event)
 
     assert mock_event.defer.to_be_called_once()
     assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME

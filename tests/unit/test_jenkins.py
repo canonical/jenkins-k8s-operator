@@ -397,11 +397,11 @@ def test_add_agent_node(admin_credentials: jenkins.Credentials):
     "invalid_meta,expected_err_message",
     [
         pytest.param(
-            jenkins.AgentMeta(executors="", labels="abc", slavehost="http://sample-host:8080"),
+            jenkins.AgentMeta(executors="", labels="abc", name="http://sample-host:8080"),
             "Fields ['executors'] cannot be empty.",
         ),
         pytest.param(
-            jenkins.AgentMeta(executors="abc", labels="abc", slavehost="http://sample-host:8080"),
+            jenkins.AgentMeta(executors="abc", labels="abc", name="http://sample-host:8080"),
             "Number of executors abc cannot be converted to type int.",
         ),
     ],

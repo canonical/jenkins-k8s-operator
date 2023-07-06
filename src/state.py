@@ -12,6 +12,9 @@ from timerange import InvalidTimeRangeError, Range
 
 logger = logging.getLogger(__name__)
 
+AGENT_RELATION = "agent"
+SLAVE_RELATION = "slave"
+
 
 class CharmStateBaseError(Exception):
     """Represents an error with charm state."""
