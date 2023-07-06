@@ -46,18 +46,14 @@ class Observer(ops.Object):
             charm.on[AGENT_RELATION].relation_joined, self._on_agent_relation_joined
         )
 
-    @property
-    def _jenkins_container(self) -> ops.Container:
-        """The Jenkins workload container."""
-        return self.charm.unit.get_container(self.state.jenkins_service_name)
-
     def _on_slave_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
         """Handle slave relation joined event.
 
         Args:
             event: The event fired from an agent joining the relationship.
         """
-        if not self._jenkins_container.can_connect():
+        container = self.charm.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
             event.defer()
             return
         if not event.unit or not all(
@@ -80,7 +76,7 @@ class Observer(ops.Object):
             return
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
-        credentials = jenkins.get_admin_credentials(self._jenkins_container)
+        credentials = jenkins.get_admin_credentials(container)
         try:
             jenkins.add_agent_node(
                 agent_meta=agent_meta,
@@ -105,7 +101,8 @@ class Observer(ops.Object):
         Args:
             event: The event fired from an agent joining the relationship.
         """
-        if not self._jenkins_container.can_connect():
+        container = self.charm.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
             event.defer()
             return
         if not event.unit or not all(
@@ -128,7 +125,7 @@ class Observer(ops.Object):
             return
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
-        credentials = jenkins.get_admin_credentials(self._jenkins_container)
+        credentials = jenkins.get_admin_credentials(container)
         try:
             jenkins.add_agent_node(
                 agent_meta=agent_meta,
@@ -157,14 +154,19 @@ class Observer(ops.Object):
             event: The event fired when a unit in slave relation is departed.
         """
         agent_name = event.relation.data[self.model.unit]["slavehost"]
+        container = self.charm.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
+            return
+
+        credentials = jenkins.get_admin_credentials(container)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:
-            jenkins.remove_agent_node(agent_name=agent_name)
+            jenkins.remove_agent_node(agent_name=agent_name, credentials=credentials)
         except jenkins.JenkinsError as exc:
             logger.error("Failed to remove agent %s, %s", agent_name, exc)
             # There is no support for degraded status yet, however, this will not impact Jenkins
             # server operation.
-            self.charm.unit.status = ops.ActiveStatus()
+            self.charm.unit.status = ops.ActiveStatus(f"Failed to remove {agent_name}")
             return
         self.charm.unit.status = ops.ActiveStatus()
 
@@ -175,13 +177,18 @@ class Observer(ops.Object):
             event: The event fired when a unit in slave relation is departed.
         """
         agent_name = event.relation.data[self.model.unit]["name"]
+        container = self.charm.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
+            return
+
+        credentials = jenkins.get_admin_credentials(container)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:
-            jenkins.remove_agent_node(agent_name=agent_name)
+            jenkins.remove_agent_node(agent_name=agent_name, credentials=credentials)
         except jenkins.JenkinsError as exc:
             logger.error("Failed to remove agent %s, %s", agent_name, exc)
             # There is no support for degraded status yet, however, this will not impact Jenkins
             # server operation.
-            self.charm.unit.status = ops.ActiveStatus()
+            self.charm.unit.status = ops.ActiveStatus(f"Failed to remove {agent_name}")
             return
         self.charm.unit.status = ops.ActiveStatus()
