@@ -16,6 +16,7 @@ from ops.charm import PebbleReadyEvent
 
 import charm
 import jenkins
+import state
 from charm import JenkinsK8sOperatorCharm
 
 from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME, MAINTENANCE_STATUS_NAME
@@ -48,11 +49,13 @@ def test__on_agent_relation_joined_relation_data_not_set(harness_container: Harn
     assert: the event is deferred.
     """
     harness_container.harness.begin()
-    relation_id = harness_container.harness.add_relation("agent", "jenkins-agent")
+    relation_id = harness_container.harness.add_relation(state.SLAVE_RELATION, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
 
-    relation = harness_container.harness.charm.model.get_relation("agent", relation_id)
-    harness_container.harness.charm.on["agent"].relation_joined.emit(relation)
+    relation = harness_container.harness.charm.model.get_relation(
+        state.SLAVE_RELATION, relation_id
+    )
+    harness_container.harness.charm.on[state.SLAVE_RELATION].relation_joined.emit(relation)
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
@@ -88,7 +91,7 @@ def test__on_agent_relation_joined_relation_data_not_valid(
     assert: the unit falls to BlockedStatus.
     """
     harness_container.harness.begin()
-    relation_id = harness_container.harness.add_relation("agent", "jenkins-agent")
+    relation_id = harness_container.harness.add_relation(state.SLAVE_RELATION, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(
         relation_id,
@@ -96,8 +99,10 @@ def test__on_agent_relation_joined_relation_data_not_valid(
         relation_data,
     )
 
-    relation = harness_container.harness.charm.model.get_relation("agent", relation_id)
-    harness_container.harness.charm.on["agent"].relation_joined.emit(
+    relation = harness_container.harness.charm.model.get_relation(
+        state.SLAVE_RELATION, relation_id
+    )
+    harness_container.harness.charm.on[state.SLAVE_RELATION].relation_joined.emit(
         relation,
         app=harness_container.harness.model.get_app("jenkins-agent"),
         unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
@@ -130,7 +135,7 @@ def test__on_agent_relation_joined_client_error(
         lambda *_args, **_kwargs: raise_exception(exception=jenkins.JenkinsError()),
     )
     harness_container.harness.begin()
-    relation_id = harness_container.harness.add_relation("agent", "jenkins-agent")
+    relation_id = harness_container.harness.add_relation(state.SLAVE_RELATION, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(
         relation_id,
@@ -138,8 +143,10 @@ def test__on_agent_relation_joined_client_error(
         agent_relation_data,
     )
 
-    relation = harness_container.harness.charm.model.get_relation("agent", relation_id)
-    harness_container.harness.charm.on["agent"].relation_joined.emit(
+    relation = harness_container.harness.charm.model.get_relation(
+        state.SLAVE_RELATION, relation_id
+    )
+    harness_container.harness.charm.on[state.SLAVE_RELATION].relation_joined.emit(
         relation,
         app=harness_container.harness.model.get_app("jenkins-agent"),
         unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
@@ -174,7 +181,7 @@ def test__on_agent_relation_joined(
     # The charm code `binding.network.bind_address` for getting unit ip address will fail without
     # the add_network call.
     harness_container.harness.add_network("10.0.0.10")
-    relation_id = harness_container.harness.add_relation("agent", "jenkins-agent")
+    relation_id = harness_container.harness.add_relation(state.SLAVE_RELATION, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(
         relation_id,
@@ -182,8 +189,10 @@ def test__on_agent_relation_joined(
         agent_relation_data,
     )
 
-    relation = harness_container.harness.charm.model.get_relation("agent", relation_id)
-    harness_container.harness.charm.on["agent"].relation_joined.emit(
+    relation = harness_container.harness.charm.model.get_relation(
+        state.SLAVE_RELATION, relation_id
+    )
+    harness_container.harness.charm.on[state.SLAVE_RELATION].relation_joined.emit(
         relation,
         app=harness_container.harness.model.get_app("jenkins-agent"),
         unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
