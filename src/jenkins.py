@@ -90,7 +90,7 @@ class AgentMeta:
     Attributes:
         executors: Number of executors of the agent in string format.
         labels: Comma separated list of labels to be assigned to the agent.
-        slavehost: The host name of the agent.
+        name: The host name of the agent.
     """
 
     executors: str
