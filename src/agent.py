@@ -150,3 +150,38 @@ class Observer(ops.Object):
         )
         self.charm.unit.status = ops.ActiveStatus()
 
+    def _on_slave_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+        """Handle slave relation departed event.
+
+        Args:
+            event: The event fired when a unit in slave relation is departed.
+        """
+        agent_name = event.relation.data[self.model.unit]["slavehost"]
+        self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
+        try:
+            jenkins.remove_agent_node(agent_name=agent_name)
+        except jenkins.JenkinsError as exc:
+            logger.error("Failed to remove agent %s, %s", agent_name, exc)
+            # There is no support for degraded status yet, however, this will not impact Jenkins
+            # server operation.
+            self.charm.unit.status = ops.ActiveStatus()
+            return
+        self.charm.unit.status = ops.ActiveStatus()
+
+    def _on_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+        """Handle slave relation departed event.
+
+        Args:
+            event: The event fired when a unit in slave relation is departed.
+        """
+        agent_name = event.relation.data[self.model.unit]["name"]
+        self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
+        try:
+            jenkins.remove_agent_node(agent_name=agent_name)
+        except jenkins.JenkinsError as exc:
+            logger.error("Failed to remove agent %s, %s", agent_name, exc)
+            # There is no support for degraded status yet, however, this will not impact Jenkins
+            # server operation.
+            self.charm.unit.status = ops.ActiveStatus()
+            return
+        self.charm.unit.status = ops.ActiveStatus()
