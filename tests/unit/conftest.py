@@ -14,6 +14,7 @@ from ops.model import Container
 from ops.pebble import ExecError
 from ops.testing import Harness
 
+import state
 from charm import JenkinsK8sOperatorCharm
 from jenkins import PASSWORD_FILE_PATH, PLUGINS_PATH, REQUIRED_PLUGINS, Credentials
 
@@ -227,14 +228,32 @@ def raise_exception_fixture():
     return raise_exception
 
 
-@pytest.fixture(scope="function", name="agent_relation_data")
-def agent_relation_data_fixture():
+@pytest.fixture(scope="function", name="get_relation_data")
+def get_relation_data_fixture():
     """The agent relation data required to register agent."""
-    return {
-        "executors": "2",
-        "labels": "x84_64",
-        "slavehost": "http://sample-address:8080",
-    }
+
+    def get_relation_data(relation: str):
+        """Return a valid relation data matching the relation interface.
+
+        Args:
+            relation: The relation name.
+
+        Returns:
+            A valid test relation data.
+        """
+        if relation == state.SLAVE_RELATION:
+            return {
+                "executors": "2",
+                "labels": "x84_64",
+                "slavehost": "jenkins-agent-0",
+            }
+        return {
+            "executors": "2",
+            "labels": "x84_64",
+            "name": "jenkins-agent-0",
+        }
+
+    return get_relation_data
 
 
 @pytest.fixture(scope="function", name="current_version")

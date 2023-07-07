@@ -43,7 +43,13 @@ class Observer(ops.Object):
             charm.on[SLAVE_RELATION].relation_joined, self._on_slave_relation_joined
         )
         charm.framework.observe(
+            charm.on[SLAVE_RELATION].relation_departed, self._on_slave_relation_departed
+        )
+        charm.framework.observe(
             charm.on[AGENT_RELATION].relation_joined, self._on_agent_relation_joined
+        )
+        charm.framework.observe(
+            charm.on[AGENT_RELATION].relation_departed, self._on_agent_relation_departed
         )
 
     def _on_slave_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
@@ -153,11 +159,12 @@ class Observer(ops.Object):
         Args:
             event: The event fired when a unit in slave relation is departed.
         """
-        agent_name = event.relation.data[self.model.unit]["slavehost"]
+        # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
         if not container.can_connect():
             return
 
+        agent_name = event.relation.data[typing.cast(ops.Unit, event.unit)]["slavehost"]
         credentials = jenkins.get_admin_credentials(container)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:
@@ -176,11 +183,12 @@ class Observer(ops.Object):
         Args:
             event: The event fired when a unit in slave relation is departed.
         """
-        agent_name = event.relation.data[self.model.unit]["name"]
+        # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
         if not container.can_connect():
             return
 
+        agent_name = event.relation.data[typing.cast(ops.Unit, event.unit)]["name"]
         credentials = jenkins.get_admin_credentials(container)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:

@@ -23,7 +23,16 @@ from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME, MAINTENANCE_STATUS
 from .types_ import HarnessWithContainer
 
 
-def test__on_agent_relation_joined_no_container(harness_container: HarnessWithContainer):
+@pytest.mark.parametrize(
+    "relation",
+    [
+        pytest.param(state.AGENT_RELATION, id="agent relation"),
+        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+    ],
+)
+def test__on_agent_relation_joined_no_container(
+    harness_container: HarnessWithContainer, relation: str
+):
     """
     arrange: given a charm with no connectable container.
     act: when agent relation joined event is fired.
@@ -36,33 +45,43 @@ def test__on_agent_relation_joined_no_container(harness_container: HarnessWithCo
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     mock_event = MagicMock(spec=PebbleReadyEvent)
 
-    jenkins_charm.agent_observer._on_slave_relation_joined(mock_event)
+    if relation == state.AGENT_RELATION:
+        jenkins_charm.agent_observer._on_agent_relation_joined(mock_event)
+    else:
+        jenkins_charm.agent_observer._on_slave_relation_joined(mock_event)
 
     assert mock_event.defer.to_be_called_once()
     assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
 
 
-def test__on_agent_relation_joined_relation_data_not_set(harness_container: HarnessWithContainer):
+@pytest.mark.parametrize(
+    "relation",
+    [
+        pytest.param(state.AGENT_RELATION, id="agent relation"),
+        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+    ],
+)
+def test__on_agent_relation_joined_relation_data_not_set(
+    harness_container: HarnessWithContainer, relation: str
+):
     """
     arrange: given a charm instance.
     act: when an agent relation joined event is fired without required data.
     assert: the event is deferred.
     """
     harness_container.harness.begin()
-    relation_id = harness_container.harness.add_relation(state.SLAVE_RELATION, "jenkins-agent")
+    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
 
-    relation = harness_container.harness.charm.model.get_relation(
-        state.SLAVE_RELATION, relation_id
-    )
-    harness_container.harness.charm.on[state.SLAVE_RELATION].relation_joined.emit(relation)
+    model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
+    harness_container.harness.charm.on[relation].relation_joined.emit(model_relation)
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
 
 
 @pytest.mark.parametrize(
-    "relation_data",
+    "relation_data, relation",
     [
         pytest.param(
             {
@@ -70,7 +89,8 @@ def test__on_agent_relation_joined_relation_data_not_set(harness_container: Harn
                 "labels": "x84_64",
                 "slavehost": "http://sample-address:8080",
             },
-            id="non-numeric executor",
+            state.SLAVE_RELATION,
+            id="non-numeric executor(slave)",
         ),
         pytest.param(
             {
@@ -78,20 +98,39 @@ def test__on_agent_relation_joined_relation_data_not_set(harness_container: Harn
                 "labels": "x84_64",
                 "slavehost": "http://sample-address:8080",
             },
-            id="Non int convertible",
+            state.SLAVE_RELATION,
+            id="Non int convertible(slave)",
+        ),
+        pytest.param(
+            {
+                "executors": "non-numeric",
+                "labels": "x84_64",
+                "name": "http://sample-address:8080",
+            },
+            state.AGENT_RELATION,
+            id="non-numeric executor(agent)",
+        ),
+        pytest.param(
+            {
+                "executors": "3.14",
+                "labels": "x84_64",
+                "name": "http://sample-address:8080",
+            },
+            state.AGENT_RELATION,
+            id="Non int convertible(agent)",
         ),
     ],
 )
 def test__on_agent_relation_joined_relation_data_not_valid(
-    harness_container: HarnessWithContainer, relation_data: dict[str, str]
+    harness_container: HarnessWithContainer, relation_data: dict[str, str], relation: str
 ):
     """
     arrange: given a charm instance.
-    act: when an agent relation joined event is fired with invalid data.
+    act: when a relation joined event is fired with invalid data.
     assert: the unit falls to BlockedStatus.
     """
     harness_container.harness.begin()
-    relation_id = harness_container.harness.add_relation(state.SLAVE_RELATION, "jenkins-agent")
+    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(
         relation_id,
@@ -99,11 +138,9 @@ def test__on_agent_relation_joined_relation_data_not_valid(
         relation_data,
     )
 
-    relation = harness_container.harness.charm.model.get_relation(
-        state.SLAVE_RELATION, relation_id
-    )
-    harness_container.harness.charm.on[state.SLAVE_RELATION].relation_joined.emit(
-        relation,
+    model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
+    harness_container.harness.charm.on[relation].relation_joined.emit(
+        model_relation,
         app=harness_container.harness.model.get_app("jenkins-agent"),
         unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
     )
@@ -113,11 +150,19 @@ def test__on_agent_relation_joined_relation_data_not_valid(
     assert jenkins_charm.unit.status.message == "Invalid agent relation data."
 
 
+@pytest.mark.parametrize(
+    "relation",
+    [
+        pytest.param(state.AGENT_RELATION, id="agent relation"),
+        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+    ],
+)
 def test__on_agent_relation_joined_client_error(
     harness_container: HarnessWithContainer,
     raise_exception: Callable,
     monkeypatch: pytest.MonkeyPatch,
-    agent_relation_data: dict[str, str],
+    get_relation_data: Callable[[str], dict[str, str]],
+    relation: str,
 ):
     """
     arrange: given a mocked patched jenkins client that raises an error.
@@ -135,19 +180,17 @@ def test__on_agent_relation_joined_client_error(
         lambda *_args, **_kwargs: raise_exception(exception=jenkins.JenkinsError()),
     )
     harness_container.harness.begin()
-    relation_id = harness_container.harness.add_relation(state.SLAVE_RELATION, "jenkins-agent")
+    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(
         relation_id,
         "jenkins-agent/0",
-        agent_relation_data,
+        get_relation_data(relation),
     )
 
-    relation = harness_container.harness.charm.model.get_relation(
-        state.SLAVE_RELATION, relation_id
-    )
-    harness_container.harness.charm.on[state.SLAVE_RELATION].relation_joined.emit(
-        relation,
+    model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
+    harness_container.harness.charm.on[relation].relation_joined.emit(
+        model_relation,
         app=harness_container.harness.model.get_app("jenkins-agent"),
         unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
     )
@@ -157,10 +200,18 @@ def test__on_agent_relation_joined_client_error(
     assert "Jenkins API exception." in jenkins_charm.unit.status.message
 
 
+@pytest.mark.parametrize(
+    "relation",
+    [
+        pytest.param(state.AGENT_RELATION, id="agent relation"),
+        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+    ],
+)
 def test__on_agent_relation_joined(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
-    agent_relation_data: dict[str, str],
+    get_relation_data: Callable[[str], dict[str, str]],
+    relation: str,
 ):
     """
     arrange: given a charm instance.
@@ -181,22 +232,137 @@ def test__on_agent_relation_joined(
     # The charm code `binding.network.bind_address` for getting unit ip address will fail without
     # the add_network call.
     harness_container.harness.add_network("10.0.0.10")
-    relation_id = harness_container.harness.add_relation(state.SLAVE_RELATION, "jenkins-agent")
+    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(
         relation_id,
         "jenkins-agent/0",
-        agent_relation_data,
+        get_relation_data(relation),
     )
 
-    relation = harness_container.harness.charm.model.get_relation(
-        state.SLAVE_RELATION, relation_id
-    )
-    harness_container.harness.charm.on[state.SLAVE_RELATION].relation_joined.emit(
-        relation,
+    model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
+    harness_container.harness.charm.on[relation].relation_joined.emit(
+        model_relation,
         app=harness_container.harness.model.get_app("jenkins-agent"),
         unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
     )
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+
+
+@pytest.mark.parametrize(
+    "relation",
+    [
+        pytest.param(state.AGENT_RELATION, id="agent relation"),
+        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+    ],
+)
+def test__on_agent_relation_departed_no_container(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+    relation: str,
+):
+    """
+    arrange: given a charm with established relation but no container.
+    act: when an agent relation departed event is fired.
+    assert: nothing happens since the workload doesn't exist.
+    """
+    mocked_remove_agent = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    monkeypatch.setattr(charm.jenkins, "remove_agent_node", mocked_remove_agent)
+    harness_container.harness.set_can_connect("jenkins", False)
+    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
+    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
+    harness_container.harness.begin()
+
+    model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
+    harness_container.harness.charm.on[relation].relation_departed.emit(
+        model_relation,
+        app=harness_container.harness.model.get_app("jenkins-agent"),
+        unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
+    )
+
+    mocked_remove_agent.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "relation",
+    [
+        pytest.param(state.AGENT_RELATION, id="agent relation"),
+        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+    ],
+)
+def test__on_agent_relation_departed_remove_agent_node_error(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+    raise_exception: Callable,
+    get_relation_data: Callable[[str], dict[str, str]],
+    relation: str,
+):
+    """
+    arrange: given a charm with established relation but no container.
+    act: when an agent relation departed event is fired.
+    assert: nothing happens since the workload doesn't exist.
+    """
+    monkeypatch.setattr(
+        charm.jenkins,
+        "remove_agent_node",
+        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsError),
+    )
+    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
+    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
+    harness_container.harness.update_relation_data(
+        relation_id, "jenkins-agent/0", get_relation_data(relation)
+    )
+    harness_container.harness.begin()
+
+    model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
+    harness_container.harness.charm.on[relation].relation_departed.emit(
+        model_relation,
+        app=harness_container.harness.model.get_app("jenkins-agent"),
+        unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
+    )
+
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+    assert jenkins_charm.unit.status.message == "Failed to remove jenkins-agent-0"
+
+
+@pytest.mark.parametrize(
+    "relation",
+    [
+        pytest.param(state.AGENT_RELATION, id="agent relation"),
+        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+    ],
+)
+def test__on_agent_relation_departed(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+    get_relation_data: Callable[[str], dict[str, str]],
+    relation: str,
+):
+    """
+    arrange: given a charm with established relation.
+    act: when an agent relation departed event is fired.
+    assert: the remove_agent_node is called and unit falls into ActiveStatus.
+    """
+    mocked_remove_agent = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    monkeypatch.setattr(charm.jenkins, "remove_agent_node", mocked_remove_agent)
+    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
+    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
+    harness_container.harness.update_relation_data(
+        relation_id, "jenkins-agent/0", get_relation_data(relation)
+    )
+    harness_container.harness.begin()
+
+    model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
+    harness_container.harness.charm.on[relation].relation_departed.emit(
+        model_relation,
+        app=harness_container.harness.model.get_app("jenkins-agent"),
+        unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
+    )
+
+    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+    assert not jenkins_charm.unit.status.message
+    mocked_remove_agent.assert_called_once()

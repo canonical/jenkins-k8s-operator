@@ -393,6 +393,34 @@ def test_add_agent_node(admin_credentials: jenkins.Credentials):
     )
 
 
+def test_remove_agent_node_fail(admin_credentials: jenkins.Credentials):
+    """
+    arrange: given a mocked jenkins client.
+    act: when add_agent is called.
+    assert: no exception is raised.
+    """
+    mock_jenkins_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_jenkins_client.delete_node.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
+
+    with pytest.raises(jenkins.JenkinsError):
+        jenkins.remove_agent_node("jekins-agent-0", admin_credentials, mock_jenkins_client)
+
+
+def test_remove_agent_node(admin_credentials: jenkins.Credentials):
+    """
+    arrange: given a mocked jenkins client.
+    act: when add_agent is called.
+    assert: no exception is raised.
+    """
+    mock_delete = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins.delete_node)
+    mock_jenkins_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_jenkins_client.delete_node = mock_delete
+
+    jenkins.remove_agent_node("jekins-agent-0", admin_credentials, mock_jenkins_client)
+
+    mock_delete.assert_called_once()
+
+
 @pytest.mark.parametrize(
     "invalid_meta,expected_err_message",
     [
