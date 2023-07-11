@@ -52,7 +52,7 @@ async def test_jenkins_deprecated_agent_relation(
         (jenkins_k8s_agent.name in key for key in nodes.keys())
     ), "Jenkins k8s agent node not registered."
 
-    job = jenkins_client.create_job("test", gen_jenkins_test_job_xml("k8s"))
+    job = jenkins_client.create_job(jenkins_k8s_agent.name, gen_jenkins_test_job_xml("k8s"))
     queue_item = job.invoke()
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
@@ -84,7 +84,9 @@ async def test_jenkins_machine_deprecated_agent_relation(
         ("jenkins-agent-0" in key for key in nodes.keys())
     ), "Jenkins agent node not registered."
 
-    job = jenkins_client.create_job("test", gen_jenkins_test_job_xml("machine"))
+    job = jenkins_client.create_job(
+        jenkins_machine_agent.name, gen_jenkins_test_job_xml("machine")
+    )
     queue_item = job.invoke()
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
@@ -111,7 +113,7 @@ async def test_jenkins_k8s_agent_relation(
         (jenkins_k8s_agent.name in key for key in nodes.keys())
     ), "Jenkins k8s agent node not registered."
 
-    job = jenkins_client.create_job("test", gen_jenkins_test_job_xml("k8s"))
+    job = jenkins_client.create_job(jenkins_k8s_agent.name, gen_jenkins_test_job_xml("k8s"))
     queue_item = job.invoke()
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
