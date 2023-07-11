@@ -89,7 +89,7 @@ async def jenkins_k8s_agent_fixture(model: Model) -> typing.AsyncGenerator[Appli
         config={"jenkins_agent_labels": "k8s"},
         channel="edge",
         num_units=3,
-        application_name=f"jenkins-agentk8s-{secrets.token_hex(2)}",
+        application_name=f"jenkins-agentk8s-{secrets.token_urlsafe(2)}",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
 
