@@ -88,7 +88,7 @@ async def jenkins_k8s_agent_fixture(model: Model) -> typing.AsyncGenerator[Appli
     """The Jenkins k8s agent."""
     # secrets random hex cannot be used because it has chances to generate numeric only suffix
     # which will return "<application-name> is not a valid application tag"
-    app_suffix = "".join(random.choices(string.ascii_lowercase, k=4))
+    app_suffix = "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
         config={"jenkins_agent_labels": "k8s"},
