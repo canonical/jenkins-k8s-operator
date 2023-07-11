@@ -177,9 +177,7 @@ async def machine_model_fixture(
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_machine_agent")
-async def jenkins_machine_agent_fixture(
-    machine_model: Model,
-) -> typing.AsyncGenerator[Application, None]:
+async def jenkins_machine_agent_fixture(machine_model: Model) -> Application:
     """The jenkins machine agent."""
     # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
     # stable.
@@ -188,9 +186,7 @@ async def jenkins_machine_agent_fixture(
     )
     await machine_model.wait_for_idle(apps=[app.name], status="blocked", timeout=1200)
 
-    yield app
-
-    await machine_model.remove_application(app.name, force=True)
+    return app
 
 
 @pytest.fixture(scope="module", name="jenkins_version")
