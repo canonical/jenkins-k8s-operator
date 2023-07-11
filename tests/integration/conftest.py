@@ -82,7 +82,7 @@ async def web_address_fixture(unit_ip: str):
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agent")
-async def jenkins_k8s_agent_fixture(model: Model) -> Application:
+async def jenkins_k8s_agent_fixture(model: Model) -> typing.AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
@@ -172,7 +172,9 @@ async def machine_model_fixture(
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_machine_agent")
-async def jenkins_machine_agent_fixture(machine_model: Model) -> Application:
+async def jenkins_machine_agent_fixture(
+    machine_model: Model,
+) -> typing.AsyncGenerator[Application, None]:
     """The jenkins machine agent."""
     # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
     # stable.
