@@ -45,6 +45,12 @@ def jenkins_image_fixture(request: FixtureRequest) -> str:
     return jenkins_image
 
 
+@pytest.fixture(scope="module", name="num_units")
+def num_units_fixture(request: FixtureRequest) -> str:
+    """The OCI image for Jenkins charm."""
+    return int(request.config.getoption("--num-units"))
+
+
 @pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
     ops_test: OpsTest, model: Model, jenkins_image: str
@@ -84,7 +90,9 @@ async def web_address_fixture(unit_ip: str):
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agent")
-async def jenkins_k8s_agent_fixture(model: Model) -> typing.AsyncGenerator[Application, None]:
+async def jenkins_k8s_agent_fixture(
+    model: Model, num_units: int
+) -> typing.AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
     # secrets random hex cannot be used because it has chances to generate numeric only suffix
     # which will return "<application-name> is not a valid application tag"
@@ -93,7 +101,7 @@ async def jenkins_k8s_agent_fixture(model: Model) -> typing.AsyncGenerator[Appli
         "jenkins-agent-k8s",
         config={"jenkins_agent_labels": "k8s"},
         channel="edge",
-        num_units=3,
+        num_units=num_units,
         application_name=f"jenkins-agentk8s-{app_suffix}",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")

@@ -14,3 +14,5 @@ def pytest_addoption(parser: pytest.Parser):
     """
     # The Jenkins image name:tag.
     parser.addoption("--jenkins-image", action="store", default="")
+    # The number of jenkins agents to deploy and relate.
+    parser.addoption("--num-units", action="store", default="1")
