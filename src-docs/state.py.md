@@ -5,6 +5,10 @@
 # <kbd>module</kbd> `state.py`
 Jenkins States. 
 
+**Global Variables**
+---------------
+- **AGENT_RELATION**
+- **SLAVE_RELATION**
 
 
 ---
@@ -18,7 +22,7 @@ Exception raised when a charm configuration is found to be invalid.
  
  - <b>`msg`</b>:  Explanation of the error. 
 
-<a href="../src/state.py#L27"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L30"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -64,7 +68,7 @@ The Jenkins k8s operator charm state.
 
 ---
 
-<a href="../src/state.py#L48"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L51"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_charm`
 

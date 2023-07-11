@@ -5,6 +5,10 @@
 # <kbd>module</kbd> `agent.py`
 The Jenkins agent relation observer. 
 
+**Global Variables**
+---------------
+- **AGENT_RELATION**
+- **SLAVE_RELATION**
 
 
 ---
@@ -28,7 +32,7 @@ Relation data required for adding the Jenkins agent.
 ## <kbd>class</kbd> `Observer`
 The Jenkins agent relation observer. 
 
-<a href="../src/agent.py#L33"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/agent.py#L31"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 

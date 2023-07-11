@@ -30,7 +30,7 @@ async def test_jenkins_wizard_bypass(web_address: str):
     assert "Welcome to Jenkins!" in str(response.content)
 
 
-async def test_jenkins_agent_relation(
+async def test_jenkins_slave_relation(
     model: Model,
     application: Application,
     jenkins_k8s_agent: Application,
@@ -42,12 +42,12 @@ async def test_jenkins_agent_relation(
     act: when the server charm is related to the k8s agent charm.
     assert: the relation succeeds and the agent is able to run jobs successfully.
     """
-    await application.relate("agent", f"{jenkins_k8s_agent.name}")
+    await application.relate("slave", f"{jenkins_k8s_agent.name}")
     await model.wait_for_idle(status="active")
 
     nodes = jenkins_client.get_nodes()
     assert any(
-        ("jenkins-agent-k8s-0" in key for key in nodes.keys())
+        (jenkins_k8s_agent.name in key for key in nodes.keys())
     ), "Jenkins k8s agent node not registered."
 
     job = jenkins_client.create_job("test", gen_jenkins_test_job_xml("k8s"))
@@ -57,7 +57,7 @@ async def test_jenkins_agent_relation(
     assert build.get_status() == "SUCCESS"
 
 
-async def test_jenkins_machine_agent_relation(
+async def test_jenkins_machine_slave_relation(
     jenkins_machine_agent: Application,
     application: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
@@ -87,3 +87,48 @@ async def test_jenkins_machine_agent_relation(
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
     assert build.get_status() == "SUCCESS"
+
+
+async def test_jenkins_k8s_agent_relation(
+    model: Model,
+    application: Application,
+    jenkins_k8s_agent: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    gen_jenkins_test_job_xml: typing.Callable[[str], str],
+):
+    """
+    arrange: given jenkins-k8s-agent and jenkins server charms.
+    act: when the server charm is related to the k8s agent charm.
+    assert: the relation succeeds and the agent is able to run jobs successfully.
+    """
+    await application.relate("agent", f"{jenkins_k8s_agent.name}")
+    await model.wait_for_idle(status="active")
+
+    nodes = jenkins_client.get_nodes()
+    assert any(
+        (jenkins_k8s_agent.name in key for key in nodes.keys())
+    ), "Jenkins k8s agent node not registered."
+
+    job = jenkins_client.create_job("test", gen_jenkins_test_job_xml("k8s"))
+    queue_item = job.invoke()
+    queue_item.block_until_complete()
+    build: jenkinsapi.build.Build = queue_item.get_build()
+    assert build.get_status() == "SUCCESS"
+
+
+async def test_jenkins_k8s_agent_relation_removed(
+    model: Model,
+    jenkins_k8s_agent_related: Application,
+    jenkins_k8s_agent: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+):
+    """
+    arrange: given a jenkins server charm related to jenkins-k8s-agent charm via agent relation.
+    act: when the relation is removed.
+    assert: no agent nodes remain registered.
+    """
+    await jenkins_k8s_agent_related.remove_relation("agent", f"{jenkins_k8s_agent.name}:agent")
+    await model.wait_for_idle()
+
+    nodes = jenkins_client.get_nodes()
+    assert not any((jenkins_k8s_agent.name in key for key in nodes.keys()))

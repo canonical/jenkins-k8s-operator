@@ -164,7 +164,11 @@ class Observer(ops.Object):
         if not container.can_connect():
             return
 
-        agent_name = event.relation.data[typing.cast(ops.Unit, event.unit)]["slavehost"]
+        # The relation data is removed before this particular hook runs, making the name set by the
+        # agent not available. Hence, we can try to infer the name of the unit.
+        # See discussion: https://github.com/canonical/operator/issues/888
+        # assert type since event unit cannot be None.
+        agent_name = jenkins.get_agent_name(typing.cast(ops.Unit, event.unit).name)
         credentials = jenkins.get_admin_credentials(container)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:
@@ -188,7 +192,11 @@ class Observer(ops.Object):
         if not container.can_connect():
             return
 
-        agent_name = event.relation.data[typing.cast(ops.Unit, event.unit)]["name"]
+        # The relation data is removed before this particular hook runs, making the name set by the
+        # agent not available. Hence, we can try to infer the name of the unit.
+        # See discussion: https://github.com/canonical/operator/issues/888
+        # assert type since event unit cannot be None.
+        agent_name = jenkins.get_agent_name(typing.cast(ops.Unit, event.unit).name)
         credentials = jenkins.get_admin_credentials(container)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:

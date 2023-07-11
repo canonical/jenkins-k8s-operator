@@ -204,7 +204,7 @@ Add a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L499"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L522"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_updatable_version`
 
@@ -228,7 +228,7 @@ Get version to update to if available.
 
 ---
 
-<a href="../src/jenkins.py#L525"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L548"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `download_stable_war`
 
@@ -254,7 +254,7 @@ Download and replace the war executable.
 
 ---
 
-<a href="../src/jenkins.py#L585"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L608"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
@@ -280,6 +280,55 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
+<a href="../src/jenkins.py#L636"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+## <kbd>function</kbd> `get_agent_name`
+
+```python
+get_agent_name(unit_name: str) → str
+```
+
+Infer agent name from unit name. 
+
+
+
+**Args:**
+ 
+ - <b>`unit_name`</b>:  The agent unit name. 
+
+
+
+**Returns:**
+ The agent node name registered on Jenkins server. 
+
+
+---
+
+<a href="../src/jenkins.py#L648"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+## <kbd>function</kbd> `remove_agent_node`
+
+```python
+remove_agent_node(
+    agent_name: str,
+    credentials: Credentials,
+    client: Jenkins | None = None
+) → None
+```
+
+Remove registered agent from Jenkins server. 
+
+
+
+**Args:**
+ 
+ - <b>`agent_name`</b>:  The agent name to remove. 
+ - <b>`credentials`</b>:  The credentials of a Jenkins user with access to the Jenkins API. 
+ - <b>`client`</b>:  The API client used to communicate with the Jenkins server. 
+
+
+---
+
 ## <kbd>class</kbd> `AgentMeta`
 Metadata for registering Jenkins Agent. 
 
@@ -289,7 +338,7 @@ Metadata for registering Jenkins Agent.
  
  - <b>`executors`</b>:  Number of executors of the agent in string format. 
  - <b>`labels`</b>:  Comma separated list of labels to be assigned to the agent. 
- - <b>`slavehost`</b>:  The host name of the agent. 
+ - <b>`name`</b>:  The host name of the agent. 
 
 
 
