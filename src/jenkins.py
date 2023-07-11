@@ -643,17 +643,3 @@ def get_agent_name(unit_name: str) -> str:
         The agent node name registered on Jenkins server.
     """
     return unit_name.replace("/", "-")
-
-
-def remove_agent_node(
-    agent_name: str, credentials: Credentials, client: jenkinsapi.jenkins.Jenkins | None = None
-) -> None:
-    """Remove registered agent from Jenkins server.
-
-    Args:
-        agent_name: The agent name to remove.
-        credentials: The credentials of a Jenkins user with access to the Jenkins API.
-        client: The API client used to communicate with the Jenkins server.
-    """
-    client = client if client is not None else _get_client(credentials)
-    client.delete_node(agent_name)

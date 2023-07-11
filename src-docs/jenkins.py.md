@@ -204,6 +204,37 @@ Add a Jenkins agent node.
 
 ---
 
+<a href="../src/jenkins.py#L416"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+## <kbd>function</kbd> `remove_agent_node`
+
+```python
+remove_agent_node(
+    agent_name: str,
+    credentials: Credentials,
+    client: Jenkins | None = None
+) → None
+```
+
+Remove a Jenkins agent node. 
+
+
+
+**Args:**
+ 
+ - <b>`agent_name`</b>:  The agent node name to remove. 
+ - <b>`credentials`</b>:  The credentials of a Jenkins user with access to the Jenkins API. 
+ - <b>`client`</b>:  The API client used to communicate with the Jenkins server. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsError`</b>:  if an error occurred running groovy script removing the node. 
+
+
+---
+
 <a href="../src/jenkins.py#L522"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_updatable_version`
@@ -300,31 +331,6 @@ Infer agent name from unit name.
 
 **Returns:**
  The agent node name registered on Jenkins server. 
-
-
----
-
-<a href="../src/jenkins.py#L648"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>function</kbd> `remove_agent_node`
-
-```python
-remove_agent_node(
-    agent_name: str,
-    credentials: Credentials,
-    client: Jenkins | None = None
-) → None
-```
-
-Remove registered agent from Jenkins server. 
-
-
-
-**Args:**
- 
- - <b>`agent_name`</b>:  The agent name to remove. 
- - <b>`credentials`</b>:  The credentials of a Jenkins user with access to the Jenkins API. 
- - <b>`client`</b>:  The API client used to communicate with the Jenkins server. 
 
 
 ---
