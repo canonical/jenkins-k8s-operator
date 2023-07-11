@@ -72,7 +72,7 @@ async def test_jenkins_machine_slave_relation(
     await machine_model.create_offer(f"{jenkins_machine_agent.name}:slave")
     model: Model = application.model
     await model.relate(
-        f"{application.name}:agent",
+        f"{application.name}:slave",
         f"localhost:admin/{machine_model.name}.{jenkins_machine_agent.name}",
     )
     await model.wait_for_idle(status="active", timeout=1200)

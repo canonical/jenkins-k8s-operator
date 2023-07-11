@@ -3,8 +3,10 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+import random
 import re
 import secrets
+import string
 import textwrap
 import typing
 
@@ -84,13 +86,15 @@ async def web_address_fixture(unit_ip: str):
 @pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agent")
 async def jenkins_k8s_agent_fixture(model: Model) -> typing.AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
+    # secrets random hex cannot be used because it has chances to generate numeric only suffix
+    # which will return "<application-name> is not a valid application tag"
+    app_suffix = "".join(random.choices(string.ascii_lowercase, k=4))
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
         config={"jenkins_agent_labels": "k8s"},
         channel="edge",
         num_units=3,
-        application_name=f"jenkinsagentk8s-{secrets.token_urlsafe(2)}",  # the name should pass the
-        # regex (?:[a-z][a-z0-9]*(?:-[a-z0-9]*[a-z][a-z0-9]*)*) with application- prefix.
+        application_name=f"jenkins-agentk8s-{app_suffix}",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
 
