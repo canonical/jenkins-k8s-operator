@@ -27,7 +27,7 @@ from .types_ import HarnessWithContainer
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
 def test__on_agent_relation_joined_no_container(
@@ -48,7 +48,7 @@ def test__on_agent_relation_joined_no_container(
     if relation == state.AGENT_RELATION:
         jenkins_charm.agent_observer._on_agent_relation_joined(mock_event)
     else:
-        jenkins_charm.agent_observer._on_slave_relation_joined(mock_event)
+        jenkins_charm.agent_observer._on_deprecated_agent_relation_joined(mock_event)
 
     assert mock_event.defer.to_be_called_once()
     assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
@@ -58,7 +58,7 @@ def test__on_agent_relation_joined_no_container(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+        pytest.param(state.DEPRECATED_AGENT_RELATION, id="slave relation"),
     ],
 )
 def test__on_agent_relation_joined_relation_data_not_set(
@@ -89,8 +89,8 @@ def test__on_agent_relation_joined_relation_data_not_set(
                 "labels": "x84_64",
                 "slavehost": "http://sample-address:8080",
             },
-            state.SLAVE_RELATION,
-            id="non-numeric executor(slave)",
+            state.DEPRECATED_AGENT_RELATION,
+            id="non-numeric executor(deprecated agent)",
         ),
         pytest.param(
             {
@@ -98,8 +98,8 @@ def test__on_agent_relation_joined_relation_data_not_set(
                 "labels": "x84_64",
                 "slavehost": "http://sample-address:8080",
             },
-            state.SLAVE_RELATION,
-            id="Non int convertible(slave)",
+            state.DEPRECATED_AGENT_RELATION,
+            id="Non int convertible(deprecated agent)",
         ),
         pytest.param(
             {
@@ -154,7 +154,7 @@ def test__on_agent_relation_joined_relation_data_not_valid(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
 def test__on_agent_relation_joined_client_error(
@@ -204,7 +204,7 @@ def test__on_agent_relation_joined_client_error(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
 def test__on_agent_relation_joined(
@@ -255,7 +255,7 @@ def test__on_agent_relation_joined(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
 def test__on_agent_relation_departed_no_container(
@@ -289,7 +289,7 @@ def test__on_agent_relation_departed_no_container(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
 def test__on_agent_relation_departed_remove_agent_node_error(
@@ -332,7 +332,7 @@ def test__on_agent_relation_departed_remove_agent_node_error(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.SLAVE_RELATION, id="slave relation"),
+        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
 def test__on_agent_relation_departed(

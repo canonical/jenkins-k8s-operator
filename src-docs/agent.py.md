@@ -8,7 +8,7 @@ The Jenkins agent relation observer.
 **Global Variables**
 ---------------
 - **AGENT_RELATION**
-- **SLAVE_RELATION**
+- **DEPRECATED_AGENT_RELATION**
 
 
 ---

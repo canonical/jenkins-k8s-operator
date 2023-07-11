@@ -13,6 +13,8 @@ import yaml
 from juju.application import Application
 from juju.model import Model
 
+import state
+
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text(encoding="utf-8"))
@@ -30,7 +32,7 @@ async def test_jenkins_wizard_bypass(web_address: str):
     assert "Welcome to Jenkins!" in str(response.content)
 
 
-async def test_jenkins_slave_relation(
+async def test_jenkins_deprecated_agent_relation(
     model: Model,
     application: Application,
     jenkins_k8s_agent: Application,
@@ -42,7 +44,7 @@ async def test_jenkins_slave_relation(
     act: when the server charm is related to the k8s agent charm.
     assert: the relation succeeds and the agent is able to run jobs successfully.
     """
-    await application.relate("slave", f"{jenkins_k8s_agent.name}")
+    await application.relate(state.DEPRECATED_AGENT_RELATION, f"{jenkins_k8s_agent.name}")
     await model.wait_for_idle(status="active")
 
     nodes = jenkins_client.get_nodes()
@@ -57,7 +59,7 @@ async def test_jenkins_slave_relation(
     assert build.get_status() == "SUCCESS"
 
 
-async def test_jenkins_machine_slave_relation(
+async def test_jenkins_machine_deprecated_agent_relation(
     jenkins_machine_agent: Application,
     application: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
@@ -72,7 +74,7 @@ async def test_jenkins_machine_slave_relation(
     await machine_model.create_offer(f"{jenkins_machine_agent.name}:slave")
     model: Model = application.model
     await model.relate(
-        f"{application.name}:slave",
+        f"{application.name}:{state.DEPRECATED_AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{jenkins_machine_agent.name}",
     )
     await model.wait_for_idle(status="active", timeout=1200)

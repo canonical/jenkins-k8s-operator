@@ -13,7 +13,7 @@ from timerange import InvalidTimeRangeError, Range
 logger = logging.getLogger(__name__)
 
 AGENT_RELATION = "agent"
-SLAVE_RELATION = "slave"
+DEPRECATED_AGENT_RELATION = "agent-deprecated"
 
 
 class CharmStateBaseError(Exception):

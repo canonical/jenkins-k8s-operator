@@ -241,7 +241,7 @@ def get_relation_data_fixture():
         Returns:
             A valid test relation data.
         """
-        if relation == state.SLAVE_RELATION:
+        if relation == state.DEPRECATED_AGENT_RELATION:
             return {
                 "executors": "2",
                 "labels": "x84_64",

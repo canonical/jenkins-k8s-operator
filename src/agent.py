@@ -8,7 +8,7 @@ import typing
 import ops
 
 import jenkins
-from state import AGENT_RELATION, SLAVE_RELATION, State
+from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, State
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +40,12 @@ class Observer(ops.Object):
         self.state = state
 
         charm.framework.observe(
-            charm.on[SLAVE_RELATION].relation_joined, self._on_slave_relation_joined
+            charm.on[DEPRECATED_AGENT_RELATION].relation_joined,
+            self._on_deprecated_agent_relation_joined,
         )
         charm.framework.observe(
-            charm.on[SLAVE_RELATION].relation_departed, self._on_slave_relation_departed
+            charm.on[DEPRECATED_AGENT_RELATION].relation_departed,
+            self._on_deprecated_agent_relation_departed,
         )
         charm.framework.observe(
             charm.on[AGENT_RELATION].relation_joined, self._on_agent_relation_joined
@@ -52,8 +54,8 @@ class Observer(ops.Object):
             charm.on[AGENT_RELATION].relation_departed, self._on_agent_relation_departed
         )
 
-    def _on_slave_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
-        """Handle slave relation joined event.
+    def _on_deprecated_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
+        """Handle deprecated agent relation joined event.
 
         Args:
             event: The event fired from an agent joining the relationship.
@@ -153,11 +155,11 @@ class Observer(ops.Object):
         )
         self.charm.unit.status = ops.ActiveStatus()
 
-    def _on_slave_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
-        """Handle slave relation departed event.
+    def _on_deprecated_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+        """Handle deprecated agent relation departed event.
 
         Args:
-            event: The event fired when a unit in slave relation is departed.
+            event: The event fired when a unit in deprecated agent relation is departed.
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
@@ -182,10 +184,10 @@ class Observer(ops.Object):
         self.charm.unit.status = ops.ActiveStatus()
 
     def _on_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
-        """Handle slave relation departed event.
+        """Handle agent relation departed event.
 
         Args:
-            event: The event fired when a unit in slave relation is departed.
+            event: The event fired when a unit in agent relation is departed.
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)

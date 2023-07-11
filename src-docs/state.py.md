@@ -8,7 +8,7 @@ Jenkins States.
 **Global Variables**
 ---------------
 - **AGENT_RELATION**
-- **SLAVE_RELATION**
+- **DEPRECATED_AGENT_RELATION**
 
 
 ---
