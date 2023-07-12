@@ -15,7 +15,7 @@ from ops.pebble import Layer
 
 import agent
 import jenkins
-from state import CharmConfigInvalidError, State
+from state import CharmConfigInvalidError, CharmRelationDataInvalidError, State
 
 if typing.TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
@@ -32,6 +32,9 @@ class JenkinsK8sOperatorCharm(CharmBase):
 
         Args:
             args: Arguments to initialize the charm base.
+
+        Raises:
+            RuntimeError: if invalid state value was encountered from relation.
         """
         super().__init__(*args)
         try:
@@ -39,6 +42,8 @@ class JenkinsK8sOperatorCharm(CharmBase):
         except CharmConfigInvalidError as exc:
             self.unit.status = BlockedStatus(exc.msg)
             return
+        except CharmRelationDataInvalidError as exc:
+            raise RuntimeError("Invalid relation data received.") from exc
 
         self.agent_observer = agent.Observer(self, self.state)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)

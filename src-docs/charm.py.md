@@ -29,6 +29,12 @@ Initialize the charm and register event handlers.
  - <b>`args`</b>:  Arguments to initialize the charm base. 
 
 
+
+**Raises:**
+ 
+ - <b>`RuntimeError`</b>:  if invalid state value was encountered from relation. 
+
+
 ---
 
 #### <kbd>property</kbd> app

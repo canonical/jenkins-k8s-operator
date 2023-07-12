@@ -20,6 +20,8 @@ import jenkinsapi.jenkins
 import ops
 import requests
 
+import state
+
 logger = logging.getLogger(__name__)
 
 WEB_PORT = 8080
@@ -81,42 +83,6 @@ class JenkinsNetworkError(JenkinsError):
 
 class JenkinsUpdateError(JenkinsError):
     """An error occurred trying to update Jenkins."""
-
-
-@dataclasses.dataclass(frozen=True)
-class AgentMeta:
-    """Metadata for registering Jenkins Agent.
-
-    Attributes:
-        executors: Number of executors of the agent in string format.
-        labels: Comma separated list of labels to be assigned to the agent.
-        name: The host name of the agent.
-    """
-
-    executors: str
-    labels: str
-    name: str
-
-    def validate(self) -> None:
-        """Validate the agent metadata.
-
-        Raises:
-            ValidationError: if the field contains invalid data.
-        """
-        empty_fields = [
-            field
-            # Pylint doesn't understand that __annotations__ is implemented in a Python class.
-            for field in self.__annotations__.keys()  # pylint: disable=no-member
-            if not getattr(self, field)
-        ]
-        if empty_fields:
-            raise ValidationError(f"Fields {empty_fields} cannot be empty.")
-        try:
-            int(self.executors)
-        except ValueError as exc:
-            raise ValidationError(
-                f"Number of executors {self.executors} cannot be converted to type int."
-            ) from exc
 
 
 def _wait_for(
@@ -384,7 +350,7 @@ def get_node_secret(
 
 
 def add_agent_node(
-    agent_meta: AgentMeta,
+    agent_meta: state.AgentMeta,
     credentials: Credentials,
     client: jenkinsapi.jenkins.Jenkins | None = None,
 ) -> None:

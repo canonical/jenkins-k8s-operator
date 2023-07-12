@@ -69,12 +69,16 @@ def test__on_agent_relation_joined_relation_data_not_set(
     act: when an agent relation joined event is fired without required data.
     assert: the event is deferred.
     """
-    harness_container.harness.begin()
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
+    harness_container.harness.begin()
 
     model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
-    harness_container.harness.charm.on[relation].relation_joined.emit(model_relation)
+    harness_container.harness.charm.on[relation].relation_joined.emit(
+        model_relation,
+        app=harness_container.harness.model.get_app("jenkins-agent"),
+        unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
+    )
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
@@ -127,9 +131,8 @@ def test__on_agent_relation_joined_relation_data_not_valid(
     """
     arrange: given a charm instance.
     act: when a relation joined event is fired with invalid data.
-    assert: the unit falls to BlockedStatus.
+    assert: the unit raises RuntimeError since corrupt data was received.
     """
-    harness_container.harness.begin()
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(
@@ -137,17 +140,8 @@ def test__on_agent_relation_joined_relation_data_not_valid(
         "jenkins-agent/0",
         relation_data,
     )
-
-    model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
-    harness_container.harness.charm.on[relation].relation_joined.emit(
-        model_relation,
-        app=harness_container.harness.model.get_app("jenkins-agent"),
-        unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
-    )
-
-    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
-    assert jenkins_charm.unit.status.message == "Invalid agent relation data."
+    with pytest.raises(RuntimeError):
+        harness_container.harness.begin()
 
 
 @pytest.mark.parametrize(
@@ -179,7 +173,6 @@ def test__on_agent_relation_joined_client_error(
         "add_agent_node",
         lambda *_args, **_kwargs: raise_exception(exception=jenkins.JenkinsError()),
     )
-    harness_container.harness.begin()
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(
@@ -187,6 +180,7 @@ def test__on_agent_relation_joined_client_error(
         "jenkins-agent/0",
         get_relation_data(relation),
     )
+    harness_container.harness.begin()
 
     model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
     harness_container.harness.charm.on[relation].relation_joined.emit(
@@ -228,7 +222,6 @@ def test__on_agent_relation_joined(
         "get_node_secret",
         lambda *_args, **_kwargs: secrets.token_hex(),
     )
-    harness_container.harness.begin()
     # The charm code `binding.network.bind_address` for getting unit ip address will fail without
     # the add_network call.
     harness_container.harness.add_network("10.0.0.10")
@@ -239,6 +232,7 @@ def test__on_agent_relation_joined(
         "jenkins-agent/0",
         get_relation_data(relation),
     )
+    harness_container.harness.begin()
 
     model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
     harness_container.harness.charm.on[relation].relation_joined.emit(

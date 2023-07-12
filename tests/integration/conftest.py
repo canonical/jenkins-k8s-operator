@@ -46,7 +46,7 @@ def jenkins_image_fixture(request: FixtureRequest) -> str:
 
 
 @pytest.fixture(scope="module", name="num_units")
-def num_units_fixture(request: FixtureRequest) -> str:
+def num_units_fixture(request: FixtureRequest) -> int:
     """The OCI image for Jenkins charm."""
     return int(request.config.getoption("--num-units"))
 

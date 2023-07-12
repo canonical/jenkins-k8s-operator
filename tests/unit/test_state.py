@@ -42,3 +42,38 @@ def test_no_time_range_config(time_range: str, harness: Harness):
     assert (
         typing.cast(charm.JenkinsK8sOperatorCharm, harness.charm).state.update_time_range is None
     ), "Update time range should not be instantiated."
+
+
+class TestAgentMeta(typing.TypedDict):
+    """Metadata wrapper for testing.
+
+    Attrs:
+        executors: Number of executors.
+        labels: Label to be given to agent.
+        name: Name of the agent.
+    """
+
+    executors: str
+    labels: str
+    name: str
+
+
+@pytest.mark.parametrize(
+    "invalid_meta",
+    [
+        pytest.param(
+            TestAgentMeta(executors="", labels="abc", name="http://sample-host:8080"),
+        ),
+        pytest.param(
+            TestAgentMeta(executors="abc", labels="abc", name="http://sample-host:8080"),
+        ),
+    ],
+)
+def test_agent_meta__validate(invalid_meta: TestAgentMeta):
+    """
+    arrange: given an invalid agent metadata tuple.
+    act: when validate is called.
+    assert: ValidationError is raised.
+    """
+    with pytest.raises(state.ValidationError):
+        state.AgentMeta(**invalid_meta)

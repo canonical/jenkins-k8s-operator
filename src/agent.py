@@ -8,7 +8,7 @@ import typing
 import ops
 
 import jenkins
-from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, State
+from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, AgentMeta, State
 
 logger = logging.getLogger(__name__)
 
@@ -64,23 +64,15 @@ class Observer(ops.Object):
         if not container.can_connect():
             event.defer()
             return
-        if not event.unit or not all(
-            event.relation.data[event.unit].get(required_data)
-            for required_data in ("executors", "labels", "slavehost")
-        ):
+        # The relation is joined, it cannot be None, hence the type casting.
+        deprecated_agent_relation_meta = typing.cast(
+            typing.Mapping[ops.Unit, AgentMeta], self.state.deprecated_agent_relation_meta
+        )
+        # The event unit cannot be None.
+        agent_meta = deprecated_agent_relation_meta[typing.cast(ops.Unit, event.unit)]
+        if not agent_meta:
             logger.warning("Relation data not ready yet. Deferring.")
             event.defer()
-            return
-        agent_meta = jenkins.AgentMeta(
-            executors=event.relation.data[event.unit]["executors"],
-            labels=event.relation.data[event.unit]["labels"],
-            name=event.relation.data[event.unit]["slavehost"],
-        )
-        try:
-            agent_meta.validate()
-        except jenkins.ValidationError as exc:
-            logger.error("Invalid agent relation data. %s", exc)
-            self.charm.unit.status = ops.BlockedStatus("Invalid agent relation data.")
             return
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
@@ -113,23 +105,15 @@ class Observer(ops.Object):
         if not container.can_connect():
             event.defer()
             return
-        if not event.unit or not all(
-            event.relation.data[event.unit].get(required_data)
-            for required_data in ("executors", "labels", "name")
-        ):
+        # The relation is joined, it cannot be None, hence the type casting.
+        agent_relation_meta = typing.cast(
+            typing.Mapping[ops.Unit, AgentMeta], self.state.agent_relation_meta
+        )
+        # The event unit cannot be None.
+        agent_meta = agent_relation_meta[typing.cast(ops.Unit, event.unit)]
+        if not agent_meta:
             logger.warning("Relation data not ready yet. Deferring.")
             event.defer()
-            return
-        agent_meta = jenkins.AgentMeta(
-            executors=event.relation.data[event.unit]["executors"],
-            labels=event.relation.data[event.unit]["labels"],
-            name=event.relation.data[event.unit]["name"],
-        )
-        try:
-            agent_meta.validate()
-        except jenkins.ValidationError as exc:
-            logger.error("Invalid agent relation data. %s", exc)
-            self.charm.unit.status = ops.BlockedStatus("Invalid agent relation data.")
             return
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")

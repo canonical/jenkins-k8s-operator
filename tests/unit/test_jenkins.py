@@ -20,6 +20,7 @@ from ops.model import Container
 from ops.pebble import ExecError, ExecProcess
 
 import jenkins
+import state
 
 from .helpers import ConnectionExceptionPatch
 from .types_ import HarnessWithContainer, Versions
@@ -357,7 +358,7 @@ def test_add_agent_node_fail(admin_credentials: jenkins.Credentials):
 
     with pytest.raises(jenkins.JenkinsError):
         jenkins.add_agent_node(
-            jenkins.AgentMeta("3", "x86_64", "localhost:8080"),
+            state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
             admin_credentials,
             mock_jenkins_client,
         )
@@ -373,7 +374,9 @@ def test_add_agent_node_already_exists(admin_credentials: jenkins.Credentials):
     mock_jenkins_client.create_node.side_effect = jenkinsapi.custom_exceptions.AlreadyExists
 
     jenkins.add_agent_node(
-        jenkins.AgentMeta("3", "x86_64", "localhost:8080"), admin_credentials, mock_jenkins_client
+        state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+        admin_credentials,
+        mock_jenkins_client,
     )
 
 
@@ -389,7 +392,9 @@ def test_add_agent_node(admin_credentials: jenkins.Credentials):
     )
 
     jenkins.add_agent_node(
-        jenkins.AgentMeta("3", "x86_64", "localhost:8080"), admin_credentials, mock_jenkins_client
+        state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+        admin_credentials,
+        mock_jenkins_client,
     )
 
 
@@ -419,31 +424,6 @@ def test_remove_agent_node(admin_credentials: jenkins.Credentials):
     jenkins.remove_agent_node("jekins-agent-0", admin_credentials, mock_jenkins_client)
 
     mock_delete.assert_called_once()
-
-
-@pytest.mark.parametrize(
-    "invalid_meta,expected_err_message",
-    [
-        pytest.param(
-            jenkins.AgentMeta(executors="", labels="abc", name="http://sample-host:8080"),
-            "Fields ['executors'] cannot be empty.",
-        ),
-        pytest.param(
-            jenkins.AgentMeta(executors="abc", labels="abc", name="http://sample-host:8080"),
-            "Number of executors abc cannot be converted to type int.",
-        ),
-    ],
-)
-def test_agent_meta__validate(invalid_meta: jenkins.AgentMeta, expected_err_message: str):
-    """
-    arrange: given an invalid agent metadata tuple.
-    act: when validate is called.
-    assert: ValidationError is raised with error messages.
-    """
-    with pytest.raises(jenkins.ValidationError) as exc:
-        invalid_meta.validate()
-
-    assert expected_err_message in str(exc.value)
 
 
 @pytest.mark.parametrize(
