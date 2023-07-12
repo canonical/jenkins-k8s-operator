@@ -144,7 +144,6 @@ def _get_agent_meta_map_from_relation(
     Returns:
         A mapping of ops.Unit to AgentMetadata.
     """
-    print("RELATION RECEIVED, ", relation)
     if not relation:
         return None
     remote_units = filter(functools.partial(_is_remote_unit, current_app_name), relation.units)

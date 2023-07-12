@@ -76,13 +76,12 @@ class Observer(ops.Object):
             return
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
-        credentials = jenkins.get_admin_credentials(container)
         try:
             jenkins.add_agent_node(
                 agent_meta=agent_meta,
-                credentials=credentials,
+                container=container,
             )
-            secret = jenkins.get_node_secret(credentials=credentials, node_name=agent_meta.name)
+            secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
@@ -117,13 +116,12 @@ class Observer(ops.Object):
             return
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
-        credentials = jenkins.get_admin_credentials(container)
         try:
             jenkins.add_agent_node(
                 agent_meta=agent_meta,
-                credentials=credentials,
+                container=container,
             )
-            secret = jenkins.get_node_secret(credentials=credentials, node_name=agent_meta.name)
+            secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
