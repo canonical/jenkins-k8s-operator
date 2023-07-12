@@ -20,6 +20,8 @@ import jenkinsapi.jenkins
 import ops
 import requests
 
+import state
+
 logger = logging.getLogger(__name__)
 
 WEB_PORT = 8080
@@ -81,42 +83,6 @@ class JenkinsNetworkError(JenkinsError):
 
 class JenkinsUpdateError(JenkinsError):
     """An error occurred trying to update Jenkins."""
-
-
-@dataclasses.dataclass(frozen=True)
-class AgentMeta:
-    """Metadata for registering Jenkins Agent.
-
-    Attributes:
-        executors: Number of executors of the agent in string format.
-        labels: Comma separated list of labels to be assigned to the agent.
-        slavehost: The host name of the agent.
-    """
-
-    executors: str
-    labels: str
-    slavehost: str
-
-    def validate(self) -> None:
-        """Validate the agent metadata.
-
-        Raises:
-            ValidationError: if the field contains invalid data.
-        """
-        empty_fields = [
-            field
-            # Pylint doesn't understand that __annotations__ is implemented in a Python class.
-            for field in self.__annotations__.keys()  # pylint: disable=no-member
-            if not getattr(self, field)
-        ]
-        if empty_fields:
-            raise ValidationError(f"Fields {empty_fields} cannot be empty.")
-        try:
-            int(self.executors)
-        except ValueError as exc:
-            raise ValidationError(
-                f"Number of executors {self.executors} cannot be converted to type int."
-            ) from exc
 
 
 def _wait_for(
@@ -186,19 +152,17 @@ class Credentials:
     password: str
 
 
-def get_admin_credentials(connectable_container: ops.Container) -> Credentials:
+def get_admin_credentials(container: ops.Container) -> Credentials:
     """Retrieve admin credentials.
 
     Args:
-        connectable_container: Connectable container to interact with filesystem.
+        container: The Jenkins workload container to interact with filesystem.
 
     Returns:
         The Jenkins admin account credentials.
     """
     user = "admin"
-    password_file_contents = str(
-        connectable_container.pull(PASSWORD_FILE_PATH, encoding="utf-8").read()
-    )
+    password_file_contents = str(container.pull(PASSWORD_FILE_PATH, encoding="utf-8").read())
     return Credentials(username=user, password=password_file_contents.strip())
 
 
@@ -244,14 +208,14 @@ def get_version() -> str:
         raise JenkinsError("Failed to get Jenkins version.") from exc
 
 
-def _unlock_wizard(connectable_container: ops.Container) -> None:
+def _unlock_wizard(container: ops.Container) -> None:
     """Write to executed version and updated version file to bypass Jenkins setup wizard.
 
     Args:
-        connectable_container: The connectable Jenkins workload container.
+        container: The Jenkins workload container.
     """
     version = get_version()
-    connectable_container.push(
+    container.push(
         LAST_EXEC_VERSION_PATH,
         version,
         encoding="utf-8",
@@ -259,7 +223,7 @@ def _unlock_wizard(connectable_container: ops.Container) -> None:
         user=USER,
         group=GROUP,
     )
-    connectable_container.push(
+    container.push(
         WIZARD_VERSION_PATH,
         version,
         encoding="utf-8",
@@ -269,33 +233,31 @@ def _unlock_wizard(connectable_container: ops.Container) -> None:
     )
 
 
-def _install_configs(connectable_container: ops.Container) -> None:
+def _install_configs(container: ops.Container) -> None:
     """Install jenkins-config.xml.
 
     Args:
-        connectable_container: The connectable Jenkins workload container.
+        container: The Jenkins workload container.
     """
     with open("templates/jenkins-config.xml", encoding="utf-8") as jenkins_config_file:
-        connectable_container.push(CONFIG_FILE_PATH, jenkins_config_file, user=USER, group=GROUP)
+        container.push(CONFIG_FILE_PATH, jenkins_config_file, user=USER, group=GROUP)
     with open("templates/jenkins.yaml", encoding="utf-8") as jenkins_casc_config_file:
-        connectable_container.push(
-            JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file, user=USER, group=GROUP
-        )
+        container.push(JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file, user=USER, group=GROUP)
 
 
-def _install_plugins(connectable_container: ops.Container) -> None:
+def _install_plugins(container: ops.Container) -> None:
     """Install Jenkins plugins.
 
     Download Jenkins plugins. A restart is required for the changes to take effect.
 
     Args:
-        connectable_container: The connectable Jenkins workload container.
+        container: The Jenkins workload container.
 
     Raises:
         JenkinsPluginError: if an error occurred installing the plugin.
     """
     plugins = " ".join(set(REQUIRED_PLUGINS))
-    proc: ops.pebble.ExecProcess = connectable_container.exec(
+    proc: ops.pebble.ExecProcess = container.exec(
         [
             "java",
             "-jar",
@@ -320,20 +282,20 @@ def _install_plugins(connectable_container: ops.Container) -> None:
 
 
 def bootstrap(
-    connectable_container: ops.Container,
+    container: ops.Container,
 ) -> None:
     """Initialize and install Jenkins.
 
     Args:
-        connectable_container: The connectable Jenkins workload container.
+        container: The Jenkins workload container.
 
     Raises:
         JenkinsBootstrapError: if there was an error installing given plugins or required plugins.
     """
-    _unlock_wizard(connectable_container)
-    _install_configs(connectable_container)
+    _unlock_wizard(container)
+    _install_configs(container)
     try:
-        _install_plugins(connectable_container)
+        _install_plugins(container)
     except JenkinsPluginError as exc:
         raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
 
@@ -357,14 +319,14 @@ def _get_client(client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
 
 def get_node_secret(
     node_name: str,
-    credentials: Credentials,
+    container: ops.Container,
     client: jenkinsapi.jenkins.Jenkins | None = None,
 ) -> str:
     """Get node secret from jenkins.
 
     Args:
         node_name: The registered node to fetch the secret from.
-        credentials: The credentials of a Jenkins user with access to the Jenkins API.
+        container: The Jenkins workload container.
         client: The API client used to communicate with the Jenkins server.
 
     Returns:
@@ -373,7 +335,7 @@ def get_node_secret(
     Raises:
         JenkinsError: if an error occurred running groovy script getting the node secret.
     """
-    client = client if client is not None else _get_client(credentials)
+    client = client if client is not None else _get_client(get_admin_credentials(container))
     try:
         return client.run_groovy_script(
             f'println(jenkins.model.Jenkins.getInstance().getComputer("{node_name}").getJnlpMac())'
@@ -384,26 +346,26 @@ def get_node_secret(
 
 
 def add_agent_node(
-    agent_meta: AgentMeta,
-    credentials: Credentials,
+    agent_meta: state.AgentMeta,
+    container: ops.Container,
     client: jenkinsapi.jenkins.Jenkins | None = None,
 ) -> None:
     """Add a Jenkins agent node.
 
     Args:
         agent_meta: The Jenkins agent metadata to create the node from.
-        credentials: The credentials of a Jenkins user with access to the Jenkins API.
+        container: The Jenkins workload container.
         client: The API client used to communicate with the Jenkins server.
 
     Raises:
         JenkinsError: if an error occurred running groovy script creating the node.
     """
-    client = client if client is not None else _get_client(credentials)
+    client = client if client is not None else _get_client(get_admin_credentials(container))
     try:
         client.create_node(
-            name=agent_meta.slavehost,
+            name=agent_meta.name,
             num_executors=int(agent_meta.executors),
-            node_description=agent_meta.slavehost,
+            node_description=agent_meta.name,
             labels=agent_meta.labels,
         )
     except jenkinsapi.custom_exceptions.AlreadyExists:
@@ -411,6 +373,29 @@ def add_agent_node(
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to add agent node, %s", exc)
         raise JenkinsError("Failed to add agent node.") from exc
+
+
+def remove_agent_node(
+    agent_name: str,
+    credentials: Credentials,
+    client: jenkinsapi.jenkins.Jenkins | None = None,
+) -> None:
+    """Remove a Jenkins agent node.
+
+    Args:
+        agent_name: The agent node name to remove.
+        credentials: The credentials of a Jenkins user with access to the Jenkins API.
+        client: The API client used to communicate with the Jenkins server.
+
+    Raises:
+        JenkinsError: if an error occurred running groovy script removing the node.
+    """
+    client = client if client is not None else _get_client(credentials)
+    try:
+        client.delete_node(nodename=agent_name)
+    except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to delete agent node, %s", exc)
+        raise JenkinsError("Failed to delete agent node.") from exc
 
 
 def _get_major_minor_version(version: str) -> str:
@@ -522,11 +507,11 @@ def get_updatable_version() -> str | None:
     return latest_version
 
 
-def download_stable_war(connectable_container: ops.Container, version: str) -> None:
+def download_stable_war(container: ops.Container, version: str) -> None:
     """Download and replace the war executable.
 
     Args:
-        connectable_container: The Jenkins container with jenkins.war executable.
+        container: The Jenkins container with jenkins.war executable.
         version: Desired version of the war to download.
 
     Raises:
@@ -542,7 +527,7 @@ def download_stable_war(connectable_container: ops.Container, version: str) -> N
     ) as exc:
         logger.error("Failed to download Jenkins war executable, %s", exc)
         raise JenkinsNetworkError(f"Failed to download Jenkins war version {version}") from exc
-    connectable_container.push(
+    container.push(
         EXECUTABLES_PATH / "jenkins.war", res.content, encoding="utf-8", user=USER, group=GROUP
     )
 
@@ -608,3 +593,15 @@ def safe_restart(
     ) as exc:
         logger.error("Failed to restart Jenkins, %s", exc)
         raise JenkinsError("Failed to restart Jenkins safely.") from exc
+
+
+def get_agent_name(unit_name: str) -> str:
+    """Infer agent name from unit name.
+
+    Args:
+        unit_name: The agent unit name.
+
+    Returns:
+        The agent node name registered on Jenkins server.
+    """
+    return unit_name.replace("/", "-")

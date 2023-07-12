@@ -5,12 +5,10 @@
 import logging
 import typing
 
-from ops.charm import CharmBase, RelationJoinedEvent
-from ops.framework import Object
-from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
+import ops
 
 import jenkins
-from state import State
+from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, AgentMeta, State
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +25,10 @@ class AgentRelationData(typing.TypedDict):
     secret: str
 
 
-class Observer(Object):
+class Observer(ops.Object):
     """The Jenkins agent relation observer."""
 
-    def __init__(self, charm: CharmBase, state: State):
+    def __init__(self, charm: ops.CharmBase, state: State):
         """Initialize the observer and register event handlers.
 
         Args:
@@ -41,53 +39,51 @@ class Observer(Object):
         self.charm = charm
         self.state = state
 
-        charm.framework.observe(charm.on["agent"].relation_joined, self._on_agent_relation_joined)
+        charm.framework.observe(
+            charm.on[DEPRECATED_AGENT_RELATION].relation_joined,
+            self._on_deprecated_agent_relation_joined,
+        )
+        charm.framework.observe(
+            charm.on[DEPRECATED_AGENT_RELATION].relation_departed,
+            self._on_deprecated_agent_relation_departed,
+        )
+        charm.framework.observe(
+            charm.on[AGENT_RELATION].relation_joined, self._on_agent_relation_joined
+        )
+        charm.framework.observe(
+            charm.on[AGENT_RELATION].relation_departed, self._on_agent_relation_departed
+        )
 
-    @property
-    def _jenkins_container(self) -> Container:
-        """The Jenkins workload container."""
-        return self.charm.unit.get_container(self.state.jenkins_service_name)
-
-    def _on_agent_relation_joined(self, event: RelationJoinedEvent) -> None:
-        """Handle agent relation joined event.
+    def _on_deprecated_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
+        """Handle deprecated agent relation joined event.
 
         Args:
             event: The event fired from an agent joining the relationship.
         """
-        if not self._jenkins_container.can_connect():
+        container = self.charm.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
             event.defer()
             return
-        if not event.unit or not all(
-            event.relation.data[event.unit].get(required_data)
-            for required_data in ("executors", "labels", "slavehost")
-        ):
+        # The relation is joined, it cannot be None, hence the type casting.
+        deprecated_agent_relation_meta = typing.cast(
+            typing.Mapping[str, AgentMeta], self.state.deprecated_agent_relation_meta
+        )
+        # The event unit cannot be None.
+        agent_meta = deprecated_agent_relation_meta[typing.cast(ops.Unit, event.unit).name]
+        if not agent_meta:
             logger.warning("Relation data not ready yet. Deferring.")
             event.defer()
             return
-        agent_meta = jenkins.AgentMeta(
-            executors=event.relation.data[event.unit]["executors"],
-            labels=event.relation.data[event.unit]["labels"],
-            slavehost=event.relation.data[event.unit]["slavehost"],
-        )
-        try:
-            agent_meta.validate()
-        except jenkins.ValidationError as exc:
-            logger.error("Invalid agent relation data. %s", exc)
-            self.charm.unit.status = BlockedStatus("Invalid agent relation data.")
-            return
 
-        self.charm.unit.status = MaintenanceStatus("Adding agent node.")
-        credentials = jenkins.get_admin_credentials(self._jenkins_container)
+        self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
             jenkins.add_agent_node(
                 agent_meta=agent_meta,
-                credentials=credentials,
+                container=container,
             )
-            secret = jenkins.get_node_secret(
-                credentials=credentials, node_name=agent_meta.slavehost
-            )
+            secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
-            self.charm.unit.status = BlockedStatus(f"Jenkins API exception. {exc=!r}")
+            self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
         # This is to avoid the None type.
@@ -96,4 +92,105 @@ class Observer(Object):
         event.relation.data[self.model.unit].update(
             AgentRelationData(url=f"http://{host}:{jenkins.WEB_PORT}", secret=secret)
         )
-        self.charm.unit.status = ActiveStatus()
+        self.charm.unit.status = ops.ActiveStatus()
+
+    def _on_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
+        """Handle agent relation joined event.
+
+        Args:
+            event: The event fired from an agent joining the relationship.
+        """
+        container = self.charm.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
+            event.defer()
+            return
+        # The relation is joined, it cannot be None, hence the type casting.
+        agent_relation_meta = typing.cast(
+            typing.Mapping[str, AgentMeta], self.state.agent_relation_meta
+        )
+        # The event unit cannot be None.
+        agent_meta = agent_relation_meta[typing.cast(ops.Unit, event.unit).name]
+        if not agent_meta:
+            logger.warning("Relation data not ready yet. Deferring.")
+            event.defer()
+            return
+
+        self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
+        try:
+            jenkins.add_agent_node(
+                agent_meta=agent_meta,
+                container=container,
+            )
+            secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
+        except jenkins.JenkinsError as exc:
+            self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
+            return
+
+        # This is to avoid the None type.
+        assert (binding := self.model.get_binding("juju-info"))  # nosec
+        host = binding.network.bind_address
+        event.relation.data[self.model.unit].update(
+            {
+                "url": f"http://{host}:{jenkins.WEB_PORT}",
+                f"{agent_meta.name}_secret": secret,
+            }
+        )
+        self.charm.unit.status = ops.ActiveStatus()
+
+    def _on_deprecated_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+        """Handle deprecated agent relation departed event.
+
+        Args:
+            event: The event fired when a unit in deprecated agent relation is departed.
+        """
+        # the event unit cannot be None.
+        container = self.charm.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
+            event.defer()
+            return
+
+        # The relation data is removed before this particular hook runs, making the name set by the
+        # agent not available. Hence, we can try to infer the name of the unit.
+        # See discussion: https://github.com/canonical/operator/issues/888
+        # assert type since event unit cannot be None.
+        agent_name = jenkins.get_agent_name(typing.cast(ops.Unit, event.unit).name)
+        credentials = jenkins.get_admin_credentials(container)
+        self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
+        try:
+            jenkins.remove_agent_node(agent_name=agent_name, credentials=credentials)
+        except jenkins.JenkinsError as exc:
+            logger.error("Failed to remove agent %s, %s", agent_name, exc)
+            # There is no support for degraded status yet, however, this will not impact Jenkins
+            # server operation.
+            self.charm.unit.status = ops.ActiveStatus(f"Failed to remove {agent_name}")
+            return
+        self.charm.unit.status = ops.ActiveStatus()
+
+    def _on_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+        """Handle agent relation departed event.
+
+        Args:
+            event: The event fired when a unit in agent relation is departed.
+        """
+        # the event unit cannot be None.
+        container = self.charm.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
+            event.defer()
+            return
+
+        # The relation data is removed before this particular hook runs, making the name set by the
+        # agent not available. Hence, we can try to infer the name of the unit.
+        # See discussion: https://github.com/canonical/operator/issues/888
+        # assert type since event unit cannot be None.
+        agent_name = jenkins.get_agent_name(typing.cast(ops.Unit, event.unit).name)
+        credentials = jenkins.get_admin_credentials(container)
+        self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
+        try:
+            jenkins.remove_agent_node(agent_name=agent_name, credentials=credentials)
+        except jenkins.JenkinsError as exc:
+            logger.error("Failed to remove agent %s, %s", agent_name, exc)
+            # There is no support for degraded status yet, however, this will not impact Jenkins
+            # server operation.
+            self.charm.unit.status = ops.ActiveStatus(f"Failed to remove {agent_name}")
+            return
+        self.charm.unit.status = ops.ActiveStatus()

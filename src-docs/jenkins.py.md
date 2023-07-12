@@ -20,7 +20,7 @@ Functions to operate Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L160"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L126"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `wait_ready`
 
@@ -46,12 +46,12 @@ Wait until Jenkins service is up.
 
 ---
 
-<a href="../src/jenkins.py#L189"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L155"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_admin_credentials`
 
 ```python
-get_admin_credentials(connectable_container: Container) → Credentials
+get_admin_credentials(container: Container) → Credentials
 ```
 
 Retrieve admin credentials. 
@@ -60,7 +60,7 @@ Retrieve admin credentials.
 
 **Args:**
  
- - <b>`connectable_container`</b>:  Connectable container to interact with filesystem. 
+ - <b>`container`</b>:  The Jenkins workload container to interact with filesystem. 
 
 
 
@@ -70,7 +70,7 @@ Retrieve admin credentials.
 
 ---
 
-<a href="../src/jenkins.py#L217"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L181"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `calculate_env`
 
@@ -88,7 +88,7 @@ Return a dictionary for Jenkins Pebble layer.
 
 ---
 
-<a href="../src/jenkins.py#L228"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L192"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_version`
 
@@ -112,12 +112,12 @@ Get the Jenkins server version.
 
 ---
 
-<a href="../src/jenkins.py#L322"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L284"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `bootstrap`
 
 ```python
-bootstrap(connectable_container: Container) → None
+bootstrap(container: Container) → None
 ```
 
 Initialize and install Jenkins. 
@@ -126,7 +126,7 @@ Initialize and install Jenkins.
 
 **Args:**
  
- - <b>`connectable_container`</b>:  The connectable Jenkins workload container. 
+ - <b>`container`</b>:  The Jenkins workload container. 
 
 
 
@@ -137,14 +137,14 @@ Initialize and install Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L358"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L320"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_node_secret`
 
 ```python
 get_node_secret(
     node_name: str,
-    credentials: Credentials,
+    container: Container,
     client: Jenkins | None = None
 ) → str
 ```
@@ -156,7 +156,7 @@ Get node secret from jenkins.
 **Args:**
  
  - <b>`node_name`</b>:  The registered node to fetch the secret from. 
- - <b>`credentials`</b>:  The credentials of a Jenkins user with access to the Jenkins API. 
+ - <b>`container`</b>:  The Jenkins workload container. 
  - <b>`client`</b>:  The API client used to communicate with the Jenkins server. 
 
 
@@ -173,14 +173,14 @@ Get node secret from jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L386"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L348"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `add_agent_node`
 
 ```python
 add_agent_node(
     agent_meta: AgentMeta,
-    credentials: Credentials,
+    container: Container,
     client: Jenkins | None = None
 ) → None
 ```
@@ -192,7 +192,7 @@ Add a Jenkins agent node.
 **Args:**
  
  - <b>`agent_meta`</b>:  The Jenkins agent metadata to create the node from. 
- - <b>`credentials`</b>:  The credentials of a Jenkins user with access to the Jenkins API. 
+ - <b>`container`</b>:  The Jenkins workload container. 
  - <b>`client`</b>:  The API client used to communicate with the Jenkins server. 
 
 
@@ -204,7 +204,38 @@ Add a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L499"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L378"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+## <kbd>function</kbd> `remove_agent_node`
+
+```python
+remove_agent_node(
+    agent_name: str,
+    credentials: Credentials,
+    client: Jenkins | None = None
+) → None
+```
+
+Remove a Jenkins agent node. 
+
+
+
+**Args:**
+ 
+ - <b>`agent_name`</b>:  The agent node name to remove. 
+ - <b>`credentials`</b>:  The credentials of a Jenkins user with access to the Jenkins API. 
+ - <b>`client`</b>:  The API client used to communicate with the Jenkins server. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsError`</b>:  if an error occurred running groovy script removing the node. 
+
+
+---
+
+<a href="../src/jenkins.py#L484"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_updatable_version`
 
@@ -228,12 +259,12 @@ Get version to update to if available.
 
 ---
 
-<a href="../src/jenkins.py#L525"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L510"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `download_stable_war`
 
 ```python
-download_stable_war(connectable_container: Container, version: str) → None
+download_stable_war(container: Container, version: str) → None
 ```
 
 Download and replace the war executable. 
@@ -242,7 +273,7 @@ Download and replace the war executable.
 
 **Args:**
  
- - <b>`connectable_container`</b>:  The Jenkins container with jenkins.war executable. 
+ - <b>`container`</b>:  The Jenkins container with jenkins.war executable. 
  - <b>`version`</b>:  Desired version of the war to download. 
 
 
@@ -254,7 +285,7 @@ Download and replace the war executable.
 
 ---
 
-<a href="../src/jenkins.py#L585"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L570"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
@@ -280,37 +311,26 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-## <kbd>class</kbd> `AgentMeta`
-Metadata for registering Jenkins Agent. 
+<a href="../src/jenkins.py#L598"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-
-
-**Attributes:**
- 
- - <b>`executors`</b>:  Number of executors of the agent in string format. 
- - <b>`labels`</b>:  Comma separated list of labels to be assigned to the agent. 
- - <b>`slavehost`</b>:  The host name of the agent. 
-
-
-
-
----
-
-<a href="../src/jenkins.py#L100"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-### <kbd>function</kbd> `validate`
+## <kbd>function</kbd> `get_agent_name`
 
 ```python
-validate() → None
+get_agent_name(unit_name: str) → str
 ```
 
-Validate the agent metadata. 
+Infer agent name from unit name. 
 
 
 
-**Raises:**
+**Args:**
  
- - <b>`ValidationError`</b>:  if the field contains invalid data. 
+ - <b>`unit_name`</b>:  The agent unit name. 
+
+
+
+**Returns:**
+ The agent node name registered on Jenkins server. 
 
 
 ---

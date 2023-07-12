@@ -13,6 +13,8 @@ import yaml
 from juju.application import Application
 from juju.model import Model
 
+import state
+
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text(encoding="utf-8"))
@@ -30,7 +32,68 @@ async def test_jenkins_wizard_bypass(web_address: str):
     assert "Welcome to Jenkins!" in str(response.content)
 
 
-async def test_jenkins_agent_relation(
+async def test_jenkins_deprecated_agent_relation(
+    model: Model,
+    application: Application,
+    jenkins_k8s_agent: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    gen_jenkins_test_job_xml: typing.Callable[[str], str],
+):
+    """
+    arrange: given jenkins-k8s-agent and jenkins server charms.
+    act: when the server charm is related to the k8s agent charm.
+    assert: the relation succeeds and the agent is able to run jobs successfully.
+    """
+    await application.relate(state.DEPRECATED_AGENT_RELATION, f"{jenkins_k8s_agent.name}")
+    await model.wait_for_idle(status="active")
+
+    nodes = jenkins_client.get_nodes()
+    assert any(
+        (jenkins_k8s_agent.name in key for key in nodes.keys())
+    ), "Jenkins k8s agent node not registered."
+
+    job = jenkins_client.create_job(jenkins_k8s_agent.name, gen_jenkins_test_job_xml("k8s"))
+    queue_item = job.invoke()
+    queue_item.block_until_complete()
+    build: jenkinsapi.build.Build = queue_item.get_build()
+    assert build.get_status() == "SUCCESS"
+
+
+async def test_jenkins_machine_deprecated_agent_relation(
+    jenkins_machine_agent: Application,
+    application: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    gen_jenkins_test_job_xml: typing.Callable[[str], str],
+):
+    """
+    arrange: given a cross controller cross model jenkins machine agent.
+    act: when the offer is created and relation is setup through the offer.
+    assert: the relation succeeds and the agent is able to run jobs successfully.
+    """
+    machine_model: Model = jenkins_machine_agent.model
+    await machine_model.create_offer(f"{jenkins_machine_agent.name}:slave")
+    model: Model = application.model
+    await model.relate(
+        f"{application.name}:{state.DEPRECATED_AGENT_RELATION}",
+        f"localhost:admin/{machine_model.name}.{jenkins_machine_agent.name}",
+    )
+    await model.wait_for_idle(status="active", timeout=1200)
+
+    nodes = jenkins_client.get_nodes()
+    assert any(
+        ("jenkins-agent-0" in key for key in nodes.keys())
+    ), "Jenkins agent node not registered."
+
+    job = jenkins_client.create_job(
+        jenkins_machine_agent.name, gen_jenkins_test_job_xml("machine")
+    )
+    queue_item = job.invoke()
+    queue_item.block_until_complete()
+    build: jenkinsapi.build.Build = queue_item.get_build()
+    assert build.get_status() == "SUCCESS"
+
+
+async def test_jenkins_k8s_agent_relation(
     model: Model,
     application: Application,
     jenkins_k8s_agent: Application,
@@ -47,43 +110,29 @@ async def test_jenkins_agent_relation(
 
     nodes = jenkins_client.get_nodes()
     assert any(
-        ("jenkins-agent-k8s-0" in key for key in nodes.keys())
+        (jenkins_k8s_agent.name in key for key in nodes.keys())
     ), "Jenkins k8s agent node not registered."
 
-    job = jenkins_client.create_job("test", gen_jenkins_test_job_xml("k8s"))
+    job = jenkins_client.create_job(jenkins_k8s_agent.name, gen_jenkins_test_job_xml("k8s"))
     queue_item = job.invoke()
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
     assert build.get_status() == "SUCCESS"
 
 
-async def test_jenkins_machine_agent_relation(
-    jenkins_machine_agent: Application,
-    application: Application,
+async def test_jenkins_k8s_agent_relation_removed(
+    model: Model,
+    jenkins_k8s_agent_related: Application,
+    jenkins_k8s_agent: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
-    gen_jenkins_test_job_xml: typing.Callable[[str], str],
 ):
     """
-    arrange: given a cross controller cross model jenkins machine agent.
-    act: when the offer is created and relation is setup through the offer.
-    assert: the relation succeeds and the agent is able to run jobs successfully.
+    arrange: given a jenkins server charm related to jenkins-k8s-agent charm via agent relation.
+    act: when the relation is removed.
+    assert: no agent nodes remain registered.
     """
-    machine_model: Model = jenkins_machine_agent.model
-    await machine_model.create_offer(f"{jenkins_machine_agent.name}:slave")
-    model: Model = application.model
-    await model.relate(
-        f"{application.name}:agent",
-        f"localhost:admin/{machine_model.name}.{jenkins_machine_agent.name}",
-    )
-    await model.wait_for_idle(status="active", timeout=1200)
+    await jenkins_k8s_agent_related.remove_relation("agent", f"{jenkins_k8s_agent.name}:agent")
+    await model.wait_for_idle()
 
     nodes = jenkins_client.get_nodes()
-    assert any(
-        ("jenkins-agent-0" in key for key in nodes.keys())
-    ), "Jenkins agent node not registered."
-
-    job = jenkins_client.create_job("test", gen_jenkins_test_job_xml("machine"))
-    queue_item = job.invoke()
-    queue_item.block_until_complete()
-    build: jenkinsapi.build.Build = queue_item.get_build()
-    assert build.get_status() == "SUCCESS"
+    assert not any((jenkins_k8s_agent.name in key for key in nodes.keys()))

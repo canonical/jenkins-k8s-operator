@@ -3,8 +3,10 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+import random
 import re
 import secrets
+import string
 import textwrap
 import typing
 
@@ -43,6 +45,12 @@ def jenkins_image_fixture(request: FixtureRequest) -> str:
     return jenkins_image
 
 
+@pytest.fixture(scope="module", name="num_units")
+def num_units_fixture(request: FixtureRequest) -> int:
+    """The OCI image for Jenkins charm."""
+    return int(request.config.getoption("--num-units"))
+
+
 @pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
     ops_test: OpsTest, model: Model, jenkins_image: str
@@ -54,7 +62,9 @@ async def application_fixture(
 
     # Deploy the charm and wait for active/idle status
     application = await model.deploy(charm, resources=resources, series="jammy")
-    await model.wait_for_idle(apps=[application.name], status="active", raise_on_blocked=True)
+    await model.wait_for_idle(
+        apps=[application.name], status="active", raise_on_blocked=True, timeout=20 * 60
+    )
 
     yield application
 
@@ -79,14 +89,26 @@ async def web_address_fixture(unit_ip: str):
     return f"http://{unit_ip}:8080"
 
 
-@pytest_asyncio.fixture(scope="module", name="jenkins_k8s_agent")
-async def jenkins_k8s_agent(model: Model) -> Application:
+@pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agent")
+async def jenkins_k8s_agent_fixture(
+    model: Model, num_units: int
+) -> typing.AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
+    # secrets random hex cannot be used because it has chances to generate numeric only suffix
+    # which will return "<application-name> is not a valid application tag"
+    app_suffix = "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
     agent_app: Application = await model.deploy(
-        "jenkins-agent-k8s", config={"jenkins_agent_labels": "k8s"}
+        "jenkins-agent-k8s",
+        config={"jenkins_agent_labels": "k8s"},
+        channel="edge",
+        num_units=num_units,
+        application_name=f"jenkins-agentk8s-{app_suffix}",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
-    return agent_app
+
+    yield agent_app
+
+    await model.remove_application(agent_app.name, force=True)
 
 
 @pytest_asyncio.fixture(scope="module", name="jenkins_client")
@@ -162,7 +184,7 @@ async def machine_model_fixture(
     await model.disconnect()
 
 
-@pytest_asyncio.fixture(scope="module", name="jenkins_machine_agent")
+@pytest_asyncio.fixture(scope="function", name="jenkins_machine_agent")
 async def jenkins_machine_agent_fixture(machine_model: Model) -> Application:
     """The jenkins machine agent."""
     # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
@@ -265,3 +287,18 @@ def update_status_env_fixture(model: Model, unit: Unit) -> typing.Iterable[str]:
         f"JUJU_MODEL_NAME={model.name}",
         f"JUJU_UNIT_NAME={unit.name}",
     )
+
+
+@pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agent_related")
+async def jenkins_k8s_agent_related_fixture(
+    model: Model,
+    jenkins_k8s_agent: Application,
+    application: Application,
+):
+    """The Jenkins-k8s server charm related to Jenkins-k8s agent charm through agent relation."""
+    await application.relate("agent", f"{jenkins_k8s_agent.name}:agent")
+    await model.wait_for_idle(
+        apps=[application.name, jenkins_k8s_agent.name], wait_for_active=True
+    )
+
+    return application

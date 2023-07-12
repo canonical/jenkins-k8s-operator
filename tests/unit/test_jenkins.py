@@ -20,6 +20,7 @@ from ops.model import Container
 from ops.pebble import ExecError, ExecProcess
 
 import jenkins
+import state
 
 from .helpers import ConnectionExceptionPatch
 from .types_ import HarnessWithContainer, Versions
@@ -269,7 +270,7 @@ def test_bootstrap_fail(
     )
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
-        jenkins.bootstrap(connectable_container=harness_container.container)
+        jenkins.bootstrap(container=harness_container.container)
 
 
 def test_bootstrap(
@@ -284,7 +285,7 @@ def test_bootstrap(
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: jenkins_version)
 
-    jenkins.bootstrap(connectable_container=harness_container.container)
+    jenkins.bootstrap(container=harness_container.container)
 
     assert harness_container.container.pull(
         jenkins.LAST_EXEC_VERSION_PATH, encoding="utf-8"
@@ -316,7 +317,7 @@ def test_get_client(admin_credentials: jenkins.Credentials):
         )
 
 
-def test_get_node_secret_api_error(admin_credentials: jenkins.Credentials):
+def test_get_node_secret_api_error(container: Container):
     """
     arrange: given a mocked Jenkins client that raises an error.
     act: when a groovy script is executed through the client.
@@ -328,10 +329,10 @@ def test_get_node_secret_api_error(admin_credentials: jenkins.Credentials):
     )
 
     with pytest.raises(jenkins.JenkinsError):
-        jenkins.get_node_secret("jenkins-agent", admin_credentials, mock_jenkins_client)
+        jenkins.get_node_secret("jenkins-agent", container, mock_jenkins_client)
 
 
-def test_get_node_secret(admin_credentials: jenkins.Credentials):
+def test_get_node_secret(container: Container):
     """
     arrange: given a mocked Jenkins client.
     act: when a groovy script getting a node secret is executed.
@@ -341,12 +342,12 @@ def test_get_node_secret(admin_credentials: jenkins.Credentials):
     mock_jenkins_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
     mock_jenkins_client.run_groovy_script.return_value = secret
 
-    node_secret = jenkins.get_node_secret("jenkins-agent", admin_credentials, mock_jenkins_client)
+    node_secret = jenkins.get_node_secret("jenkins-agent", container, mock_jenkins_client)
 
     assert secret == node_secret, "Secret value mismatch."
 
 
-def test_add_agent_node_fail(admin_credentials: jenkins.Credentials):
+def test_add_agent_node_fail(container: Container):
     """
     arrange: given a mocked jenkins client that raises an API exception.
     act: when add_agent is called
@@ -357,13 +358,13 @@ def test_add_agent_node_fail(admin_credentials: jenkins.Credentials):
 
     with pytest.raises(jenkins.JenkinsError):
         jenkins.add_agent_node(
-            jenkins.AgentMeta("3", "x86_64", "localhost:8080"),
-            admin_credentials,
+            state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+            container,
             mock_jenkins_client,
         )
 
 
-def test_add_agent_node_already_exists(admin_credentials: jenkins.Credentials):
+def test_add_agent_node_already_exists(container: Container):
     """
     arrange: given a mocked jenkins client that raises an Already exists exception.
     act: when add_agent is called.
@@ -373,11 +374,13 @@ def test_add_agent_node_already_exists(admin_credentials: jenkins.Credentials):
     mock_jenkins_client.create_node.side_effect = jenkinsapi.custom_exceptions.AlreadyExists
 
     jenkins.add_agent_node(
-        jenkins.AgentMeta("3", "x86_64", "localhost:8080"), admin_credentials, mock_jenkins_client
+        state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+        container,
+        mock_jenkins_client,
     )
 
 
-def test_add_agent_node(admin_credentials: jenkins.Credentials):
+def test_add_agent_node(container: Container):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
@@ -389,33 +392,38 @@ def test_add_agent_node(admin_credentials: jenkins.Credentials):
     )
 
     jenkins.add_agent_node(
-        jenkins.AgentMeta("3", "x86_64", "localhost:8080"), admin_credentials, mock_jenkins_client
+        state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+        container,
+        mock_jenkins_client,
     )
 
 
-@pytest.mark.parametrize(
-    "invalid_meta,expected_err_message",
-    [
-        pytest.param(
-            jenkins.AgentMeta(executors="", labels="abc", slavehost="http://sample-host:8080"),
-            "Fields ['executors'] cannot be empty.",
-        ),
-        pytest.param(
-            jenkins.AgentMeta(executors="abc", labels="abc", slavehost="http://sample-host:8080"),
-            "Number of executors abc cannot be converted to type int.",
-        ),
-    ],
-)
-def test_agent_meta__validate(invalid_meta: jenkins.AgentMeta, expected_err_message: str):
+def test_remove_agent_node_fail(admin_credentials: jenkins.Credentials):
     """
-    arrange: given an invalid agent metadata tuple.
-    act: when validate is called.
-    assert: ValidationError is raised with error messages.
+    arrange: given a mocked jenkins client.
+    act: when add_agent is called.
+    assert: no exception is raised.
     """
-    with pytest.raises(jenkins.ValidationError) as exc:
-        invalid_meta.validate()
+    mock_jenkins_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_jenkins_client.delete_node.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
 
-    assert expected_err_message in str(exc.value)
+    with pytest.raises(jenkins.JenkinsError):
+        jenkins.remove_agent_node("jekins-agent-0", admin_credentials, mock_jenkins_client)
+
+
+def test_remove_agent_node(admin_credentials: jenkins.Credentials):
+    """
+    arrange: given a mocked jenkins client.
+    act: when add_agent is called.
+    assert: no exception is raised.
+    """
+    mock_delete = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins.delete_node)
+    mock_jenkins_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_jenkins_client.delete_node = mock_delete
+
+    jenkins.remove_agent_node("jekins-agent-0", admin_credentials, mock_jenkins_client)
+
+    mock_delete.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -614,10 +622,10 @@ def test_download_stable_war_failure(monkeypatch: pytest.MonkeyPatch, current_ve
     assert: JenkinsNetworkError is raised.
     """
     monkeypatch.setattr(requests, "get", ConnectionExceptionPatch)
-    connectable_container = unittest.mock.MagicMock(spec=Container)
+    container = unittest.mock.MagicMock(spec=Container)
 
     with pytest.raises(jenkins.JenkinsNetworkError):
-        jenkins.download_stable_war(connectable_container, current_version)
+        jenkins.download_stable_war(container, current_version)
 
 
 def test_download_stable_war(monkeypatch: pytest.MonkeyPatch, current_version: str):
@@ -629,11 +637,11 @@ def test_download_stable_war(monkeypatch: pytest.MonkeyPatch, current_version: s
     mock_download_response = unittest.mock.MagicMock(spec=requests.Response)
     mock_download_response.content = b"mock war content"
     monkeypatch.setattr(requests, "get", lambda *_, **__: mock_download_response)
-    connectable_container = unittest.mock.MagicMock(spec=Container)
+    container = unittest.mock.MagicMock(spec=Container)
 
-    jenkins.download_stable_war(connectable_container, current_version)
+    jenkins.download_stable_war(container, current_version)
 
-    connectable_container.push.assert_called_once_with(
+    container.push.assert_called_once_with(
         jenkins.EXECUTABLES_PATH / "jenkins.war",
         mock_download_response.content,
         encoding="utf-8",

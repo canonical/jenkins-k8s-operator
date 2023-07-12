@@ -38,6 +38,9 @@ resources:
     type: oci-image
     description: OCI image for Jenkins
 requires:
-  agent:
+  agent-deprecated:
     interface: jenkins-slave
+    optional: true
+  agent:
+    interface: jenkins_agent_v0
     optional: true

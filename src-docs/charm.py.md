@@ -26,7 +26,13 @@ Initialize the charm and register event handlers.
 
 **Args:**
  
- - <b>`args`</b>:  Arguments to initialize the char base. 
+ - <b>`args`</b>:  Arguments to initialize the charm base. 
+
+
+
+**Raises:**
+ 
+ - <b>`RuntimeError`</b>:  if invalid state value was encountered from relation. 
 
 
 ---
