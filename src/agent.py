@@ -146,6 +146,7 @@ class Observer(ops.Object):
         # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
         if not container.can_connect():
+            event.defer()
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the
@@ -174,6 +175,7 @@ class Observer(ops.Object):
         # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
         if not container.can_connect():
+            event.defer()
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the
