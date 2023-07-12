@@ -66,10 +66,10 @@ class Observer(ops.Object):
             return
         # The relation is joined, it cannot be None, hence the type casting.
         deprecated_agent_relation_meta = typing.cast(
-            typing.Mapping[ops.Unit, AgentMeta], self.state.deprecated_agent_relation_meta
+            typing.Mapping[str, AgentMeta], self.state.deprecated_agent_relation_meta
         )
         # The event unit cannot be None.
-        agent_meta = deprecated_agent_relation_meta[typing.cast(ops.Unit, event.unit)]
+        agent_meta = deprecated_agent_relation_meta[typing.cast(ops.Unit, event.unit).name]
         if not agent_meta:
             logger.warning("Relation data not ready yet. Deferring.")
             event.defer()
@@ -106,10 +106,10 @@ class Observer(ops.Object):
             return
         # The relation is joined, it cannot be None, hence the type casting.
         agent_relation_meta = typing.cast(
-            typing.Mapping[ops.Unit, AgentMeta], self.state.agent_relation_meta
+            typing.Mapping[str, AgentMeta], self.state.agent_relation_meta
         )
         # The event unit cannot be None.
-        agent_meta = agent_relation_meta[typing.cast(ops.Unit, event.unit)]
+        agent_meta = agent_relation_meta[typing.cast(ops.Unit, event.unit).name]
         if not agent_meta:
             logger.warning("Relation data not ready yet. Deferring.")
             event.defer()
