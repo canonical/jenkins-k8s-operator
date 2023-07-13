@@ -24,6 +24,7 @@ from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
 import jenkins
+import state
 
 from .types_ import ModelAppUnit
 
@@ -89,14 +90,39 @@ async def web_address_fixture(unit_ip: str):
     return f"http://{unit_ip}:8080"
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agent")
-async def jenkins_k8s_agent_fixture(
-    model: Model, num_units: int
-) -> typing.AsyncGenerator[Application, None]:
-    """The Jenkins k8s agent."""
+@pytest.fixture(scope="function", name="app_suffix")
+def app_suffix_fixture():
+    """Get random 4 char length application suffix."""
     # secrets random hex cannot be used because it has chances to generate numeric only suffix
     # which will return "<application-name> is not a valid application tag"
     app_suffix = "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
+    return app_suffix
+
+
+@pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agent")
+async def jenkins_k8s_agent_fixture(
+    model: Model, app_suffix: str
+) -> typing.AsyncGenerator[Application, None]:
+    """The Jenkins k8s agent."""
+
+    agent_app: Application = await model.deploy(
+        "jenkins-agent-k8s",
+        config={"jenkins_agent_labels": "k8s"},
+        channel="latest/edge",
+        application_name=f"jenkins-agentk8s-{app_suffix}",
+    )
+    await model.wait_for_idle(apps=[agent_app.name], status="blocked")
+
+    yield agent_app
+
+    await model.remove_application(agent_app.name, force=True)
+
+
+@pytest_asyncio.fixture(scope="function", name="jenkins_multi_k8s_agents")
+async def jenkins_multi_k8s_agents_fixture(
+    model: Model, num_units: int, app_suffix: str
+) -> typing.AsyncGenerator[Application, None]:
+    """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
         config={"jenkins_agent_labels": "k8s"},
@@ -109,6 +135,23 @@ async def jenkins_k8s_agent_fixture(
     yield agent_app
 
     await model.remove_application(agent_app.name, force=True)
+
+
+@pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agent_related")
+async def jenkins_k8s_agent_related_fixture(
+    model: Model,
+    jenkins_multi_k8s_agents: Application,
+    application: Application,
+):
+    """The Jenkins-k8s server charm related to Jenkins-k8s agent charm through agent relation."""
+    await application.relate(
+        state.AGENT_RELATION, f"{jenkins_multi_k8s_agents.name}:{state.AGENT_RELATION}"
+    )
+    await model.wait_for_idle(
+        apps=[application.name, jenkins_multi_k8s_agents.name], wait_for_active=True
+    )
+
+    return application
 
 
 @pytest_asyncio.fixture(scope="module", name="jenkins_client")
@@ -185,16 +228,69 @@ async def machine_model_fixture(
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_machine_agent")
-async def jenkins_machine_agent_fixture(machine_model: Model) -> Application:
+async def jenkins_machine_agent_fixture(machine_model: Model, app_suffix: str) -> Application:
     """The jenkins machine agent."""
     # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
     # stable.
     app = await machine_model.deploy(
-        "jenkins-agent", channel="latest/edge", config={"labels": "machine"}
+        "jenkins-agent",
+        channel="latest/edge",
+        config={"labels": "machine"},
+        application_name=f"jenkins-agent-{app_suffix}",
     )
+    await machine_model.create_offer(f"{app.name}:slave")
     await machine_model.wait_for_idle(apps=[app.name], status="blocked", timeout=1200)
 
-    return app
+    yield app
+
+    await machine_model.remove_offer(f"admin/{machine_model.name}.{app.name}", force=True)
+    await machine_model.remove_application(app.name, force=True)
+
+
+@pytest_asyncio.fixture(scope="function", name="jenkins_multi_machine_agents")
+async def jenkins_multi_machine_agents_fixture(
+    machine_model: Model, num_units: int, app_suffix: str
+) -> Application:
+    """The jenkins machine agent with 3 units."""
+    # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
+    # stable.
+    app = await machine_model.deploy(
+        "jenkins-agent",
+        channel="latest/edge",
+        config={"labels": "machine"},
+        application_name=f"jenkins-agent-{app_suffix}",
+        num_units=num_units,
+    )
+    await machine_model.create_offer(f"{app.name}:{state.AGENT_RELATION}")
+    await machine_model.wait_for_idle(apps=[app.name], status="blocked", timeout=1200)
+
+    yield app
+
+    await machine_model.remove_offer(app.name, force=True)
+    await machine_model.remove_application(app.name, force=True)
+
+
+@pytest_asyncio.fixture(scope="function", name="jenkins_agent_related")
+async def jenkins_agent_related_fixture(
+    model: Model,
+    jenkins_multi_machine_agents: Application,
+    application: Application,
+):
+    """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
+    machine_model: Model = jenkins_multi_machine_agents.model
+    await machine_model.create_offer(f"{jenkins_multi_machine_agents.name}:{state.AGENT_RELATION}")
+    model: Model = application.model
+    await model.relate(
+        f"{application.name}:{state.AGENT_RELATION}",
+        f"localhost:admin/{machine_model.name}.{jenkins_multi_machine_agents.name}",
+    )
+    await model.wait_for_idle(
+        apps=[application.name, jenkins_multi_machine_agents.name], wait_for_active=True
+    )
+
+    yield application
+
+    await machine_model.remove_offer(f"{jenkins_multi_machine_agents.name}:{state.AGENT_RELATION}")
 
 
 @pytest.fixture(scope="module", name="jenkins_version")
@@ -287,18 +383,3 @@ def update_status_env_fixture(model: Model, unit: Unit) -> typing.Iterable[str]:
         f"JUJU_MODEL_NAME={model.name}",
         f"JUJU_UNIT_NAME={unit.name}",
     )
-
-
-@pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agent_related")
-async def jenkins_k8s_agent_related_fixture(
-    model: Model,
-    jenkins_k8s_agent: Application,
-    application: Application,
-):
-    """The Jenkins-k8s server charm related to Jenkins-k8s agent charm through agent relation."""
-    await application.relate("agent", f"{jenkins_k8s_agent.name}:agent")
-    await model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agent.name], wait_for_active=True
-    )
-
-    return application
