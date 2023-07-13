@@ -169,7 +169,7 @@ async def test_jenkins_machine_agent_relation(
     ), "Jenkins k8s agent node not registered."
 
     job = jenkins_client.create_job(
-        jenkins_multi_machine_agents.name, gen_jenkins_test_job_xml("k8s")
+        jenkins_multi_machine_agents.name, gen_jenkins_test_job_xml("machine")
     )
     queue_item = job.invoke()
     queue_item.block_until_complete()
@@ -179,7 +179,7 @@ async def test_jenkins_machine_agent_relation(
 
 async def test_jenkins_machine_agent_relation_removed(
     model: Model,
-    jenkins_k8s_agent_related: Application,
+    jenkins_agent_related: Application,
     jenkins_multi_machine_agents: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ):
@@ -188,10 +188,10 @@ async def test_jenkins_machine_agent_relation_removed(
     act: when the relation is removed.
     assert: no agent nodes remain registered.
     """
-    await jenkins_k8s_agent_related.remove_relation(
+    await jenkins_agent_related.remove_relation(
         state.AGENT_RELATION, f"{jenkins_multi_machine_agents.name}:{state.AGENT_RELATION}"
     )
-    await model.wait_for_idle(apps=[jenkins_k8s_agent_related.name])
+    await model.wait_for_idle(apps=[jenkins_agent_related.name])
 
     nodes = jenkins_client.get_nodes()
     assert not any((jenkins_multi_machine_agents.name in key for key in nodes.keys()))

@@ -266,7 +266,7 @@ async def jenkins_multi_machine_agents_fixture(
 
     yield app
 
-    await machine_model.remove_offer(app.name, force=True)
+    await machine_model.remove_offer(f"admin/{machine_model.name}.{app.name}", force=True)
     await machine_model.remove_application(app.name, force=True)
 
 
