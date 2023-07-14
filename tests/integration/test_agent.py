@@ -155,7 +155,6 @@ async def test_jenkins_machine_agent_relation(
     assert: the relation succeeds and the agent is able to run jobs successfully.
     """
     machine_model: Model = jenkins_multi_machine_agents.model
-    model: Model = application.model
     await application.relate(
         state.AGENT_RELATION,
         f"localhost:admin/{machine_model.name}.{jenkins_multi_machine_agents.name}",
