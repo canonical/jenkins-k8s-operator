@@ -289,11 +289,7 @@ async def jenkins_agent_related_fixture(
     )
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
-    yield application
-
-    await machine_model.remove_offer(
-        f"admin/{machine_model.name}:{jenkins_multi_machine_agents.name}"
-    )
+    return application
 
 
 @pytest.fixture(scope="module", name="jenkins_version")
