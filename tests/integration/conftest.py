@@ -279,13 +279,15 @@ async def jenkins_agent_related_fixture(
 ):
     """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
     machine_model: Model = jenkins_multi_machine_agents.model
+    await machine_model.create_offer(f"{jenkins_multi_machine_agents.name}:{state.AGENT_RELATION}")
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{jenkins_multi_machine_agents.name}",
     )
-    await model.wait_for_idle(
-        apps=[application.name, jenkins_multi_machine_agents.name], wait_for_active=True
+    await machine_model.wait_for_idle(
+        apps=[jenkins_multi_machine_agents.name], wait_for_active=True
     )
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
     yield application
 
