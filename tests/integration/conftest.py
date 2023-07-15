@@ -255,7 +255,7 @@ async def jenkins_multi_machine_agents_fixture(
     """The jenkins machine agent with 3 units."""
     # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
     # stable.
-    app = await machine_model.deploy(
+    app: Application = await machine_model.deploy(
         "jenkins-agent",
         channel="latest/edge",
         config={"labels": "machine"},
@@ -268,7 +268,7 @@ async def jenkins_multi_machine_agents_fixture(
     yield app
 
     await machine_model.remove_offer(f"admin/{machine_model.name}.{app.name}", force=True)
-    await machine_model.remove_application(app.name, force=True)
+    await app.remove(force=True, no_wait=True)
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_agent_related")
