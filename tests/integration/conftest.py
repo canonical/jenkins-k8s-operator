@@ -69,7 +69,7 @@ async def application_fixture(
 
     yield application
 
-    await model.remove_application(application.name, block_until_done=True)
+    await model.remove_application(application.name, force=True, block_until_done=True)
 
 
 @pytest_asyncio.fixture(scope="module", name="unit_ip")
