@@ -45,7 +45,9 @@ async def test_jenkins_k8s_deprecated_agent_relation(
     assert: the relation succeeds and the agent is able to run jobs successfully.
     """
     await application.relate(state.DEPRECATED_AGENT_RELATION, f"{jenkins_k8s_agent.name}")
-    await model.wait_for_idle(apps=[application.name, jenkins_k8s_agent.name], status="active")
+    await model.wait_for_idle(
+        apps=[application.name, jenkins_k8s_agent.name], wait_for_active=True
+    )
 
     nodes = jenkins_client.get_nodes()
     assert any(
@@ -76,8 +78,8 @@ async def test_jenkins_machine_deprecated_agent_relation(
         state.DEPRECATED_AGENT_RELATION,
         f"localhost:admin/{machine_model.name}.{jenkins_machine_agent.name}",
     )
-    await model.wait_for_idle(apps=[application.name], status="active")
-    await machine_model.wait_for_idle(apps=[jenkins_machine_agent.name], status="active")
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+    await machine_model.wait_for_idle(apps=[jenkins_machine_agent.name], wait_for_active=True)
 
     nodes = jenkins_client.get_nodes()
     assert any(
@@ -107,7 +109,7 @@ async def test_jenkins_k8s_agent_relation(
     """
     await application.relate(state.AGENT_RELATION, jenkins_multi_k8s_agents.name)
     await model.wait_for_idle(
-        apps=[application.name, jenkins_multi_k8s_agents.name], status="active"
+        apps=[application.name, jenkins_multi_k8s_agents.name], wait_for_active=True
     )
 
     nodes = jenkins_client.get_nodes()
@@ -159,13 +161,15 @@ async def test_jenkins_machine_agent_relation(
         state.AGENT_RELATION,
         f"localhost:admin/{machine_model.name}.{jenkins_multi_machine_agents.name}",
     )
-    await model.wait_for_idle(apps=[application.name], status="active")
-    await machine_model.wait_for_idle(apps=[jenkins_multi_machine_agents.name], status="active")
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+    await machine_model.wait_for_idle(
+        apps=[jenkins_multi_machine_agents.name], wait_for_active=True
+    )
 
     nodes = jenkins_client.get_nodes()
     assert any(
         (jenkins_multi_machine_agents.name in key for key in nodes.keys())
-    ), "Jenkins k8s agent node not registered."
+    ), "Jenkins agent nodes not registered."
 
     job = jenkins_client.create_job(
         jenkins_multi_machine_agents.name, gen_jenkins_test_job_xml("machine")

@@ -268,7 +268,7 @@ async def jenkins_multi_machine_agents_fixture(
     yield app
 
     await machine_model.remove_offer(f"admin/{machine_model.name}.{app.name}", force=True)
-    await app.remove(force=True, no_wait=True)
+    await machine_model.remove_application(app.name, force=True, block_until_done=True)
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_agent_related")
