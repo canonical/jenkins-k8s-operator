@@ -71,7 +71,9 @@ async def application_fixture(
         idle_period=30,
     )
 
-    yield application
+    # slow down update-status so that it doesn't intervene currently running tests
+    with ops_test.fast_forward(fast_interval="1h"):
+        yield application
 
     await model.remove_application(application.name, force=True, block_until_done=True)
 
