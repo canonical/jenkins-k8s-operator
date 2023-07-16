@@ -64,7 +64,11 @@ async def application_fixture(
     # Deploy the charm and wait for active/idle status
     application = await model.deploy(charm, resources=resources, series="jammy")
     await model.wait_for_idle(
-        apps=[application.name], status="active", raise_on_blocked=True, timeout=20 * 60
+        apps=[application.name],
+        wait_for_active=True,
+        raise_on_blocked=True,
+        timeout=20 * 60,
+        idle_period=30,
     )
 
     yield application
@@ -263,7 +267,9 @@ async def jenkins_multi_machine_agents_fixture(
         num_units=num_units,
     )
     await machine_model.create_offer(f"{app.name}:{state.AGENT_RELATION}")
-    await machine_model.wait_for_idle(apps=[app.name], status="blocked", timeout=1200)
+    await machine_model.wait_for_idle(
+        apps=[app.name], status="blocked", idle_period=30, timeout=1200
+    )
 
     yield app
 
