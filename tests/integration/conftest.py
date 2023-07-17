@@ -145,15 +145,15 @@ async def new_relation_k8s_agents_fixture(
 @pytest_asyncio.fixture(scope="function", name="new_relation_k8s_agents_related")
 async def new_relation_k8s_agents_related_fixture(
     model: Model,
-    jenkins_multi_k8s_agents: Application,
+    new_relation_k8s_agents: Application,
     application: Application,
 ):
     """The Jenkins-k8s server charm related to Jenkins-k8s agent charm through agent relation."""
     await application.relate(
-        state.AGENT_RELATION, f"{jenkins_multi_k8s_agents.name}:{state.AGENT_RELATION}"
+        state.AGENT_RELATION, f"{new_relation_k8s_agents.name}:{state.AGENT_RELATION}"
     )
     await model.wait_for_idle(
-        apps=[application.name, jenkins_multi_k8s_agents.name], wait_for_active=True
+        apps=[application.name, new_relation_k8s_agents.name], wait_for_active=True
     )
 
     return application
@@ -282,18 +282,18 @@ async def new_relation_machine_agents_fixture(
 @pytest_asyncio.fixture(scope="function", name="new_relation_agent_related")
 async def new_relation_agents_related_fixture(
     model: Model,
-    jenkins_multi_machine_agents: Application,
+    new_relation_machine_agents: Application,
     application: Application,
 ):
     """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
-    machine_model: Model = jenkins_multi_machine_agents.model
-    await machine_model.create_offer(f"{jenkins_multi_machine_agents.name}:{state.AGENT_RELATION}")
+    machine_model: Model = new_relation_machine_agents.model
+    await machine_model.create_offer(f"{new_relation_machine_agents.name}:{state.AGENT_RELATION}")
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{jenkins_multi_machine_agents.name}",
+        f"localhost:admin/{machine_model.name}.{new_relation_machine_agents.name}",
     )
     await machine_model.wait_for_idle(
-        apps=[jenkins_multi_machine_agents.name], wait_for_active=True
+        apps=[new_relation_machine_agents.name], wait_for_active=True
     )
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
