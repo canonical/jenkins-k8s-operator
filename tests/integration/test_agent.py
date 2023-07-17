@@ -139,7 +139,7 @@ async def test_jenkins_k8s_agent_relation_removed(
         state.AGENT_RELATION, f"{new_relation_k8s_agents.name}:{state.AGENT_RELATION}"
     )
     await model.wait_for_idle(
-        apps=[new_relation_k8s_agents_related.name, jenkins_multi_k8s_agents.name]
+        apps=[new_relation_k8s_agents_related.name, new_relation_k8s_agents.name]
     )
 
     nodes = jenkins_client.get_nodes()
