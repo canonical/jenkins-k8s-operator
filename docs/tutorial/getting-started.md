@@ -66,7 +66,7 @@ admin credentials setup for you. You can use the following command below.
 juju run-action jenkins-k8s/0 get-admin-password --wait
 ```
 
-The result should look something similar to the contents below:
+The output should look something similar to the contents below:
 
 ```
 unit-jenkins-k8s-0:
