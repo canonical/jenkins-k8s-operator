@@ -1,3 +1,3 @@
 # Configurations
 
-See [Configure](https://charmhub.io/wordpress-k8s/configure).
+See [Configure](https://charmhub.io/jenkins-k8s/configure).
