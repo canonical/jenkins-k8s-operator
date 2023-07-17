@@ -2,7 +2,7 @@
 
 ### Configure update-time-range
 
-To configure when the Jenkins-k8s should check for patch and automatically update, you can apply
+To configure when Jenkins-k8s looks up for patches and automatically update, you can apply
 the update-time-range configuration. Note that patch updates are applicable only to releases within
 the same [LTS](https://www.jenkins.io/download/lts/) version.
 
