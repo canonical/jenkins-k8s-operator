@@ -123,11 +123,11 @@ async def jenkins_k8s_agent_fixture(
     await model.remove_application(agent_app.name, force=True)
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_multi_k8s_agents")
-async def jenkins_multi_k8s_agents_fixture(
+@pytest_asyncio.fixture(scope="function", name="new_relation_k8s_agents")
+async def new_relation_k8s_agents_fixture(
     model: Model, num_units: int, app_suffix: str
 ) -> typing.AsyncGenerator[Application, None]:
-    """The Jenkins k8s agent."""
+    """The Jenkins k8s agent to be used for new agent relation with multiple units."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
         config={"jenkins_agent_labels": "k8s"},
@@ -142,8 +142,8 @@ async def jenkins_multi_k8s_agents_fixture(
     await model.remove_application(agent_app.name, force=True)
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agent_related")
-async def jenkins_k8s_agent_related_fixture(
+@pytest_asyncio.fixture(scope="function", name="new_relation_k8s_agents_related")
+async def new_relation_k8s_agents_related_fixture(
     model: Model,
     jenkins_multi_k8s_agents: Application,
     application: Application,
@@ -254,11 +254,11 @@ async def jenkins_machine_agent_fixture(
     await machine_model.remove_application(app.name, force=True)
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_multi_machine_agents")
-async def jenkins_multi_machine_agents_fixture(
+@pytest_asyncio.fixture(scope="function", name="new_relation_machine_agents")
+async def new_relation_machine_agents_fixture(
     machine_model: Model, num_units: int, app_suffix: str
 ) -> typing.AsyncGenerator[Application, None]:
-    """The jenkins machine agent with 3 units."""
+    """The jenkins machine agent with 3 units to be used for new agent relation."""
     # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
     # stable.
     app: Application = await machine_model.deploy(
@@ -279,8 +279,8 @@ async def jenkins_multi_machine_agents_fixture(
     await machine_model.remove_application(app.name, force=True, block_until_done=True)
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_agent_related")
-async def jenkins_agent_related_fixture(
+@pytest_asyncio.fixture(scope="function", name="new_relation_agent_related")
+async def new_relation_agents_related_fixture(
     model: Model,
     jenkins_multi_machine_agents: Application,
     application: Application,
