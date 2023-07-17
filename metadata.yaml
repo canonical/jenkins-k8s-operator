@@ -24,7 +24,7 @@ description: |
   For DevOps and SRE teams, this charm will make operating Jenkins simple and straightforward
   through Juju's clean interface. Allowing both kubernetes and machine agent relations, it supports
   multiple environments for automation.
-docs: ""
+docs:
 issues: https://github.com/canonical/jenkins-k8s-operator/issues
 source: https://github.com/canonical/jenkins-k8s-operator
 tags:
