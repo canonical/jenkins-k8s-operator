@@ -8,7 +8,7 @@
 
 The jenkins-k8s charm helps deploy a Jenkins automation server application with ease and
 also helps operate the charm. This
-tutorial will walk you through each step of deployment to get a basic Jenkins deployment.
+tutorial will walk you through each step of deployment to get a basic Jenkins server deployment.
 
 ### Prerequisites
 
@@ -31,6 +31,7 @@ Start off by deploying the jenkins-k8s charm. By default it will deploy the late
 of the jenkins-k8s charm.
 
 ```
+# Deploy an edge version of the charm until stable version is released.
 juju deploy jenkins-k8s --channel=latest/edge
 ```
 
