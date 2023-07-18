@@ -130,3 +130,6 @@ dmypy.json
 
 # rocks
 */*.rock
+
+# charm artifact
+*.charm
