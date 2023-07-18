@@ -3,7 +3,7 @@
 ### Configure update-time-range
 
 Use the `update-time-range` configuration to set the time interval when `jenkins-k8s` automatically
-aplies the latest patches for the current [LTS](https://www.jenkins.io/download/lts/) version.
+applies the latest patches for the current [LTS](https://www.jenkins.io/download/lts/) version.
 The minimum time interval is 1 hour. Time range is applied each day of the week.
 
 ```
