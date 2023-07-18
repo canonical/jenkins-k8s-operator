@@ -2,9 +2,9 @@
 
 ### Configure update-time-range
 
-To configure when Jenkins-k8s looks up for patches and automatically update, you can apply
-the update-time-range configuration. Note that patch updates are applicable only to releases within
-the same [LTS](https://www.jenkins.io/download/lts/) version.
+Use the `update-time-range` configuration to set the time interval when `jenkins-k8s` automatically
+aplies the latest patches for the current [LTS](https://www.jenkins.io/download/lts/) version.
+The minimum time interval is 1 hour. Time range is applied each day of the week.
 
 ```
 juju config jenkins-k8s update-time-range=<desired-time-range>
