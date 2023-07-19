@@ -13,8 +13,11 @@ For DevOps or SRE teams this charm will make operating Jenkins simple and straig
 The Jenkins-k8s Operator is a member of the Ubuntu family. It's an open source project that warmly welcomes community projects, contributions, suggestions, fixes and constructive feedback.
 
 - [Code of conduct](https://ubuntu.com/community/code-of-conduct)
+
 - [Get support](https://discourse.charmhub.io/)
+
 - [Join our online chat](https://chat.charmhub.io/charmhub/channels/charm-dev)
+
 - [Contribute](Contribute)
 
 Thinking about using the Jenkins-k8s Operator for your next project? [Get in touch](https://chat.charmhub.io/charmhub/channels/charm-dev)!
