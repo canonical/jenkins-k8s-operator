@@ -18,17 +18,3 @@ The Jenkins-k8s Operator is a member of the Ubuntu family. It's an open source p
 - [Contribute](Contribute)
 
 Thinking about using the Jenkins-k8s Operator for your next project? [Get in touch](https://chat.charmhub.io/charmhub/channels/charm-dev)!
-
-# Contents
-
-1. [Tutorial](tutorial)
-   1. [Getting Started](tutorial/getting-started.md)
-1. [How to](how-to)
-   1. [Configure update-time-range](how-to/configure-update-time-range.md)
-   1. [Get admin password](how-to/get-admin-password.md)
-1. [Reference](reference)
-   1. [Actions](reference/actions.md)
-   1. [Configurations](reference/configurations.md)
-   1. [Integrations](reference/integrations.md)
-1. [Explanation](explanation)
-   1. [Agent-deprecated relation](explanation/agent-deprecated-relation.md)
