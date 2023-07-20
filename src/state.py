@@ -155,6 +155,51 @@ def _get_agent_meta_map_from_relation(
     return {unit.name: AgentMeta.from_agent_relation(relation.data[unit]) for unit in remote_units}
 
 
+class ProxyConfig(BaseModel):
+    """Configuration for accessing Jenkins through proxy.
+
+    Attributes:
+        hostname: The proxy server hostname.
+        port: The proxy server port.
+        username: The proxy server username for authentication.
+        password: The proxy server password for authentication.
+        no_proxy: Comma separated list of hostnames to bypass proxy.
+    """
+
+    hostname: typing.Optional[str]
+    port: typing.Optional[int]
+    username: typing.Optional[str]
+    password: typing.Optional[str]
+    no_proxy: typing.Optional[str]
+
+    @classmethod
+    def from_charm_config(cls, config_data: ops.ConfigData) -> typing.Optional["ProxyConfig"]:
+        """Instantiate ProxyConfig from charm configuration data.
+
+        Args:
+            config_data: The charm config data.
+
+        Returns:
+            ProxyConfig if proxy configuration is provided, None otherwise.
+        """
+        hostname = config_data.get("proxy-hostname")
+        port = config_data.get("proxy-port")
+        username = config_data.get("proxy-username")
+        password = config_data.get("proxy-password")
+        no_proxy = config_data.get("no-proxy")
+
+        if not hostname or not port:
+            return None
+        return cls(
+            hostname=hostname,
+            port=typing.cast(int, port),  # cannot input config of a different type since
+            # config.yaml defines the port as type int
+            username=username,
+            password=password,
+            no_proxy=no_proxy,
+        )
+
+
 @dataclasses.dataclass(frozen=True)
 class State:
     """The Jenkins k8s operator charm state.
@@ -164,6 +209,7 @@ class State:
         agent_relation_meta: Metadata of all agents from units related through agent relation.
         deprecated_agent_relation_meta: Metadata of all agents from units related through
             deprecated agent relation.
+        proxy_config: Proxy configuration to access Jenkins upstream through.
         jenkins_service_name: The Jenkins service name. Note that the container name is the same.
     """
 
@@ -172,6 +218,7 @@ class State:
     deprecated_agent_relation_meta: typing.Optional[
         typing.Mapping[str, typing.Optional[AgentMeta]]
     ]
+    proxy_config: typing.Optional[ProxyConfig]
     jenkins_service_name: str = "jenkins"
 
     @classmethod
@@ -221,9 +268,11 @@ class State:
             raise CharmRelationDataInvalidError(
                 f"Invalid {DEPRECATED_AGENT_RELATION} relation data."
             ) from exc
+        proxy_config = ProxyConfig.from_charm_config(charm.config)
 
         return cls(
             update_time_range=update_time_range,
             agent_relation_meta=agent_relation_meta_map,
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
+            proxy_config=proxy_config,
         )

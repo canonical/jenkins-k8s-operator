@@ -174,6 +174,48 @@ Represents an error with charm state.
 
 ---
 
+## <kbd>class</kbd> `ProxyConfig`
+Configuration for accessing Jenkins through proxy. 
+
+
+
+**Attributes:**
+ 
+ - <b>`hostname`</b>:  The proxy server hostname. 
+ - <b>`port`</b>:  The proxy server port. 
+ - <b>`username`</b>:  The proxy server username for authentication. 
+ - <b>`password`</b>:  The proxy server password for authentication. 
+ - <b>`no_proxy`</b>:  Comma separated list of hostnames to bypass proxy. 
+
+
+
+
+---
+
+<a href="../src/state.py#L175"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>classmethod</kbd> `from_charm_config`
+
+```python
+from_charm_config(config_data: ConfigData) → Optional[ForwardRef('ProxyConfig')]
+```
+
+Instantiate ProxyConfig from charm configuration data. 
+
+
+
+**Args:**
+ 
+ - <b>`config_data`</b>:  The charm config data. 
+
+
+
+**Returns:**
+ ProxyConfig if proxy configuration is provided, None otherwise. 
+
+
+---
+
 ## <kbd>class</kbd> `State`
 The Jenkins k8s operator charm state. 
 
@@ -184,6 +226,7 @@ The Jenkins k8s operator charm state.
  - <b>`update_time_range`</b>:  Time range to allow Jenkins to update version. 
  - <b>`agent_relation_meta`</b>:  Metadata of all agents from units related through agent relation. 
  - <b>`deprecated_agent_relation_meta`</b>:  Metadata of all agents from units related through  deprecated agent relation. 
+ - <b>`proxy_config`</b>:  Proxy configuration to access Jenkins upstream through. 
  - <b>`jenkins_service_name`</b>:  The Jenkins service name. Note that the container name is the same. 
 
 
@@ -191,7 +234,7 @@ The Jenkins k8s operator charm state.
 
 ---
 
-<a href="../src/state.py#L177"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L224"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_charm`
 

@@ -65,6 +65,10 @@ class JenkinsError(Exception):
     """Base exception for Jenkins errors."""
 
 
+class JenkinsProxyError(JenkinsError):
+    """An error occurred configuring Jenkins proxy."""
+
+
 class JenkinsPluginError(JenkinsError):
     """An error occurred installing Jenkins plugin."""
 
@@ -245,30 +249,85 @@ def _install_configs(container: ops.Container) -> None:
         container.push(JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file, user=USER, group=GROUP)
 
 
-def _install_plugins(container: ops.Container) -> None:
+def _configure_proxy(
+    container: ops.Container,
+    proxy_config: state.ProxyConfig | None = None,
+    client: jenkinsapi.jenkins.Jenkins | None = None,
+) -> None:
+    """Configure Jenkins proxy settings if proxy configuration values are provided.
+
+    Args:
+        container: The Jenkins workload container
+        proxy_config: The proxy settings to apply.
+        client: The API client used to communicate with the Jenkins server.
+
+    Raises:
+        JenkinsProxyError: if an error occurred running proxy configuration script.
+    """
+    if not proxy_config:
+        return
+
+    client = client if client is not None else _get_client(get_admin_credentials(container))
+
+    proxy_args = [f"'{proxy_config.hostname}'", f"'{proxy_config.port}'"]
+    if proxy_config.username and proxy_config.password:
+        proxy_args += [f"'{proxy_config.username}'", f"'{proxy_config.password}'"]
+    if proxy_config.no_proxy:
+        proxy_args += [f"'{proxy_config.no_proxy}'"]
+    parsed_args = ", ".join(proxy_args)
+    try:
+        client.run_groovy_script(f"proxy = new ProxyConfiguration({parsed_args})\nproxy.save()")
+    except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to configure proxy, %s", exc)
+        raise JenkinsProxyError("Proxy configuration failed.") from exc
+
+
+def _install_plugins(
+    container: ops.Container, proxy_config: state.ProxyConfig | None = None
+) -> None:
     """Install Jenkins plugins.
 
     Download Jenkins plugins. A restart is required for the changes to take effect.
 
     Args:
         container: The Jenkins workload container.
+        proxy_config: The proxy settings to apply.
 
     Raises:
         JenkinsPluginError: if an error occurred installing the plugin.
     """
-    plugins = " ".join(set(REQUIRED_PLUGINS))
+    command = ["java"]
+    if proxy_config:
+        command += [
+            f"-Dhttp.proxyHost={proxy_config.hostname}",
+            f"-Dhttp.proxyPort={proxy_config.port}",
+            f"-Dhttps.proxyHost={proxy_config.hostname}",
+            f"-Dhttps.proxyPort={proxy_config.port}",
+        ]
+    if proxy_config and proxy_config.username and proxy_config.password:
+        command += [
+            f"-Dhttp.proxyUser={proxy_config.username}",
+            f"-Dhttp.proxyPassword={proxy_config.password}",
+            f"-Dhttps.proxyUser={proxy_config.username}",
+            f"-Dhttps.proxyPassword={proxy_config.password}",
+        ]
+    if proxy_config and proxy_config.no_proxy:
+        formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
+        command += [
+            f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"'
+        ]  # http and https share same nonProxyHosts value
+    command += [
+        "-jar",
+        "jenkins-plugin-manager-2.12.11.jar",
+        "-w",
+        "jenkins.war",
+        "-d",
+        str(PLUGINS_PATH),
+        "-p",
+        " ".join(set(REQUIRED_PLUGINS)),
+    ]
     proc: ops.pebble.ExecProcess = container.exec(
-        [
-            "java",
-            "-jar",
-            "jenkins-plugin-manager-2.12.11.jar",
-            "-w",
-            "jenkins.war",
-            "-d",
-            str(PLUGINS_PATH),
-            "-p",
-            plugins,
-        ],
+        command,
         working_dir=str(EXECUTABLES_PATH),
         timeout=600,
         user=USER,
@@ -281,13 +340,12 @@ def _install_plugins(container: ops.Container) -> None:
         raise JenkinsPluginError("Failed to install plugins.") from exc
 
 
-def bootstrap(
-    container: ops.Container,
-) -> None:
+def bootstrap(container: ops.Container, proxy_config: state.ProxyConfig | None = None) -> None:
     """Initialize and install Jenkins.
 
     Args:
         container: The Jenkins workload container.
+        proxy_config: The Jenkins proxy configuration settings.
 
     Raises:
         JenkinsBootstrapError: if there was an error installing given plugins or required plugins.
@@ -295,8 +353,9 @@ def bootstrap(
     _unlock_wizard(container)
     _install_configs(container)
     try:
-        _install_plugins(container)
-    except JenkinsPluginError as exc:
+        _configure_proxy(container, proxy_config)
+        _install_plugins(container, proxy_config)
+    except (JenkinsProxyError, JenkinsPluginError) as exc:
         raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
 
 

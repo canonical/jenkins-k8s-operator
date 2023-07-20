@@ -241,13 +241,80 @@ def test__install_plugins_fail(raise_exception):
         jenkins._install_plugins(mock_container)
 
 
-def test__install_plugins(harness_container: HarnessWithContainer):
+def test__install_plugins(
+    harness_container: HarnessWithContainer, proxy_config: state.ProxyConfig
+):
     """
     arrange: given a mocked container with jenkins-plugin-manager executable.
     act: when _install_plugins is called.
     assert: No exceptions are raised.
     """
-    jenkins._install_plugins(harness_container.container)
+    jenkins._install_plugins(harness_container.container, proxy_config)
+
+
+def test__configure_proxy_fail(
+    harness_container: HarnessWithContainer,
+    proxy_config: state.ProxyConfig,
+    raise_exception: typing.Callable,
+):
+    """
+    arrange: given a test proxy config and a monkeypatched jenkins client that raises an exception.
+    act: when _configure_proxy is called.
+    assert: JenkinsProxyError is raised.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.run_groovy_script = lambda *_args, **_kwargs: raise_exception(
+        exception=jenkinsapi.custom_exceptions.JenkinsAPIException
+    )
+
+    with pytest.raises(jenkins.JenkinsProxyError) as exc:
+        jenkins._configure_proxy(harness_container.container, proxy_config, mock_client)
+
+    assert exc.value.args[0] == "Proxy configuration failed."
+
+
+def test__configure_proxy_partial(
+    harness_container: HarnessWithContainer,
+    partial_proxy_config: state.ProxyConfig,
+):
+    """
+    arrange: given a test partial proxy config and a mock jenkins client.
+    act: when _configure_proxy is called.
+    assert: mock client is called with correct proxy arguments.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_run_groovy_script = unittest.mock.MagicMock()
+    mock_client.run_groovy_script = mock_run_groovy_script
+
+    jenkins._configure_proxy(harness_container.container, partial_proxy_config, mock_client)
+
+    mock_run_groovy_script.assert_called_once_with(
+        f"proxy = new ProxyConfiguration('{partial_proxy_config.hostname}', "
+        f"'{partial_proxy_config.port}')\n"
+        "proxy.save()"
+    )
+
+
+def test__configure_proxy(
+    harness_container: HarnessWithContainer,
+    proxy_config: state.ProxyConfig,
+):
+    """
+    arrange: given a test proxy config and a mock jenkins client.
+    act: when _configure_proxy is called.
+    assert: mock client is called with correct proxy arguments.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_run_groovy_script = unittest.mock.MagicMock()
+    mock_client.run_groovy_script = mock_run_groovy_script
+
+    jenkins._configure_proxy(harness_container.container, proxy_config, mock_client)
+
+    mock_run_groovy_script.assert_called_once_with(
+        f"proxy = new ProxyConfiguration('{proxy_config.hostname}', '{proxy_config.port}', "
+        f"'{proxy_config.username}', '{proxy_config.password}', '{proxy_config.no_proxy}')\n"
+        "proxy.save()"
+    )
 
 
 def test_bootstrap_fail(

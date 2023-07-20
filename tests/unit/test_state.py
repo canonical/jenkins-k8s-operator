@@ -77,3 +77,35 @@ def test_agent_meta__validate(invalid_meta: TestAgentMeta):
     """
     with pytest.raises(state.ValidationError):
         state.AgentMeta(**invalid_meta)
+
+
+def test_proxyconfig_none(harness: Harness):
+    """
+    arrange: given config_data without proxy configuration.
+    act: when ProxyConfig.from_charm_config is called.
+    assert: None is returned.
+    """
+    harness.begin()
+
+    assert state.ProxyConfig.from_charm_config(harness.model.config) is None
+
+
+def test_proxyconfig_from_charm_config(harness: Harness, proxy_config: state.ProxyConfig):
+    """
+    arrange: given config_data without invalid proxy port.
+    act: when ProxyConfig.from_charm_config is called.
+    assert: Validation Error is raised.
+    """
+    # type cast since the fixture types are known
+    harness.update_config(
+        {
+            "proxy-hostname": typing.cast(str, proxy_config.hostname),
+            "proxy-port": typing.cast(int, proxy_config.port),
+            "proxy-username": typing.cast(str, proxy_config.username),
+            "proxy-password": typing.cast(str, proxy_config.password),
+            "no-proxy": typing.cast(str, proxy_config.no_proxy),
+        }
+    )
+    harness.begin()
+
+    assert state.ProxyConfig.from_charm_config(harness.model.config) == proxy_config

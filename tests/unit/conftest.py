@@ -153,6 +153,7 @@ def container_fixture(
     harness: Harness,
     admin_credentials: Credentials,
     monkeypatch: pytest.MonkeyPatch,
+    proxy_config: state.ProxyConfig,
 ) -> Container:
     """Harness Jenkins workload container that acts as a Jenkins container."""
     harness.set_can_connect("jenkins", True)
@@ -174,12 +175,35 @@ def container_fixture(
             RuntimeError: if the handler for a command has not yet been registered.
         """
         required_plugins = " ".join(set(REQUIRED_PLUGINS))
+        # type cast since the fixture contains no_proxy values
+        no_proxy_hosts = "|".join(typing.cast(str, proxy_config.no_proxy).split(","))
         match argv:
             # Ignore R0801: Similar lines in 2 files because this is a required stub
             # implementation of executed command.
             # pylint: disable=R0801
             case _ if [
                 "java",
+                "-jar",
+                "jenkins-plugin-manager-2.12.11.jar",
+                "-w",
+                "jenkins.war",
+                "-d",
+                str(PLUGINS_PATH),
+                "-p",
+                required_plugins,
+            ] == argv:
+                return (0, "", "Done")
+            case _ if [
+                "java",
+                f"-Dhttp.proxyHost={proxy_config.hostname}",
+                f"-Dhttp.proxyPort={proxy_config.port}",
+                f"-Dhttps.proxyHost={proxy_config.hostname}",
+                f"-Dhttps.proxyPort={proxy_config.port}",
+                f"-Dhttp.proxyUser={proxy_config.username}",
+                f"-Dhttp.proxyPassword={proxy_config.password}",
+                f"-Dhttps.proxyUser={proxy_config.username}",
+                f"-Dhttps.proxyPassword={proxy_config.password}",
+                f'-Dhttp.nonProxyHosts="{no_proxy_hosts}"',
                 "-jar",
                 "jenkins-plugin-manager-2.12.11.jar",
                 "-w",
@@ -351,4 +375,24 @@ def rss_feed_fixture(current_version: str, patched_version: str, minor_updated_v
     </rss>
     """.encode(
         encoding="utf-8"
+    )
+
+
+@pytest.fixture(scope="function", name="partial_proxy_config")
+def partial_proxy_config_fixture():
+    """Proxy configuration with only hostname and port."""
+    return state.ProxyConfig(
+        hostname="test.internal", port=3128, username=None, password=None, no_proxy=None
+    )
+
+
+@pytest.fixture(scope="function", name="proxy_config")
+def proxy_config_fixture():
+    """Proxy configuration with authentication and no_proxy values."""
+    return state.ProxyConfig(
+        hostname="test.internal",
+        port=3128,
+        username="tester",
+        password=token_hex(16),
+        no_proxy="noproxy.host1,noproxy.host2",
     )
