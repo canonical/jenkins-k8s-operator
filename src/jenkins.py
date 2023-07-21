@@ -265,6 +265,7 @@ def _configure_proxy(
     Raises:
         JenkinsProxyError: if an error occurred running proxy configuration script.
     """
+    print("DEBUG: ", proxy_config)
     if not proxy_config:
         return
 
