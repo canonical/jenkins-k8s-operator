@@ -9,8 +9,8 @@ jobs:
     secrets: inherit
     with:
       pre-run-script: |
-        microk8s config > ${GITHUB_WORKSPACE}/kube-config
+        -c "microk8s config > ${GITHUB_WORKSPACE}/kube-config
         chmod +x tests/integration/pre_run_script.sh
-        ./tests/integration/pre_run_script.sh
+        ./tests/integration/pre_run_script.sh"
       extra-arguments: |
         --kube-config ${GITHUB_WORKSPACE}/kube-config
