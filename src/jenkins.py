@@ -19,6 +19,7 @@ import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
 import ops
 import requests
+from pydantic import HttpUrl
 
 import state
 
@@ -269,9 +270,22 @@ def _configure_proxy(
 
     client = client if client is not None else _get_client(get_admin_credentials(container))
 
-    proxy_args = [f"'{proxy_config.hostname}'", f"'{proxy_config.port}'"]
-    if proxy_config.username and proxy_config.password:
-        proxy_args += [f"'{proxy_config.username}'", f"'{proxy_config.password}'"]
+    if proxy_config.https_proxy:
+        proxy_args = [
+            f"'{proxy_config.https_proxy.host}'",
+            f"'{proxy_config.https_proxy.port}'",
+            f"'{proxy_config.https_proxy.user or ''}'",
+            f"'{proxy_config.https_proxy.password or ''}'",
+        ]
+    else:
+        # http proxy and https proxy value both cannot be None at the same time.
+        http_proxy = typing.cast(HttpUrl, proxy_config.http_proxy)
+        proxy_args = [
+            f"'{http_proxy.host}'",
+            f"'{http_proxy.port}'",
+            f"'{http_proxy.user or ''}'",
+            f"'{http_proxy.password or ''}'",
+        ]
     if proxy_config.no_proxy:
         proxy_args += [f"'{proxy_config.no_proxy}'"]
     parsed_args = ", ".join(proxy_args)
@@ -297,25 +311,24 @@ def _install_plugins(
         JenkinsPluginError: if an error occurred installing the plugin.
     """
     command = ["java"]
-    if proxy_config:
+    if proxy_config and proxy_config.http_proxy:
         command += [
-            f"-Dhttp.proxyHost={proxy_config.hostname}",
-            f"-Dhttp.proxyPort={proxy_config.port}",
-            f"-Dhttps.proxyHost={proxy_config.hostname}",
-            f"-Dhttps.proxyPort={proxy_config.port}",
+            f"-Dhttp.proxyHost={proxy_config.http_proxy.host}",
+            f"-Dhttp.proxyPort={proxy_config.http_proxy.port}",
+            f"-Dhttp.proxyUser={proxy_config.http_proxy.user or ''}",
+            f"-Dhttp.proxyPassword={proxy_config.http_proxy.password or ''}",
         ]
-    if proxy_config and proxy_config.username and proxy_config.password:
+    if proxy_config and proxy_config.https_proxy:
         command += [
-            f"-Dhttp.proxyUser={proxy_config.username}",
-            f"-Dhttp.proxyPassword={proxy_config.password}",
-            f"-Dhttps.proxyUser={proxy_config.username}",
-            f"-Dhttps.proxyPassword={proxy_config.password}",
+            f"-Dhttps.proxyHost={proxy_config.https_proxy.host}",
+            f"-Dhttps.proxyPort={proxy_config.https_proxy.port}",
+            f"-Dhttps.proxyUser={proxy_config.https_proxy.user or ''}",
+            f"-Dhttps.proxyPassword={proxy_config.https_proxy.password or ''}",
         ]
     if proxy_config and proxy_config.no_proxy:
         formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
-        command += [
-            f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"'
-        ]  # http and https share same nonProxyHosts value
+        # http and https share same nonProxyHosts value
+        command += [f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"']
     command += [
         "-jar",
         "jenkins-plugin-manager-2.12.11.jar",

@@ -29,7 +29,7 @@ Metadata for registering Jenkins Agent.
 
 ---
 
-<a href="../src/state.py#L102"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L103"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_agent_relation`
 
@@ -54,7 +54,7 @@ Instantiate AgentMeta from charm relation databag.
 
 ---
 
-<a href="../src/state.py#L83"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L84"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_deprecated_agent_relation`
 
@@ -79,7 +79,7 @@ Instantiate AgentMeta from charm relation databag.
 
 ---
 
-<a href="../src/state.py#L70"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L71"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `numeric_executors`
 
@@ -112,7 +112,7 @@ Exception raised when a charm configuration is found to be invalid.
  
  - <b>`msg`</b>:  Explanation of the error. 
 
-<a href="../src/state.py#L32"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L33"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -143,7 +143,7 @@ Represents an error with invalid data in relation data.
  
  - <b>`msg`</b>:  Explanation of the error. 
 
-<a href="../src/state.py#L48"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L49"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -181,10 +181,8 @@ Configuration for accessing Jenkins through proxy.
 
 **Attributes:**
  
- - <b>`hostname`</b>:  The proxy server hostname. 
- - <b>`port`</b>:  The proxy server port. 
- - <b>`username`</b>:  The proxy server username for authentication. 
- - <b>`password`</b>:  The proxy server password for authentication. 
+ - <b>`http_proxy`</b>:  The http proxy URL. 
+ - <b>`https_proxy`</b>:  The https proxy URL. 
  - <b>`no_proxy`</b>:  Comma separated list of hostnames to bypass proxy. 
 
 
@@ -192,21 +190,21 @@ Configuration for accessing Jenkins through proxy.
 
 ---
 
-<a href="../src/state.py#L175"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L172"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-### <kbd>classmethod</kbd> `from_charm_config`
+### <kbd>classmethod</kbd> `from_charm_env`
 
 ```python
-from_charm_config(config_data: ConfigData) → Optional[ForwardRef('ProxyConfig')]
+from_charm_env(env: Mapping[str, str]) → Optional[ForwardRef('ProxyConfig')]
 ```
 
-Instantiate ProxyConfig from charm configuration data. 
+Instantiate ProxyConfig from juju charm environment. 
 
 
 
 **Args:**
  
- - <b>`config_data`</b>:  The charm config data. 
+ - <b>`env`</b>:  The charm environment variable. 
 
 
 
@@ -234,7 +232,7 @@ The Jenkins k8s operator charm state.
 
 ---
 
-<a href="../src/state.py#L224"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L215"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_charm`
 

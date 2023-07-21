@@ -81,31 +81,30 @@ def test_agent_meta__validate(invalid_meta: TestAgentMeta):
 
 def test_proxyconfig_none(harness: Harness):
     """
-    arrange: given config_data without proxy configuration.
+    arrange: given mapping without proxy configuration.
     act: when ProxyConfig.from_charm_config is called.
     assert: None is returned.
     """
     harness.begin()
 
-    assert state.ProxyConfig.from_charm_config(harness.model.config) is None
+    assert state.ProxyConfig.from_charm_env({}) is None
 
 
-def test_proxyconfig_from_charm_config(harness: Harness, proxy_config: state.ProxyConfig):
+def test_proxyconfig_from_charm_env(harness: Harness, proxy_config: state.ProxyConfig):
     """
-    arrange: given config_data without invalid proxy port.
+    arrange: given mapping with proxy configurations.
     act: when ProxyConfig.from_charm_config is called.
     assert: Validation Error is raised.
     """
-    # type cast since the fixture types are known
-    harness.update_config(
-        {
-            "proxy-hostname": typing.cast(str, proxy_config.hostname),
-            "proxy-port": typing.cast(int, proxy_config.port),
-            "proxy-username": typing.cast(str, proxy_config.username),
-            "proxy-password": typing.cast(str, proxy_config.password),
-            "no-proxy": typing.cast(str, proxy_config.no_proxy),
-        }
-    )
     harness.begin()
 
-    assert state.ProxyConfig.from_charm_config(harness.model.config) == proxy_config
+    assert (
+        state.ProxyConfig.from_charm_env(
+            {
+                "JUJU_CHARM_HTTP_PROXY": str(proxy_config.http_proxy),
+                "JUJU_CHARM_HTTPS_PROXY": str(proxy_config.https_proxy),
+                "JUJU_CHARM_NO_PROXY": str(proxy_config.no_proxy),
+            }
+        )
+        == proxy_config
+    )

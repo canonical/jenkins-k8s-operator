@@ -5,10 +5,11 @@
 import dataclasses
 import functools
 import logging
+import os
 import typing
 
 import ops
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
 
 from timerange import InvalidTimeRangeError, Range
 
@@ -159,44 +160,34 @@ class ProxyConfig(BaseModel):
     """Configuration for accessing Jenkins through proxy.
 
     Attributes:
-        hostname: The proxy server hostname.
-        port: The proxy server port.
-        username: The proxy server username for authentication.
-        password: The proxy server password for authentication.
+        http_proxy: The http proxy URL.
+        https_proxy: The https proxy URL.
         no_proxy: Comma separated list of hostnames to bypass proxy.
     """
 
-    hostname: typing.Optional[str]
-    port: typing.Optional[int]
-    username: typing.Optional[str]
-    password: typing.Optional[str]
+    http_proxy: typing.Optional[HttpUrl]
+    https_proxy: typing.Optional[HttpUrl]
     no_proxy: typing.Optional[str]
 
     @classmethod
-    def from_charm_config(cls, config_data: ops.ConfigData) -> typing.Optional["ProxyConfig"]:
-        """Instantiate ProxyConfig from charm configuration data.
+    def from_charm_env(cls, env: typing.Mapping[str, str]) -> typing.Optional["ProxyConfig"]:
+        """Instantiate ProxyConfig from juju charm environment.
 
         Args:
-            config_data: The charm config data.
+            env: The charm environment variable.
 
         Returns:
             ProxyConfig if proxy configuration is provided, None otherwise.
         """
-        hostname = config_data.get("proxy-hostname")
-        port = config_data.get("proxy-port")
-        username = config_data.get("proxy-username")
-        password = config_data.get("proxy-password")
-        no_proxy = config_data.get("no-proxy")
+        http_proxy = env.get("JUJU_CHARM_HTTP_PROXY")
+        https_proxy = env.get("JUJU_CHARM_HTTPS_PROXY")
+        no_proxy = env.get("JUJU_CHARM_NO_PROXY")
 
-        if not hostname or not port:
+        if not http_proxy and not https_proxy:
             return None
+        # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
         return cls(
-            hostname=hostname,
-            port=typing.cast(int, port),  # cannot input config of a different type since
-            # config.yaml defines the port as type int
-            username=username,
-            password=password,
-            no_proxy=no_proxy,
+            http_proxy=http_proxy, https_proxy=https_proxy, no_proxy=no_proxy  # type: ignore
         )
 
 
@@ -268,7 +259,7 @@ class State:
             raise CharmRelationDataInvalidError(
                 f"Invalid {DEPRECATED_AGENT_RELATION} relation data."
             ) from exc
-        proxy_config = ProxyConfig.from_charm_config(charm.config)
+        proxy_config = ProxyConfig.from_charm_env(os.environ)
 
         return cls(
             update_time_range=update_time_range,

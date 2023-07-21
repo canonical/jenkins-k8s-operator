@@ -288,9 +288,35 @@ def test__configure_proxy_partial(
 
     jenkins._configure_proxy(harness_container.container, partial_proxy_config, mock_client)
 
+    assert partial_proxy_config.https_proxy, "Https value for proxy config fixture cannot be None."
     mock_run_groovy_script.assert_called_once_with(
-        f"proxy = new ProxyConfiguration('{partial_proxy_config.hostname}', "
-        f"'{partial_proxy_config.port}')\n"
+        f"proxy = new ProxyConfiguration('{partial_proxy_config.https_proxy.host}', "
+        f"'{partial_proxy_config.https_proxy.port}', '', '')\n"
+        "proxy.save()"
+    )
+
+
+def test__configure_proxy_http(
+    harness_container: HarnessWithContainer,
+    http_partial_proxy_config: state.ProxyConfig,
+):
+    """
+    arrange: given a test partial http proxy config and a mock jenkins client.
+    act: when _configure_proxy is called.
+    assert: mock client is called with correct proxy arguments.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_run_groovy_script = unittest.mock.MagicMock()
+    mock_client.run_groovy_script = mock_run_groovy_script
+
+    jenkins._configure_proxy(harness_container.container, http_partial_proxy_config, mock_client)
+
+    assert (
+        http_partial_proxy_config.http_proxy
+    ), "Http value for proxy config fixture cannot be None."
+    mock_run_groovy_script.assert_called_once_with(
+        f"proxy = new ProxyConfiguration('{http_partial_proxy_config.http_proxy.host}', "
+        f"'{http_partial_proxy_config.http_proxy.port}', '', '')\n"
         "proxy.save()"
     )
 
@@ -310,9 +336,13 @@ def test__configure_proxy(
 
     jenkins._configure_proxy(harness_container.container, proxy_config, mock_client)
 
+    # Assert for type not being None.
+    assert proxy_config.https_proxy, "https proxy should not be None."
     mock_run_groovy_script.assert_called_once_with(
-        f"proxy = new ProxyConfiguration('{proxy_config.hostname}', '{proxy_config.port}', "
-        f"'{proxy_config.username}', '{proxy_config.password}', '{proxy_config.no_proxy}')\n"
+        f"proxy = new ProxyConfiguration('{proxy_config.https_proxy.host}', "
+        f"'{proxy_config.https_proxy.port}', "
+        f"'{proxy_config.https_proxy.user}', '{proxy_config.https_proxy.password}', "
+        f"'{proxy_config.no_proxy}')\n"
         "proxy.save()"
     )
 
