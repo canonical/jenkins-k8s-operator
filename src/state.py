@@ -179,10 +179,9 @@ class ProxyConfig(BaseModel):
         Returns:
             ProxyConfig if proxy configuration is provided, None otherwise.
         """
-        http_proxy = env.get("JUJU_CHARM_HTTP_PROXY")
-        https_proxy = env.get("JUJU_CHARM_HTTPS_PROXY")
-        no_proxy = env.get("JUJU_CHARM_NO_PROXY")
-
+        http_proxy = env.get("HTTP_PROXY")
+        https_proxy = env.get("HTTPS_PROXY")
+        no_proxy = env.get("NO_PROXY")
         if not http_proxy and not https_proxy:
             return None
         # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
@@ -243,7 +242,9 @@ class State:
                 charm.model.get_relation(AGENT_RELATION), charm.app.name
             )
         except ValidationError as exc:
-            logger.error("Invalid agent relation data received from %s relation.", AGENT_RELATION)
+            logger.error(
+                "Invalid agent relation data received from %s relation, %s", AGENT_RELATION, exc
+            )
             raise CharmRelationDataInvalidError(
                 f"Invalid {AGENT_RELATION} relation data."
             ) from exc
@@ -254,12 +255,19 @@ class State:
             )
         except ValidationError as exc:
             logger.error(
-                "Invalid agent relation data received from %s relation.", DEPRECATED_AGENT_RELATION
+                "Invalid agent relation data received from %s relation, %s",
+                DEPRECATED_AGENT_RELATION,
+                exc,
             )
             raise CharmRelationDataInvalidError(
                 f"Invalid {DEPRECATED_AGENT_RELATION} relation data."
             ) from exc
-        proxy_config = ProxyConfig.from_charm_env(os.environ)
+
+        try:
+            proxy_config = ProxyConfig.from_charm_env(os.environ)
+        except ValidationError as exc:
+            logger.error("Invalid juju model proxy configuration, %s", exc)
+            raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
 
         return cls(
             update_time_range=update_time_range,

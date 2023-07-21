@@ -273,7 +273,7 @@ def _configure_proxy(
     if proxy_config.https_proxy:
         proxy_args = [
             f"'{proxy_config.https_proxy.host}'",
-            f"'{proxy_config.https_proxy.port}'",
+            f"{proxy_config.https_proxy.port}",
             f"'{proxy_config.https_proxy.user or ''}'",
             f"'{proxy_config.https_proxy.password or ''}'",
         ]
@@ -282,7 +282,7 @@ def _configure_proxy(
         http_proxy = typing.cast(HttpUrl, proxy_config.http_proxy)
         proxy_args = [
             f"'{http_proxy.host}'",
-            f"'{http_proxy.port}'",
+            f"{http_proxy.port}",
             f"'{http_proxy.user or ''}'",
             f"'{http_proxy.password or ''}'",
         ]
@@ -482,8 +482,11 @@ def _get_major_minor_version(version: str) -> str:
     return ".".join(version.split(".")[0:2])
 
 
-def _fetch_versions_from_rss() -> typing.Iterable[str]:
+def _fetch_versions_from_rss(proxy: state.ProxyConfig | None = None) -> typing.Iterable[str]:
     """Fetch and extract Jenkins versions from the stable RSS feed.
+
+    Args:
+        proxy: Proxy server to route the requests through.
 
     Returns:
         The jenkins versions from the RSS feed.
@@ -492,8 +495,12 @@ def _fetch_versions_from_rss() -> typing.Iterable[str]:
         JenkinsNetworkError: if there was an error fetching the RSS feed.
         ValidationError: if an invalid RSS feed was received.
     """
+    if proxy:
+        proxies = {"http": str(proxy.http_proxy), "https": str(proxy.https_proxy)}
+    else:
+        proxies = None
     try:
-        res = requests.get(RSS_FEED_URL, timeout=30)
+        res = requests.get(RSS_FEED_URL, timeout=30, proxies=proxies)
         res.raise_for_status()
     except (
         requests.exceptions.ConnectionError,
@@ -521,11 +528,12 @@ def _fetch_versions_from_rss() -> typing.Iterable[str]:
     return versions
 
 
-def _get_latest_patch_version(current_version: str) -> str:
+def _get_latest_patch_version(current_version: str, proxy: state.ProxyConfig | None = None) -> str:
     """Get the latest lts patch version matching with the current version.
 
     Args:
         current_version: Current LTS semantic version.
+        proxy: Proxy server to route the requests through.
 
     Returns:
         The latest patched version available.
@@ -535,7 +543,7 @@ def _get_latest_patch_version(current_version: str) -> str:
         ValidationError: if the RSS feed contains no matching LTS version.
     """
     try:
-        versions = _fetch_versions_from_rss()
+        versions = _fetch_versions_from_rss(proxy=proxy)
     except (JenkinsNetworkError, ValidationError) as exc:
         logger.error("Failed to fetch Jenkins versions from rss, %s", exc)
         raise
@@ -553,8 +561,11 @@ def _get_latest_patch_version(current_version: str) -> str:
     return sorted_versions[0]
 
 
-def get_updatable_version() -> str | None:
+def get_updatable_version(proxy: state.ProxyConfig | None = None) -> str | None:
     """Get version to update to if available.
+
+    Args:
+        proxy: Proxy server to route the requests through.
 
     Raises:
         JenkinsUpdateError: if there was an error trying to determine next Jenkins update version.
@@ -569,7 +580,7 @@ def get_updatable_version() -> str | None:
         raise JenkinsUpdateError("Failed to get Jenkins version.") from exc
 
     try:
-        latest_version = _get_latest_patch_version(current_version=current_version)
+        latest_version = _get_latest_patch_version(current_version=current_version, proxy=proxy)
     except (JenkinsNetworkError, ValidationError) as exc:
         logger.error("Failed to fetch latest patch version info, %s", exc)
         raise JenkinsUpdateError("Failed to fetch latest patch version info.") from exc

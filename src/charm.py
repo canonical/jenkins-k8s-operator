@@ -162,7 +162,7 @@ class JenkinsK8sOperatorCharm(CharmBase):
 
         self.unit.status = ActiveStatus("Checking for updates.")
         try:
-            latest_patch_version = jenkins.get_updatable_version()
+            latest_patch_version = jenkins.get_updatable_version(proxy=self.state.proxy_config)
         except jenkins.JenkinsUpdateError as exc:
             logger.error("Failed to get Jenkins updates, %s", exc)
             self.unit.status = ActiveStatus("Failed to get Jenkins patch version.")

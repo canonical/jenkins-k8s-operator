@@ -79,6 +79,19 @@ def test_agent_meta__validate(invalid_meta: TestAgentMeta):
         state.AgentMeta(**invalid_meta)
 
 
+def test_proxyconfig_invalid(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given a monkeypatched os.environ mapping that contains invalid proxy values.
+    act: when charm state is initialized.
+    assert: CharmConfigInvalidError is raised.
+    """
+    monkeypatch.setattr(state.os, "environ", {"HTTP_PROXY": "INVALID_URL"})
+    harness.begin()
+
+    with pytest.raises(state.CharmConfigInvalidError):
+        state.State.from_charm(harness.charm)
+
+
 def test_proxyconfig_none(harness: Harness):
     """
     arrange: given mapping without proxy configuration.
@@ -94,17 +107,18 @@ def test_proxyconfig_from_charm_env(harness: Harness, proxy_config: state.ProxyC
     """
     arrange: given mapping with proxy configurations.
     act: when ProxyConfig.from_charm_config is called.
-    assert: Validation Error is raised.
+    assert: valid proxy configuration is returned.
     """
     harness.begin()
 
-    assert (
-        state.ProxyConfig.from_charm_env(
-            {
-                "JUJU_CHARM_HTTP_PROXY": str(proxy_config.http_proxy),
-                "JUJU_CHARM_HTTPS_PROXY": str(proxy_config.https_proxy),
-                "JUJU_CHARM_NO_PROXY": str(proxy_config.no_proxy),
-            }
-        )
-        == proxy_config
+    config = state.ProxyConfig.from_charm_env(
+        {
+            "HTTP_PROXY": str(proxy_config.http_proxy),
+            "HTTPS_PROXY": str(proxy_config.https_proxy),
+            "NO_PROXY": str(proxy_config.no_proxy),
+        }
     )
+    assert config, "Valid proxy config should not return None."
+    assert config.http_proxy == proxy_config.http_proxy
+    assert config.https_proxy == proxy_config.https_proxy
+    assert config.no_proxy == proxy_config.no_proxy
