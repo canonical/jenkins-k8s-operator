@@ -60,6 +60,8 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
     charm = request.config.getoption("--charm-file")
     if not charm:
         charm = await ops_test.build_charm(".")
+    else:
+        charm = f"./{charm}"
 
     return charm
 
