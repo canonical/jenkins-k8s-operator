@@ -205,6 +205,25 @@ Instantiate ProxyConfig from juju charm environment.
 **Returns:**
   ProxyConfig if proxy configuration is provided, None otherwise. 
 
+---
+
+<a href="../src/state.py#L189"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `to_str_dict`
+
+```python
+to_str_dict() → dict[str, str]
+```
+
+Get dictionary values where no values are of type None. 
+
+This is a helper function to allow empty values to be casted to string as empty string ("") rather than "None". 
+
+
+
+**Returns:**
+  A proxy configuration values dictionary with empty string as default. 
+
 
 ---
 
@@ -226,7 +245,7 @@ The Jenkins k8s operator charm state.
 
 ---
 
-<a href="../src/state.py#L211"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L231"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_charm`
 

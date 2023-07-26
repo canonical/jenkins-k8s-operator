@@ -19,7 +19,6 @@ import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
 import ops
 import requests
-from pydantic import HttpUrl
 
 import state
 
@@ -269,23 +268,23 @@ def _configure_proxy(
         return
 
     client = client if client is not None else _get_client(get_admin_credentials(container))
+    proxy_dict = proxy_config.to_str_dict()
 
     if proxy_config.https_proxy:
         proxy_args = [
-            f"'{proxy_config.https_proxy.host}'",
-            f"{proxy_config.https_proxy.port}",
-            f"'{proxy_config.https_proxy.user or ''}'",
-            f"'{proxy_config.https_proxy.password or ''}'",
+            f"'{proxy_dict['HTTPS_PROXY_HOST']}'",
+            f"{proxy_dict['HTTPS_PROXY_PORT']}",
+            f"'{proxy_dict['HTTPS_PROXY_USER']}'",
+            f"'{proxy_dict['HTTPS_PROXY_PASSWORD']}'",
         ]
     else:
         # http proxy and https proxy value cannot both be None since proxy_config would be parsed
         # as None.
-        http_proxy = typing.cast(HttpUrl, proxy_config.http_proxy)
         proxy_args = [
-            f"'{http_proxy.host}'",
-            f"{http_proxy.port}",
-            f"'{http_proxy.user or ''}'",
-            f"'{http_proxy.password or ''}'",
+            f"'{proxy_dict['HTTP_PROXY_HOST']}'",
+            f"{proxy_dict['HTTP_PROXY_PORT']}",
+            f"'{proxy_dict['HTTP_PROXY_USER']}'",
+            f"'{proxy_dict['HTTP_PROXY_PASSWORD']}'",
         ]
     if proxy_config.no_proxy:
         proxy_args += [f"'{proxy_config.no_proxy}'"]
@@ -312,19 +311,20 @@ def _install_plugins(
         JenkinsPluginError: if an error occurred installing the plugin.
     """
     command = ["java"]
+    proxy_dict = proxy_config.to_str_dict() if proxy_config else {}
     if proxy_config and proxy_config.http_proxy:
         command += [
-            f"-Dhttp.proxyHost={proxy_config.http_proxy.host}",
-            f"-Dhttp.proxyPort={proxy_config.http_proxy.port}",
-            f"-Dhttp.proxyUser={proxy_config.http_proxy.user or ''}",
-            f"-Dhttp.proxyPassword={proxy_config.http_proxy.password or ''}",
+            f"-Dhttp.proxyHost={proxy_dict['HTTP_PROXY_HOST']}",
+            f"-Dhttp.proxyPort={proxy_dict['HTTP_PROXY_PORT']}",
+            f"-Dhttp.proxyUser={proxy_dict['HTTP_PROXY_USER']}",
+            f"-Dhttp.proxyPassword={proxy_dict['HTTP_PROXY_PASSWORD']}",
         ]
     if proxy_config and proxy_config.https_proxy:
         command += [
-            f"-Dhttps.proxyHost={proxy_config.https_proxy.host}",
-            f"-Dhttps.proxyPort={proxy_config.https_proxy.port}",
-            f"-Dhttps.proxyUser={proxy_config.https_proxy.user or ''}",
-            f"-Dhttps.proxyPassword={proxy_config.https_proxy.password or ''}",
+            f"-Dhttps.proxyHost={proxy_dict['HTTPS_PROXY_HOST']}",
+            f"-Dhttps.proxyPort={proxy_dict['HTTPS_PROXY_PORT']}",
+            f"-Dhttps.proxyUser={proxy_dict['HTTPS_PROXY_USER']}",
+            f"-Dhttps.proxyPassword={proxy_dict['HTTPS_PROXY_PASSWORD']}",
         ]
     if proxy_config and proxy_config.no_proxy:
         formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
