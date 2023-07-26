@@ -171,7 +171,7 @@ async def new_relation_k8s_agents_related_fixture(
     return application
 
 
-@pytest_asyncio.fixture(scope="module", name="jenkins_client")
+@pytest_asyncio.fixture(scope="function", name="jenkins_client")
 async def jenkins_client_fixture(
     application: Application,
     web_address: str,
