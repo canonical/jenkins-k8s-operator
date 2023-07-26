@@ -92,12 +92,14 @@ def test_proxyconfig_invalid(harness: Harness, monkeypatch: pytest.MonkeyPatch):
         state.State.from_charm(harness.charm)
 
 
-def test_proxyconfig_none(harness: Harness):
+def test_proxyconfig_none(harness: Harness, monkeypatch: pytest.MonkeyPatch):
     """
     arrange: given mapping without proxy configuration.
     act: when ProxyConfig.from_charm_config is called.
     assert: None is returned.
     """
+    # has to be monkeypatched to empty value since Github Runner will pick up squid.internal proxy.
+    monkeypatch.setattr(state.os, "environ", {})
     harness.begin()
 
     assert state.ProxyConfig.from_env() is None
