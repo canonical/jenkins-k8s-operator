@@ -100,24 +100,29 @@ def test_proxyconfig_none(harness: Harness):
     """
     harness.begin()
 
-    assert state.ProxyConfig.from_charm_env({}) is None
+    assert state.ProxyConfig.from_env() is None
 
 
-def test_proxyconfig_from_charm_env(harness: Harness, proxy_config: state.ProxyConfig):
+def test_proxyconfig_from_charm_env(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch, proxy_config: state.ProxyConfig
+):
     """
-    arrange: given mapping with proxy configurations.
+    arrange: given a monkeypatched os.environ with proxy configurations.
     act: when ProxyConfig.from_charm_config is called.
     assert: valid proxy configuration is returned.
     """
-    harness.begin()
-
-    config = state.ProxyConfig.from_charm_env(
+    monkeypatch.setattr(
+        state.os,
+        "environ",
         {
             "HTTP_PROXY": str(proxy_config.http_proxy),
             "HTTPS_PROXY": str(proxy_config.https_proxy),
             "NO_PROXY": str(proxy_config.no_proxy),
-        }
+        },
     )
+    harness.begin()
+
+    config = state.ProxyConfig.from_env()
     assert config, "Valid proxy config should not return None."
     assert config.http_proxy == proxy_config.http_proxy
     assert config.https_proxy == proxy_config.https_proxy

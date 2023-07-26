@@ -192,24 +192,18 @@ Configuration for accessing Jenkins through proxy.
 
 <a href="../src/state.py#L172"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-### <kbd>classmethod</kbd> `from_charm_env`
+### <kbd>classmethod</kbd> `from_env`
 
 ```python
-from_charm_env(env: Mapping[str, str]) → Optional[ForwardRef('ProxyConfig')]
+from_env() → Optional[ForwardRef('ProxyConfig')]
 ```
 
 Instantiate ProxyConfig from juju charm environment. 
 
 
 
-**Args:**
- 
- - <b>`env`</b>:  The charm environment variable. 
-
-
-
 **Returns:**
- ProxyConfig if proxy configuration is provided, None otherwise. 
+  ProxyConfig if proxy configuration is provided, None otherwise. 
 
 
 ---
@@ -232,7 +226,7 @@ The Jenkins k8s operator charm state.
 
 ---
 
-<a href="../src/state.py#L214"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L211"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_charm`
 

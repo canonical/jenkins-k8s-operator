@@ -278,7 +278,8 @@ def _configure_proxy(
             f"'{proxy_config.https_proxy.password or ''}'",
         ]
     else:
-        # http proxy and https proxy value both cannot be None at the same time.
+        # http proxy and https proxy value cannot both be None since proxy_config would be parsed
+        # as None.
         http_proxy = typing.cast(HttpUrl, proxy_config.http_proxy)
         proxy_args = [
             f"'{http_proxy.host}'",

@@ -9,7 +9,7 @@ import os
 import typing
 
 import ops
-from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
+from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, validator
 
 from timerange import InvalidTimeRangeError, Range
 
@@ -165,23 +165,20 @@ class ProxyConfig(BaseModel):
         no_proxy: Comma separated list of hostnames to bypass proxy.
     """
 
-    http_proxy: typing.Optional[HttpUrl]
-    https_proxy: typing.Optional[HttpUrl]
+    http_proxy: typing.Optional[AnyHttpUrl]
+    https_proxy: typing.Optional[AnyHttpUrl]
     no_proxy: typing.Optional[str]
 
     @classmethod
-    def from_charm_env(cls, env: typing.Mapping[str, str]) -> typing.Optional["ProxyConfig"]:
+    def from_env(cls) -> typing.Optional["ProxyConfig"]:
         """Instantiate ProxyConfig from juju charm environment.
-
-        Args:
-            env: The charm environment variable.
 
         Returns:
             ProxyConfig if proxy configuration is provided, None otherwise.
         """
-        http_proxy = env.get("HTTP_PROXY")
-        https_proxy = env.get("HTTPS_PROXY")
-        no_proxy = env.get("NO_PROXY")
+        http_proxy = os.environ.get("HTTP_PROXY")
+        https_proxy = os.environ.get("HTTPS_PROXY")
+        no_proxy = os.environ.get("NO_PROXY")
         if not http_proxy and not https_proxy:
             return None
         # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
@@ -264,7 +261,7 @@ class State:
             ) from exc
 
         try:
-            proxy_config = ProxyConfig.from_charm_env(os.environ)
+            proxy_config = ProxyConfig.from_env()
         except ValidationError as exc:
             logger.error("Invalid juju model proxy configuration, %s", exc)
             raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
