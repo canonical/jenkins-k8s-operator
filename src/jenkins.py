@@ -260,22 +260,18 @@ def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[s
         Groovy script proxy arguments.
     """
     if proxy_config.https_proxy:
-        yield from (
-            f"'{proxy_config.https_proxy.host}'",
-            f"{proxy_config.https_proxy.port}",
-            f"'{proxy_config.https_proxy.user or ''}'",
-            f"'{proxy_config.https_proxy.password or ''}'",
-        )
+        yield f"'{proxy_config.https_proxy.host}'",
+        yield f"{proxy_config.https_proxy.port}",
+        yield f"'{proxy_config.https_proxy.user or ''}'",
+        yield f"'{proxy_config.https_proxy.password or ''}'",
     else:
         # http proxy and https proxy value cannot both be None since proxy_config would be parsed
         # as None.
         proxy_config.http_proxy = typing.cast(HttpUrl, proxy_config.http_proxy)
-        yield from (
-            f"'{proxy_config.http_proxy.host}'",
-            f"{proxy_config.http_proxy.port}",
-            f"'{proxy_config.http_proxy.user or ''}'",
-            f"'{proxy_config.http_proxy.password or ''}'",
-        )
+        yield f"'{proxy_config.http_proxy.host}'",
+        yield f"{proxy_config.http_proxy.port}",
+        yield f"'{proxy_config.http_proxy.user or ''}'",
+        yield f"'{proxy_config.http_proxy.password or ''}'",
     if proxy_config.no_proxy:
         yield f"'{proxy_config.no_proxy}'"
 
@@ -317,25 +313,17 @@ def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str
         JVM System property proxy arguments.
     """
     if proxy_config.http_proxy:
-        yield from (
-            f"-Dhttp.proxyHost={proxy_config.http_proxy.host}",
-            f"-Dhttp.proxyPort={proxy_config.http_proxy.port}",
-        )
+        yield f"-Dhttp.proxyHost={proxy_config.http_proxy.host}",
+        yield f"-Dhttp.proxyPort={proxy_config.http_proxy.port}",
         if proxy_config.http_proxy.user and proxy_config.http_proxy.password:
-            yield from (
-                f"-Dhttp.proxyUser={proxy_config.http_proxy.user}",
-                f"-Dhttp.proxyPassword={proxy_config.http_proxy.password}",
-            )
+            yield f"-Dhttp.proxyUser={proxy_config.http_proxy.user}",
+            yield f"-Dhttp.proxyPassword={proxy_config.http_proxy.password}",
     if proxy_config.https_proxy:
-        yield from (
-            f"-Dhttps.proxyHost={proxy_config.https_proxy.host}",
-            f"-Dhttps.proxyPort={proxy_config.https_proxy.port}",
-        )
+        yield f"-Dhttps.proxyHost={proxy_config.https_proxy.host}",
+        yield f"-Dhttps.proxyPort={proxy_config.https_proxy.port}",
         if proxy_config.https_proxy.user and proxy_config.https_proxy.password:
-            yield from (
-                f"-Dhttps.proxyUser={proxy_config.https_proxy.user}",
-                f"-Dhttps.proxyPassword={proxy_config.https_proxy.password}",
-            )
+            yield f"-Dhttps.proxyUser={proxy_config.https_proxy.user}",
+            yield f"-Dhttps.proxyPassword={proxy_config.https_proxy.password}",
     if proxy_config.no_proxy:
         formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
         yield f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"'
