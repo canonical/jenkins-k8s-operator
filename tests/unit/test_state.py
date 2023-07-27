@@ -85,7 +85,7 @@ def test_proxyconfig_invalid(harness: Harness, monkeypatch: pytest.MonkeyPatch):
     act: when charm state is initialized.
     assert: CharmConfigInvalidError is raised.
     """
-    monkeypatch.setattr(state.os, "environ", {"HTTP_PROXY": "INVALID_URL"})
+    monkeypatch.setattr(state.os, "environ", {"JUJU_CHARM_HTTP_PROXY": "INVALID_URL"})
     harness.begin()
 
     with pytest.raises(state.CharmConfigInvalidError):
@@ -117,9 +117,9 @@ def test_proxyconfig_from_charm_env(
         state.os,
         "environ",
         {
-            "HTTP_PROXY": str(proxy_config.http_proxy),
-            "HTTPS_PROXY": str(proxy_config.https_proxy),
-            "NO_PROXY": str(proxy_config.no_proxy),
+            "JUJU_CHARM_HTTP_PROXY": str(proxy_config.http_proxy),
+            "JUJU_CHARM_HTTPS_PROXY": str(proxy_config.https_proxy),
+            "JUJU_CHARM_NO_PROXY": str(proxy_config.no_proxy),
         },
     )
     harness.begin()

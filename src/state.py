@@ -176,9 +176,9 @@ class ProxyConfig(BaseModel):
         Returns:
             ProxyConfig if proxy configuration is provided, None otherwise.
         """
-        http_proxy = os.environ.get("HTTP_PROXY")
-        https_proxy = os.environ.get("HTTPS_PROXY")
-        no_proxy = os.environ.get("NO_PROXY")
+        http_proxy = os.environ.get("JUJU_CHARM_HTTP_PROXY")
+        https_proxy = os.environ.get("JUJU_CHARM_HTTPS_PROXY")
+        no_proxy = os.environ.get("JUJU_CHARM_NO_PROXY")
         if not http_proxy and not https_proxy:
             return None
         # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
