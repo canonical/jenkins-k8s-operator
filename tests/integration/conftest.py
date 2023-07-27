@@ -511,13 +511,11 @@ async def model_with_proxy_fixture(
 ) -> typing.AsyncGenerator[Model, None]:
     """Model with proxy configuration values."""
     tinyproxy_url = f"http://{tinyproxy_ip}:{tinyproxy_port}"
-    await model.set_config(
-        {"JUJU_CHARM_HTTP_PROXY": tinyproxy_url, "JUJU_CHARM_HTTPS_PROXY": tinyproxy_url}
-    )
+    await model.set_config({"juju-http-proxy": tinyproxy_url, "juju-https-proxy": tinyproxy_url})
 
     yield model
 
-    await model.set_config({"JUJU_CHARM_HTTP_PROXY": "", "JUJU_CHARM_HTTPS_PROXY": ""})
+    await model.set_config({"juju-http-proxy": "", "juju-https-proxy": ""})
 
 
 @pytest_asyncio.fixture(scope="module", name="jenkins_with_proxy")
