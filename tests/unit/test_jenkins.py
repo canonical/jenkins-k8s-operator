@@ -224,6 +224,70 @@ def test__install_config(harness_container: HarnessWithContainer):
     assert jnlp_match.group(1) == "50000", "jnlp not set as default port."
 
 
+@pytest.mark.parametrize(
+    "proxy_config,expected_args",
+    [
+        pytest.param(
+            # mypy doesn't understand pydantic converts string to HttpUrl.
+            state.ProxyConfig(
+                http_proxy="http://testing.internal",  # type: ignore
+                https_proxy=None,
+                no_proxy=None,
+            ),
+            ("-Dhttp.proxyHost=testing.internal", "-Dhttp.proxyPort=80"),
+            id="http_proxy only",
+        ),
+        pytest.param(
+            state.ProxyConfig(
+                http_proxy=None,
+                https_proxy="https://testing.internal",  # type: ignore
+                no_proxy=None,
+            ),
+            ("-Dhttps.proxyHost=testing.internal", "-Dhttps.proxyPort=443"),
+            id="https_proxy only",
+        ),
+        pytest.param(
+            state.ProxyConfig(
+                http_proxy="http://testing.internal",  # type: ignore
+                https_proxy="https://testing.internal",  # type: ignore
+                no_proxy=None,
+            ),
+            (
+                "-Dhttp.proxyHost=testing.internal",
+                "-Dhttp.proxyPort=80",
+                "-Dhttps.proxyHost=testing.internal",
+                "-Dhttps.proxyPort=443",
+            ),
+            id="both proxies",
+        ),
+        pytest.param(
+            state.ProxyConfig(
+                http_proxy="http://testing.internal",  # type: ignore
+                https_proxy="https://testing.internal",  # type: ignore
+                no_proxy="localhost",
+            ),
+            (
+                "-Dhttp.proxyHost=testing.internal",
+                "-Dhttp.proxyPort=80",
+                "-Dhttps.proxyHost=testing.internal",
+                "-Dhttps.proxyPort=443",
+                '-Dhttp.nonProxyHosts="localhost"',
+            ),
+            id="full config",
+        ),
+    ],
+)
+def test__get_java_proxy_args(
+    proxy_config: state.ProxyConfig, expected_args: typing.Iterable[str]
+):
+    """
+    arrange: given a proxy configuration.
+    act: when _get_java_proxy_args is called.
+    assert: proper arguments from proxy configuration is generated.
+    """
+    assert tuple(jenkins._get_java_proxy_args(proxy_config)) == expected_args
+
+
 def test__install_plugins_fail(raise_exception):
     """
     arrange: given a mocked container with a mocked failing process.

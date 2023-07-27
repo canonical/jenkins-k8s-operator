@@ -19,6 +19,7 @@ import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
 import ops
 import requests
+from pydantic import HttpUrl
 
 import state
 
@@ -249,6 +250,36 @@ def _install_configs(container: ops.Container) -> None:
         container.push(JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file, user=USER, group=GROUP)
 
 
+def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
+    """Get proxy arguments for proxy configuration Groovy script.
+
+    Args:
+        proxy_config: The proxy settings to apply.
+
+    Yields:
+        Groovy script proxy arguments.
+    """
+    if proxy_config.https_proxy:
+        yield from (
+            f"'{proxy_config.https_proxy.host}'",
+            f"{proxy_config.https_proxy.port}",
+            f"'{proxy_config.https_proxy.user or ''}'",
+            f"'{proxy_config.https_proxy.password or ''}'",
+        )
+    else:
+        # http proxy and https proxy value cannot both be None since proxy_config would be parsed
+        # as None.
+        proxy_config.http_proxy = typing.cast(HttpUrl, proxy_config.http_proxy)
+        yield from (
+            f"'{proxy_config.http_proxy.host}'",
+            f"{proxy_config.http_proxy.port}",
+            f"'{proxy_config.http_proxy.user or ''}'",
+            f"'{proxy_config.http_proxy.password or ''}'",
+        )
+    if proxy_config.no_proxy:
+        yield f"'{proxy_config.no_proxy}'"
+
+
 def _configure_proxy(
     container: ops.Container,
     proxy_config: state.ProxyConfig | None = None,
@@ -268,32 +299,46 @@ def _configure_proxy(
         return
 
     client = client if client is not None else _get_client(get_admin_credentials(container))
-    proxy_dict = proxy_config.to_str_dict()
-
-    if proxy_config.https_proxy:
-        proxy_args = [
-            f"'{proxy_dict['HTTPS_PROXY_HOST']}'",
-            f"{proxy_dict['HTTPS_PROXY_PORT']}",
-            f"'{proxy_dict['HTTPS_PROXY_USER']}'",
-            f"'{proxy_dict['HTTPS_PROXY_PASSWORD']}'",
-        ]
-    else:
-        # http proxy and https proxy value cannot both be None since proxy_config would be parsed
-        # as None.
-        proxy_args = [
-            f"'{proxy_dict['HTTP_PROXY_HOST']}'",
-            f"{proxy_dict['HTTP_PROXY_PORT']}",
-            f"'{proxy_dict['HTTP_PROXY_USER']}'",
-            f"'{proxy_dict['HTTP_PROXY_PASSWORD']}'",
-        ]
-    if proxy_config.no_proxy:
-        proxy_args += [f"'{proxy_config.no_proxy}'"]
-    parsed_args = ", ".join(proxy_args)
+    parsed_args = ", ".join(_get_groovy_proxy_args(proxy_config))
     try:
         client.run_groovy_script(f"proxy = new ProxyConfiguration({parsed_args})\nproxy.save()")
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to configure proxy, %s", exc)
         raise JenkinsProxyError("Proxy configuration failed.") from exc
+
+
+def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
+    """Get JVM system property arguments for proxy.
+
+    Args:
+        proxy_config: The proxy settings to apply.
+
+    Yields:
+        JVM System property proxy arguments.
+    """
+    if proxy_config.http_proxy:
+        yield from (
+            f"-Dhttp.proxyHost={proxy_config.http_proxy.host}",
+            f"-Dhttp.proxyPort={proxy_config.http_proxy.port}",
+        )
+        if proxy_config.http_proxy.user and proxy_config.http_proxy.password:
+            yield from (
+                f"-Dhttp.proxyUser={proxy_config.http_proxy.user}",
+                f"-Dhttp.proxyPassword={proxy_config.http_proxy.password}",
+            )
+    if proxy_config.https_proxy:
+        yield from (
+            f"-Dhttps.proxyHost={proxy_config.https_proxy.host}",
+            f"-Dhttps.proxyPort={proxy_config.https_proxy.port}",
+        )
+        if proxy_config.https_proxy.user and proxy_config.https_proxy.password:
+            yield from (
+                f"-Dhttps.proxyUser={proxy_config.https_proxy.user}",
+                f"-Dhttps.proxyPassword={proxy_config.https_proxy.password}",
+            )
+    if proxy_config.no_proxy:
+        formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
+        yield f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"'
 
 
 def _install_plugins(
@@ -310,27 +355,10 @@ def _install_plugins(
     Raises:
         JenkinsPluginError: if an error occurred installing the plugin.
     """
-    command = ["java"]
-    proxy_dict = proxy_config.to_str_dict() if proxy_config else {}
-    if proxy_config and proxy_config.http_proxy:
-        command += [
-            f"-Dhttp.proxyHost={proxy_dict['HTTP_PROXY_HOST']}",
-            f"-Dhttp.proxyPort={proxy_dict['HTTP_PROXY_PORT']}",
-            f"-Dhttp.proxyUser={proxy_dict['HTTP_PROXY_USER']}",
-            f"-Dhttp.proxyPassword={proxy_dict['HTTP_PROXY_PASSWORD']}",
-        ]
-    if proxy_config and proxy_config.https_proxy:
-        command += [
-            f"-Dhttps.proxyHost={proxy_dict['HTTPS_PROXY_HOST']}",
-            f"-Dhttps.proxyPort={proxy_dict['HTTPS_PROXY_PORT']}",
-            f"-Dhttps.proxyUser={proxy_dict['HTTPS_PROXY_USER']}",
-            f"-Dhttps.proxyPassword={proxy_dict['HTTPS_PROXY_PASSWORD']}",
-        ]
-    if proxy_config and proxy_config.no_proxy:
-        formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
-        # http and https share same nonProxyHosts value
-        command += [f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"']
-    command += [
+    proxy_args = [] if not proxy_config else _get_java_proxy_args(proxy_config)
+    command = [
+        "java",
+        *proxy_args,
         "-jar",
         "jenkins-plugin-manager-2.12.11.jar",
         "-w",

@@ -9,7 +9,7 @@ import os
 import typing
 
 import ops
-from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
 
 from timerange import InvalidTimeRangeError, Range
 
@@ -165,8 +165,8 @@ class ProxyConfig(BaseModel):
         no_proxy: Comma separated list of hostnames to bypass proxy.
     """
 
-    http_proxy: typing.Optional[AnyHttpUrl]
-    https_proxy: typing.Optional[AnyHttpUrl]
+    http_proxy: typing.Optional[HttpUrl]
+    https_proxy: typing.Optional[HttpUrl]
     no_proxy: typing.Optional[str]
 
     @classmethod
@@ -185,26 +185,6 @@ class ProxyConfig(BaseModel):
         return cls(
             http_proxy=http_proxy, https_proxy=https_proxy, no_proxy=no_proxy  # type: ignore
         )
-
-    def to_str_dict(self) -> dict[str, str]:
-        """Get dictionary values where no values are of type None.
-
-        This is a helper function to allow empty values to be casted to string as empty string ("")
-        rather than "None".
-
-        Returns:
-            A proxy configuration values dictionary with empty string as default.
-        """
-        return {
-            "HTTP_PROXY_HOST": self.http_proxy.host or "" if self.http_proxy else "",
-            "HTTP_PROXY_PORT": self.http_proxy.port or "" if self.http_proxy else "",
-            "HTTP_PROXY_USER": self.http_proxy.user or "" if self.http_proxy else "",
-            "HTTP_PROXY_PASSWORD": self.http_proxy.password or "" if self.http_proxy else "",
-            "HTTPS_PROXY_HOST": self.https_proxy.host or "" if self.https_proxy else "",
-            "HTTPS_PROXY_PORT": self.https_proxy.port or "" if self.https_proxy else "",
-            "HTTPS_PROXY_USER": self.https_proxy.user or "" if self.https_proxy else "",
-            "HTTPS_PROXY_PASSWORD": self.https_proxy.password or "" if self.https_proxy else "",
-        }
 
 
 @dataclasses.dataclass(frozen=True)
