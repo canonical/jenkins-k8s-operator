@@ -5,10 +5,11 @@
 import dataclasses
 import functools
 import logging
+import os
 import typing
 
 import ops
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
 
 from timerange import InvalidTimeRangeError, Range
 
@@ -155,6 +156,37 @@ def _get_agent_meta_map_from_relation(
     return {unit.name: AgentMeta.from_agent_relation(relation.data[unit]) for unit in remote_units}
 
 
+class ProxyConfig(BaseModel):
+    """Configuration for accessing Jenkins through proxy.
+
+    Attributes:
+        http_proxy: The http proxy URL.
+        https_proxy: The https proxy URL.
+        no_proxy: Comma separated list of hostnames to bypass proxy.
+    """
+
+    http_proxy: typing.Optional[HttpUrl]
+    https_proxy: typing.Optional[HttpUrl]
+    no_proxy: typing.Optional[str]
+
+    @classmethod
+    def from_env(cls) -> typing.Optional["ProxyConfig"]:
+        """Instantiate ProxyConfig from juju charm environment.
+
+        Returns:
+            ProxyConfig if proxy configuration is provided, None otherwise.
+        """
+        http_proxy = os.environ.get("JUJU_CHARM_HTTP_PROXY")
+        https_proxy = os.environ.get("JUJU_CHARM_HTTPS_PROXY")
+        no_proxy = os.environ.get("JUJU_CHARM_NO_PROXY")
+        if not http_proxy and not https_proxy:
+            return None
+        # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
+        return cls(
+            http_proxy=http_proxy, https_proxy=https_proxy, no_proxy=no_proxy  # type: ignore
+        )
+
+
 @dataclasses.dataclass(frozen=True)
 class State:
     """The Jenkins k8s operator charm state.
@@ -164,6 +196,7 @@ class State:
         agent_relation_meta: Metadata of all agents from units related through agent relation.
         deprecated_agent_relation_meta: Metadata of all agents from units related through
             deprecated agent relation.
+        proxy_config: Proxy configuration to access Jenkins upstream through.
         jenkins_service_name: The Jenkins service name. Note that the container name is the same.
     """
 
@@ -172,6 +205,7 @@ class State:
     deprecated_agent_relation_meta: typing.Optional[
         typing.Mapping[str, typing.Optional[AgentMeta]]
     ]
+    proxy_config: typing.Optional[ProxyConfig]
     jenkins_service_name: str = "jenkins"
 
     @classmethod
@@ -205,7 +239,9 @@ class State:
                 charm.model.get_relation(AGENT_RELATION), charm.app.name
             )
         except ValidationError as exc:
-            logger.error("Invalid agent relation data received from %s relation.", AGENT_RELATION)
+            logger.error(
+                "Invalid agent relation data received from %s relation, %s", AGENT_RELATION, exc
+            )
             raise CharmRelationDataInvalidError(
                 f"Invalid {AGENT_RELATION} relation data."
             ) from exc
@@ -216,14 +252,23 @@ class State:
             )
         except ValidationError as exc:
             logger.error(
-                "Invalid agent relation data received from %s relation.", DEPRECATED_AGENT_RELATION
+                "Invalid agent relation data received from %s relation, %s",
+                DEPRECATED_AGENT_RELATION,
+                exc,
             )
             raise CharmRelationDataInvalidError(
                 f"Invalid {DEPRECATED_AGENT_RELATION} relation data."
             ) from exc
 
+        try:
+            proxy_config = ProxyConfig.from_env()
+        except ValidationError as exc:
+            logger.error("Invalid juju model proxy configuration, %s", exc)
+            raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
+
         return cls(
             update_time_range=update_time_range,
             agent_relation_meta=agent_relation_meta_map,
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
+            proxy_config=proxy_config,
         )

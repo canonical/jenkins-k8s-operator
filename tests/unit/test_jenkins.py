@@ -224,6 +224,70 @@ def test__install_config(harness_container: HarnessWithContainer):
     assert jnlp_match.group(1) == "50000", "jnlp not set as default port."
 
 
+@pytest.mark.parametrize(
+    "proxy_config,expected_args",
+    [
+        pytest.param(
+            # mypy doesn't understand pydantic converts string to HttpUrl.
+            state.ProxyConfig(
+                http_proxy="http://testing.internal",  # type: ignore
+                https_proxy=None,
+                no_proxy=None,
+            ),
+            ("-Dhttp.proxyHost=testing.internal", "-Dhttp.proxyPort=80"),
+            id="http_proxy only",
+        ),
+        pytest.param(
+            state.ProxyConfig(
+                http_proxy=None,
+                https_proxy="https://testing.internal",  # type: ignore
+                no_proxy=None,
+            ),
+            ("-Dhttps.proxyHost=testing.internal", "-Dhttps.proxyPort=443"),
+            id="https_proxy only",
+        ),
+        pytest.param(
+            state.ProxyConfig(
+                http_proxy="http://testing.internal",  # type: ignore
+                https_proxy="https://testing.internal",  # type: ignore
+                no_proxy=None,
+            ),
+            (
+                "-Dhttp.proxyHost=testing.internal",
+                "-Dhttp.proxyPort=80",
+                "-Dhttps.proxyHost=testing.internal",
+                "-Dhttps.proxyPort=443",
+            ),
+            id="both proxies",
+        ),
+        pytest.param(
+            state.ProxyConfig(
+                http_proxy="http://testing.internal",  # type: ignore
+                https_proxy="https://testing.internal",  # type: ignore
+                no_proxy="localhost",
+            ),
+            (
+                "-Dhttp.proxyHost=testing.internal",
+                "-Dhttp.proxyPort=80",
+                "-Dhttps.proxyHost=testing.internal",
+                "-Dhttps.proxyPort=443",
+                '-Dhttp.nonProxyHosts="localhost"',
+            ),
+            id="full config",
+        ),
+    ],
+)
+def test__get_java_proxy_args(
+    proxy_config: state.ProxyConfig, expected_args: typing.Iterable[str]
+):
+    """
+    arrange: given a proxy configuration.
+    act: when _get_java_proxy_args is called.
+    assert: proper arguments from proxy configuration is generated.
+    """
+    assert tuple(jenkins._get_java_proxy_args(proxy_config)) == expected_args
+
+
 def test__install_plugins_fail(raise_exception):
     """
     arrange: given a mocked container with a mocked failing process.
@@ -241,13 +305,110 @@ def test__install_plugins_fail(raise_exception):
         jenkins._install_plugins(mock_container)
 
 
-def test__install_plugins(harness_container: HarnessWithContainer):
+def test__install_plugins(
+    harness_container: HarnessWithContainer, proxy_config: state.ProxyConfig
+):
     """
     arrange: given a mocked container with jenkins-plugin-manager executable.
     act: when _install_plugins is called.
     assert: No exceptions are raised.
     """
-    jenkins._install_plugins(harness_container.container)
+    jenkins._install_plugins(harness_container.container, proxy_config)
+
+
+def test__configure_proxy_fail(
+    harness_container: HarnessWithContainer,
+    proxy_config: state.ProxyConfig,
+    raise_exception: typing.Callable,
+):
+    """
+    arrange: given a test proxy config and a monkeypatched jenkins client that raises an exception.
+    act: when _configure_proxy is called.
+    assert: JenkinsProxyError is raised.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.run_groovy_script = lambda *_args, **_kwargs: raise_exception(
+        exception=jenkinsapi.custom_exceptions.JenkinsAPIException
+    )
+
+    with pytest.raises(jenkins.JenkinsProxyError) as exc:
+        jenkins._configure_proxy(harness_container.container, proxy_config, mock_client)
+
+    assert exc.value.args[0] == "Proxy configuration failed."
+
+
+def test__configure_proxy_partial(
+    harness_container: HarnessWithContainer,
+    partial_proxy_config: state.ProxyConfig,
+):
+    """
+    arrange: given a test partial proxy config and a mock jenkins client.
+    act: when _configure_proxy is called.
+    assert: mock client is called with correct proxy arguments.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_run_groovy_script = unittest.mock.MagicMock()
+    mock_client.run_groovy_script = mock_run_groovy_script
+
+    jenkins._configure_proxy(harness_container.container, partial_proxy_config, mock_client)
+
+    assert partial_proxy_config.https_proxy, "Https value for proxy config fixture cannot be None."
+    mock_run_groovy_script.assert_called_once_with(
+        f"proxy = new ProxyConfiguration('{partial_proxy_config.https_proxy.host}', "
+        f"{partial_proxy_config.https_proxy.port}, '', '')\n"
+        "proxy.save()"
+    )
+
+
+def test__configure_proxy_http(
+    harness_container: HarnessWithContainer,
+    http_partial_proxy_config: state.ProxyConfig,
+):
+    """
+    arrange: given a test partial http proxy config and a mock jenkins client.
+    act: when _configure_proxy is called.
+    assert: mock client is called with correct proxy arguments.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_run_groovy_script = unittest.mock.MagicMock()
+    mock_client.run_groovy_script = mock_run_groovy_script
+
+    jenkins._configure_proxy(harness_container.container, http_partial_proxy_config, mock_client)
+
+    assert (
+        http_partial_proxy_config.http_proxy
+    ), "Http value for proxy config fixture cannot be None."
+    mock_run_groovy_script.assert_called_once_with(
+        f"proxy = new ProxyConfiguration('{http_partial_proxy_config.http_proxy.host}', "
+        f"{http_partial_proxy_config.http_proxy.port}, '', '')\n"
+        "proxy.save()"
+    )
+
+
+def test__configure_proxy(
+    harness_container: HarnessWithContainer,
+    proxy_config: state.ProxyConfig,
+):
+    """
+    arrange: given a test proxy config and a mock jenkins client.
+    act: when _configure_proxy is called.
+    assert: mock client is called with correct proxy arguments.
+    """
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_run_groovy_script = unittest.mock.MagicMock()
+    mock_client.run_groovy_script = mock_run_groovy_script
+
+    jenkins._configure_proxy(harness_container.container, proxy_config, mock_client)
+
+    # Assert for type not being None.
+    assert proxy_config.https_proxy, "https proxy should not be None."
+    mock_run_groovy_script.assert_called_once_with(
+        f"proxy = new ProxyConfiguration('{proxy_config.https_proxy.host}', "
+        f"{proxy_config.https_proxy.port}, "
+        f"'{proxy_config.https_proxy.user}', '{proxy_config.https_proxy.password}', "
+        f"'{proxy_config.no_proxy}')\n"
+        "proxy.save()"
+    )
 
 
 def test_bootstrap_fail(
@@ -454,6 +615,29 @@ def test_fetch_versions_from_rss_failure(monkeypatch: pytest.MonkeyPatch):
 
     with pytest.raises(jenkins.JenkinsNetworkError):
         jenkins._fetch_versions_from_rss()
+
+
+def test_fetch_versions_from_rss_proxy(
+    monkeypatch: pytest.MonkeyPatch, rss_feed: bytes, proxy_config: state.ProxyConfig
+):
+    """
+    arrange: given a monkeypatched request to the Jenkins RSS feed.
+    act: when _fetch_versions_from_rss is called with proxy config.
+    assert: requests is called with proxies.
+    """
+    mock_rss_response = unittest.mock.MagicMock(spec=requests.Response)
+    mock_rss_response.content = rss_feed
+    mocked_get = unittest.mock.MagicMock(spec=requests.get)
+    mocked_get.return_value = mock_rss_response
+    monkeypatch.setattr(requests, "get", mocked_get)
+
+    jenkins._fetch_versions_from_rss(proxy_config)
+
+    mocked_get.assert_called_once_with(
+        jenkins.RSS_FEED_URL,
+        timeout=30,
+        proxies={"http": str(proxy_config.http_proxy), "https": str(proxy_config.https_proxy)},
+    )
 
 
 def test_fetch_versions_from_rss(

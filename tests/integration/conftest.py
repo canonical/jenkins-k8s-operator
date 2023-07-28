@@ -11,6 +11,8 @@ import textwrap
 import typing
 
 import jenkinsapi.jenkins
+import kubernetes.client
+import kubernetes.config
 import pytest
 import pytest_asyncio
 import requests
@@ -52,13 +54,23 @@ def num_units_fixture(request: FixtureRequest) -> int:
     return int(request.config.getoption("--num-units"))
 
 
+@pytest_asyncio.fixture(scope="module", name="charm")
+async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
+    """The path to charm."""
+    charm = request.config.getoption("--charm-file")
+    if not charm:
+        charm = await ops_test.build_charm(".")
+    else:
+        charm = f"./{charm}"
+
+    return charm
+
+
 @pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
-    ops_test: OpsTest, model: Model, jenkins_image: str
+    ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
 ) -> typing.AsyncGenerator[Application, None]:
-    """Build and deploy the charm."""
-    # Build and deploy charm from local source folder
-    charm = await ops_test.build_charm(".")
+    """Deploy the charm."""
     resources = {"jenkins-image": jenkins_image}
 
     # Deploy the charm and wait for active/idle status
@@ -72,7 +84,7 @@ async def application_fixture(
     )
 
     # slow down update-status so that it doesn't intervene currently running tests
-    async with ops_test.fast_forward(fast_interval="1h"):
+    async with ops_test.fast_forward(fast_interval="5h"):
         yield application
 
     await model.remove_application(application.name, force=True, block_until_done=True)
@@ -159,7 +171,7 @@ async def new_relation_k8s_agents_related_fixture(
     return application
 
 
-@pytest_asyncio.fixture(scope="module", name="jenkins_client")
+@pytest_asyncio.fixture(scope="function", name="jenkins_client")
 async def jenkins_client_fixture(
     application: Application,
     web_address: str,
@@ -389,4 +401,185 @@ def update_status_env_fixture(model: Model, unit: Unit) -> typing.Iterable[str]:
         "JUJU_DISPATCH_PATH=hooks/update-status",
         f"JUJU_MODEL_NAME={model.name}",
         f"JUJU_UNIT_NAME={unit.name}",
+    )
+
+
+@pytest.fixture(scope="module", name="kube_config")
+def kube_config_fixture(request: FixtureRequest) -> str:
+    """The kubernetes config file path."""
+    kube_config = request.config.getoption("--kube-config")
+    assert (
+        kube_config
+    ), "--kube-confg argument is required which should contain the path to kube config."
+    return kube_config
+
+
+@pytest.fixture(scope="module", name="kube_core_client")
+def kube_core_client_fixture(kube_config: str) -> kubernetes.client.CoreV1Api:
+    """Create a kubernetes client for core v1 API."""
+    kubernetes.config.load_kube_config(config_file=kube_config)
+    return kubernetes.client.CoreV1Api()
+
+
+@pytest.fixture(scope="module", name="kube_apps_client")
+def kube_apps_client_fixture(kube_config: str) -> kubernetes.client.AppsV1Api:
+    """Create a kubernetes client for apps v1 API."""
+    kubernetes.config.load_kube_config(config_file=kube_config)
+    return kubernetes.client.AppsV1Api()
+
+
+@pytest.fixture(scope="module", name="tinyproxy_port")
+def tinyproxy_port_fixture() -> int:
+    """Tinyproxy port."""
+    return 8888
+
+
+@pytest.fixture(scope="module", name="tiny_proxy_daemonset")
+def tiny_proxy_daemonset_fixture(
+    model: Model, kube_apps_client: kubernetes.client.AppsV1Api, tinyproxy_port: int
+) -> kubernetes.client.V1DaemonSet:
+    """Create a tiny proxy daemonset."""
+    container = kubernetes.client.V1Container(
+        name="tinyproxy",
+        image="monokal/tinyproxy",
+        image_pull_policy="IfNotPresent",
+        ports=[
+            kubernetes.client.V1ContainerPort(
+                container_port=tinyproxy_port, host_port=tinyproxy_port
+            )
+        ],
+        args=["ANY"],
+    )
+    template = kubernetes.client.V1PodTemplateSpec(
+        metadata=kubernetes.client.V1ObjectMeta(labels={"app": "tinyproxy"}),
+        spec=kubernetes.client.V1PodSpec(containers=[container]),
+    )
+    spec = kubernetes.client.V1DaemonSetSpec(
+        selector=kubernetes.client.V1LabelSelector(match_labels={"app": "tinyproxy"}),
+        template=template,
+    )
+    daemonset = kubernetes.client.V1DaemonSet(
+        api_version="apps/v1",
+        kind="DaemonSet",
+        metadata=kubernetes.client.V1ObjectMeta(name="daemonset-tiny-proxy"),
+        spec=spec,
+    )
+    return kube_apps_client.create_namespaced_daemon_set(namespace=model.name, body=daemonset)
+
+
+@pytest_asyncio.fixture(scope="module", name="tinyproxy_ip")
+async def tinyproxy_ip_fixture(
+    model: Model,
+    kube_core_client: kubernetes.client.CoreV1Api,
+    tiny_proxy_daemonset: kubernetes.client.V1DaemonSet,
+) -> str:
+    """The tinyproxy daemonset pod ip.
+
+    Localhost is, by default, added to NO_PROXY by juju, hence the pod ip has to be used.
+    """
+    spec: kubernetes.client.V1DaemonSetSpec = tiny_proxy_daemonset.spec
+    template: kubernetes.client.V1PodTemplateSpec = spec.template
+    metadata: kubernetes.client.V1ObjectMeta = template.metadata
+
+    def get_tinyproxy_ip() -> str | None:
+        """Get tinyproxy pod IP when ready.
+
+        Returns:
+            Pod IP when pod is ready. None otherwise.
+        """
+        podlist: kubernetes.client.V1PodList = kube_core_client.list_namespaced_pod(
+            namespace=model.name, label_selector=f"app={metadata.labels['app']}"
+        )
+        pods: list[kubernetes.client.V1Pod] = podlist.items
+        for pod in pods:
+            status: kubernetes.client.V1PodStatus = pod.status
+            if status.conditions is None:
+                return None
+            for condition in status.conditions:
+                if condition.type == "Ready" and condition.status == "True":
+                    return status.pod_ip
+        return None
+
+    await model.block_until(get_tinyproxy_ip, timeout=300, wait_period=5)
+
+    return typing.cast(str, get_tinyproxy_ip())
+
+
+@pytest_asyncio.fixture(scope="module", name="model_with_proxy")
+async def model_with_proxy_fixture(
+    model: Model, tinyproxy_ip: str, tinyproxy_port: int
+) -> typing.AsyncGenerator[Model, None]:
+    """Model with proxy configuration values."""
+    tinyproxy_url = f"http://{tinyproxy_ip}:{tinyproxy_port}"
+    await model.set_config({"juju-http-proxy": tinyproxy_url, "juju-https-proxy": tinyproxy_url})
+
+    yield model
+
+    await model.set_config({"juju-http-proxy": "", "juju-https-proxy": ""})
+
+
+@pytest_asyncio.fixture(scope="module", name="jenkins_with_proxy")
+async def jenkins_with_proxy_fixture(
+    model_with_proxy: Model, charm: str, ops_test: OpsTest, jenkins_image: str
+) -> typing.AsyncGenerator[Application, None]:
+    """Jenkins server charm deployed under model with proxy configuration."""
+    resources = {"jenkins-image": jenkins_image}
+
+    # Deploy the charm and wait for active/idle status
+    application = await model_with_proxy.deploy(
+        charm,
+        resources=resources,
+        series="jammy",
+        application_name="jenkins-proxy-k8s",
+    )
+    await model_with_proxy.wait_for_idle(
+        apps=[application.name],
+        wait_for_active=True,
+        raise_on_blocked=True,
+        timeout=20 * 60,
+        idle_period=30,
+    )
+
+    # slow down update-status so that it doesn't intervene currently running tests
+    async with ops_test.fast_forward(fast_interval="5h"):
+        yield application
+
+    await model_with_proxy.remove_application(application.name, force=True, block_until_done=True)
+
+
+@pytest_asyncio.fixture(scope="module", name="proxy_jenkins_unit_ip")
+async def proxy_jenkins_unit_ip_fixture(model: Model, jenkins_with_proxy: Application):
+    """Get Jenkins charm w/ proxy enabled unit IP."""
+    status: FullStatus = await model.get_status([jenkins_with_proxy.name])
+    try:
+        unit_status: UnitStatus = next(
+            iter(status.applications[jenkins_with_proxy.name].units.values())
+        )
+        assert unit_status.address, "Invalid unit address"
+        return unit_status.address
+    except StopIteration as exc:
+        raise StopIteration("Invalid unit status") from exc
+
+
+@pytest_asyncio.fixture(scope="module", name="proxy_jenkins_web_address")
+async def proxy_jenkins_web_address_fixture(proxy_jenkins_unit_ip: str):
+    """Get Jenkins charm w/ proxy enabled web address."""
+    return f"http://{proxy_jenkins_unit_ip}:8080"
+
+
+@pytest_asyncio.fixture(scope="module", name="jenkins_with_proxy_client")
+async def jenkins_with_proxy_client_fixture(
+    jenkins_with_proxy: Application,
+    proxy_jenkins_web_address: str,
+) -> jenkinsapi.jenkins.Jenkins:
+    """The Jenkins API client."""
+    jenkins_unit: Unit = jenkins_with_proxy.units[0]
+    action: Action = await jenkins_unit.run_action("get-admin-password")
+    await action.wait()
+    password = action.results["password"]
+
+    # Initialization of the jenkins client will raise an exception if unable to connect to the
+    # server.
+    return jenkinsapi.jenkins.Jenkins(
+        baseurl=proxy_jenkins_web_address, username="admin", password=password, timeout=60
     )

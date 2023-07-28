@@ -77,3 +77,55 @@ def test_agent_meta__validate(invalid_meta: TestAgentMeta):
     """
     with pytest.raises(state.ValidationError):
         state.AgentMeta(**invalid_meta)
+
+
+def test_proxyconfig_invalid(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given a monkeypatched os.environ mapping that contains invalid proxy values.
+    act: when charm state is initialized.
+    assert: CharmConfigInvalidError is raised.
+    """
+    monkeypatch.setattr(state.os, "environ", {"JUJU_CHARM_HTTP_PROXY": "INVALID_URL"})
+    harness.begin()
+
+    with pytest.raises(state.CharmConfigInvalidError):
+        state.State.from_charm(harness.charm)
+
+
+def test_proxyconfig_none(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given mapping without proxy configuration.
+    act: when ProxyConfig.from_charm_config is called.
+    assert: None is returned.
+    """
+    # has to be monkeypatched to empty value since Github Runner will pick up squid.internal proxy.
+    monkeypatch.setattr(state.os, "environ", {})
+    harness.begin()
+
+    assert state.ProxyConfig.from_env() is None
+
+
+def test_proxyconfig_from_charm_env(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch, proxy_config: state.ProxyConfig
+):
+    """
+    arrange: given a monkeypatched os.environ with proxy configurations.
+    act: when ProxyConfig.from_charm_config is called.
+    assert: valid proxy configuration is returned.
+    """
+    monkeypatch.setattr(
+        state.os,
+        "environ",
+        {
+            "JUJU_CHARM_HTTP_PROXY": str(proxy_config.http_proxy),
+            "JUJU_CHARM_HTTPS_PROXY": str(proxy_config.https_proxy),
+            "JUJU_CHARM_NO_PROXY": str(proxy_config.no_proxy),
+        },
+    )
+    harness.begin()
+
+    config = state.ProxyConfig.from_env()
+    assert config, "Valid proxy config should not return None."
+    assert config.http_proxy == proxy_config.http_proxy
+    assert config.https_proxy == proxy_config.https_proxy
+    assert config.no_proxy == proxy_config.no_proxy

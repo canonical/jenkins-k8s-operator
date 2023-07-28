@@ -16,6 +16,7 @@ from ops.charm import ActionEvent, PebbleReadyEvent, UpdateStatusEvent
 from ops.model import ActiveStatus, BlockedStatus, StatusBase
 
 import jenkins
+import state
 import timerange
 from charm import JenkinsK8sOperatorCharm
 
@@ -126,6 +127,9 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     act: when the Jenkins pebble ready event is fired.
     assert: the unit status should show expected status.
     """
+    # monkeypatch environment variables because the test is running in self-hosted runners and juju
+    # proxy environment is picked up, making the test fail.
+    monkeypatch.setattr(state.os, "environ", {})
     # speed up waiting by changing default argument values
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=status_code))

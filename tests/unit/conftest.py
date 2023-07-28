@@ -153,6 +153,7 @@ def container_fixture(
     harness: Harness,
     admin_credentials: Credentials,
     monkeypatch: pytest.MonkeyPatch,
+    proxy_config: state.ProxyConfig,
 ) -> Container:
     """Harness Jenkins workload container that acts as a Jenkins container."""
     harness.set_can_connect("jenkins", True)
@@ -174,12 +175,38 @@ def container_fixture(
             RuntimeError: if the handler for a command has not yet been registered.
         """
         required_plugins = " ".join(set(REQUIRED_PLUGINS))
+        # type cast since the fixture contains no_proxy values
+        no_proxy_hosts = "|".join(typing.cast(str, proxy_config.no_proxy).split(","))
+        # assert for types that cannot be None.
+        assert proxy_config.http_proxy, "Http proxy fixture should not be None."
+        assert proxy_config.https_proxy, "Https proxy fixture should not be None."
         match argv:
             # Ignore R0801: Similar lines in 2 files because this is a required stub
             # implementation of executed command.
             # pylint: disable=R0801
             case _ if [
                 "java",
+                "-jar",
+                "jenkins-plugin-manager-2.12.11.jar",
+                "-w",
+                "jenkins.war",
+                "-d",
+                str(PLUGINS_PATH),
+                "-p",
+                required_plugins,
+            ] == argv:
+                return (0, "", "Done")
+            case _ if [
+                "java",
+                f"-Dhttp.proxyHost={proxy_config.http_proxy.host}",
+                f"-Dhttp.proxyPort={proxy_config.http_proxy.port}",
+                f"-Dhttp.proxyUser={proxy_config.http_proxy.user}",
+                f"-Dhttp.proxyPassword={proxy_config.http_proxy.password}",
+                f"-Dhttps.proxyHost={proxy_config.https_proxy.host}",
+                f"-Dhttps.proxyPort={proxy_config.https_proxy.port}",
+                f"-Dhttps.proxyUser={proxy_config.https_proxy.user}",
+                f"-Dhttps.proxyPassword={proxy_config.https_proxy.password}",
+                f'-Dhttp.nonProxyHosts="{no_proxy_hosts}"',
                 "-jar",
                 "jenkins-plugin-manager-2.12.11.jar",
                 "-w",
@@ -351,4 +378,36 @@ def rss_feed_fixture(current_version: str, patched_version: str, minor_updated_v
     </rss>
     """.encode(
         encoding="utf-8"
+    )
+
+
+@pytest.fixture(scope="function", name="partial_proxy_config")
+def partial_proxy_config_fixture():
+    """Proxy configuration with only hostname and port."""
+    # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
+    return state.ProxyConfig(
+        http_proxy="http://httptest.internal:3127",  # type: ignore
+        https_proxy="http://httpstest.internal:3127",  # type: ignore
+        no_proxy=None,
+    )
+
+
+@pytest.fixture(scope="function", name="http_partial_proxy_config")
+def http_partial_proxy_config_fixture():
+    """Proxy configuration with only http proxy hostname and port."""
+    # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
+    return state.ProxyConfig(
+        http_proxy="http://httptest.internal:3127",  # type: ignore
+        no_proxy=None,
+    )
+
+
+@pytest.fixture(scope="function", name="proxy_config")
+def proxy_config_fixture():
+    """Proxy configuration with authentication and no_proxy values."""
+    # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
+    return state.ProxyConfig(
+        http_proxy=f"http://testusername:{token_hex(16)}@httptest.internal:3127",  # type: ignore
+        https_proxy=f"http://testusername:{token_hex(16)}@httpstest.internal:3127",  # type: ignore
+        no_proxy="noproxy.host1,noproxy.host2",
     )

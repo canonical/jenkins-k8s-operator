@@ -19,6 +19,7 @@ import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
 import ops
 import requests
+from pydantic import HttpUrl
 
 import state
 
@@ -63,6 +64,10 @@ SYSTEM_PROPERTY_HEADLESS = "java.awt.headless=true"
 
 class JenkinsError(Exception):
     """Base exception for Jenkins errors."""
+
+
+class JenkinsProxyError(JenkinsError):
+    """An error occurred configuring Jenkins proxy."""
 
 
 class JenkinsPluginError(JenkinsError):
@@ -245,30 +250,114 @@ def _install_configs(container: ops.Container) -> None:
         container.push(JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file, user=USER, group=GROUP)
 
 
-def _install_plugins(container: ops.Container) -> None:
+def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
+    """Get proxy arguments for proxy configuration Groovy script.
+
+    Args:
+        proxy_config: The proxy settings to apply.
+
+    Yields:
+        Groovy script proxy arguments.
+    """
+    if proxy_config.https_proxy:
+        yield f"'{proxy_config.https_proxy.host}'"
+        yield f"{proxy_config.https_proxy.port}"
+        yield f"'{proxy_config.https_proxy.user or ''}'"
+        yield f"'{proxy_config.https_proxy.password or ''}'"
+    else:
+        # http proxy and https proxy value cannot both be None since proxy_config would be parsed
+        # as None.
+        proxy_config.http_proxy = typing.cast(HttpUrl, proxy_config.http_proxy)
+        yield f"'{proxy_config.http_proxy.host}'"
+        yield f"{proxy_config.http_proxy.port}"
+        yield f"'{proxy_config.http_proxy.user or ''}'"
+        yield f"'{proxy_config.http_proxy.password or ''}'"
+    if proxy_config.no_proxy:
+        yield f"'{proxy_config.no_proxy}'"
+
+
+def _configure_proxy(
+    container: ops.Container,
+    proxy_config: state.ProxyConfig | None = None,
+    client: jenkinsapi.jenkins.Jenkins | None = None,
+) -> None:
+    """Configure Jenkins proxy settings if proxy configuration values are provided.
+
+    Args:
+        container: The Jenkins workload container
+        proxy_config: The proxy settings to apply.
+        client: The API client used to communicate with the Jenkins server.
+
+    Raises:
+        JenkinsProxyError: if an error occurred running proxy configuration script.
+    """
+    if not proxy_config:
+        return
+
+    client = client if client is not None else _get_client(get_admin_credentials(container))
+    parsed_args = ", ".join(_get_groovy_proxy_args(proxy_config))
+    try:
+        client.run_groovy_script(f"proxy = new ProxyConfiguration({parsed_args})\nproxy.save()")
+    except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to configure proxy, %s", exc)
+        raise JenkinsProxyError("Proxy configuration failed.") from exc
+
+
+def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
+    """Get JVM system property arguments for proxy.
+
+    Args:
+        proxy_config: The proxy settings to apply.
+
+    Yields:
+        JVM System property proxy arguments.
+    """
+    if proxy_config.http_proxy:
+        yield f"-Dhttp.proxyHost={proxy_config.http_proxy.host}"
+        yield f"-Dhttp.proxyPort={proxy_config.http_proxy.port}"
+        if proxy_config.http_proxy.user and proxy_config.http_proxy.password:
+            yield f"-Dhttp.proxyUser={proxy_config.http_proxy.user}"
+            yield f"-Dhttp.proxyPassword={proxy_config.http_proxy.password}"
+    if proxy_config.https_proxy:
+        yield f"-Dhttps.proxyHost={proxy_config.https_proxy.host}"
+        yield f"-Dhttps.proxyPort={proxy_config.https_proxy.port}"
+        if proxy_config.https_proxy.user and proxy_config.https_proxy.password:
+            yield f"-Dhttps.proxyUser={proxy_config.https_proxy.user}"
+            yield f"-Dhttps.proxyPassword={proxy_config.https_proxy.password}"
+    if proxy_config.no_proxy:
+        formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
+        yield f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"'
+
+
+def _install_plugins(
+    container: ops.Container, proxy_config: state.ProxyConfig | None = None
+) -> None:
     """Install Jenkins plugins.
 
     Download Jenkins plugins. A restart is required for the changes to take effect.
 
     Args:
         container: The Jenkins workload container.
+        proxy_config: The proxy settings to apply.
 
     Raises:
         JenkinsPluginError: if an error occurred installing the plugin.
     """
-    plugins = " ".join(set(REQUIRED_PLUGINS))
+    proxy_args = [] if not proxy_config else _get_java_proxy_args(proxy_config)
+    command = [
+        "java",
+        *proxy_args,
+        "-jar",
+        "jenkins-plugin-manager-2.12.11.jar",
+        "-w",
+        "jenkins.war",
+        "-d",
+        str(PLUGINS_PATH),
+        "-p",
+        " ".join(set(REQUIRED_PLUGINS)),
+    ]
     proc: ops.pebble.ExecProcess = container.exec(
-        [
-            "java",
-            "-jar",
-            "jenkins-plugin-manager-2.12.11.jar",
-            "-w",
-            "jenkins.war",
-            "-d",
-            str(PLUGINS_PATH),
-            "-p",
-            plugins,
-        ],
+        command,
         working_dir=str(EXECUTABLES_PATH),
         timeout=600,
         user=USER,
@@ -281,13 +370,12 @@ def _install_plugins(container: ops.Container) -> None:
         raise JenkinsPluginError("Failed to install plugins.") from exc
 
 
-def bootstrap(
-    container: ops.Container,
-) -> None:
+def bootstrap(container: ops.Container, proxy_config: state.ProxyConfig | None = None) -> None:
     """Initialize and install Jenkins.
 
     Args:
         container: The Jenkins workload container.
+        proxy_config: The Jenkins proxy configuration settings.
 
     Raises:
         JenkinsBootstrapError: if there was an error installing given plugins or required plugins.
@@ -295,8 +383,9 @@ def bootstrap(
     _unlock_wizard(container)
     _install_configs(container)
     try:
-        _install_plugins(container)
-    except JenkinsPluginError as exc:
+        _configure_proxy(container, proxy_config)
+        _install_plugins(container, proxy_config)
+    except (JenkinsProxyError, JenkinsPluginError) as exc:
         raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
 
 
@@ -410,8 +499,11 @@ def _get_major_minor_version(version: str) -> str:
     return ".".join(version.split(".")[0:2])
 
 
-def _fetch_versions_from_rss() -> typing.Iterable[str]:
+def _fetch_versions_from_rss(proxy: state.ProxyConfig | None = None) -> typing.Iterable[str]:
     """Fetch and extract Jenkins versions from the stable RSS feed.
+
+    Args:
+        proxy: Proxy server to route the requests through.
 
     Returns:
         The jenkins versions from the RSS feed.
@@ -420,8 +512,12 @@ def _fetch_versions_from_rss() -> typing.Iterable[str]:
         JenkinsNetworkError: if there was an error fetching the RSS feed.
         ValidationError: if an invalid RSS feed was received.
     """
+    if proxy:
+        proxies = {"http": str(proxy.http_proxy), "https": str(proxy.https_proxy)}
+    else:
+        proxies = None
     try:
-        res = requests.get(RSS_FEED_URL, timeout=30)
+        res = requests.get(RSS_FEED_URL, timeout=30, proxies=proxies)
         res.raise_for_status()
     except (
         requests.exceptions.ConnectionError,
@@ -449,11 +545,12 @@ def _fetch_versions_from_rss() -> typing.Iterable[str]:
     return versions
 
 
-def _get_latest_patch_version(current_version: str) -> str:
+def _get_latest_patch_version(current_version: str, proxy: state.ProxyConfig | None = None) -> str:
     """Get the latest lts patch version matching with the current version.
 
     Args:
         current_version: Current LTS semantic version.
+        proxy: Proxy server to route the requests through.
 
     Returns:
         The latest patched version available.
@@ -463,7 +560,7 @@ def _get_latest_patch_version(current_version: str) -> str:
         ValidationError: if the RSS feed contains no matching LTS version.
     """
     try:
-        versions = _fetch_versions_from_rss()
+        versions = _fetch_versions_from_rss(proxy=proxy)
     except (JenkinsNetworkError, ValidationError) as exc:
         logger.error("Failed to fetch Jenkins versions from rss, %s", exc)
         raise
@@ -481,8 +578,11 @@ def _get_latest_patch_version(current_version: str) -> str:
     return sorted_versions[0]
 
 
-def get_updatable_version() -> str | None:
+def get_updatable_version(proxy: state.ProxyConfig | None = None) -> str | None:
     """Get version to update to if available.
+
+    Args:
+        proxy: Proxy server to route the requests through.
 
     Raises:
         JenkinsUpdateError: if there was an error trying to determine next Jenkins update version.
@@ -497,7 +597,7 @@ def get_updatable_version() -> str | None:
         raise JenkinsUpdateError("Failed to get Jenkins version.") from exc
 
     try:
-        latest_version = _get_latest_patch_version(current_version=current_version)
+        latest_version = _get_latest_patch_version(current_version=current_version, proxy=proxy)
     except (JenkinsNetworkError, ValidationError) as exc:
         logger.error("Failed to fetch latest patch version info, %s", exc)
         raise JenkinsUpdateError("Failed to fetch latest patch version info.") from exc

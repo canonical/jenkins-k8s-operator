@@ -29,7 +29,7 @@ Metadata for registering Jenkins Agent.
 
 ---
 
-<a href="../src/state.py#L102"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L103"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_agent_relation`
 
@@ -54,7 +54,7 @@ Instantiate AgentMeta from charm relation databag.
 
 ---
 
-<a href="../src/state.py#L83"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L84"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_deprecated_agent_relation`
 
@@ -79,7 +79,7 @@ Instantiate AgentMeta from charm relation databag.
 
 ---
 
-<a href="../src/state.py#L70"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L71"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `numeric_executors`
 
@@ -112,7 +112,7 @@ Exception raised when a charm configuration is found to be invalid.
  
  - <b>`msg`</b>:  Explanation of the error. 
 
-<a href="../src/state.py#L32"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L33"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -143,7 +143,7 @@ Represents an error with invalid data in relation data.
  
  - <b>`msg`</b>:  Explanation of the error. 
 
-<a href="../src/state.py#L48"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L49"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -174,6 +174,40 @@ Represents an error with charm state.
 
 ---
 
+## <kbd>class</kbd> `ProxyConfig`
+Configuration for accessing Jenkins through proxy. 
+
+
+
+**Attributes:**
+ 
+ - <b>`http_proxy`</b>:  The http proxy URL. 
+ - <b>`https_proxy`</b>:  The https proxy URL. 
+ - <b>`no_proxy`</b>:  Comma separated list of hostnames to bypass proxy. 
+
+
+
+
+---
+
+<a href="../src/state.py#L172"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>classmethod</kbd> `from_env`
+
+```python
+from_env() → Optional[ForwardRef('ProxyConfig')]
+```
+
+Instantiate ProxyConfig from juju charm environment. 
+
+
+
+**Returns:**
+  ProxyConfig if proxy configuration is provided, None otherwise. 
+
+
+---
+
 ## <kbd>class</kbd> `State`
 The Jenkins k8s operator charm state. 
 
@@ -184,6 +218,7 @@ The Jenkins k8s operator charm state.
  - <b>`update_time_range`</b>:  Time range to allow Jenkins to update version. 
  - <b>`agent_relation_meta`</b>:  Metadata of all agents from units related through agent relation. 
  - <b>`deprecated_agent_relation_meta`</b>:  Metadata of all agents from units related through  deprecated agent relation. 
+ - <b>`proxy_config`</b>:  Proxy configuration to access Jenkins upstream through. 
  - <b>`jenkins_service_name`</b>:  The Jenkins service name. Note that the container name is the same. 
 
 
@@ -191,7 +226,7 @@ The Jenkins k8s operator charm state.
 
 ---
 
-<a href="../src/state.py#L177"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L211"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_charm`
 
