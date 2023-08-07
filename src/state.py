@@ -197,6 +197,7 @@ class State:
         deprecated_agent_relation_meta: Metadata of all agents from units related through
             deprecated agent relation.
         proxy_config: Proxy configuration to access Jenkins upstream through.
+        plugins: The list of allowed plugins to install.
         jenkins_service_name: The Jenkins service name. Note that the container name is the same.
     """
 
@@ -206,6 +207,7 @@ class State:
         typing.Mapping[str, typing.Optional[AgentMeta]]
     ]
     proxy_config: typing.Optional[ProxyConfig]
+    plugins: typing.Optional[typing.Iterable[str]]
     jenkins_service_name: str = "jenkins"
 
     @classmethod
@@ -266,9 +268,13 @@ class State:
             logger.error("Invalid juju model proxy configuration, %s", exc)
             raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
 
+        plugins_str = charm.config.get("plugins")
+        plugins = (plugin.strip() for plugin in plugins_str.split(",")) if plugins_str else None
+
         return cls(
             update_time_range=update_time_range,
             agent_relation_meta=agent_relation_meta_map,
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
+            plugins=plugins,
             proxy_config=proxy_config,
         )

@@ -156,8 +156,18 @@ class JenkinsK8sOperatorCharm(CharmBase):
         1. Update Jenkins patch LTS version if available.
         2. Update apt packages if available.
         """
+        container = self.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
+            return
+
+        err_info = ""
+        try:
+            jenkins.remove_unlisted_plugins(plugins=self.state.plugins, container=container)
+        except (jenkins.JenkinsPluginError, jenkins.JenkinsError) as exc:
+            logger.error("Failed to remove unlisted plugin, %s", exc)
+            err_info = "Failed to remove unlisted plugin."
+
         if self.state.update_time_range and not self.state.update_time_range.check_now():
-            self.unit.status = ActiveStatus()
             return
 
         self.unit.status = ActiveStatus("Checking for updates.")
@@ -174,15 +184,13 @@ class JenkinsK8sOperatorCharm(CharmBase):
 
         self.unit.status = MaintenanceStatus("Updating Jenkins.")
         try:
-            jenkins.download_stable_war(self._jenkins_container, latest_patch_version)
+            jenkins.download_stable_war(container, latest_patch_version)
         except jenkins.JenkinsNetworkError as exc:
             logger.error("Failed to download Jenkins war. %s", exc)
             self.unit.status = ActiveStatus("Failed to download executable.")
             return
-
-        credentials = jenkins.get_admin_credentials(self._jenkins_container)
         try:
-            jenkins.safe_restart(credentials)
+            jenkins.safe_restart(container)
             jenkins.wait_ready()
         except (jenkins.JenkinsError, TimeoutError) as exc:
             logger.error("Failed to safely restart Jenkins. %s", exc)
@@ -190,7 +198,7 @@ class JenkinsK8sOperatorCharm(CharmBase):
             return
 
         self.unit.set_workload_version(latest_patch_version)
-        self.unit.status = ActiveStatus()
+        self.unit.status = ActiveStatus(err_info)
 
 
 if __name__ == "__main__":  # pragma: nocover

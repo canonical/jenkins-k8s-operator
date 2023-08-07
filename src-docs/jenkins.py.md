@@ -348,7 +348,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L771"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L814"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 
@@ -369,6 +369,13 @@ Remove plugins that are not a part of list of desired plugins.
  - <b>`plugins`</b>:  The list of plugins that can be installed. 
  - <b>`container`</b>:  The workload container. 
  - <b>`client`</b>:  The Jenkins API client. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsPluginError`</b>:  if there was an error removing unlisted plugin. 
+ - <b>`JenkinsError`</b>:  if there was an error restarting Jenkins after removing the plugin. 
 
 
 ---
