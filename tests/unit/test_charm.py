@@ -188,6 +188,7 @@ def test__on_update_status_no_action(
     assert: no action is taken and the charm remains active.
     """
     mock_download_func = MagicMock(spec=jenkins.download_stable_war)
+    monkeypatch.setattr(jenkins, "remove_unlisted_plugins", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "get_version", lambda: current_version)
     monkeypatch.setattr(jenkins, "_get_latest_patch_version", lambda *_, **__: current_version)
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
@@ -211,6 +212,7 @@ def test__on_update_status_get_updatable_version_error(
     act: when update_status action is triggered.
     assert: the charm falls into ActiveStatus with a warning message.
     """
+    monkeypatch.setattr(jenkins, "remove_unlisted_plugins", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         jenkins,
         "get_updatable_version",
@@ -237,6 +239,7 @@ def test__on_update_status_dowload_stable_war_error(
     act: when update_status action is triggered.
     assert: the charm falls into ActiveStatus since the service should still be functioning.
     """
+    monkeypatch.setattr(jenkins, "remove_unlisted_plugins", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
     monkeypatch.setattr(
         jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
@@ -266,6 +269,7 @@ def test__on_update_status_safe_restart_error(
     act: when update_status action is triggered.
     assert: the charm falls into BlockedStatus since the service is not functioning.
     """
+    monkeypatch.setattr(jenkins, "remove_unlisted_plugins", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
     monkeypatch.setattr(
         jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
@@ -302,6 +306,7 @@ def test__on_update_status_update(
     """
     mock_download = MagicMock(spec=jenkins.download_stable_war)
     mock_safe_restart = MagicMock(spec=jenkins.safe_restart)
+    monkeypatch.setattr(jenkins, "remove_unlisted_plugins", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "get_version", lambda: current_version)
     monkeypatch.setattr(jenkins, "_get_latest_patch_version", lambda *_, **__: patched_version)
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download)
@@ -331,13 +336,15 @@ def test__on_update_status_not_in_time_range(
     test_time = timerange.datetime(2023, 1, 1, 23)
     mock_datetime.utcnow.return_value = test_time
     monkeypatch.setattr(timerange, "datetime", mock_datetime)
+    monkeypatch.setattr(jenkins, "remove_unlisted_plugins", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.update_config({"update-time-range": "00-23"})
     harness_container.harness.begin()
+    previous_status = harness_container.harness.charm.unit.status.name
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     mock_download_func.assert_not_called()
-    assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+    assert jenkins_charm.unit.status.name == previous_status

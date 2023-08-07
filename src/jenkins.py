@@ -759,13 +759,56 @@ def _set_jenkins_system_message(message: str, container: ops.Container):
 
     Args:
         message: The system message to display.
+        container: The Jenkins workload container.
     """
     jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
     config = yaml.safe_load(jcasc_yaml)
-    config["jekins"]["systemMessage"] = message
+    config["jenkins"]["systemMessage"] = message
     output = StringIO()
     yaml.dump(config, output)
     container.push(JCASC_CONFIG_FILE_PATH, output, encoding="utf-8")
+
+
+def _build_dependencies_lookup(
+    plugin_dependency_outputs: typing.Iterable[str],
+) -> dict[str, list[str]]:
+    """Build a lookup table of plugin short name to list of dependency plugin short name.
+
+    Args:
+        plugin_dependency_outputs (typing.Iterable[str]): _description_
+
+    Returns:
+        dict[str, list[str]]: _description_
+    """
+    dependency_lookup: dict[str, list[str]] = {}
+    for line in plugin_dependency_outputs:
+        match = re.match(PLUGIN_LINE_CAPTURE, line)
+        if not match:
+            continue
+        plugin, dependencies = match.group(1), match.group(3)
+        if not dependencies:
+            dependency_lookup[plugin] = []
+            continue
+        dependency_lookup[plugin] = list(
+            _get_plugin_name(dependency) for dependency in dependencies.split(", ")
+        )
+
+    return dependency_lookup
+
+
+def _get_plugins_to_remove(
+    wanted_plugins: set[str], plugins: typing.Iterable[str]
+) -> typing.Iterable[str]:
+    """Get an iterable containing short names of plugins to remove.
+
+    Args:
+        wanted_plugins (set[str]): _description_
+        plugins (typing.Iterable[str]): _description_
+
+    Returns:
+        set[str]: _description_
+    """
+    return (plugin for plugin in plugins if plugin not in wanted_plugins)
 
 
 def remove_unlisted_plugins(
@@ -779,6 +822,10 @@ def remove_unlisted_plugins(
         plugins: The list of plugins that can be installed.
         container: The workload container.
         client: The Jenkins API client.
+
+    Raises:
+        JenkinsPluginError: if there was an error removing unlisted plugin.
+        JenkinsError: if there was an error restarting Jenkins after removing the plugin.
     """
     client = client if client is not None else _get_client(get_admin_credentials(container))
     res = client.run_groovy_script(
@@ -789,34 +836,21 @@ plugins.each {
 }
 """
     )
-    dependency_lookup: dict[str, list[str]] = {}
-    for line in res.splitlines():
-        match = re.match(PLUGIN_LINE_CAPTURE, line)
-        if not match:
-            continue
-        plugin, dependencies = match.group(1), match.group(3)
-        if not dependencies:
-            dependency_lookup[plugin] = []
-            continue
-        dependency_lookup[plugin] = list(
-            _get_plugin_name(dependency) for dependency in dependencies.split(", ")
-        )
+    plugin_dependencies_lookup = _build_dependencies_lookup(res.splitlines())
 
     wanted_plugins: set[str] = set()
     for plugin in itertools.chain(plugins, REQUIRED_PLUGINS):
-        _build_desired_plugins_set(dependency_lookup, plugin, wanted_plugins)
+        _build_desired_plugins_set(plugin_dependencies_lookup, plugin, wanted_plugins)
 
-    plugins_to_remove: set[str] = set()
-    for plugin in dependency_lookup.keys():
-        if plugin in wanted_plugins:
-            continue
-        plugins_to_remove.add(plugin)
+    plugins_to_remove = list(
+        _get_plugins_to_remove(wanted_plugins, plugin_dependencies_lookup.keys())
+    )
 
     if not plugins_to_remove:
         return
 
     try:
-        client.delete_plugins(list(plugins_to_remove), restart=False)
+        client.delete_plugins(plugins_to_remove, restart=False)
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to remove the following plugins: %s, %s", plugins_to_remove, exc)
         raise JenkinsPluginError("Failed to remove plugins.") from exc

@@ -9,3 +9,9 @@ options:
       take place whenever an update is available. For example, 03-05 will allow updates to take
       place from 3AM UTC to 5AM UTC. Awaits for running job completion for 5 minutes. 
     default: ""
+  plugins:
+    type: string
+    description: >
+      List of allowed plugin short names separated by commas. Plugins are not automatically
+      installed but can be installed by the user. Plugins not on the list but installed by the user
+      will be removed automatically, including its dependencies.
