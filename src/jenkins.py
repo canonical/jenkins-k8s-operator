@@ -5,9 +5,12 @@
 
 import dataclasses
 import functools
+import itertools
 import logging
+import re
 import typing
 from datetime import datetime, timedelta
+from io import StringIO
 from pathlib import Path
 from time import sleep
 
@@ -19,6 +22,7 @@ import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
 import ops
 import requests
+import yaml
 from pydantic import HttpUrl
 
 import state
@@ -668,18 +672,18 @@ def _wait_jenkins_job_shutdown(client: jenkinsapi.jenkins.Jenkins) -> None:
 
 
 def safe_restart(
-    credentials: Credentials, client: jenkinsapi.jenkins.Jenkins | None = None
+    container: ops.Container, client: jenkinsapi.jenkins.Jenkins | None = None
 ) -> None:
     """Safely restart Jenkins server after all jobs are done executing.
 
     Args:
-        credentials: The credentials of a Jenkins user with access to the Jenkins API.
+        container: The Jenkins workload container to interact with filesystem.
         client: The API client used to communicate with the Jenkins server.
 
     Raises:
         JenkinsError: if there was an API error calling safe restart.
     """
-    client = client if client is not None else _get_client(credentials)
+    client = client if client is not None else _get_client(get_admin_credentials(container))
     try:
         # There is a bug with wait_for_reboot in the jenkinsapi
         # https://github.com/pycontribs/jenkinsapi/issues/844
@@ -705,3 +709,126 @@ def get_agent_name(unit_name: str) -> str:
         The agent node name registered on Jenkins server.
     """
     return unit_name.replace("/", "-")
+
+
+PLUGIN_NAME_GROUP = r"^([a-zA-Z0-9-]+)"
+WHITESPACE = r"\s*"
+VERSION_GROUP = r"\((.*?)\)"
+DEPENDENCIES_GROUP = r"\[(.*?)\]"
+PLUGIN_CAPTURE = rf"{PLUGIN_NAME_GROUP}{WHITESPACE}{VERSION_GROUP}"
+PLUGIN_LINE_CAPTURE = rf"{PLUGIN_CAPTURE} => {DEPENDENCIES_GROUP}"
+
+
+def _get_plugin_name(plugin_info: str) -> str:
+    """Get plugin name given a plugin info string of format <plugin-shortname> (<plugin-version>).
+
+    Args:
+        plugin_info: Text containing plugin name and plugin version.
+
+    Raises:
+        ValidationError: if the plugin info string does not conform to expected format.
+
+    Returns:
+        The plugin shortname.
+    """
+    match = re.match(PLUGIN_CAPTURE, plugin_info)
+    if not match:
+        raise ValidationError(f"No plugin matched in: {plugin_info}")
+    return match.group(1)
+
+
+def _build_desired_plugins_set(
+    plugins_lookup: dict[str, list[str]], plugin: str, desired_plugins: set[str]
+):
+    """Build a set of plugins that are desired installations.
+
+    Args:
+        plugins_lookup: The plugin and it's dependencies lookup table.
+        plugin: The desired plugin to add.
+        desired_plugins: A set of desired plugin and it's dependencies.
+    """
+    if plugin in desired_plugins:
+        return
+    desired_plugins.add(plugin)
+    for dependency in plugins_lookup.get(plugin, []):
+        _build_desired_plugins_set(plugins_lookup, dependency, desired_plugins)
+
+
+def _set_jenkins_system_message(message: str, container: ops.Container):
+    """Set a system message on Jenkins.
+
+    Args:
+        message: The system message to display.
+    """
+    jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
+    config = yaml.safe_load(jcasc_yaml)
+    config["jekins"]["systemMessage"] = message
+    output = StringIO()
+    yaml.dump(config, output)
+    container.push(JCASC_CONFIG_FILE_PATH, output, encoding="utf-8")
+
+
+def remove_unlisted_plugins(
+    plugins: typing.Iterable[str],
+    container: ops.Container,
+    client: jenkinsapi.jenkins.Jenkins | None = None,
+):
+    """Remove plugins that are not a part of list of desired plugins.
+
+    Args:
+        plugins: The list of plugins that can be installed.
+        container: The workload container.
+        client: The Jenkins API client.
+    """
+    client = client if client is not None else _get_client(get_admin_credentials(container))
+    res = client.run_groovy_script(
+        """
+def plugins = jenkins.model.Jenkins.instance.getPluginManager().getPlugins()
+plugins.each {
+    println "${it.getShortName()} (${it.getVersion()}) => ${it.getDependencies()}"
+}
+"""
+    )
+    dependency_lookup: dict[str, list[str]] = {}
+    for line in res.splitlines():
+        match = re.match(PLUGIN_LINE_CAPTURE, line)
+        if not match:
+            continue
+        plugin, dependencies = match.group(1), match.group(3)
+        if not dependencies:
+            dependency_lookup[plugin] = []
+            continue
+        dependency_lookup[plugin] = list(
+            _get_plugin_name(dependency) for dependency in dependencies.split(", ")
+        )
+
+    wanted_plugins: set[str] = set()
+    for plugin in itertools.chain(plugins, REQUIRED_PLUGINS):
+        _build_desired_plugins_set(dependency_lookup, plugin, wanted_plugins)
+
+    plugins_to_remove: set[str] = set()
+    for plugin in dependency_lookup.keys():
+        if plugin in wanted_plugins:
+            continue
+        plugins_to_remove.add(plugin)
+
+    if not plugins_to_remove:
+        return
+
+    try:
+        client.delete_plugins(list(plugins_to_remove), restart=False)
+    except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to remove the following plugins: %s, %s", plugins_to_remove, exc)
+        raise JenkinsPluginError("Failed to remove plugins.") from exc
+    logger.info("Removed %s", plugins_to_remove)
+
+    _set_jenkins_system_message(
+        "The following plugins have been removed by the system administrator."
+        f"{','.join(plugins_to_remove)}"
+    )
+
+    try:
+        safe_restart(container, client)
+    except JenkinsError as exc:
+        logger.error("Failed to restart Jenkins after removing plugins, %s", exc)
+        raise
