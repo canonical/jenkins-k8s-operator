@@ -10,7 +10,6 @@ import logging
 import re
 import typing
 from datetime import datetime, timedelta
-from io import StringIO
 from pathlib import Path
 from time import sleep
 
@@ -763,10 +762,11 @@ def _set_jenkins_system_message(message: str, container: ops.Container):
     """
     jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
     config = yaml.safe_load(jcasc_yaml)
+    logger.info("CONFIG: %s", config)
     config["jenkins"]["systemMessage"] = message
-    output = StringIO()
-    yaml.dump(config, output)
-    container.push(JCASC_CONFIG_FILE_PATH, output, encoding="utf-8")
+    container.push(
+        JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
+    )
 
 
 def _build_dependencies_lookup(
@@ -780,39 +780,85 @@ def _build_dependencies_lookup(
     Returns:
         dict[str, list[str]]: _description_
     """
-    dependency_lookup: dict[str, list[str]] = {}
+    dependency_lookup: dict[str, tuple[str, ...]] = {}
     for line in plugin_dependency_outputs:
         match = re.match(PLUGIN_LINE_CAPTURE, line)
         if not match:
             continue
         plugin, dependencies = match.group(1), match.group(3)
         if not dependencies:
-            dependency_lookup[plugin] = []
+            dependency_lookup[plugin] = ()
             continue
-        dependency_lookup[plugin] = list(
+        dependency_lookup[plugin] = tuple(
             _get_plugin_name(dependency) for dependency in dependencies.split(", ")
         )
 
     return dependency_lookup
 
 
-def _get_plugins_to_remove(
-    wanted_plugins: set[str], plugins: typing.Iterable[str]
+def _traverse_dependencies(
+    plugin: str, dependency_lookup: dict[str, typing.Iterable[str]], seen: set[str]
 ) -> typing.Iterable[str]:
-    """Get an iterable containing short names of plugins to remove.
+    """Traverse through plugin dependencies that have not yet been traversed recursively.
 
     Args:
-        wanted_plugins (set[str]): _description_
-        plugins (typing.Iterable[str]): _description_
+        plugin: The plugin to recurse through the dependencies.
+        dependency_lookup: The plugin and it's dependencies lookup table.
+        seen: a set indicating whether a plugin has already been traversed.
+
+    Yields:
+        Plugin and it's dependents.
+    """
+    if plugin in seen or plugin not in dependency_lookup:
+        return
+    yield plugin
+    seen.add(plugin)
+    for dependency in dependency_lookup[plugin]:
+        yield from _traverse_dependencies(dependency, dependency_lookup, seen)
+
+
+def _get_allowed_plugins(
+    top_level_plugins: typing.Iterable[str], dependency_lookup: dict[str, typing.Iterable[str]]
+) -> typing.Iterable[str]:
+    """Get the plugin short names of allowed plugins and its dependencies.
+
+    Args:
+        top_level_plugins: The allowed plugins short names to add to allowed plugins with its
+            dependencies.
+        dependency_lookup: The plugin dependency lookup table.
+
+    Yields:
+        The allowed plugin short name.
+    """
+    seen = set()
+    for plugin in top_level_plugins:
+        if plugin in seen:
+            continue
+        yield from _traverse_dependencies(plugin, dependency_lookup, seen)
+
+
+def _get_top_level_plugins(
+    plugins: typing.Iterable[str], dependency_lookup: dict[str, typing.Iterable[str]]
+) -> typing.Iterable[str]:
+    """Get top level plugins that are not dependencies to other plugins.
+
+    Args:
+        plugins: Plugins to extract top level plugins from.
+        dependency_lookup: The dependency lookup table.
 
     Returns:
-        set[str]: _description_
+        All plugins that are not dependency to another plugin.
     """
-    return (plugin for plugin in plugins if plugin not in wanted_plugins)
+    logger.info("DEBUG: plugins: %s  lookup: %s", plugins, dependency_lookup)
+    dependent_plugins: set[str] = set()
+    for _, dependencies in dependency_lookup.items():
+        dependent_plugins = dependent_plugins.union(dependencies)
+
+    return set(plugins) - dependent_plugins
 
 
 def remove_unlisted_plugins(
-    plugins: typing.Iterable[str],
+    plugins: typing.Iterable[str] | None,
     container: ops.Container,
     client: jenkinsapi.jenkins.Jenkins | None = None,
 ):
@@ -827,6 +873,9 @@ def remove_unlisted_plugins(
         JenkinsPluginError: if there was an error removing unlisted plugin.
         JenkinsError: if there was an error restarting Jenkins after removing the plugin.
     """
+    if not plugins:
+        return
+
     client = client if client is not None else _get_client(get_admin_credentials(container))
     res = client.run_groovy_script(
         """
@@ -836,33 +885,31 @@ plugins.each {
 }
 """
     )
-    plugin_dependencies_lookup = _build_dependencies_lookup(res.splitlines())
-
-    wanted_plugins: set[str] = set()
-    for plugin in itertools.chain(plugins, REQUIRED_PLUGINS):
-        _build_desired_plugins_set(plugin_dependencies_lookup, plugin, wanted_plugins)
-
-    plugins_to_remove = list(
-        _get_plugins_to_remove(wanted_plugins, plugin_dependencies_lookup.keys())
+    dependency_lookup = _build_dependencies_lookup(res.splitlines())
+    allowed_plugins = _get_allowed_plugins(
+        itertools.chain(plugins, REQUIRED_PLUGINS), dependency_lookup
     )
-
+    plugins_to_remove = set(dependency_lookup.keys()) - set(allowed_plugins)
     if not plugins_to_remove:
         return
 
     try:
-        client.delete_plugins(plugins_to_remove, restart=False)
+        client.delete_plugins(list(plugins_to_remove), restart=False)
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to remove the following plugins: %s, %s", plugins_to_remove, exc)
         raise JenkinsPluginError("Failed to remove plugins.") from exc
     logger.info("Removed %s", plugins_to_remove)
 
+    top_level_plugins = _get_top_level_plugins(plugins_to_remove, dependency_lookup)
     _set_jenkins_system_message(
-        "The following plugins have been removed by the system administrator."
-        f"{','.join(plugins_to_remove)}"
+        message="The following plugins have been removed by the system administrator: "
+        f"{', '.join(top_level_plugins)}",
+        container=container,
     )
 
     try:
         safe_restart(container, client)
+        wait_ready()
     except JenkinsError as exc:
         logger.error("Failed to restart Jenkins after removing plugins, %s", exc)
         raise

@@ -12,6 +12,7 @@ options:
   plugins:
     type: string
     description: >
-      List of allowed plugin short names separated by commas. Plugins are not automatically
-      installed but can be installed by the user. Plugins not on the list but installed by the user
-      will be removed automatically, including its dependencies.
+      List of allowed plugin short names separated by commas. Leaving this empty will allow any
+      plugins to be installed. Plugins are not automatically installed but can be installed by the 
+      user. Plugins not on the list but installed by the user will be removed automatically, 
+      including its dependencies.
