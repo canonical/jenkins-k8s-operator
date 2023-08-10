@@ -12,7 +12,7 @@ Charm Jenkins.
 ## <kbd>class</kbd> `JenkinsK8sOperatorCharm`
 Charm Jenkins. 
 
-<a href="../src/charm.py#L30"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/charm.py#L27"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
