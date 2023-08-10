@@ -1,0 +1,11 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+options:
+  update-time-range:
+    type: string
+    description: >
+      Preferred UTC time range for LTS patch updates in 24 hour  format. If empty, the update will
+      take place whenever an update is available. For example, 03-05 will allow updates to take
+      place from 3AM UTC to 5AM UTC. Awaits for running job completion for 5 minutes. 
+    default: ""

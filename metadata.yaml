@@ -1,7 +1,7 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-name: jenkins-k8s-operator
+name: jenkins-k8s
 assumes:
   - k8s-api
 display-name: Jenkins K8s
@@ -24,13 +24,12 @@ description: |
   For DevOps and SRE teams, this charm will make operating Jenkins simple and straightforward
   through Juju's clean interface. Allowing both kubernetes and machine agent relations, it supports
   multiple environments for automation.
-docs: ""
+docs: https://discourse.charmhub.io/t/jenkins-k8s-documentation-overview/11169
 issues: https://github.com/canonical/jenkins-k8s-operator/issues
 source: https://github.com/canonical/jenkins-k8s-operator
 tags:
   - application_development
   - ops
-subordinate: false
 containers:
   jenkins:
     resource: jenkins-image
@@ -38,3 +37,10 @@ resources:
   jenkins-image:
     type: oci-image
     description: OCI image for Jenkins
+requires:
+  agent-deprecated:
+    interface: jenkins-slave
+    optional: true
+  agent:
+    interface: jenkins_agent_v0
+    optional: true
