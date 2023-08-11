@@ -17,7 +17,7 @@ def test_state_invalid_time_config(harness: Harness):
     act: when state is initialized through from_charm method.
     assert: CharmConfigInvalidError is raised.
     """
-    harness.update_config({"update-time-range": "-1"})
+    harness.update_config({"restart-time-range": "-1"})
     harness.begin()
 
     with pytest.raises(state.CharmConfigInvalidError):
@@ -36,12 +36,12 @@ def test_no_time_range_config(time_range: str, harness: Harness):
     act: when state is instantiated.
     assert: state without time range is returned.
     """
-    harness.update_config({"update-time-range": time_range})
+    harness.update_config({"restart-time-range": time_range})
     harness.begin()
 
     assert (
-        typing.cast(charm.JenkinsK8sOperatorCharm, harness.charm).state.update_time_range is None
-    ), "Update time range should not be instantiated."
+        typing.cast(charm.JenkinsK8sOperatorCharm, harness.charm).state.restart_time_range is None
+    ), "Restart time range should not be instantiated."
 
 
 class TestAgentMeta(typing.TypedDict):

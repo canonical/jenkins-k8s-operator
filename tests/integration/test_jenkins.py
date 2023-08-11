@@ -38,7 +38,7 @@ async def test_jenkins_automatic_update_out_of_range(
 ):
     """
     arrange: given jenkins charm with frozen time to 15:00 UTC.
-    act: when update-time-range between 3AM to 5AM is applied.
+    act: when restart-time-range between 3AM to 5AM is applied.
     assert: the update does not take place.
     """
     ret_code, _, stderr = await ops_test.juju(

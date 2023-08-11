@@ -24,10 +24,10 @@ import timerange
         pytest.param("2023‐06‐20T15:31:23Z-2023‐09‐20T15:31:23Z", id="ISO timestamp range"),
     ],
 )
-def test_update_time_range_invalid_time(time_range: str):
+def test_restart_time_range_invalid_time(time_range: str):
     """
     arrange: given an invalid time ranges.
-    act: when UpdateTimeRange class is instantiated through from_string method.
+    act: when timerange.Range class is instantiated through from_string method.
     assert: ValueError is raised.
     """
     with pytest.raises(timerange.InvalidTimeRangeError):
@@ -44,17 +44,17 @@ def test_update_time_range_invalid_time(time_range: str):
         pytest.param("23-00", (23, 0), id="midnight edge probe"),
     ],
 )
-def test_update_time_range_valid_time(time_range: str, expected_range: tuple[int, int]):
+def test_restart_time_range_valid_time(time_range: str, expected_range: tuple[int, int]):
     """
     arrange: given a valid time range.
     act: when UpdateTimeRange class is instantiated through from_string method.
     assert: no exceptions are raised.
     """
-    update_time_range = timerange.Range.from_str(time_range)
-    assert update_time_range, "Expected time range to not be None."
+    restart_time_range = timerange.Range.from_str(time_range)
+    assert restart_time_range, "Expected time range to not be None."
 
-    assert update_time_range.start == expected_range[0], "Unexpected start time."
-    assert update_time_range.end == expected_range[1], "Unexpected end time."
+    assert restart_time_range.start == expected_range[0], "Unexpected start time."
+    assert restart_time_range.end == expected_range[1], "Unexpected end time."
 
 
 @pytest.mark.parametrize(
@@ -71,7 +71,7 @@ def test_update_time_range_valid_time(time_range: str, expected_range: tuple[int
         pytest.param(2, "23-1", False, id="out of overnight range(after)"),
     ],
 )
-def test_update_time_range_check_now(
+def test_restart_time_range_check_now(
     patch_hour: int, time_range: str, expected_result: bool, monkeypatch: pytest.MonkeyPatch
 ):
     """
@@ -84,7 +84,7 @@ def test_update_time_range_check_now(
     mock_datetime.utcnow.return_value = test_time
     monkeypatch.setattr(timerange, "datetime", mock_datetime)
 
-    update_time_range = timerange.Range.from_str(time_range)
-    assert update_time_range, "Expected time range to not be None."
+    restart_time_range = timerange.Range.from_str(time_range)
+    assert restart_time_range, "Expected time range to not be None."
 
-    assert update_time_range.check_now() == expected_result
+    assert restart_time_range.check_now() == expected_result

@@ -356,14 +356,14 @@ def model_app_unit_fixture(model: Model, application: Application, unit: Unit):
     return ModelAppUnit(model=model, app=application, unit=unit)
 
 
-@pytest_asyncio.fixture(scope="function", name="update_time_range_app")
-async def update_time_range_app_fixture(application: Application):
-    """Application with update-time-range configured."""
-    await application.set_config({"update-time-range": "03-05"})
+@pytest_asyncio.fixture(scope="function", name="restart_time_range_app")
+async def restart_time_range_app_fixture(application: Application):
+    """Application with restart-time-range configured."""
+    await application.set_config({"restart-time-range": "03-05"})
 
     yield application
 
-    await application.reset_config(["update-time-range"])
+    await application.reset_config(["restart-time-range"])
 
 
 @pytest_asyncio.fixture(scope="function", name="libfaketime_unit")
@@ -379,10 +379,10 @@ async def libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit):
 
 @pytest.fixture(scope="function", name="timerange_model_app_unit")
 def timerange_model_app_unit_fixture(
-    model: Model, update_time_range_app: Application, libfaketime_unit: Unit
+    model: Model, restart_time_range_app: Application, libfaketime_unit: Unit
 ):
     """The packaged model, application, unit of Jenkins to reduce number of parameters in tests."""
-    return ModelAppUnit(model=model, app=update_time_range_app, unit=libfaketime_unit)
+    return ModelAppUnit(model=model, app=restart_time_range_app, unit=libfaketime_unit)
 
 
 @pytest.fixture(scope="function", name="libfaketime_env")

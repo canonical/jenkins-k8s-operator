@@ -2,12 +2,15 @@
 # See LICENSE file for licensing details.
 
 options:
-  update-time-range:
+  restart-time-range:
     type: string
     description: >
-      Preferred UTC time range for LTS patch updates in 24 hour  format. If empty, the update will
-      take place whenever an update is available. For example, 03-05 will allow updates to take
-      place from 3AM UTC to 5AM UTC. Awaits for running job completion for 5 minutes. 
+      Preferred UTC time range for restarting Jenkins in 24 hour format. If empty, restart will
+      take place whenever Jenkins needs to restart. Jenkins will to restart on the following
+      occasions. 1. Patched Jenkins version within the same LTS available. 2. Plugins that are not
+      part of `plugins` configuration option is detected.
+      For example, 03-05 will allow Jenkins restart to take place from 3AM UTC to 5AM UTC. 
+      Awaits for running job completion for 5 minutes.
     default: ""
   plugins:
     type: string
