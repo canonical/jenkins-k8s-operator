@@ -914,7 +914,7 @@ def test__wait_jenkins_job_shutdown(monkeypatch: pytest.MonkeyPatch):
     jenkins._wait_jenkins_job_shutdown(mock_client)
 
 
-def test_safe_restart_failure(admin_credentials: jenkins.Credentials):
+def test_safe_restart_failure(harness_container: HarnessWithContainer):
     """
     arrange: given a mocked Jenkins API client that raises JenkinsAPIException.
     act: when safe_restart is called.
@@ -924,10 +924,10 @@ def test_safe_restart_failure(admin_credentials: jenkins.Credentials):
     mock_client.safe_restart.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
 
     with pytest.raises(jenkins.JenkinsError):
-        jenkins.safe_restart(admin_credentials, client=mock_client)
+        jenkins.safe_restart(harness_container.container, client=mock_client)
 
 
-def test_safe_restart(admin_credentials: jenkins.Credentials, monkeypatch: pytest.MonkeyPatch):
+def test_safe_restart(harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch):
     """
     arrange: given a mocked Jenkins API client that does not raise an exception.
     act: when safe_restart is called.
@@ -936,6 +936,6 @@ def test_safe_restart(admin_credentials: jenkins.Credentials, monkeypatch: pytes
     monkeypatch.setattr(jenkins, "_wait_jenkins_job_shutdown", lambda *_args, **_kwargs: None)
     mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
-    jenkins.safe_restart(admin_credentials, client=mock_client)
+    jenkins.safe_restart(harness_container.container, client=mock_client)
 
     mock_client.safe_restart.assert_called_once_with(wait_for_reboot=False)

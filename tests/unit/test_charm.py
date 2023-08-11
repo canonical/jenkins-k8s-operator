@@ -194,12 +194,13 @@ def test__on_update_status_no_action(
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
+    original_status = harness_container.harness.charm.unit.status.name
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
     mock_download_func.assert_not_called()
-    assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+    assert jenkins_charm.unit.status.name == original_status
 
 
 def test__on_update_status_get_updatable_version_error(
@@ -220,11 +221,12 @@ def test__on_update_status_get_updatable_version_error(
     )
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
+    original_status = harness_container.harness.charm.unit.status.name
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
-    assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+    assert jenkins_charm.unit.status.name == original_status
     assert jenkins_charm.unit.status.message, "The status message should not be empty."
 
 
@@ -251,11 +253,12 @@ def test__on_update_status_dowload_stable_war_error(
     )
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
+    original_status = harness_container.harness.charm.unit.status.name
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_update_status(mock_event)
 
-    assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+    assert jenkins_charm.unit.status.name == original_status
 
 
 def test__on_update_status_safe_restart_error(
