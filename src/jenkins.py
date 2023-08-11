@@ -738,7 +738,7 @@ def _get_plugin_name(plugin_info: str) -> str:
 
 def _build_desired_plugins_set(
     plugins_lookup: dict[str, list[str]], plugin: str, desired_plugins: set[str]
-):
+) -> None:
     """Build a set of plugins that are desired installations.
 
     Args:
@@ -753,7 +753,7 @@ def _build_desired_plugins_set(
         _build_desired_plugins_set(plugins_lookup, dependency, desired_plugins)
 
 
-def _set_jenkins_system_message(message: str, container: ops.Container):
+def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
     """Set a system message on Jenkins.
 
     Args:
@@ -762,7 +762,6 @@ def _set_jenkins_system_message(message: str, container: ops.Container):
     """
     jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
     config = yaml.safe_load(jcasc_yaml)
-    logger.info("CONFIG: %s", config)
     config["jenkins"]["systemMessage"] = message
     container.push(
         JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
@@ -771,14 +770,14 @@ def _set_jenkins_system_message(message: str, container: ops.Container):
 
 def _build_dependencies_lookup(
     plugin_dependency_outputs: typing.Iterable[str],
-) -> dict[str, list[str]]:
-    """Build a lookup table of plugin short name to list of dependency plugin short name.
+) -> dict[str, tuple[str, ...]]:
+    """Build a lookup table of plugin short name to list of dependency plugin's short names.
 
     Args:
-        plugin_dependency_outputs (typing.Iterable[str]): _description_
+        plugin_dependency_outputs: The plugin dependency output from Jenkins Groovy script.
 
     Returns:
-        dict[str, list[str]]: _description_
+        The dependency lookup table.
     """
     dependency_lookup: dict[str, tuple[str, ...]] = {}
     for line in plugin_dependency_outputs:
@@ -797,7 +796,7 @@ def _build_dependencies_lookup(
 
 
 def _traverse_dependencies(
-    plugin: str, dependency_lookup: dict[str, typing.Iterable[str]], seen: set[str]
+    plugin: str, dependency_lookup: typing.Mapping[str, typing.Iterable[str]], seen: set[str]
 ) -> typing.Iterable[str]:
     """Traverse through plugin dependencies that have not yet been traversed recursively.
 
@@ -818,7 +817,8 @@ def _traverse_dependencies(
 
 
 def _get_allowed_plugins(
-    top_level_plugins: typing.Iterable[str], dependency_lookup: dict[str, typing.Iterable[str]]
+    top_level_plugins: typing.Iterable[str],
+    dependency_lookup: typing.Mapping[str, typing.Iterable[str]],
 ) -> typing.Iterable[str]:
     """Get the plugin short names of allowed plugins and its dependencies.
 
@@ -830,7 +830,7 @@ def _get_allowed_plugins(
     Yields:
         The allowed plugin short name.
     """
-    seen = set()
+    seen: set[str] = set()
     for plugin in top_level_plugins:
         if plugin in seen:
             continue
@@ -838,7 +838,7 @@ def _get_allowed_plugins(
 
 
 def _get_top_level_plugins(
-    plugins: typing.Iterable[str], dependency_lookup: dict[str, typing.Iterable[str]]
+    plugins: typing.Iterable[str], dependency_lookup: typing.Mapping[str, typing.Iterable[str]]
 ) -> typing.Iterable[str]:
     """Get top level plugins that are not dependencies to other plugins.
 
@@ -849,7 +849,6 @@ def _get_top_level_plugins(
     Returns:
         All plugins that are not dependency to another plugin.
     """
-    logger.info("DEBUG: plugins: %s  lookup: %s", plugins, dependency_lookup)
     dependent_plugins: set[str] = set()
     for _, dependencies in dependency_lookup.items():
         dependent_plugins = dependent_plugins.union(dependencies)
@@ -861,7 +860,7 @@ def remove_unlisted_plugins(
     plugins: typing.Iterable[str] | None,
     container: ops.Container,
     client: jenkinsapi.jenkins.Jenkins | None = None,
-):
+) -> None:
     """Remove plugins that are not a part of list of desired plugins.
 
     Args:
@@ -898,7 +897,7 @@ plugins.each {
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to remove the following plugins: %s, %s", plugins_to_remove, exc)
         raise JenkinsPluginError("Failed to remove plugins.") from exc
-    logger.info("Removed %s", plugins_to_remove)
+    logger.debug("Removed %s", plugins_to_remove)
 
     top_level_plugins = _get_top_level_plugins(plugins_to_remove, dependency_lookup)
     _set_jenkins_system_message(

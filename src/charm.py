@@ -146,56 +146,116 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         credentials = jenkins.get_admin_credentials(self._jenkins_container)
         event.set_results({"password": credentials.password})
 
-    def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
-        """Handle update status event.
+    def _remove_unlisted_plugins(self, container: ops.Container) -> ops.StatusBase:
+        """Remove plugins that are installed but not allowed.
 
-        On Update status:
-        1. Update Jenkins patch LTS version if available.
-        2. Update apt packages if available.
+        Args:
+            container: The jenkins workload container.
+
+        Returns:
+            The unit status of the charm after the operation.
         """
-        container = self.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            return
-
-        err_info = ""
         try:
             jenkins.remove_unlisted_plugins(plugins=self.state.plugins, container=container)
         except (jenkins.JenkinsPluginError, jenkins.JenkinsError) as exc:
             logger.error("Failed to remove unlisted plugin, %s", exc)
-            err_info = "Failed to remove unlisted plugin."
+            return ops.ActiveStatus("Failed to remove unlisted plugin.")
+        return ops.ActiveStatus()
 
+    def _update_jenkins_version(self, container: ops.Container) -> ops.StatusBase:
+        """Update Jenkins patch version if available.
+
+        The update will only take place if the current time is within the update-time-range config
+        value.
+
+        Args:
+            container: The Jenkins workload container.
+
+        Returns:
+            The unit status of the charm after the operation.
+        """
         if self.state.update_time_range and not self.state.update_time_range.check_now():
-            return
+            return self.unit.status
 
-        self.unit.status = ops.ActiveStatus("Checking for updates.")
+        original_status = self.unit.status.name
+        self.unit.status = ops.StatusBase.from_name(original_status, "Checking for updates.")
         try:
             latest_patch_version = jenkins.get_updatable_version(proxy=self.state.proxy_config)
         except jenkins.JenkinsUpdateError as exc:
             logger.error("Failed to get Jenkins updates, %s", exc)
-            self.unit.status = ops.ActiveStatus("Failed to get Jenkins patch version.")
-            return
+            return ops.StatusBase.from_name(
+                original_status, "Failed to get Jenkins patch version."
+            )
 
         if not latest_patch_version:
-            self.unit.status = ops.ActiveStatus()
-            return
+            return ops.StatusBase.from_name(original_status, "")
 
         self.unit.status = ops.MaintenanceStatus("Updating Jenkins.")
         try:
             jenkins.download_stable_war(container, latest_patch_version)
         except jenkins.JenkinsNetworkError as exc:
             logger.error("Failed to download Jenkins war. %s", exc)
-            self.unit.status = ops.ActiveStatus("Failed to download executable.")
-            return
+            return ops.StatusBase.from_name(original_status, "Failed to download executable.")
         try:
             jenkins.safe_restart(container)
             jenkins.wait_ready()
         except (jenkins.JenkinsError, TimeoutError) as exc:
             logger.error("Failed to safely restart Jenkins. %s", exc)
-            self.unit.status = ops.BlockedStatus("Update restart failed.")
-            return
+            return ops.BlockedStatus("Update restart failed.")
 
         self.unit.set_workload_version(latest_patch_version)
-        self.unit.status = ops.ActiveStatus(err_info)
+        return ops.ActiveStatus()
+
+    def _get_priority_status(self, statuses: typing.Iterable[ops.StatusBase]) -> ops.StatusBase:
+        """Get status to display out of all possible statuses returned by charm components.
+
+        Args:
+            statuses: Statuses returned by components of the charm.
+
+        Returns:
+            The final status to display.
+        """
+
+        def get_status_priority(status: ops.StatusBase) -> int:
+            """Get status priority in numerical value.
+
+            Args:
+                status: The status to convert to priority value.
+
+            Returns:
+                The status priority value integer.
+            """
+            priority = {
+                ops.ErrorStatus.name: 0,
+                ops.BlockedStatus.name: 2,
+                ops.MaintenanceStatus.name: 4,
+                ops.WaitingStatus.name: 6,
+                ops.ActiveStatus.name: 8,
+            }.get(status.name)
+            priority = typing.cast(int, priority)
+            if status.message:
+                return priority + 1
+            return priority
+
+        return sorted(statuses, key=get_status_priority)[0]
+
+    def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
+        """Handle update status event.
+
+        On Update status:
+        1. Remove plugins that are installed but are not allowed by plugins config value.
+        2. Update Jenkins patch version if available and is within update-time-range config value.
+        """
+        container = self.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
+            return
+
+        self.unit.status = self._get_priority_status(
+            (
+                self._remove_unlisted_plugins(container=container),
+                self._update_jenkins_version(container=container),
+            )
+        )
 
 
 if __name__ == "__main__":  # pragma: nocover
