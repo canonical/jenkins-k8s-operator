@@ -7,7 +7,7 @@ assumes:
 display-name: Jenkins K8s
 summary: Jenkins Continuous Integration Server
 maintainers:
-  - IS DevOps <launchpad.net/~canonical-is-devops>
+  - https://launchpad.net/~canonical-is-devops
 description: |
   A [Juju](https://juju.is/) [charm](https://juju.is/docs/olm/charmed-operators)
   deploying and managing [Jenkins](https://jenkins.io/) on Kubernetes. Jenkins is an open source

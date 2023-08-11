@@ -348,7 +348,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L860"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L859"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 
@@ -357,7 +357,7 @@ remove_unlisted_plugins(
     plugins: Optional[Iterable[str]],
     container: Container,
     client: Jenkins | None = None
-)
+) → None
 ```
 
 Remove plugins that are not a part of list of desired plugins. 
