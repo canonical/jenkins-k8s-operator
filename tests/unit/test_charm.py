@@ -25,7 +25,7 @@ from .types_ import HarnessWithContainer, Versions
 
 
 @pytest.mark.parametrize(
-    "charm_config", [pytest.param({"update-time-range": "-2"}, id="invalid update-time-range")]
+    "charm_config", [pytest.param({"restart-time-range": "-2"}, id="invalid restart-time-range")]
 )
 def test___init___invailid_config(
     harness_container: HarnessWithContainer, charm_config: dict[str, str]
@@ -330,7 +330,7 @@ def test__on_update_status_not_in_time_range(
     harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
 ):
     """
-    arrange: given a charm with update-time-range 0-23 and monkeypatched datetime with hour 23.
+    arrange: given a charm with restart-time-range 0-23 and monkeypatched datetime with hour 23.
     act: when update_status action is triggered.
     assert: no action is taken and the charm remains active.
     """
@@ -342,7 +342,7 @@ def test__on_update_status_not_in_time_range(
     monkeypatch.setattr(jenkins, "remove_unlisted_plugins", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
     mock_event = MagicMock(spec=UpdateStatusEvent)
-    harness_container.harness.update_config({"update-time-range": "00-23"})
+    harness_container.harness.update_config({"restart-time-range": "00-23"})
     harness_container.harness.begin()
     previous_status = harness_container.harness.charm.unit.status.name
 

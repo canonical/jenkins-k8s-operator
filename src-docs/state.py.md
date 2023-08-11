@@ -215,7 +215,7 @@ The Jenkins k8s operator charm state.
 
 **Attributes:**
  
- - <b>`update_time_range`</b>:  Time range to allow Jenkins to update version. 
+ - <b>`restart_time_range`</b>:  Time range to allow Jenkins to update version. 
  - <b>`agent_relation_meta`</b>:  Metadata of all agents from units related through agent relation. 
  - <b>`deprecated_agent_relation_meta`</b>:  Metadata of all agents from units related through  deprecated agent relation. 
  - <b>`proxy_config`</b>:  Proxy configuration to access Jenkins upstream through. 

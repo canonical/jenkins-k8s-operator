@@ -165,7 +165,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
     def _update_jenkins_version(self, container: ops.Container) -> ops.StatusBase:
         """Update Jenkins patch version if available.
 
-        The update will only take place if the current time is within the update-time-range config
+        The update will only take place if the current time is within the restart-time-range config
         value.
 
         Args:
@@ -174,7 +174,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The unit status of the charm after the operation.
         """
-        if self.state.update_time_range and not self.state.update_time_range.check_now():
+        if self.state.restart_time_range and not self.state.restart_time_range.check_now():
             return self.unit.status
 
         original_status = self.unit.status.name
@@ -244,7 +244,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         On Update status:
         1. Remove plugins that are installed but are not allowed by plugins config value.
-        2. Update Jenkins patch version if available and is within update-time-range config value.
+        2. Update Jenkins patch version if available and is within restart-time-range config value.
         """
         container = self.unit.get_container(self.state.jenkins_service_name)
         if not container.can_connect():
