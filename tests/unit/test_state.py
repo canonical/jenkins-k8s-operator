@@ -129,3 +129,29 @@ def test_proxyconfig_from_charm_env(
     assert config.http_proxy == proxy_config.http_proxy
     assert config.https_proxy == proxy_config.https_proxy
     assert config.no_proxy == proxy_config.no_proxy
+
+
+def test_plugins_config_none(harness: Harness):
+    """
+    arrange: given a charm with no plugins config.
+    act: when state is initialized from charm.
+    assert: plugin state is None.
+    """
+    harness.begin()
+
+    config = state.State.from_charm(harness.charm)
+    assert config.plugins is None
+
+
+def test_plugins_config(harness: Harness):
+    """
+    arrange: given a charm with comma separated plugins.
+    act: when state is initialized from charm.
+    assert: plugin state contains an iterable of plugins.
+    """
+    harness.update_config({"plugins": "hello, world"})
+    harness.begin()
+
+    config = state.State.from_charm(harness.charm)
+    assert config.plugins is not None
+    assert tuple(config.plugins) == ("hello", "world")
