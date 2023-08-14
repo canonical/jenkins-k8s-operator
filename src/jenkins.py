@@ -902,7 +902,8 @@ plugins.each {
     top_level_plugins = _get_top_level_plugins(plugins_to_remove, dependency_lookup)
     _set_jenkins_system_message(
         message="The following plugins have been removed by the system administrator: "
-        f"{', '.join(top_level_plugins)}",
+        f"{', '.join(top_level_plugins)}\n"
+        f"To allow the plugins, please include them in the plugins configuration of the charm.",
         container=container,
     )
 
