@@ -190,7 +190,9 @@ def test__on_update_status_no_action(
     mock_download_func = MagicMock(spec=jenkins.download_stable_war)
     monkeypatch.setattr(jenkins, "remove_unlisted_plugins", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "get_version", lambda: current_version)
-    monkeypatch.setattr(jenkins, "_get_latest_patch_version", lambda *_, **__: current_version)
+    monkeypatch.setattr(
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: current_version
+    )
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
     mock_event = MagicMock(spec=UpdateStatusEvent)
     harness_container.harness.begin()
@@ -311,7 +313,9 @@ def test__on_update_status_update(
     mock_safe_restart = MagicMock(spec=jenkins.safe_restart)
     monkeypatch.setattr(jenkins, "remove_unlisted_plugins", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "get_version", lambda: current_version)
-    monkeypatch.setattr(jenkins, "_get_latest_patch_version", lambda *_, **__: patched_version)
+    monkeypatch.setattr(
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: patched_version
+    )
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download)
     monkeypatch.setattr(jenkins, "safe_restart", mock_safe_restart)
     monkeypatch.setattr(jenkins, "wait_ready", lambda: None)

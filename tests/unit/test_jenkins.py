@@ -650,7 +650,7 @@ def test_fetch_versions_from_rss(
     """
     mock_rss_response = unittest.mock.MagicMock(spec=requests.Response)
     mock_rss_response.content = rss_feed
-    monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
+    monkeypatch.setattr(requests, "get", lambda *_args, **_kwargs: mock_rss_response)
 
     expected = [versions.minor_update, versions.patched, versions.current]
     result = list(jenkins._fetch_versions_from_rss())
@@ -682,7 +682,7 @@ def test_get_latest_patch_version_invalid_rss(
     """
     mock_rss_response = unittest.mock.MagicMock(spec=requests.Response)
     mock_rss_response.content = b"invalid rss"
-    monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
+    monkeypatch.setattr(requests, "get", lambda *_args, **_kwargs: mock_rss_response)
 
     with pytest.raises(jenkins.ValidationError):
         jenkins._get_latest_patch_version(current_version)
@@ -704,7 +704,7 @@ def test_get_latest_patch_version_missing_version_rss(
         </rss>""".encode(
         encoding="utf-8"
     )
-    monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
+    monkeypatch.setattr(requests, "get", lambda *_args, **_kwargs: mock_rss_response)
 
     with pytest.raises(jenkins.ValidationError):
         jenkins._get_latest_patch_version(current_version)
@@ -720,7 +720,7 @@ def test__get_latest_patch_version(
     """
     mock_rss_response = unittest.mock.MagicMock(spec=requests.Response)
     mock_rss_response.content = rss_feed
-    monkeypatch.setattr(requests, "get", lambda *_, **__: mock_rss_response)
+    monkeypatch.setattr(requests, "get", lambda *_args, **_kwargs: mock_rss_response)
 
     result = jenkins._get_latest_patch_version(current_version)
 
@@ -820,7 +820,7 @@ def test_download_stable_war(monkeypatch: pytest.MonkeyPatch, current_version: s
     """
     mock_download_response = unittest.mock.MagicMock(spec=requests.Response)
     mock_download_response.content = b"mock war content"
-    monkeypatch.setattr(requests, "get", lambda *_, **__: mock_download_response)
+    monkeypatch.setattr(requests, "get", lambda *_args, **_kwargs: mock_download_response)
     container = unittest.mock.MagicMock(spec=Container)
 
     jenkins.download_stable_war(container, current_version)
