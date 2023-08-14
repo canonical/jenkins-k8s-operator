@@ -13,11 +13,9 @@ import pytest
 
 from status import get_priority_status
 
-# walrus operator cannot be used with type hints and mypy assigns the type to the first type it
-# encounters, making subsequent types invalid.
-expected_status: ops.StatusBase
 
-
+# pylint doesn't quite understand walrus operators
+# pylint: disable=unused-variable,undefined-variable,too-many-locals
 @pytest.mark.parametrize(
     "statuses, expected_status",
     [
@@ -44,14 +42,16 @@ expected_status: ops.StatusBase
         pytest.param(
             [
                 ops.ActiveStatus(),
-                expected_status := ops.ActiveStatus("I have a message"),
+                # walrus operator is initialized with another status, mypy complains about
+                # incompatible types in assignment
+                expected_status := ops.ActiveStatus("I have a message"),  # type: ignore
             ],
             expected_status,
             id="same statuses, one with message",
         ),
         pytest.param(
             [
-                expected_status := ops.ActiveStatus("I have a message"),
+                expected_status := ops.ActiveStatus("I have a message"),  # type: ignore
                 ops.ActiveStatus("I have a message too"),
             ],
             expected_status,
@@ -59,6 +59,7 @@ expected_status: ops.StatusBase
         ),
     ],
 )
+# pylint: enable=unused-variable,undefined-variable,too-many-locals
 def test__get_priority_status(
     statuses: typing.Iterable[ops.StatusBase],
     expected_status: ops.StatusBase,

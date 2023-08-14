@@ -432,11 +432,8 @@ def test__on_update_status_not_in_time_range(
     mock_status_func.assert_not_called()
 
 
-# walrus operator cannot be used with type hints and mypy assigns the type to the first type it
-# encounters, making subsequent types invalid.
-expected_status: ops.StatusBase
-
-
+# pylint doesn't quite understand walrus operators
+# pylint: disable=unused-variable,undefined-variable,too-many-locals
 @pytest.mark.parametrize(
     "remove_plugin_status, update_jenkins_status, expected_status",
     [
@@ -448,19 +445,21 @@ expected_status: ops.StatusBase
         ),
         pytest.param(
             ops.ActiveStatus("Failed to remove unlisted plugin."),
-            expected_status := ops.BlockedStatus(),
+            # walrus operator is initialized with another status, mypy complains about
+            # incompatible types in assignment
+            expected_status := ops.BlockedStatus(),  # type: ignore
             expected_status,
             id="Failed plugin remove status (blocked status).",
         ),
         pytest.param(
             ops.ActiveStatus("Failed to remove unlisted plugin."),
-            expected_status := ops.MaintenanceStatus(),
+            expected_status := ops.MaintenanceStatus(),  # type: ignore
             expected_status,
             id="Failed plugin remove status (maintenance status).",
         ),
         pytest.param(
             ops.ActiveStatus(),
-            expected_status := ops.WaitingStatus(),
+            expected_status := ops.WaitingStatus(),  # type: ignore
             expected_status,
             id="Failed update jenkins status (waiting status).",
         ),
@@ -472,6 +471,7 @@ expected_status: ops.StatusBase
         ),
     ],
 )
+# pylint: enable=unused-variable,undefined-variable,too-many-locals
 def test__on_update_status(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
@@ -479,6 +479,11 @@ def test__on_update_status(
     update_jenkins_status: ops.StatusBase,
     expected_status: ops.StatusBase,
 ):
+    """
+    arrange: given patched statuses from _remove_unlisted_plugins and _update_jenkins_version.
+    act: when _on_update_status is called.
+    assert: expected status is applied to the unit status.
+    """
     monkeypatch.setattr(
         JenkinsK8sOperatorCharm,
         "_remove_unlisted_plugins",
