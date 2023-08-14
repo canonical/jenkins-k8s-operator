@@ -47,11 +47,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.update_status, self._on_update_status)
 
-    @property
-    def _jenkins_container(self) -> ops.Container:
-        """The Jenkins workload container."""
-        return self.unit.get_container(self.state.jenkins_service_name)
-
     def _get_pebble_layer(self, jenkins_env: jenkins.Environment) -> ops.pebble.Layer:
         """Return a dictionary representing a Pebble layer.
 
@@ -140,10 +135,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The event fired from get-admin-password action.
         """
-        if not self._jenkins_container.can_connect():
+        container = self.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
             event.defer()
             return
-        credentials = jenkins.get_admin_credentials(self._jenkins_container)
+        credentials = jenkins.get_admin_credentials(container)
         event.set_results({"password": credentials.password})
 
     def _remove_unlisted_plugins(self, container: ops.Container) -> ops.StatusBase:
