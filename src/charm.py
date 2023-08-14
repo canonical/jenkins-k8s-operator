@@ -214,6 +214,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if not container.can_connect():
             return
 
+        if self.state.restart_time_range and not self.state.restart_time_range.check_now():
+            return
+
         self.unit.status = status.get_priority_status(
             (
                 self._remove_unlisted_plugins(container=container),
