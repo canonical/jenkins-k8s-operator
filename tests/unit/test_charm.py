@@ -12,8 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import requests
-from ops.charm import ActionEvent, PebbleReadyEvent, UpdateStatusEvent
-from ops.model import ActiveStatus, BlockedStatus, StatusBase
+import ops
 
 import jenkins
 import state
@@ -50,7 +49,7 @@ def test__on_jenkins_pebble_ready_no_container(harness_container: HarnessWithCon
     """
     harness_container.harness.begin()
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    mock_event = MagicMock(spec=PebbleReadyEvent)
+    mock_event = MagicMock(spec=ops.PebbleReadyEvent)
     mock_event.workload = None
 
     jenkins_charm._on_jenkins_pebble_ready(mock_event)
@@ -110,8 +109,8 @@ def test__on_jenkins_pebble_ready_get_version_error(
 @pytest.mark.parametrize(
     "status_code,expected_status",
     [
-        pytest.param(503, BlockedStatus, id="jenkins not ready"),
-        pytest.param(200, ActiveStatus, id="jenkins ready"),
+        pytest.param(503, ops.BlockedStatus, id="jenkins not ready"),
+        pytest.param(200, ops.ActiveStatus, id="jenkins ready"),
     ],
 )
 # there are too many dependent fixtures that cannot be merged.
@@ -120,7 +119,7 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     mocked_get_request: Callable[[str, int, Any, Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
     status_code: int,
-    expected_status: StatusBase,
+    expected_status: ops.StatusBase,
 ):
     """
     arrange: given a mocked jenkins client and a patched requests instance.
@@ -153,7 +152,7 @@ def test__on_get_admin_password_action_container_not_ready(
     harness_container.harness.set_can_connect(
         harness_container.harness.model.unit.containers["jenkins"], False
     )
-    mock_event = MagicMock(spec=ActionEvent)
+    mock_event = MagicMock(spec=ops.ActionEvent)
     harness_container.harness.begin()
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
@@ -170,7 +169,7 @@ def test__on_get_admin_password_action(
     act: when get-admin-password action is run.
     assert: the correct admin password is returned.
     """
-    mock_event = MagicMock(spec=ActionEvent)
+    mock_event = MagicMock(spec=ops.ActionEvent)
     harness_container.harness.begin()
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
@@ -221,8 +220,7 @@ def test__on_update_status_get_updatable_version_error(
         "get_updatable_version",
         lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsUpdateError),
     )
-    mock_event = MagicMock(spec=UpdateStatusEvent)
-    harness_container.harness.begin()
+    mock_event = MagicMock(spec=ops.UpdateStatusEvent)
     original_status = harness_container.harness.charm.unit.status.name
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
@@ -253,7 +251,7 @@ def test__on_update_status_dowload_stable_war_error(
         "download_stable_war",
         lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsNetworkError),
     )
-    mock_event = MagicMock(spec=UpdateStatusEvent)
+    mock_event = MagicMock(spec=ops.UpdateStatusEvent)
     harness_container.harness.begin()
     original_status = harness_container.harness.charm.unit.status.name
 
@@ -289,7 +287,7 @@ def test__on_update_status_safe_restart_error(
         "safe_restart",
         lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsError),
     )
-    mock_event = MagicMock(spec=UpdateStatusEvent)
+    mock_event = MagicMock(spec=ops.UpdateStatusEvent)
     harness_container.harness.begin()
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
@@ -319,7 +317,7 @@ def test__on_update_status_update(
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download)
     monkeypatch.setattr(jenkins, "safe_restart", mock_safe_restart)
     monkeypatch.setattr(jenkins, "wait_ready", lambda: None)
-    mock_event = MagicMock(spec=UpdateStatusEvent)
+    mock_event = MagicMock(spec=ops.UpdateStatusEvent)
     harness_container.harness.begin()
 
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
