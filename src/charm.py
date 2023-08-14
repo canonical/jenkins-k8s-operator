@@ -171,9 +171,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The unit status of the charm after the operation.
         """
-        if self.state.restart_time_range and not self.state.restart_time_range.check_now():
-            return self.unit.status
-
         original_status = self.unit.status.name
         self.unit.status = ops.StatusBase.from_name(original_status, "Checking for updates.")
         try:

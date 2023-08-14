@@ -13,18 +13,22 @@ import pytest
 
 from status import get_priority_status
 
+# walrus operator cannot be used with type hints and mypy assigns the type to the first type it
+# encounters, making subsequent types invalid.
+expected_status: ops.StatusBase
+
 
 @pytest.mark.parametrize(
     "statuses, expected_status",
     [
         pytest.param(
             [
-                ops.BlockedStatus(),
+                expected_status := ops.BlockedStatus(),
                 ops.MaintenanceStatus(),
                 ops.WaitingStatus(),
                 ops.ActiveStatus(),
             ],
-            ops.BlockedStatus(),
+            expected_status,
             id="all statuses in order",
         ),
         pytest.param(
@@ -32,25 +36,25 @@ from status import get_priority_status
                 ops.ActiveStatus(),
                 ops.WaitingStatus(),
                 ops.MaintenanceStatus(),
-                ops.BlockedStatus(),
+                expected_status := ops.BlockedStatus(),
             ],
-            ops.BlockedStatus(),
+            expected_status,
             id="all statuses in reverse",
         ),
         pytest.param(
             [
                 ops.ActiveStatus(),
-                ops.ActiveStatus("I have a message"),
+                expected_status := ops.ActiveStatus("I have a message"),
             ],
-            ops.ActiveStatus("I have a message"),
+            expected_status,
             id="same statuses, one with message",
         ),
         pytest.param(
             [
-                ops.ActiveStatus("I have a message"),
+                expected_status := ops.ActiveStatus("I have a message"),
                 ops.ActiveStatus("I have a message too"),
             ],
-            ops.ActiveStatus("I have a message"),
+            expected_status,
             id="same statuses with messages",
         ),
     ],
