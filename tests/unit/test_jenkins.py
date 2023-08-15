@@ -1232,6 +1232,7 @@ def test__set_jenkins_system_message(container: ops.Container):
 def test_remove_unlisted_plugins_delete_error(
     monkeypatch: pytest.MonkeyPatch,
     container: ops.Container,
+    plugin_groovy_script_result: str,
 ):
     """
     arrange: given a mocked client that raises an exception on delete_plugins call.
@@ -1246,17 +1247,7 @@ def test_remove_unlisted_plugins_delete_error(
             spec=jenkinsapi.jenkins.Jenkins.run_groovy_script
         )
     )
-    mock_groovy_script.return_value = textwrap.dedent(
-        """
-        plugin-a (v0.0.1) => [dep-a-a (v0.0.1), dep-a-b (v0.0.1)]
-        plugin-b (v0.0.2) => [dep-b-a (v0.0.2), dep-b-b (v0.0.2)]
-        plugin-c (v0.0.5) => []
-        dep-a-a (v0.0.3) => []
-        dep-a-b (v0.0.3) => []
-        dep-b-a (v0.0.4) => []
-        dep-b-b (v0.0.4) => []
-        """
-    )
+    mock_groovy_script.return_value = plugin_groovy_script_result
     mock_client.delete_plugins.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
 
     with pytest.raises(jenkins.JenkinsPluginError):
@@ -1273,6 +1264,7 @@ def test_remove_unlisted_plugins_delete_error(
 def test_remove_unlisted_plugins_restart_error(
     monkeypatch: pytest.MonkeyPatch,
     container: ops.Container,
+    plugin_groovy_script_result: str,
     raise_exception: typing.Callable,
     expected_exception: Exception,
 ):
@@ -1290,17 +1282,7 @@ def test_remove_unlisted_plugins_restart_error(
             spec=jenkinsapi.jenkins.Jenkins.run_groovy_script
         )
     )
-    mock_groovy_script.return_value = textwrap.dedent(
-        """
-        plugin-a (v0.0.1) => [dep-a-a (v0.0.1), dep-a-b (v0.0.1)]
-        plugin-b (v0.0.2) => [dep-b-a (v0.0.2), dep-b-b (v0.0.2)]
-        plugin-c (v0.0.5) => []
-        dep-a-a (v0.0.3) => []
-        dep-a-b (v0.0.3) => []
-        dep-b-a (v0.0.4) => []
-        dep-b-b (v0.0.4) => []
-        """
-    )
+    mock_groovy_script.return_value = plugin_groovy_script_result
 
     # mypy doesn't understand that Exception type can match TypeVar("E", bound=BaseException)
     with pytest.raises(expected_exception):  # type: ignore

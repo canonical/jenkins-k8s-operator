@@ -3,6 +3,7 @@
 
 """Fixtures for Jenkins-k8s-operator charm unit tests."""
 
+import textwrap
 import typing
 from pathlib import Path
 from secrets import token_hex
@@ -418,4 +419,20 @@ def proxy_config_fixture():
         http_proxy=f"http://testusername:{token_hex(16)}@httptest.internal:3127",  # type: ignore
         https_proxy=f"http://testusername:{token_hex(16)}@httpstest.internal:3127",  # type: ignore
         no_proxy="noproxy.host1,noproxy.host2",
+    )
+
+
+@pytest.fixture(scope="function", name="plugin_groovy_script_result")
+def plugin_groovy_script_result_fixture():
+    """A sample groovy script result from getting plugin and dependencies script."""
+    return textwrap.dedent(
+        """
+        plugin-a (v0.0.1) => [dep-a-a (v0.0.1), dep-a-b (v0.0.1)]
+        plugin-b (v0.0.2) => [dep-b-a (v0.0.2), dep-b-b (v0.0.2)]
+        plugin-c (v0.0.5) => []
+        dep-a-a (v0.0.3) => []
+        dep-a-b (v0.0.3) => []
+        dep-b-a (v0.0.4) => []
+        dep-b-b (v0.0.4) => []
+        """
     )
