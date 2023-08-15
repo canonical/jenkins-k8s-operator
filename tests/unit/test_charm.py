@@ -336,10 +336,23 @@ def test__update_jenkins_version_update(
 
 
 @pytest.mark.parametrize(
-    "exception",
+    "exception, expected_status",
     [
-        pytest.param(jenkins.JenkinsPluginError, id="plugin error"),
-        pytest.param(jenkins.JenkinsError, id="jenkins error"),
+        pytest.param(
+            jenkins.JenkinsPluginError,
+            ops.MaintenanceStatus("Failed to remove unlisted plugin."),
+            id="plugin error",
+        ),
+        pytest.param(
+            jenkins.JenkinsError,
+            ops.MaintenanceStatus("Failed to remove unlisted plugin."),
+            id="jenkins error",
+        ),
+        pytest.param(
+            TimeoutError,
+            ops.BlockedStatus("Failed to restart Jenkins (remove plugin)"),
+            id="jenkins error",
+        ),
     ],
 )
 def test__remove_unlisted_plugins_error(
@@ -347,6 +360,7 @@ def test__remove_unlisted_plugins_error(
     monkeypatch: pytest.MonkeyPatch,
     exception: Exception,
     raise_exception: typing.Callable,
+    expected_status: ops.StatusBase,
 ):
     """
     arrange: given a charm and monkeypatched remove_unlisted_plugins that raises exceptions.
@@ -361,8 +375,7 @@ def test__remove_unlisted_plugins_error(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     returned_status = jenkins_charm._remove_unlisted_plugins(harness_container.container)
 
-    assert returned_status.name == ACTIVE_STATUS_NAME
-    assert returned_status.message == "Failed to remove unlisted plugin."
+    assert returned_status == expected_status
 
 
 def test__remove_unlisted_plugins(
