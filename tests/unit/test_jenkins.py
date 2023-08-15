@@ -4,19 +4,22 @@
 """Jenkins-k8s jenkins module tests."""
 
 # Need access to protected functions for testing
-# pylint:disable=protected-access
+# All tests belong to single jenkins module
+# pylint:disable=protected-access, too-many-lines
 
 
 import re
 import secrets
+import textwrap
 import typing
 import unittest.mock
 from functools import partial
 
 import jenkinsapi.jenkins
+import ops
 import pytest
 import requests
-from ops.model import Container
+import yaml
 from ops.pebble import ExecError, ExecProcess
 
 import jenkins
@@ -298,7 +301,7 @@ def test__install_plugins_fail(raise_exception):
     mock_proc.wait_output.side_effect = lambda: raise_exception(
         exception=ExecError(["mock", "command"], 1, "", "Failed to install plugins.")
     )
-    mock_container = unittest.mock.MagicMock(spec=Container)
+    mock_container = unittest.mock.MagicMock(spec=ops.Container)
     mock_container.exec.return_value = mock_proc
 
     with pytest.raises(jenkins.JenkinsPluginError):
@@ -478,7 +481,7 @@ def test_get_client(admin_credentials: jenkins.Credentials):
         )
 
 
-def test_get_node_secret_api_error(container: Container):
+def test_get_node_secret_api_error(container: ops.Container):
     """
     arrange: given a mocked Jenkins client that raises an error.
     act: when a groovy script is executed through the client.
@@ -493,7 +496,7 @@ def test_get_node_secret_api_error(container: Container):
         jenkins.get_node_secret("jenkins-agent", container, mock_jenkins_client)
 
 
-def test_get_node_secret(container: Container):
+def test_get_node_secret(container: ops.Container):
     """
     arrange: given a mocked Jenkins client.
     act: when a groovy script getting a node secret is executed.
@@ -508,7 +511,7 @@ def test_get_node_secret(container: Container):
     assert secret == node_secret, "Secret value mismatch."
 
 
-def test_add_agent_node_fail(container: Container):
+def test_add_agent_node_fail(container: ops.Container):
     """
     arrange: given a mocked jenkins client that raises an API exception.
     act: when add_agent is called
@@ -525,7 +528,7 @@ def test_add_agent_node_fail(container: Container):
         )
 
 
-def test_add_agent_node_already_exists(container: Container):
+def test_add_agent_node_already_exists(container: ops.Container):
     """
     arrange: given a mocked jenkins client that raises an Already exists exception.
     act: when add_agent is called.
@@ -541,7 +544,7 @@ def test_add_agent_node_already_exists(container: Container):
     )
 
 
-def test_add_agent_node(container: Container):
+def test_add_agent_node(container: ops.Container):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
@@ -806,7 +809,7 @@ def test_download_stable_war_failure(monkeypatch: pytest.MonkeyPatch, current_ve
     assert: JenkinsNetworkError is raised.
     """
     monkeypatch.setattr(requests, "get", ConnectionExceptionPatch)
-    container = unittest.mock.MagicMock(spec=Container)
+    container = unittest.mock.MagicMock(spec=ops.Container)
 
     with pytest.raises(jenkins.JenkinsNetworkError):
         jenkins.download_stable_war(container, current_version)
@@ -821,7 +824,7 @@ def test_download_stable_war(monkeypatch: pytest.MonkeyPatch, current_version: s
     mock_download_response = unittest.mock.MagicMock(spec=requests.Response)
     mock_download_response.content = b"mock war content"
     monkeypatch.setattr(requests, "get", lambda *_args, **_kwargs: mock_download_response)
-    container = unittest.mock.MagicMock(spec=Container)
+    container = unittest.mock.MagicMock(spec=ops.Container)
 
     jenkins.download_stable_war(container, current_version)
 
@@ -939,3 +942,451 @@ def test_safe_restart(harness_container: HarnessWithContainer, monkeypatch: pyte
     jenkins.safe_restart(harness_container.container, client=mock_client)
 
     mock_client.safe_restart.assert_called_once_with(wait_for_reboot=False)
+
+
+@pytest.mark.parametrize(
+    "plugin_str",
+    [
+        pytest.param("", id="empty plugin name"),
+        pytest.param(";;", id="invalid character"),
+        pytest.param("too many whitespaces", id="too many whitespaces"),
+        pytest.param("no-plugin-version", id="no version"),
+        pytest.param("invalid-plugin-version", id="invalid version"),
+    ],
+)
+def test__get_plugin_name_fail(plugin_str: str):
+    """
+    arrange: given a plugin string that is invalid.
+    act: when _get_plugin_name is called.
+    assert: ValidationError is raised.
+    """
+    with pytest.raises(jenkins.ValidationError):
+        jenkins._get_plugin_name(plugin_str)
+
+
+@pytest.mark.parametrize(
+    "plugin_str, expected_name",
+    [
+        pytest.param("test-plugin (0.1.2)", "test-plugin", id="standard plugin string"),
+        pytest.param(
+            "test-plugin (any version string is ok)",
+            "test-plugin",
+            id="non-standard plugin version",
+        ),
+    ],
+)
+def test__get_plugin_name(plugin_str: str, expected_name: str):
+    """
+    arrange: given a plugin string that is valid.
+    act: when _get_plugin_name is called.
+    assert: expected plugin name is returned.
+    """
+    plugin_name = jenkins._get_plugin_name(plugin_str)
+
+    assert plugin_name == expected_name
+
+
+@pytest.mark.parametrize(
+    "dependency_strs, expected_lookup",
+    [
+        pytest.param(
+            [
+                # dependency plugin versions do not necessarily match installed version
+                # hence the difference in dependency version to installed version string.
+                "plugin-a (v0.0.1) => [plugin-b (v0.0.1), plugin-c (v0.0.1)]",
+                "plugin-b (v0.0.2) => [plugin-d (v0.0.1)]",
+                "plugin-c (v0.0.3) => []",
+                "plugin-d (v0.0.4) => []",
+            ],
+            {
+                "plugin-a": ("plugin-b", "plugin-c"),
+                "plugin-b": ("plugin-d",),
+                "plugin-c": (),
+                "plugin-d": (),
+            },
+            id="valid plugins",
+        ),
+        pytest.param(
+            [
+                "plugin-a (v0.0.1) => [plugin-b (v0.0.1), plugin-c (v0.0.1)]",
+                "plugin-b (v0.0.2) => [plugin-d (v0.0.1)]",
+                "plugin-c (v0.0.3) => []",
+                "plugin-d (v0.0.4) => []",
+                "skip-invalid-groovy-script-output",
+                "invalid-deps (v0.0.01) => [invalid-dep]",
+            ],
+            {
+                "plugin-a": ("plugin-b", "plugin-c"),
+                "plugin-b": ("plugin-d",),
+                "plugin-c": (),
+                "plugin-d": (),
+            },
+            id="invalid plugin lines skipped",
+        ),
+    ],
+)
+def test__build_dependencies_lookup(
+    dependency_strs: typing.Iterable[str],
+    expected_lookup: typing.Mapping[str, typing.Iterable[str]],
+):
+    """
+    arrange: given an iterable string of plugin to dependencies.
+    act: when _build_dependencies_lookup is called.
+    assert: the expected lookup table is built.
+    """
+    lookup = jenkins._build_dependencies_lookup(dependency_strs)
+
+    assert lookup == expected_lookup
+
+
+@pytest.mark.parametrize(
+    "plugin, plugins_lookup, expected_plugins",
+    [
+        pytest.param(
+            "plugin-a",
+            {
+                "plugin-a": ("plugin-b", "plugin-c"),
+                "plugin-b": ("plugin-d",),
+                "plugin-c": (),
+                "plugin-d": (),
+            },
+            ("plugin-a", "plugin-b", "plugin-d", "plugin-c"),
+            id="no duplicate dependencies",
+        ),
+        pytest.param(
+            "plugin-a",
+            {
+                "plugin-a": ("plugin-b", "plugin-c"),
+                "plugin-b": ("plugin-d", "plugin-c"),
+                "plugin-c": ("plugin-d"),
+                "plugin-d": (),
+            },
+            ("plugin-a", "plugin-b", "plugin-d", "plugin-c"),
+            id="duplicate dependencies",
+        ),
+        pytest.param(
+            "plugin-a",
+            {
+                "plugin-a": ("plugin-b", "plugin-e"),
+                "plugin-b": ("plugin-d", "plugin-e"),
+                "plugin-c": ("plugin-d"),
+                "plugin-d": (),
+            },
+            ("plugin-a", "plugin-b", "plugin-d"),
+            id="dependency not in lookup table",
+        ),
+    ],
+)
+def test__traverse_dependencies(
+    plugin: str,
+    plugins_lookup: typing.Mapping[str, typing.Iterable[str]],
+    expected_plugins: typing.Tuple[str],
+):
+    """
+    arrange: given the plugins lookup table and a target plugin to recursively find dependencies.
+    act: when _traverse_dependencies is called.
+    assert: the plugin and its dependencies are traversed.
+    """
+    traversed_plugins = jenkins._traverse_dependencies(plugin, plugins_lookup, set())
+
+    assert tuple(traversed_plugins) == expected_plugins
+
+
+@pytest.mark.parametrize(
+    "top_level_plugins, plugins_lookup, expected_allowed_plugins",
+    [
+        pytest.param(
+            ("plugin-a", "plugin-b"),
+            {
+                "plugin-a": ("dep-a-a", "dep-a-b"),
+                "plugin-b": ("dep-b-a", "dep-b-b"),
+                "dep-a-a": ("dep-a-b",),
+                "dep-a-b": (),
+                "dep-b-a": ("dep-b-b"),
+                "dep-b-b": (),
+            },
+            set(("plugin-a", "dep-a-a", "dep-a-b", "plugin-b", "dep-b-a", "dep-b-b")),
+            id="all exists",
+        ),
+        pytest.param(
+            (
+                "plugin-a",
+                "plugin-c",
+            ),
+            {
+                "plugin-a": ("dep-a-a", "dep-a-b"),
+                "plugin-b": ("dep-b-a", "dep-b-b"),
+                "dep-a-a": ("dep-a-b",),
+                "dep-a-b": (),
+                "dep-b-a": ("dep-b-b"),
+                "dep-b-b": (),
+            },
+            set(("plugin-a", "dep-a-a", "dep-a-b")),
+            id="missing top level plugin",
+        ),
+        pytest.param(
+            (
+                "plugin-a",
+                "plugin-b",
+            ),
+            {
+                "plugin-a": ("dep-a-a", "dep-a-b"),
+                "plugin-b": ("dep-b-a", "dep-b-b"),
+                "dep-a-a": ("dep-a-b",),
+                "dep-a-b": (),
+            },
+            set(("plugin-a", "dep-a-a", "dep-a-b", "plugin-b")),
+            id="missing dependency",
+        ),
+        pytest.param(
+            (
+                "plugin-a",
+                "plugin-b",
+            ),
+            {
+                "plugin-a": ("dep-a-a", "dep-a-b", "common-dep"),
+                "plugin-b": ("dep-b-a", "dep-b-b", "common-dep"),
+                "dep-a-a": ("dep-a-b",),
+                "dep-a-b": (),
+                "common-dep": (),
+            },
+            set(("plugin-a", "dep-a-a", "dep-a-b", "plugin-b", "common-dep")),
+            id="common dependency",
+        ),
+        pytest.param(
+            ("plugin-a", "plugin-b", "common-dep"),
+            {
+                "plugin-a": ("dep-a-a", "dep-a-b", "common-dep"),
+                "plugin-b": ("dep-b-a", "dep-b-b", "common-dep"),
+                "dep-a-a": ("dep-a-b",),
+                "dep-a-b": (),
+                "common-dep": (),
+            },
+            set(("plugin-a", "dep-a-a", "dep-a-b", "plugin-b", "common-dep")),
+            id="common dependency in top level plugin",
+        ),
+    ],
+)
+def test__get_allowed_plugins(
+    top_level_plugins: typing.Iterable[str],
+    plugins_lookup: typing.Mapping[str, typing.Iterable[str]],
+    expected_allowed_plugins: set[str],
+):
+    """
+    arrange: given a list of top level plugins (not a dependency to another plugin).
+    act: when _get_allowed_plugins is called.
+    assert: the plugin and its dependencies are yielded.
+    """
+    allowed_plugins = jenkins._get_allowed_plugins(top_level_plugins, plugins_lookup)
+
+    assert set(allowed_plugins) == expected_allowed_plugins
+
+
+@pytest.mark.parametrize(
+    "all_plugins, plugins_lookup, expected_top_level_plugins",
+    [
+        pytest.param(
+            ("plugin-a", "dep-a-a", "dep-a-b", "plugin-b", "dep-b-a", "dep-b-b"),
+            {
+                "plugin-a": ("dep-a-a", "dep-a-b"),
+                "plugin-b": ("dep-b-a", "dep-b-b"),
+                "dep-a-a": ("dep-a-b",),
+                "dep-a-b": (),
+                "dep-b-a": ("dep-b-b"),
+                "dep-b-b": (),
+            },
+            set(("plugin-a", "plugin-b")),
+            id="plugins a, b",
+        ),
+    ],
+)
+def test__get_top_level_plugins(
+    all_plugins: typing.Iterable[str],
+    plugins_lookup: typing.Mapping[str, typing.Iterable[str]],
+    expected_top_level_plugins: set[str],
+):
+    """
+    arrange: given all the list of plugins installed plugins.
+    act: when _get_top_level_plugins is called.
+    assert: only the top level plugins (not a dependency to another plugin) are returned.
+    """
+    top_level_plugins = jenkins._get_top_level_plugins(all_plugins, plugins_lookup)
+
+    assert set(top_level_plugins) == expected_top_level_plugins
+
+
+def test__set_jenkins_system_message(container: ops.Container):
+    """
+    arrange: given a container with jenkins.yaml (JCasC config file) and a system message.
+    act: when _set_jenkins_system_message is called.
+    assert: the jenkins.yaml file pushed to the container has systemMessage property defined.
+    """
+    message = "hello world!"
+    jenkins._set_jenkins_system_message(message, container)
+
+    contents = str(container.pull(jenkins.JCASC_CONFIG_FILE_PATH, encoding="utf-8").read())
+    config = yaml.safe_load(contents)
+    assert config["jenkins"]["systemMessage"] == message
+
+
+def test_remove_unlisted_plugins_delete_error(
+    monkeypatch: pytest.MonkeyPatch,
+    container: ops.Container,
+):
+    """
+    arrange: given a mocked client that raises an exception on delete_plugins call.
+    act: when remove_unlisted_plugins is called.
+    assert: JenkinsPluginError is raised.
+    """
+    monkeypatch.setattr(jenkins, "safe_restart", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(jenkins, "wait_ready", lambda *_args, **_kwargs: None)
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.run_groovy_script = (
+        mock_groovy_script := unittest.mock.MagicMock(
+            spec=jenkinsapi.jenkins.Jenkins.run_groovy_script
+        )
+    )
+    mock_groovy_script.return_value = textwrap.dedent(
+        """
+        plugin-a (v0.0.1) => [dep-a-a (v0.0.1), dep-a-b (v0.0.1)]
+        plugin-b (v0.0.2) => [dep-b-a (v0.0.2), dep-b-b (v0.0.2)]
+        plugin-c (v0.0.5) => []
+        dep-a-a (v0.0.3) => []
+        dep-a-b (v0.0.3) => []
+        dep-b-a (v0.0.4) => []
+        dep-b-b (v0.0.4) => []
+        """
+    )
+    mock_client.delete_plugins.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
+
+    with pytest.raises(jenkins.JenkinsPluginError):
+        jenkins.remove_unlisted_plugins(("plugin-a", "plugin-b"), container, mock_client)
+
+
+@pytest.mark.parametrize(
+    "expected_exception",
+    [
+        pytest.param(jenkins.JenkinsError, id="JenkinsError"),
+        pytest.param(TimeoutError, id="TimeoutError"),
+    ],
+)
+def test_remove_unlisted_plugins_restart_error(
+    monkeypatch: pytest.MonkeyPatch,
+    container: ops.Container,
+    raise_exception: typing.Callable,
+    expected_exception: Exception,
+):
+    """
+    arrange: given a monkeypatched safe_restart call that raises an exception.
+    act: when remove_unlisted_plugins is called.
+    assert: exceptions are re-raised.
+    """
+    monkeypatch.setattr(
+        jenkins, "safe_restart", lambda *_args, **_kwargs: raise_exception(expected_exception)
+    )
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.run_groovy_script = (
+        mock_groovy_script := unittest.mock.MagicMock(
+            spec=jenkinsapi.jenkins.Jenkins.run_groovy_script
+        )
+    )
+    mock_groovy_script.return_value = textwrap.dedent(
+        """
+        plugin-a (v0.0.1) => [dep-a-a (v0.0.1), dep-a-b (v0.0.1)]
+        plugin-b (v0.0.2) => [dep-b-a (v0.0.2), dep-b-b (v0.0.2)]
+        plugin-c (v0.0.5) => []
+        dep-a-a (v0.0.3) => []
+        dep-a-b (v0.0.3) => []
+        dep-b-a (v0.0.4) => []
+        dep-b-b (v0.0.4) => []
+        """
+    )
+
+    # mypy doesn't understand that Exception type can match TypeVar("E", bound=BaseException)
+    with pytest.raises(expected_exception):  # type: ignore
+        jenkins.remove_unlisted_plugins(("plugin-a", "plugin-b"), container, mock_client)
+
+
+@pytest.mark.parametrize(
+    "desired_plugins, groovy_script_output, expected_delete_plugins",
+    [
+        pytest.param(
+            ("plugin-a", "plugin-b"),
+            textwrap.dedent(
+                """
+                plugin-a (v0.0.1) => [dep-a-a (v0.0.1), dep-a-b (v0.0.1)]
+                plugin-b (v0.0.2) => [dep-b-a (v0.0.2), dep-b-b (v0.0.2)]
+                plugin-c (v0.0.5) => []
+                dep-a-a (v0.0.3) => []
+                dep-a-b (v0.0.3) => []
+                dep-b-a (v0.0.4) => []
+                dep-b-b (v0.0.4) => []
+                Result: [Plugin:plugin-a, Plugin:plugin-b, Plugin:dep-a-a, \
+                    Plugin:dep-a-b, Plugin:dep-b-a, Plugin:dep-b-b]
+                """
+            ),
+            set(("plugin-c",)),
+            id="plugin-c not expected",
+        ),
+        pytest.param(
+            ("plugin-a", "plugin-b", "plugin-c"),
+            """
+            plugin-a (v0.0.1) => [dep-a-a (v0.0.1), dep-a-b (v0.0.1)]
+            plugin-b (v0.0.2) => [dep-b-a (v0.0.2), dep-b-b (v0.0.2)]
+            plugin-c (v0.0.5) => []
+            dep-a-a (v0.0.3) => []
+            dep-a-b (v0.0.3) => []
+            dep-b-a (v0.0.4) => []
+            dep-b-b (v0.0.4) => []
+            Result: [Plugin:plugin-a, Plugin:plugin-b, Plugin:dep-a-a, \
+                Plugin:dep-a-b, Plugin:dep-b-a, Plugin:dep-b-b]
+            """,
+            set(),
+            id="no undesired plugins",
+        ),
+        pytest.param(
+            ("plugin-a", "plugin-b", "plugin-c"),
+            """
+            Result: []
+            """,
+            set(()),
+            id="no plugins installed",
+        ),
+        pytest.param(
+            (),
+            "",
+            set(()),
+            id="plugins config not set (all allowed)",
+        ),
+    ],
+)
+def test_remove_unlisted_plugins(
+    monkeypatch: pytest.MonkeyPatch,
+    container: ops.Container,
+    desired_plugins: tuple[str],
+    groovy_script_output: str,
+    expected_delete_plugins: set[str],
+):
+    """
+    arrange: given a mocked client that returns a groovy script output of plugins and dependencies.
+    act: when remove_unlisted_plugins is called.
+    assert: delete function call is made with expected plugins.
+    """
+    monkeypatch.setattr(jenkins, "safe_restart", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(jenkins, "wait_ready", lambda *_args, **_kwargs: None)
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.run_groovy_script = (
+        mock_groovy_script := unittest.mock.MagicMock(
+            spec=jenkinsapi.jenkins.Jenkins.run_groovy_script
+        )
+    )
+    mock_groovy_script.return_value = groovy_script_output
+
+    jenkins.remove_unlisted_plugins(desired_plugins, container, mock_client)
+
+    if expected_delete_plugins:
+        mock_client.delete_plugins.assert_called_once_with(
+            plugin_list=expected_delete_plugins, restart=False
+        )
+    else:
+        mock_client.delete_plugins.assert_not_called()
