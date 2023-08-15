@@ -16,7 +16,13 @@ from ops.testing import Harness
 
 import state
 from charm import JenkinsK8sOperatorCharm
-from jenkins import PASSWORD_FILE_PATH, PLUGINS_PATH, REQUIRED_PLUGINS, Credentials
+from jenkins import (
+    JCASC_CONFIG_FILE_PATH,
+    PASSWORD_FILE_PATH,
+    PLUGINS_PATH,
+    REQUIRED_PLUGINS,
+    Credentials,
+)
 
 from .types_ import HarnessWithContainer, Versions
 
@@ -161,6 +167,8 @@ def container_fixture(
     container.push(
         PASSWORD_FILE_PATH, admin_credentials.password, encoding="utf-8", make_dirs=True
     )
+    with open("templates/jenkins.yaml", encoding="utf-8") as jenkins_casc_config_file:
+        container.push(JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file)
 
     def cmd_handler(argv: list[str]) -> tuple[int, str, str]:
         """Handle the python command execution inside the Flask container.

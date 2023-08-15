@@ -710,7 +710,7 @@ def get_agent_name(unit_name: str) -> str:
     return unit_name.replace("/", "-")
 
 
-PLUGIN_NAME_GROUP = r"^([a-zA-Z0-9-]+)"
+PLUGIN_NAME_GROUP = r"^([a-zA-Z0-9-_]+)"
 WHITESPACE = r"\s*"
 VERSION_GROUP = r"\((.*?)\)"
 DEPENDENCIES_GROUP = r"\[(.*?)\]"
@@ -736,38 +736,6 @@ def _get_plugin_name(plugin_info: str) -> str:
     return match.group(1)
 
 
-def _build_desired_plugins_set(
-    plugins_lookup: dict[str, list[str]], plugin: str, desired_plugins: set[str]
-) -> None:
-    """Build a set of plugins that are desired installations.
-
-    Args:
-        plugins_lookup: The plugin and it's dependencies lookup table.
-        plugin: The desired plugin to add.
-        desired_plugins: A set of desired plugin and it's dependencies.
-    """
-    if plugin in desired_plugins:
-        return
-    desired_plugins.add(plugin)
-    for dependency in plugins_lookup.get(plugin, []):
-        _build_desired_plugins_set(plugins_lookup, dependency, desired_plugins)
-
-
-def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
-    """Set a system message on Jenkins.
-
-    Args:
-        message: The system message to display.
-        container: The Jenkins workload container.
-    """
-    jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
-    config = yaml.safe_load(jcasc_yaml)
-    config["jenkins"]["systemMessage"] = message
-    container.push(
-        JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
-    )
-
-
 def _build_dependencies_lookup(
     plugin_dependency_outputs: typing.Iterable[str],
 ) -> dict[str, tuple[str, ...]]:
@@ -788,11 +756,30 @@ def _build_dependencies_lookup(
         if not dependencies:
             dependency_lookup[plugin] = ()
             continue
-        dependency_lookup[plugin] = tuple(
-            _get_plugin_name(dependency) for dependency in dependencies.split(", ")
-        )
+        try:
+            dependency_lookup[plugin] = tuple(
+                _get_plugin_name(dependency) for dependency in dependencies.split(", ")
+            )
+        except ValidationError as exc:
+            logger.error("Invalid plugin dependency, %s", exc)
+            continue
 
     return dependency_lookup
+
+
+def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
+    """Set a system message on Jenkins.
+
+    Args:
+        message: The system message to display.
+        container: The Jenkins workload container.
+    """
+    jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
+    config = yaml.safe_load(jcasc_yaml)
+    config["jenkins"]["systemMessage"] = message
+    container.push(
+        JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
+    )
 
 
 def _traverse_dependencies(
@@ -812,7 +799,7 @@ def _traverse_dependencies(
         return
     yield plugin
     seen.add(plugin)
-    for dependency in dependency_lookup[plugin]:
+    for dependency in dependency_lookup.get(plugin, []):
         yield from _traverse_dependencies(dependency, dependency_lookup, seen)
 
 
@@ -871,6 +858,7 @@ def remove_unlisted_plugins(
     Raises:
         JenkinsPluginError: if there was an error removing unlisted plugin.
         JenkinsError: if there was an error restarting Jenkins after removing the plugin.
+        TimeoutError: if it took too long to restart Jenkins after removing the plugin.
     """
     if not plugins:
         return
@@ -893,7 +881,7 @@ plugins.each {
         return
 
     try:
-        client.delete_plugins(list(plugins_to_remove), restart=False)
+        client.delete_plugins(plugin_list=plugins_to_remove, restart=False)
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to remove the following plugins: %s, %s", plugins_to_remove, exc)
         raise JenkinsPluginError("Failed to remove plugins.") from exc
@@ -910,6 +898,6 @@ plugins.each {
     try:
         safe_restart(container, client)
         wait_ready()
-    except JenkinsError as exc:
+    except (JenkinsError, TimeoutError) as exc:
         logger.error("Failed to restart Jenkins after removing plugins, %s", exc)
         raise
