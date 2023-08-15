@@ -152,11 +152,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The unit status of the charm after the operation.
         """
+        original_status = self.unit.status.name
         try:
             jenkins.remove_unlisted_plugins(plugins=self.state.plugins, container=container)
         except (jenkins.JenkinsPluginError, jenkins.JenkinsError) as exc:
             logger.error("Failed to remove unlisted plugin, %s", exc)
-            return ops.ActiveStatus("Failed to remove unlisted plugin.")
+            return ops.StatusBase.from_name(original_status, "Failed to remove unlisted plugin.")
+        except TimeoutError as exc:
+            logger.error("Failed to restart jenkins after removing plugin, %s", exc)
+            return ops.BlockedStatus("Failed to restart Jenkins (remove plugin)")
         return ops.ActiveStatus()
 
     def _update_jenkins_version(self, container: ops.Container) -> ops.StatusBase:
