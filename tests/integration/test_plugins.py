@@ -10,6 +10,7 @@ import typing
 import jenkinsapi.jenkins
 import pytest
 import requests.exceptions
+from juju.model import Model
 from pytest_operator.plugin import OpsTest
 
 from .types_ import PluginsMeta, UnitWebClient
@@ -30,7 +31,7 @@ def try_install_plugins(
         plugins_to_install: The plugins to install on Jenkins.
 
     Returns:
-        True if plugins installation succeds. False otherwise.
+        True if plugins installation succeeds. False otherwise.
     """
     try:
         client.install_plugins(plugins_to_install)
@@ -39,7 +40,7 @@ def try_install_plugins(
         requests.exceptions.ConnectionError,
         requests.exceptions.HTTPError,
     ) as exc:
-        logger.warn("Failed to install plugins, %s", exc)
+        logger.warning("Failed to install plugins, %s", exc)
         return False
     return True
 
@@ -47,6 +48,7 @@ def try_install_plugins(
 @pytest.mark.usefixtures("jenkins_with_plugin_config")
 async def test_jenkins_plugins_config(
     ops_test: OpsTest,
+    model: Model,
     unit_web_client: UnitWebClient,
     plugins_meta: PluginsMeta,
     update_status_env: typing.Iterable[str],
@@ -56,7 +58,7 @@ async def test_jenkins_plugins_config(
     act: when update_status_hook is fired.
     assert: the plugin is uninstalled and the system message is set on Jenkins.
     """
-    await ops_test.model.block_until(
+    await model.block_until(
         functools.partial(
             try_install_plugins,
             client=unit_web_client.client,
