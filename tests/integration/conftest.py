@@ -28,7 +28,7 @@ from pytest_operator.plugin import OpsTest
 import jenkins
 import state
 
-from .types_ import ModelAppUnit
+from .types_ import ModelAppUnit, PluginsMeta, UnitWebClient
 
 
 @pytest.fixture(scope="module", name="model")
@@ -87,7 +87,19 @@ async def application_fixture(
     async with ops_test.fast_forward(fast_interval="5h"):
         yield application
 
-    await model.remove_application(application.name, force=True, block_until_done=True)
+    # await model.remove_application(application.name, force=True, block_until_done=True)
+
+
+@pytest.fixture(scope="module", name="unit")
+def unit_fixture(application: Application) -> Unit:
+    """The Jenkins-k8s charm application unit."""
+    return application.units[0]
+
+
+@pytest.fixture(scope="module", name="model_app_unit")
+def model_app_unit_fixture(model: Model, application: Application, unit: Unit):
+    """The packaged model, application, unit of Jenkins to reduce number of parameters in tests."""
+    return ModelAppUnit(model=model, app=application, unit=unit)
 
 
 @pytest_asyncio.fixture(scope="module", name="unit_ip")
@@ -102,10 +114,36 @@ async def unit_ip_fixture(model: Model, application: Application):
         raise StopIteration("Invalid unit status") from exc
 
 
-@pytest_asyncio.fixture(scope="module", name="web_address")
-async def web_address_fixture(unit_ip: str):
+@pytest.fixture(scope="module", name="web_address")
+def web_address_fixture(unit_ip: str):
     """Get Jenkins charm web address."""
     return f"http://{unit_ip}:8080"
+
+
+@pytest_asyncio.fixture(scope="function", name="jenkins_client")
+async def jenkins_client_fixture(
+    application: Application,
+    web_address: str,
+) -> jenkinsapi.jenkins.Jenkins:
+    """The Jenkins API client."""
+    jenkins_unit: Unit = application.units[0]
+    action: Action = await jenkins_unit.run_action("get-admin-password")
+    await action.wait()
+    password = action.results["password"]
+
+    # Initialization of the jenkins client will raise an exception if unable to connect to the
+    # server.
+    return jenkinsapi.jenkins.Jenkins(
+        baseurl=web_address, username="admin", password=password, timeout=60
+    )
+
+
+@pytest.fixture(scope="function", name="unit_web_client")
+def unit_web_client_fixture(
+    unit: Unit, web_address: str, jenkins_client: jenkinsapi.jenkins.Jenkins
+):
+    """The wrapper around unit, web_address and jenkins_client."""
+    return UnitWebClient(unit=unit, web=web_address, client=jenkins_client)
 
 
 @pytest.fixture(scope="function", name="app_suffix")
@@ -169,24 +207,6 @@ async def new_relation_k8s_agents_related_fixture(
     )
 
     return application
-
-
-@pytest_asyncio.fixture(scope="function", name="jenkins_client")
-async def jenkins_client_fixture(
-    application: Application,
-    web_address: str,
-) -> jenkinsapi.jenkins.Jenkins:
-    """The Jenkins API client."""
-    jenkins_unit: Unit = application.units[0]
-    action: Action = await jenkins_unit.run_action("get-admin-password")
-    await action.wait()
-    password = action.results["password"]
-
-    # Initialization of the jenkins client will raise an exception if unable to connect to the
-    # server.
-    return jenkinsapi.jenkins.Jenkins(
-        baseurl=web_address, username="admin", password=password, timeout=60
-    )
 
 
 @pytest.fixture(scope="module", name="gen_jenkins_test_job_xml")
@@ -342,18 +362,6 @@ async def latest_jenkins_lts_version_fixture(jenkins_version: str) -> str:
 def freeze_time_fixture() -> str:
     """The time string to freeze the charm time."""
     return "2022-01-01 15:00:00"
-
-
-@pytest.fixture(scope="module", name="unit")
-def unit_fixture(application: Application) -> Unit:
-    """The Jenkins-k8s charm application unit."""
-    return application.units[0]
-
-
-@pytest.fixture(scope="module", name="model_app_unit")
-def model_app_unit_fixture(model: Model, application: Application, unit: Unit):
-    """The packaged model, application, unit of Jenkins to reduce number of parameters in tests."""
-    return ModelAppUnit(model=model, app=application, unit=unit)
 
 
 @pytest_asyncio.fixture(scope="function", name="restart_time_range_app")
@@ -583,3 +591,52 @@ async def jenkins_with_proxy_client_fixture(
     return jenkinsapi.jenkins.Jenkins(
         baseurl=proxy_jenkins_web_address, username="admin", password=password, timeout=60
     )
+
+
+@pytest.fixture(scope="function", name="plugins_config")
+def plugins_config_fixture() -> typing.Iterable[str]:
+    """The test Jenkins plugins configuration values."""
+    return ("structs", "script-security")
+
+
+@pytest.fixture(scope="function", name="plugins_to_install")
+def plugins_to_install_fixture(jenkins_client: jenkinsapi.jenkins.Jenkins) -> typing.Iterable[str]:
+    """The plugins to install on Jenkins."""
+    plugin_lookup = jenkins_client.plugins.update_center_dict["plugins"]
+    return [
+        f"structs@{plugin_lookup['structs']['version']}",
+        f"script-security@{plugin_lookup['script-security']['version']}",
+        f"git@{plugin_lookup['git']['version']}",
+    ]
+
+
+@pytest.fixture(scope="function", name="plugins_to_remove")
+def plugins_to_remove_fixture(
+    plugins_config: typing.Iterable[str],
+    plugins_to_install: typing.Iterable[str],
+) -> typing.Iterable[str]:
+    """Plugins that are installed but not part of the plugins config."""
+    return set(plugins_to_install) - set(plugins_config)
+
+
+@pytest.fixture(scope="function", name="plugins_meta")
+def plugins_meta_fixture(
+    plugins_config: typing.Iterable[str],
+    plugins_to_install: typing.Iterable[str],
+    plugins_to_remove: typing.Iterable[str],
+) -> PluginsMeta:
+    """The wrapper around plugins configuration, plugins to install and plugins to remove."""
+    return PluginsMeta(config=plugins_config, install=plugins_to_install, remove=plugins_to_remove)
+
+
+@pytest_asyncio.fixture(scope="function", name="jenkins_with_plugin_config")
+async def jenkins_with_plugin_config_fixture(
+    application: Application,
+    plugins_config: typing.Iterable[str],
+) -> Application:
+    """Jenkins charm with plugins configured."""
+    await application.set_config({"plugins": ",".join(plugins_config)})
+
+    yield application
+
+    await application.reset_config(to_default=["plugins"])
