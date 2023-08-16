@@ -13,6 +13,7 @@ import typing
 import jenkinsapi.jenkins
 import kubernetes.client
 import kubernetes.config
+import kubernetes.stream
 import pytest
 import pytest_asyncio
 import requests
@@ -600,14 +601,9 @@ def plugins_config_fixture() -> typing.Iterable[str]:
 
 
 @pytest.fixture(scope="function", name="plugins_to_install")
-def plugins_to_install_fixture(jenkins_client: jenkinsapi.jenkins.Jenkins) -> typing.Iterable[str]:
+def plugins_to_install_fixture() -> typing.Iterable[str]:
     """The plugins to install on Jenkins."""
-    plugin_lookup = jenkins_client.plugins.update_center_dict["plugins"]
-    return [
-        f"structs@{plugin_lookup['structs']['version']}",
-        f"script-security@{plugin_lookup['script-security']['version']}",
-        f"git@{plugin_lookup['git']['version']}",
-    ]
+    return ("structs", "script-security", "git")
 
 
 @pytest.fixture(scope="function", name="plugins_to_remove")
@@ -640,3 +636,46 @@ async def jenkins_with_plugin_config_fixture(
     yield application
 
     await application.reset_config(to_default=["plugins"])
+
+
+@pytest_asyncio.fixture(scope="function", name="install_plugins")
+async def install_plugins_fixture(
+    model: Model,
+    jenkins_with_plugin_config: Application,
+    kube_core_client: kubernetes.client.CoreV1Api,
+    plugins_to_install: typing.Iterable[str],
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+):
+    """Install plugins using kubernetes container command."""
+    unit: Unit = jenkins_with_plugin_config.units[0]
+    stdout = kubernetes.stream.stream(
+        kube_core_client.connect_get_namespaced_pod_exec,
+        unit.name.replace("/", "-"),
+        model.name,
+        container="jenkins",
+        command=[
+            "java",
+            "-jar",
+            f"{jenkins.EXECUTABLES_PATH / 'jenkins-plugin-manager-2.12.11.jar'}",
+            "-w",
+            f"{jenkins.EXECUTABLES_PATH / 'jenkins.war'}",
+            "-d",
+            str(jenkins.PLUGINS_PATH),
+            "-p",
+            " ".join(plugins_to_install),
+        ],
+        stderr=True,
+        stdin=False,
+        stdout=True,
+        tty=False,
+    )
+    assert "Done" in stdout, f"Failed to install plugins via kube exec, {stdout}"
+
+    # the library will return 503 or other status codes that are not 200, hence restart and wait
+    # rather than check for status code.
+    jenkins_client.safe_restart()
+    await model.block_until(
+        lambda: requests.get(jenkins_client.baseurl, timeout=10).status_code == 403,
+        timeout=300,
+        wait_period=10,
+    )
