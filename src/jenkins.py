@@ -748,12 +748,15 @@ def _build_dependencies_lookup(
     Returns:
         The dependency lookup table.
     """
-    dependency_lookup: dict[str, tuple[str, ...]] = defaultdict(lambda: ())
+    # coverage tool thinks defaultdict() has an exit condition.
+    dependency_lookup: dict[str, tuple[str, ...]] = defaultdict(lambda: ())  # pragma: no cover
     for line in plugin_dependency_outputs:
         match = re.match(PLUGIN_LINE_CAPTURE, line)
         if not match:
             continue
         plugin, dependencies = match.group(1), match.group(3)
+        if not dependencies:
+            dependency_lookup[plugin] = ()
         try:
             dependency_lookup[plugin] = tuple(
                 _get_plugin_name(dependency) for dependency in dependencies.split(", ")
