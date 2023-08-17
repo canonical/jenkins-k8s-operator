@@ -9,6 +9,7 @@ import itertools
 import logging
 import re
 import typing
+from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
@@ -747,15 +748,12 @@ def _build_dependencies_lookup(
     Returns:
         The dependency lookup table.
     """
-    dependency_lookup: dict[str, tuple[str, ...]] = {}
+    dependency_lookup: dict[str, tuple[str, ...]] = defaultdict(lambda: ())
     for line in plugin_dependency_outputs:
         match = re.match(PLUGIN_LINE_CAPTURE, line)
         if not match:
             continue
         plugin, dependencies = match.group(1), match.group(3)
-        if not dependencies:
-            dependency_lookup[plugin] = ()
-            continue
         try:
             dependency_lookup[plugin] = tuple(
                 _get_plugin_name(dependency) for dependency in dependencies.split(", ")
@@ -799,7 +797,7 @@ def _traverse_dependencies(
         return
     yield plugin
     seen.add(plugin)
-    for dependency in dependency_lookup.get(plugin, []):
+    for dependency in dependency_lookup[plugin]:
         yield from _traverse_dependencies(dependency, dependency_lookup, seen)
 
 
