@@ -60,7 +60,7 @@ from status import get_priority_status
     ],
 )
 # pylint: enable=unused-variable,undefined-variable,too-many-locals
-def test__get_priority_status(
+def test_get_priority_status(
     statuses: typing.Iterable[ops.StatusBase],
     expected_status: ops.StatusBase,
 ):
