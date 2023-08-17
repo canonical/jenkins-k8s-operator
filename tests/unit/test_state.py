@@ -3,7 +3,9 @@
 
 """Jenkins-k8s state module tests."""
 import typing
+import unittest.mock
 
+import ops
 import pytest
 from ops.testing import Harness
 
@@ -131,15 +133,16 @@ def test_proxyconfig_from_charm_env(
     assert config.no_proxy == proxy_config.no_proxy
 
 
-def test_plugins_config_none(harness: Harness):
+def test_plugins_config_none():
     """
     arrange: given a charm with no plugins config.
     act: when state is initialized from charm.
     assert: plugin state is None.
     """
-    harness.begin()
+    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
+    mock_charm.config = {}
 
-    config = state.State.from_charm(harness.charm)
+    config = state.State.from_charm(mock_charm)
     assert config.plugins is None
 
 
