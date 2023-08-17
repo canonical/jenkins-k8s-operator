@@ -6,7 +6,7 @@ Use the `restart-time-range` configuration to set the time interval when `jenkin
 
 1. automatically applies the latest patches for the current
    [LTS](https://www.jenkins.io/download/lts/) version.
-2. automatically remove plugins that are installed on the system but is not part of the `plugins`
+2. automatically remove plugins that are installed on the system but are not part of the `plugins`
    configuration option.
 
 The minimum time interval is 1 hour. Time range is applied each day of the week.

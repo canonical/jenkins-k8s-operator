@@ -2,17 +2,16 @@
 
 ### Configure `plugins`
 
-Use the `plugins` configuration to allow a list of plugins to be installed on Jenkins. It is a list
-of allowed plugin short names separated by commas. Leaving this empty will allow any
-plugins to be installed. Plugins are not automatically installed but can be installed by the
-user. Plugins not on the list but installed by the user will be removed automatically,
-including its dependencies. The plugins are cleaned up at `update-status` hook trigger. If the
-`restart-time-range` configuration option is provided, the plugins are cleaned up during the
-defined time range.
+Use the `plugins` configuration to allow a list of plugins to be installed on Jenkins.
+Comma-separated list of allowed plugin short names. If empty, any plugin can be installed.
+Plugins installed by the user and their dependencies will be removed automatically if not on
+the list. Included plugins are not automatically installed.
+The plugins are cleaned up at `update-status` hook trigger. If the `restart-time-range`
+configuration option is provided, the plugins are cleaned up during the defined time range.
 
 On trigger it will:
 
-1. Delete any plugins and its dependencies that are installed but is not defined on the list.
+1. Delete any installed plugins not defined on the list and their dependencies.
 2. Set a system message on Jenkins indicating which user installed plugins have been deleted.
 
 ```
