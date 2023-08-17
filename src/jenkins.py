@@ -817,9 +817,8 @@ def _get_allowed_plugins(
     """
     seen: set[str] = set()
     for plugin in top_level_plugins:
-        if plugin in seen:
-            continue
-        yield from _traverse_dependencies(plugin, dependency_lookup, seen)
+        if plugin not in seen:
+            yield from _traverse_dependencies(plugin, dependency_lookup, seen)
 
 
 def _get_top_level_plugins(
