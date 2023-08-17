@@ -783,15 +783,15 @@ def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
 def _traverse_dependencies(
     plugin: str, dependency_lookup: typing.Mapping[str, typing.Iterable[str]], seen: set[str]
 ) -> typing.Iterable[str]:
-    """Traverse through plugin dependencies that have not yet been traversed recursively.
+    """Recursively traverse through plugin dependencies.
 
     Args:
         plugin: The plugin to recurse through the dependencies.
-        dependency_lookup: The plugin and it's dependencies lookup table.
-        seen: a set indicating whether a plugin has already been traversed.
+        dependency_lookup: The plugin and its dependencies lookup table.
+        seen: a set indicating whether a plugin has already been visited.
 
     Yields:
-        Plugin and it's dependents.
+        Plugin and its dependents.
     """
     if plugin in seen or plugin not in dependency_lookup:
         return
@@ -805,10 +805,10 @@ def _get_allowed_plugins(
     top_level_plugins: typing.Iterable[str],
     dependency_lookup: typing.Mapping[str, typing.Iterable[str]],
 ) -> typing.Iterable[str]:
-    """Get the plugin short names of allowed plugins and its dependencies.
+    """Get the plugin short names of allowed plugins and their dependencies.
 
     Args:
-        top_level_plugins: The allowed plugins short names to add to allowed plugins with its
+        top_level_plugins: The allowed plugins short names to add to allowed plugins with their
             dependencies.
         dependency_lookup: The plugin dependency lookup table.
 
@@ -824,14 +824,14 @@ def _get_allowed_plugins(
 def _get_top_level_plugins(
     plugins: typing.Iterable[str], dependency_lookup: typing.Mapping[str, typing.Iterable[str]]
 ) -> typing.Iterable[str]:
-    """Get top level plugins that are not dependencies to other plugins.
+    """Get top level plugins that are not dependencies of other plugins.
 
     Args:
         plugins: Plugins to extract top level plugins from.
         dependency_lookup: The dependency lookup table.
 
     Returns:
-        All plugins that are not dependency to another plugin.
+        All plugins that are not dependency of another plugin.
     """
     dependent_plugins: set[str] = set()
     for _, dependencies in dependency_lookup.items():
@@ -845,7 +845,7 @@ def remove_unlisted_plugins(
     container: ops.Container,
     client: jenkinsapi.jenkins.Jenkins | None = None,
 ) -> None:
-    """Remove plugins that are not a part of list of desired plugins.
+    """Remove plugins that are not in the list of desired plugins.
 
     Args:
         plugins: The list of plugins that can be installed.
