@@ -88,7 +88,7 @@ async def application_fixture(
     async with ops_test.fast_forward(fast_interval="5h"):
         yield application
 
-    # await model.remove_application(application.name, force=True, block_until_done=True)
+    await model.remove_application(application.name, force=True, block_until_done=True)
 
 
 @pytest.fixture(scope="module", name="unit")
