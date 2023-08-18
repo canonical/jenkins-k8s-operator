@@ -768,21 +768,6 @@ def _build_dependencies_lookup(
     return dependency_lookup
 
 
-def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
-    """Set a system message on Jenkins.
-
-    Args:
-        message: The system message to display.
-        container: The Jenkins workload container.
-    """
-    jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
-    config = yaml.safe_load(jcasc_yaml)
-    config["jenkins"]["systemMessage"] = message
-    container.push(
-        JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
-    )
-
-
 def _traverse_dependencies(
     plugin: str, dependency_lookup: typing.Mapping[str, typing.Iterable[str]], seen: set[str]
 ) -> typing.Iterable[str]:
@@ -841,6 +826,21 @@ def _get_top_level_plugins(
         dependent_plugins = dependent_plugins.union(dependencies)
 
     return set(plugins) - dependent_plugins
+
+
+def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
+    """Set a system message on Jenkins.
+
+    Args:
+        message: The system message to display.
+        container: The Jenkins workload container.
+    """
+    jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
+    config = yaml.safe_load(jcasc_yaml)
+    config["jenkins"]["systemMessage"] = message
+    container.push(
+        JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
+    )
 
 
 def remove_unlisted_plugins(
