@@ -13,6 +13,7 @@ import ops
 import agent
 import jenkins
 import status
+import timerange
 from state import CharmConfigInvalidError, CharmRelationDataInvalidError, State
 
 if typing.TYPE_CHECKING:
@@ -215,7 +216,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if not container.can_connect():
             return
 
-        if self.state.restart_time_range and not self.state.restart_time_range.check_now():
+        if self.state.restart_time_range and not timerange.check_now_within_bound_hours(
+            self.state.restart_time_range.start, self.state.restart_time_range.end
+        ):
             return
 
         self.unit.status = status.get_priority_status(

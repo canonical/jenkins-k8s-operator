@@ -73,15 +73,16 @@ class Range(BaseModel):
             ) from exc
         return update_range
 
-    def check_now(self) -> bool:
-        """Check whether the current time is within the defined bounds.
 
-        Returns:
-            True if within bounds, False otherwise.
-        """
-        current_hour = datetime.utcnow().time().hour
-        # If the range crosses midnight
-        if self.start > self.end:
-            return current_hour >= self.start or current_hour < self.end
-        # If the range doesn't cross midnight
-        return self.start <= current_hour < self.end
+def check_now_within_bound_hours(start: int, end: int) -> bool:
+    """Check whether the current time is within the defined bounds.
+
+    Returns:
+        True if within bounds, False otherwise.
+    """
+    current_hour = datetime.utcnow().time().hour
+    # If the range crosses midnight
+    if start > end:
+        return current_hour >= start or current_hour < end
+    # If the range doesn't cross midnight
+    return start <= current_hour < end

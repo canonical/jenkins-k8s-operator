@@ -6,6 +6,23 @@
 The module for checking time ranges. 
 
 
+---
+
+<a href="../src/timerange.py#L77"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+## <kbd>function</kbd> `check_now_within_bound_hours`
+
+```python
+check_now_within_bound_hours(start: int, end: int) → bool
+```
+
+Check whether the current time is within the defined bounds. 
+
+
+
+**Returns:**
+  True if within bounds, False otherwise. 
+
 
 ---
 
@@ -30,23 +47,6 @@ Time range to allow Jenkins to update version.
 
 
 
-
----
-
-<a href="../src/timerange.py#L76"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-### <kbd>function</kbd> `check_now`
-
-```python
-check_now() → bool
-```
-
-Check whether the current time is within the defined bounds. 
-
-
-
-**Returns:**
-  True if within bounds, False otherwise. 
 
 ---
 
