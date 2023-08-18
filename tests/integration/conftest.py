@@ -631,11 +631,11 @@ async def jenkins_with_plugin_config_fixture(
     plugins_config: typing.Iterable[str],
 ) -> Application:
     """Jenkins charm with plugins configured."""
-    await application.set_config({"plugins": ",".join(plugins_config)})
+    await application.set_config({"allowed-plugins": ",".join(plugins_config)})
 
     yield application
 
-    await application.reset_config(to_default=["plugins"])
+    await application.reset_config(to_default=["allowed-plugins"])
 
 
 @pytest_asyncio.fixture(scope="function", name="install_plugins")

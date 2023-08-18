@@ -154,7 +154,7 @@ def test_plugins_config():
     assert: plugin state contains an iterable of plugins.
     """
     mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
-    mock_charm.config = {"plugins": "hello, world"}
+    mock_charm.config = {"allowed-plugins": "hello, world"}
 
     config = state.State.from_charm(mock_charm)
     assert config.plugins is not None
