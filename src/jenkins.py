@@ -785,12 +785,14 @@ def _traverse_dependencies(
         return
     yield plugin
     seen.add(plugin)
-    for dependency in dependency_lookup[plugin]:
-        yield from _traverse_dependencies(dependency, dependency_lookup, seen)
+    yield from itertools.chain(
+        _traverse_dependencies(dependency, dependency_lookup, seen)
+        for dependency in dependency_lookup[plugin]
+    )
 
 
 def _get_allowed_plugins(
-    top_level_plugins: typing.Iterable[str],
+    allowed_plugins: typing.Iterable[str],
     dependency_lookup: typing.Mapping[str, typing.Iterable[str]],
 ) -> typing.Iterable[str]:
     """Get the plugin short names of allowed plugins and their dependencies.
@@ -804,7 +806,7 @@ def _get_allowed_plugins(
         The allowed plugin short name.
     """
     seen: set[str] = set()
-    for plugin in top_level_plugins:
+    for plugin in allowed_plugins:
         if plugin not in seen:
             yield from _traverse_dependencies(plugin, dependency_lookup, seen)
 
