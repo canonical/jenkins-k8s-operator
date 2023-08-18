@@ -4,26 +4,26 @@ Applicable spec: <link>
 
 <!-- A high level overview of the change -->
 
-# Rationale
+### Rationale
 
 <!-- The reason the change is needed -->
 
-# Juju Events Changes
+### Juju Events Changes
 
 <!-- Any changes to the juju events being observed (newly added, significantly modified or deleted) -->
 
-# Module Changes
+### Module Changes
 
 <!-- Any high level changes to modules and why (Service, Observer, helper) -->
 
-# Library Changes
+### Library Changes
 
 <!-- Any changes to charm libraries -->
 
-# Checklist
+### Checklist
 
-[ ] The [charm style guide](https://juju.is/docs/sdk/styleguide) was applied
-[ ] The [contributing guide](https://github.com/canonical/is-charms-contributing-guide) was applied
-[ ] The changes are compliant with charms [style guide](https://juju.is/docs/sdk/styleguide)
+- [ ] The [charm style guide](https://juju.is/docs/sdk/styleguide) was applied
+- [ ] The [contributing guide](https://github.com/canonical/is-charms-contributing-guide) was applied
+- [ ] The changes are compliant with [ISD054 - Manging Charm Complexity](https://discourse.charmhub.io/t/specification-isd014-managing-charm-complexity/11619)
 
 <!-- Explanation for any unchecked items above -->
