@@ -268,7 +268,7 @@ class State:
             logger.error("Invalid juju model proxy configuration, %s", exc)
             raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
 
-        plugins_str = charm.config.get("plugins")
+        plugins_str = charm.config.get("allowed-plugins")
         plugins = (plugin.strip() for plugin in plugins_str.split(",")) if plugins_str else None
 
         return cls(
