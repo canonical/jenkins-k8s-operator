@@ -5,10 +5,13 @@
 # <kbd>module</kbd> `status.py`
 The charm status module. 
 
+**Global Variables**
+---------------
+- **PRIORITY_MAP**
 
 ---
 
-<a href="../src/status.py#L11"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/status.py#L19"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_priority_status`
 
