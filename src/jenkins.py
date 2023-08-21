@@ -9,7 +9,6 @@ import itertools
 import logging
 import re
 import typing
-from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
@@ -748,8 +747,7 @@ def _build_dependencies_lookup(
     Returns:
         The dependency lookup table.
     """
-    # coverage tool thinks defaultdict() has an exit condition.
-    dependency_lookup: dict[str, tuple[str, ...]] = defaultdict(lambda: ())  # pragma: no cover
+    dependency_lookup: dict[str, tuple[str, ...]] = {}
     for line in plugin_dependency_outputs:
         match = re.match(PLUGIN_LINE_CAPTURE, line)
         if not match:
@@ -807,8 +805,10 @@ def _get_allowed_plugins(
     """
     seen: set[str] = set()
     for plugin in allowed_plugins:
-        if plugin not in seen:
-            yield from _traverse_dependencies(plugin, dependency_lookup, seen)
+        try:
+            yield from _get_allowed_plugins(dependency_lookup[plugin], dependency_lookup, seen)
+        except KeyError:
+            logger.warning("Plugin %s not found in dependency lookup.", plugin)
 
 
 def _get_top_level_plugins(

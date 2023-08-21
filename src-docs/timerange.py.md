@@ -18,10 +18,19 @@ check_now_within_bound_hours(start: int, end: int) → bool
 
 Check whether the current time is within the defined bounds. 
 
+The bounds are defined as [start, end). 
+
+
+
+**Args:**
+ 
+ - <b>`start`</b>:  The starting bound hour (inclusive). 
+ - <b>`end`</b>:  The ending bound hour (exclusive). 
+
 
 
 **Returns:**
-  True if within bounds, False otherwise. 
+ True if within bounds, False otherwise. 
 
 
 ---
