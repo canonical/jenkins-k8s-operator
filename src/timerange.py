@@ -77,6 +77,12 @@ class Range(BaseModel):
 def check_now_within_bound_hours(start: int, end: int) -> bool:
     """Check whether the current time is within the defined bounds.
 
+    The bounds are defined as [start, end).
+
+    Args:
+        start: The starting bound hour (inclusive).
+        end: The ending bound hour (exclusive).
+
     Returns:
         True if within bounds, False otherwise.
     """
