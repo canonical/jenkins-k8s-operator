@@ -812,7 +812,7 @@ def test_download_stable_war_failure(monkeypatch: pytest.MonkeyPatch, current_ve
     container = unittest.mock.MagicMock(spec=ops.Container)
 
     with pytest.raises(jenkins.JenkinsNetworkError):
-        jenkins.download_stable_war(container, current_version)
+        jenkins._download_stable_war(container, current_version)
 
 
 def test_download_stable_war(monkeypatch: pytest.MonkeyPatch, current_version: str):
@@ -826,7 +826,7 @@ def test_download_stable_war(monkeypatch: pytest.MonkeyPatch, current_version: s
     monkeypatch.setattr(requests, "get", lambda *_args, **_kwargs: mock_download_response)
     container = unittest.mock.MagicMock(spec=ops.Container)
 
-    jenkins.download_stable_war(container, current_version)
+    jenkins._download_stable_war(container, current_version)
 
     container.push.assert_called_once_with(
         jenkins.EXECUTABLES_PATH / "jenkins.war",

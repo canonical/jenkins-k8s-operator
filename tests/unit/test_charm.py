@@ -191,7 +191,7 @@ def test__update_jenkins_version_already_latest(
     assert: original status is returned with no status message.
     """
     monkeypatch.setattr(jenkins, "get_updatable_version", lambda *_args, **_kwargs: None)
-    mock_download_func = MagicMock(spec=jenkins.download_stable_war)
+    mock_download_func = MagicMock(spec=jenkins._download_stable_war)
     monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
     harness, container = harness_container.harness, harness_container.container
     harness.begin()

@@ -26,7 +26,7 @@ Functions to operate Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L134"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L138"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `wait_ready`
 
@@ -52,7 +52,7 @@ Wait until Jenkins service is up.
 
 ---
 
-<a href="../src/jenkins.py#L163"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L167"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_admin_credentials`
 
@@ -76,7 +76,7 @@ Retrieve admin credentials.
 
 ---
 
-<a href="../src/jenkins.py#L189"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L193"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `calculate_env`
 
@@ -94,31 +94,7 @@ Return a dictionary for Jenkins Pebble layer.
 
 ---
 
-<a href="../src/jenkins.py#L200"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>function</kbd> `get_version`
-
-```python
-get_version() → str
-```
-
-Get the Jenkins server version. 
-
-
-
-**Raises:**
- 
- - <b>`JenkinsError`</b>:  if Jenkins is unreachable. 
-
-
-
-**Returns:**
- The Jenkins server version. 
-
-
----
-
-<a href="../src/jenkins.py#L376"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L381"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `bootstrap`
 
@@ -144,7 +120,7 @@ Initialize and install Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L412"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L417"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_node_secret`
 
@@ -180,7 +156,7 @@ Get node secret from jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L440"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L445"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `add_agent_node`
 
@@ -211,7 +187,7 @@ Add a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L470"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L475"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_agent_node`
 
@@ -242,63 +218,62 @@ Remove a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L584"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L619"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-## <kbd>function</kbd> `get_updatable_version`
+## <kbd>function</kbd> `has_lts_updates`
 
 ```python
-get_updatable_version(proxy: ProxyConfig | None = None) → str | None
+has_lts_updates(proxy: ProxyConfig | None = None) → bool
 ```
 
-Get version to update to if available. 
-
-
-
-**Args:**
- 
- - <b>`proxy`</b>:  Proxy server to route the requests through. 
+Returns whether the Jenkins has a patched LTS update available. 
 
 
 
 **Raises:**
  
- - <b>`JenkinsUpdateError`</b>:  if there was an error trying to determine next Jenkins update version. 
+ - <b>`JenkinsUpdateError`</b>:  If there was an error fetching the Jenkins version information. 
 
 
 
 **Returns:**
- Patched version string if the update is available. None if latest version is applied. 
+ True if an update within the same LTS is available. False otherwise. 
 
 
 ---
 
-<a href="../src/jenkins.py#L613"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L668"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-## <kbd>function</kbd> `download_stable_war`
+## <kbd>function</kbd> `update_jenkins`
 
 ```python
-download_stable_war(container: Container, version: str) → None
+update_jenkins(container: Container, proxy: ProxyConfig | None = None) → str
 ```
 
-Download and replace the war executable. 
+Update Jenkins and return the updated version. 
 
 
 
 **Args:**
  
- - <b>`container`</b>:  The Jenkins container with jenkins.war executable. 
- - <b>`version`</b>:  Desired version of the war to download. 
+ - <b>`container`</b>:  The Jenkins workload container. 
+ - <b>`proxy`</b>:  The proxy settings to apply. 
 
 
 
 **Raises:**
  
- - <b>`JenkinsNetworkError`</b>:  if there was an error fetching the jenkins.war executable. 
+ - <b>`JenkinsUpdateError`</b>:  If there was an error updating Jenkins. 
+
+
+
+**Returns:**
+ The updated Jenkins version. 
 
 
 ---
 
-<a href="../src/jenkins.py#L673"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L739"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
@@ -324,7 +299,7 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-<a href="../src/jenkins.py#L701"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L767"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
@@ -348,7 +323,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L836"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L902"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 
@@ -451,6 +426,15 @@ An error occurred installing Jenkins plugin.
 
 ## <kbd>class</kbd> `JenkinsProxyError`
 An error occurred configuring Jenkins proxy. 
+
+
+
+
+
+---
+
+## <kbd>class</kbd> `JenkinsRestartError`
+An error occurred trying to restart Jenkins. 
 
 
 

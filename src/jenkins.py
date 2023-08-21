@@ -93,6 +93,10 @@ class JenkinsUpdateError(JenkinsError):
     """An error occurred trying to update Jenkins."""
 
 
+class JenkinsRestartError(JenkinsError):
+    """An error occurred trying to restart Jenkins."""
+
+
 def _wait_for(
     func: typing.Callable[[], typing.Any], timeout: int = 300, check_interval: int = 10
 ) -> None:
@@ -197,6 +201,7 @@ def calculate_env() -> Environment:
     )
 
 
+@functools.cache
 def get_version() -> str:
     """Get the Jenkins server version.
 
@@ -581,6 +586,7 @@ def _get_latest_patch_version(current_version: str, proxy: state.ProxyConfig | N
     return sorted_versions[0]
 
 
+@functools.cache
 def get_updatable_version(proxy: state.ProxyConfig | None = None) -> str | None:
     """Get version to update to if available.
 
@@ -610,7 +616,31 @@ def get_updatable_version(proxy: state.ProxyConfig | None = None) -> str | None:
     return latest_version
 
 
-def download_stable_war(container: ops.Container, version: str) -> None:
+def has_lts_updates(proxy: state.ProxyConfig | None = None) -> bool:
+    """Returns whether the Jenkins has a patched LTS update available.
+
+    Raises:
+        JenkinsUpdateError: If there was an error fetching the Jenkins version information.
+
+    Returns:
+        True if an update within the same LTS is available. False otherwise.
+    """
+    try:
+        current_version = get_version()
+    except JenkinsError as exc:
+        logger.error("Failed to get Jenkins version while fetching update, %s", exc)
+        raise JenkinsUpdateError("Failed to get Jenkins version.") from exc
+
+    try:
+        latest_version = _get_latest_patch_version(current_version=current_version, proxy=proxy)
+    except (JenkinsNetworkError, ValidationError) as exc:
+        logger.error("Failed to fetch latest patch version info, %s", exc)
+        raise JenkinsUpdateError("Failed to fetch latest patch version info.") from exc
+
+    return current_version != latest_version
+
+
+def _download_stable_war(container: ops.Container, version: str) -> None:
     """Download and replace the war executable.
 
     Args:
@@ -633,6 +663,42 @@ def download_stable_war(container: ops.Container, version: str) -> None:
     container.push(
         EXECUTABLES_PATH / "jenkins.war", res.content, encoding="utf-8", user=USER, group=GROUP
     )
+
+
+def update_jenkins(container: ops.Container, proxy: state.ProxyConfig | None = None) -> str:
+    """Update Jenkins and return the updated version.
+
+    Args:
+        container: The Jenkins workload container.
+        proxy: The proxy settings to apply.
+
+    Raises:
+        JenkinsUpdateError: If there was an error updating Jenkins.
+
+    Returns:
+        The updated Jenkins version.
+    """
+    try:
+        current_version = get_version()
+        latest_version = _get_latest_patch_version(current_version=current_version, proxy=proxy)
+    except (JenkinsNetworkError, JenkinsError, ValidationError) as exc:
+        logger.error("Failed to get Jenkins version metadata, %s", exc)
+        raise JenkinsUpdateError("Error fetching Jenkins version metadata.") from exc
+
+    try:
+        _download_stable_war(container, latest_version)
+    except JenkinsNetworkError as exc:
+        logger.error("Failed to download Jenkins executable, %s", exc)
+        raise JenkinsUpdateError("Error downloading Jenkins executable.") from exc
+
+    try:
+        safe_restart(container)
+        wait_ready()
+    except (JenkinsError, TimeoutError) as exc:
+        logger.error("Failed to restart Jenkins after updating, %s", exc)
+        raise JenkinsRestartError("Error restarting Jenkins after update.") from exc
+
+    return latest_version
 
 
 def _is_shutdown(client: jenkinsapi.jenkins.Jenkins) -> bool:
