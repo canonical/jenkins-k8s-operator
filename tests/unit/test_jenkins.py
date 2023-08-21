@@ -1161,7 +1161,7 @@ def test__get_top_level_plugins(
     act: when _get_top_level_plugins is called.
     assert: only the top level plugins (not a dependency to another plugin) are returned.
     """
-    top_level_plugins = jenkins._get_top_level_plugins(all_plugins, plugins_lookup)
+    top_level_plugins = jenkins._filter_dependent_plugins(all_plugins, plugins_lookup)
 
     assert set(top_level_plugins) == expected_top_level_plugins
 

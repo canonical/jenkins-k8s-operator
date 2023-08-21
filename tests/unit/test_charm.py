@@ -350,7 +350,7 @@ def test__update_jenkins_version_update(
         ),
         pytest.param(
             TimeoutError,
-            ops.BlockedStatus("Failed to restart Jenkins (remove plugin)"),
+            ops.BlockedStatus("Failed to restart Jenkins after removing plugins"),
             id="jenkins error",
         ),
     ],
