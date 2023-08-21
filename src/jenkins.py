@@ -796,13 +796,16 @@ def _get_allowed_plugins(
             logger.warning("Plugin %s not found in dependency lookup.", plugin)
 
 
-def _get_top_level_plugins(
+def _filter_dependent_plugins(
     plugins: typing.Iterable[str], dependency_lookup: typing.Mapping[str, typing.Iterable[str]]
 ) -> typing.Iterable[str]:
-    """Get top level plugins that are not dependencies of other plugins.
+    """Filter out dependencies from the iterable consisting of all plugins.
+
+    This method filters out any plugins that is a dependency of another plugin, returning top level
+    plugin only.
 
     Args:
-        plugins: Plugins to extract top level plugins from.
+        plugins: Plugins to filter out dependency plugins from.
         dependency_lookup: The dependency lookup table.
 
     Returns:
@@ -874,7 +877,7 @@ plugins.each {
         raise JenkinsPluginError("Failed to remove plugins.") from exc
     logger.debug("Removed %s", plugins_to_remove)
 
-    top_level_plugins = _get_top_level_plugins(plugins_to_remove, dependency_lookup)
+    top_level_plugins = _filter_dependent_plugins(plugins_to_remove, dependency_lookup)
     _set_jenkins_system_message(
         message="The following plugins have been removed by the system administrator: "
         f"{', '.join(top_level_plugins)}\n"
