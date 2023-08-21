@@ -1040,59 +1040,6 @@ def test__build_dependencies_lookup(
 
 
 @pytest.mark.parametrize(
-    "plugin, plugins_lookup, expected_plugins",
-    [
-        pytest.param(
-            "plugin-a",
-            {
-                "plugin-a": ("plugin-b", "plugin-c"),
-                "plugin-b": ("plugin-d",),
-                "plugin-c": (),
-                "plugin-d": (),
-            },
-            ("plugin-a", "plugin-b", "plugin-d", "plugin-c"),
-            id="no duplicate dependencies",
-        ),
-        pytest.param(
-            "plugin-a",
-            {
-                "plugin-a": ("plugin-b", "plugin-c"),
-                "plugin-b": ("plugin-d", "plugin-c"),
-                "plugin-c": ("plugin-d"),
-                "plugin-d": (),
-            },
-            ("plugin-a", "plugin-b", "plugin-d", "plugin-c"),
-            id="duplicate dependencies",
-        ),
-        pytest.param(
-            "plugin-a",
-            {
-                "plugin-a": ("plugin-b", "plugin-e"),
-                "plugin-b": ("plugin-d", "plugin-e"),
-                "plugin-c": ("plugin-d"),
-                "plugin-d": (),
-            },
-            ("plugin-a", "plugin-b", "plugin-d"),
-            id="dependency not in lookup table",
-        ),
-    ],
-)
-def test__traverse_dependencies(
-    plugin: str,
-    plugins_lookup: typing.Mapping[str, typing.Iterable[str]],
-    expected_plugins: typing.Tuple[str],
-):
-    """
-    arrange: given the plugins lookup table and a target plugin to recursively find dependencies.
-    act: when _traverse_dependencies is called.
-    assert: the plugin and its dependencies are traversed.
-    """
-    traversed_plugins = jenkins._traverse_dependencies(plugin, plugins_lookup, set())
-
-    assert tuple(traversed_plugins) == expected_plugins
-
-
-@pytest.mark.parametrize(
     "top_level_plugins, plugins_lookup, expected_allowed_plugins",
     [
         pytest.param(
@@ -1102,7 +1049,7 @@ def test__traverse_dependencies(
                 "plugin-b": ("dep-b-a", "dep-b-b"),
                 "dep-a-a": ("dep-a-b",),
                 "dep-a-b": (),
-                "dep-b-a": ("dep-b-b"),
+                "dep-b-a": ("dep-b-b",),
                 "dep-b-b": (),
             },
             set(("plugin-a", "dep-a-a", "dep-a-b", "plugin-b", "dep-b-a", "dep-b-b")),
@@ -1118,10 +1065,10 @@ def test__traverse_dependencies(
                 "plugin-b": ("dep-b-a", "dep-b-b"),
                 "dep-a-a": ("dep-a-b",),
                 "dep-a-b": (),
-                "dep-b-a": ("dep-b-b"),
+                "dep-b-a": ("dep-b-b",),
                 "dep-b-b": (),
             },
-            set(("plugin-a", "dep-a-a", "dep-a-b")),
+            set(("dep-a-b", "plugin-c", "dep-a-a", "plugin-a")),
             id="missing top level plugin",
         ),
         pytest.param(
@@ -1135,7 +1082,7 @@ def test__traverse_dependencies(
                 "dep-a-a": ("dep-a-b",),
                 "dep-a-b": (),
             },
-            set(("plugin-a", "dep-a-a", "dep-a-b", "plugin-b")),
+            set(("dep-a-b", "dep-b-a", "dep-b-b", "plugin-a", "plugin-b", "dep-a-a")),
             id="missing dependency",
         ),
         pytest.param(
@@ -1150,7 +1097,9 @@ def test__traverse_dependencies(
                 "dep-a-b": (),
                 "common-dep": (),
             },
-            set(("plugin-a", "dep-a-a", "dep-a-b", "plugin-b", "common-dep")),
+            set(
+                ("plugin-a", "dep-a-a", "dep-a-b", "common-dep", "plugin-b", "dep-b-a", "dep-b-b")
+            ),
             id="common dependency",
         ),
         pytest.param(
@@ -1162,7 +1111,9 @@ def test__traverse_dependencies(
                 "dep-a-b": (),
                 "common-dep": (),
             },
-            set(("plugin-a", "dep-a-a", "dep-a-b", "plugin-b", "common-dep")),
+            set(
+                ("plugin-a", "dep-a-a", "dep-a-b", "common-dep", "plugin-b", "dep-b-a", "dep-b-b")
+            ),
             id="common dependency in top level plugin",
         ),
     ],
