@@ -26,7 +26,7 @@ Functions to operate Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L135"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L134"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `wait_ready`
 
@@ -52,7 +52,7 @@ Wait until Jenkins service is up.
 
 ---
 
-<a href="../src/jenkins.py#L164"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L163"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_admin_credentials`
 
@@ -76,7 +76,7 @@ Retrieve admin credentials.
 
 ---
 
-<a href="../src/jenkins.py#L190"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L189"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `calculate_env`
 
@@ -94,7 +94,7 @@ Return a dictionary for Jenkins Pebble layer.
 
 ---
 
-<a href="../src/jenkins.py#L201"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L200"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_version`
 
@@ -118,7 +118,7 @@ Get the Jenkins server version.
 
 ---
 
-<a href="../src/jenkins.py#L377"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L376"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `bootstrap`
 
@@ -144,7 +144,7 @@ Initialize and install Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L413"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L412"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_node_secret`
 
@@ -180,7 +180,7 @@ Get node secret from jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L441"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L440"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `add_agent_node`
 
@@ -211,7 +211,7 @@ Add a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L471"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L470"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_agent_node`
 
@@ -242,7 +242,7 @@ Remove a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L585"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L584"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_updatable_version`
 
@@ -272,7 +272,7 @@ Get version to update to if available.
 
 ---
 
-<a href="../src/jenkins.py#L614"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L613"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `download_stable_war`
 
@@ -298,7 +298,7 @@ Download and replace the war executable.
 
 ---
 
-<a href="../src/jenkins.py#L674"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L673"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
@@ -324,7 +324,7 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-<a href="../src/jenkins.py#L702"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L701"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
@@ -348,7 +348,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L848"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L836"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 
