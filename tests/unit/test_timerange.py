@@ -87,4 +87,7 @@ def test_restart_time_range_check_now(
     restart_time_range = timerange.Range.from_str(time_range)
     assert restart_time_range, "Expected time range to not be None."
 
-    assert restart_time_range.check_now() == expected_result
+    assert (
+        timerange.check_now_within_bound_hours(restart_time_range.start, restart_time_range.end)
+        == expected_result
+    )
