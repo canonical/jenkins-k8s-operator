@@ -196,7 +196,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ops.StatusBase.from_name(original_status, "Failed to get update data.")
         except jenkins.JenkinsRestartError as exc:
             logger.error("Failed to safely restart Jenkins. %s", exc)
-            self.unit.status = BlockedStatus("Update restart failed.")
+            self.unit.status = ops.BlockedStatus("Update restart failed.")
             return
 
         self.unit.set_workload_version(updated_version)
