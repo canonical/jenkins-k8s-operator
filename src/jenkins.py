@@ -766,45 +766,30 @@ def _build_dependencies_lookup(
     return dependency_lookup
 
 
-def _traverse_dependencies(
-    plugin: str, dependency_lookup: typing.Mapping[str, typing.Iterable[str]], seen: set[str]
-) -> typing.Iterable[str]:
-    """Recursively traverse through plugin dependencies.
-
-    Args:
-        plugin: The plugin to recurse through the dependencies.
-        dependency_lookup: The plugin and its dependencies lookup table.
-        seen: a set indicating whether a plugin has already been visited.
-
-    Yields:
-        Plugin and its dependents.
-    """
-    if plugin in seen or plugin not in dependency_lookup:
-        return
-    yield plugin
-    seen.add(plugin)
-    yield from itertools.chain(
-        _traverse_dependencies(dependency, dependency_lookup, seen)
-        for dependency in dependency_lookup[plugin]
-    )
-
-
 def _get_allowed_plugins(
     allowed_plugins: typing.Iterable[str],
     dependency_lookup: typing.Mapping[str, typing.Iterable[str]],
+    seen: set[str] | None = None,
 ) -> typing.Iterable[str]:
     """Get the plugin short names of allowed plugins and their dependencies.
 
     Args:
-        top_level_plugins: The allowed plugins short names to add to allowed plugins with their
+        allowed_plugins: The allowed plugins short names to add to allowed plugins with their
             dependencies.
         dependency_lookup: The plugin dependency lookup table.
+        seen: Whether the plugin has been yielded already during recursive traversal.
 
     Yields:
         The allowed plugin short name.
     """
-    seen: set[str] = set()
+    # mypy doesn't understand that we can reassign the type and it cannot be None aftwards.
+    if seen is None:
+        seen: set[str] = set()  # type: ignore
     for plugin in allowed_plugins:
+        if plugin in seen:  # type: ignore
+            continue
+        yield plugin
+        seen.add(plugin)  # type: ignore
         try:
             yield from _get_allowed_plugins(dependency_lookup[plugin], dependency_lookup, seen)
         except KeyError:
