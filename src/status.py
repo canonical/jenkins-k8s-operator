@@ -25,7 +25,6 @@ def get_priority_status(statuses: typing.Iterable[ops.StatusBase]) -> ops.Status
     Returns:
         The final status to display.
     """
-
     return sorted(statuses, key=lambda item: (PRIORITY_MAP[item.name] - int(bool(item.message))))[
         0
     ]
