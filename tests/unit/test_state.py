@@ -3,25 +3,25 @@
 
 """Jenkins-k8s state module tests."""
 import typing
+import unittest.mock
 
+import ops
 import pytest
-from ops.testing import Harness
 
-import charm
 import state
 
 
-def test_state_invalid_time_config(harness: Harness):
+def test_state_invalid_time_config():
     """
     arrange: given an invalid time charm config.
     act: when state is initialized through from_charm method.
     assert: CharmConfigInvalidError is raised.
     """
-    harness.update_config({"update-time-range": "-1"})
-    harness.begin()
+    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
+    mock_charm.config = {"restart-time-range": "-1"}
 
     with pytest.raises(state.CharmConfigInvalidError):
-        state.State.from_charm(typing.cast(charm.JenkinsK8sOperatorCharm, harness.charm))
+        state.State.from_charm(mock_charm)
 
 
 @pytest.mark.parametrize(
@@ -30,18 +30,20 @@ def test_state_invalid_time_config(harness: Harness):
         pytest.param("", id="empty string"),
     ],
 )
-def test_no_time_range_config(time_range: str, harness: Harness):
+def test_no_time_range_config(time_range: str):
     """
     arrange: given an empty time range config value.
     act: when state is instantiated.
     assert: state without time range is returned.
     """
-    harness.update_config({"update-time-range": time_range})
-    harness.begin()
+    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
+    mock_charm.config = {"restart-time-range": time_range}
+
+    returned_state = state.State.from_charm(mock_charm)
 
     assert (
-        typing.cast(charm.JenkinsK8sOperatorCharm, harness.charm).state.update_time_range is None
-    ), "Update time range should not be instantiated."
+        returned_state.restart_time_range is None
+    ), "Restart time range should not be instantiated."
 
 
 class TestAgentMeta(typing.TypedDict):
@@ -79,20 +81,21 @@ def test_agent_meta__validate(invalid_meta: TestAgentMeta):
         state.AgentMeta(**invalid_meta)
 
 
-def test_proxyconfig_invalid(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+def test_proxyconfig_invalid(monkeypatch: pytest.MonkeyPatch):
     """
     arrange: given a monkeypatched os.environ mapping that contains invalid proxy values.
     act: when charm state is initialized.
     assert: CharmConfigInvalidError is raised.
     """
     monkeypatch.setattr(state.os, "environ", {"JUJU_CHARM_HTTP_PROXY": "INVALID_URL"})
-    harness.begin()
+    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
+    mock_charm.config = {}
 
     with pytest.raises(state.CharmConfigInvalidError):
-        state.State.from_charm(harness.charm)
+        state.State.from_charm(mock_charm)
 
 
-def test_proxyconfig_none(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+def test_proxyconfig_none(monkeypatch: pytest.MonkeyPatch):
     """
     arrange: given mapping without proxy configuration.
     act: when ProxyConfig.from_charm_config is called.
@@ -100,13 +103,12 @@ def test_proxyconfig_none(harness: Harness, monkeypatch: pytest.MonkeyPatch):
     """
     # has to be monkeypatched to empty value since Github Runner will pick up squid.internal proxy.
     monkeypatch.setattr(state.os, "environ", {})
-    harness.begin()
 
     assert state.ProxyConfig.from_env() is None
 
 
 def test_proxyconfig_from_charm_env(
-    harness: Harness, monkeypatch: pytest.MonkeyPatch, proxy_config: state.ProxyConfig
+    monkeypatch: pytest.MonkeyPatch, proxy_config: state.ProxyConfig
 ):
     """
     arrange: given a monkeypatched os.environ with proxy configurations.
@@ -122,10 +124,38 @@ def test_proxyconfig_from_charm_env(
             "JUJU_CHARM_NO_PROXY": str(proxy_config.no_proxy),
         },
     )
-    harness.begin()
+    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
+    mock_charm.config = {}
 
-    config = state.ProxyConfig.from_env()
+    config = state.State.from_charm(mock_charm).proxy_config
     assert config, "Valid proxy config should not return None."
     assert config.http_proxy == proxy_config.http_proxy
     assert config.https_proxy == proxy_config.https_proxy
     assert config.no_proxy == proxy_config.no_proxy
+
+
+def test_plugins_config_none():
+    """
+    arrange: given a charm with no plugins config.
+    act: when state is initialized from charm.
+    assert: plugin state is None.
+    """
+    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
+    mock_charm.config = {}
+
+    config = state.State.from_charm(mock_charm)
+    assert config.plugins is None
+
+
+def test_plugins_config():
+    """
+    arrange: given a charm with comma separated plugins.
+    act: when state is initialized from charm.
+    assert: plugin state contains an iterable of plugins.
+    """
+    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
+    mock_charm.config = {"allowed-plugins": "hello, world"}
+
+    config = state.State.from_charm(mock_charm)
+    assert config.plugins is not None
+    assert tuple(config.plugins) == ("hello", "world")

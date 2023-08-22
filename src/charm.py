@@ -8,13 +8,12 @@
 import logging
 import typing
 
-from ops.charm import ActionEvent, CharmBase, PebbleReadyEvent, UpdateStatusEvent
-from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
-from ops.pebble import Layer
+import ops
 
 import agent
 import jenkins
+import status
+import timerange
 from state import CharmConfigInvalidError, CharmRelationDataInvalidError, State
 
 if typing.TYPE_CHECKING:
@@ -24,7 +23,7 @@ if typing.TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class JenkinsK8sOperatorCharm(CharmBase):
+class JenkinsK8sOperatorCharm(ops.CharmBase):
     """Charm Jenkins."""
 
     def __init__(self, *args: typing.Any):
@@ -40,7 +39,7 @@ class JenkinsK8sOperatorCharm(CharmBase):
         try:
             self.state = State.from_charm(self)
         except CharmConfigInvalidError as exc:
-            self.unit.status = BlockedStatus(exc.msg)
+            self.unit.status = ops.BlockedStatus(exc.msg)
             return
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
@@ -50,12 +49,7 @@ class JenkinsK8sOperatorCharm(CharmBase):
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.update_status, self._on_update_status)
 
-    @property
-    def _jenkins_container(self) -> Container:
-        """The Jenkins workload container."""
-        return self.unit.get_container(self.state.jenkins_service_name)
-
-    def _get_pebble_layer(self, jenkins_env: jenkins.Environment) -> Layer:
+    def _get_pebble_layer(self, jenkins_env: jenkins.Environment) -> ops.pebble.Layer:
         """Return a dictionary representing a Pebble layer.
 
         Args:
@@ -90,9 +84,9 @@ class JenkinsK8sOperatorCharm(CharmBase):
                 }
             },
         }
-        return Layer(layer)
+        return ops.pebble.Layer(layer)
 
-    def _on_jenkins_pebble_ready(self, event: PebbleReadyEvent) -> None:
+    def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
         """Configure and start Jenkins server.
 
         Args:
@@ -103,7 +97,7 @@ class JenkinsK8sOperatorCharm(CharmBase):
             event.defer()
             return
 
-        self.unit.status = MaintenanceStatus("Installing Jenkins.")
+        self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
         # First Jenkins server start installs Jenkins server.
         container.add_layer(
             "jenkins",
@@ -113,85 +107,127 @@ class JenkinsK8sOperatorCharm(CharmBase):
         container.replan()
         try:
             jenkins.wait_ready()
-            self.unit.status = MaintenanceStatus("Configuring Jenkins.")
+            self.unit.status = ops.MaintenanceStatus("Configuring Jenkins.")
             jenkins.bootstrap(container, self.state.proxy_config)
             # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
             container.restart(self.state.jenkins_service_name)
             jenkins.wait_ready()
         except TimeoutError as exc:
             logger.error("Timed out waiting for Jenkins, %s", exc)
-            self.unit.status = BlockedStatus("Timed out waiting for Jenkins.")
+            self.unit.status = ops.BlockedStatus("Timed out waiting for Jenkins.")
             return
         except jenkins.JenkinsBootstrapError as exc:
             logger.error("Error installing plugins, %s", exc)
-            self.unit.status = BlockedStatus("Error installling plugins.")
+            self.unit.status = ops.BlockedStatus("Error installling plugins.")
             return
 
         try:
             version = jenkins.get_version()
         except jenkins.JenkinsError as exc:
             logger.error("Failed to get Jenkins version, %s", exc)
-            self.unit.status = BlockedStatus("Failed to get Jenkins version.")
+            self.unit.status = ops.BlockedStatus("Failed to get Jenkins version.")
             return
 
         self.unit.set_workload_version(version)
-        self.unit.status = ActiveStatus()
+        self.unit.status = ops.ActiveStatus()
 
-    def _on_get_admin_password(self, event: ActionEvent) -> None:
+    def _on_get_admin_password(self, event: ops.ActionEvent) -> None:
         """Handle get-admin-password event.
 
         Args:
             event: The event fired from get-admin-password action.
         """
-        if not self._jenkins_container.can_connect():
+        container = self.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
             event.defer()
             return
-        credentials = jenkins.get_admin_credentials(self._jenkins_container)
+        credentials = jenkins.get_admin_credentials(container)
         event.set_results({"password": credentials.password})
 
-    def _on_update_status(self, _: UpdateStatusEvent) -> None:
-        """Handle update status event.
+    def _remove_unlisted_plugins(self, container: ops.Container) -> ops.StatusBase:
+        """Remove plugins that are installed but not allowed.
 
-        On Update status:
-        1. Update Jenkins patch LTS version if available.
-        2. Update apt packages if available.
+        Args:
+            container: The jenkins workload container.
+
+        Returns:
+            The unit status of the charm after the operation.
         """
-        if self.state.update_time_range and not self.state.update_time_range.check_now():
-            self.unit.status = ActiveStatus()
-            return
+        original_status = self.unit.status.name
+        try:
+            jenkins.remove_unlisted_plugins(plugins=self.state.plugins, container=container)
+        except (jenkins.JenkinsPluginError, jenkins.JenkinsError) as exc:
+            logger.error("Failed to remove unlisted plugin, %s", exc)
+            return ops.StatusBase.from_name(original_status, "Failed to remove unlisted plugin.")
+        except TimeoutError as exc:
+            logger.error("Failed to restart jenkins after removing plugin, %s", exc)
+            return ops.BlockedStatus("Failed to restart Jenkins after removing plugins")
+        return ops.ActiveStatus()
 
-        self.unit.status = ActiveStatus("Checking for updates.")
+    def _update_jenkins_version(self, container: ops.Container) -> ops.StatusBase:
+        """Update Jenkins patch version if available.
+
+        The update will only take place if the current time is within the restart-time-range config
+        value.
+
+        Args:
+            container: The Jenkins workload container.
+
+        Returns:
+            The unit status of the charm after the operation.
+        """
+        original_status = self.unit.status.name
+        self.unit.status = ops.StatusBase.from_name(original_status, "Checking for updates.")
         try:
             latest_patch_version = jenkins.get_updatable_version(proxy=self.state.proxy_config)
         except jenkins.JenkinsUpdateError as exc:
             logger.error("Failed to get Jenkins updates, %s", exc)
-            self.unit.status = ActiveStatus("Failed to get Jenkins patch version.")
-            return
+            return ops.StatusBase.from_name(
+                original_status, "Failed to get Jenkins patch version."
+            )
 
         if not latest_patch_version:
-            self.unit.status = ActiveStatus()
-            return
+            return ops.StatusBase.from_name(original_status, "")
 
-        self.unit.status = MaintenanceStatus("Updating Jenkins.")
+        self.unit.status = ops.MaintenanceStatus("Updating Jenkins.")
         try:
-            jenkins.download_stable_war(self._jenkins_container, latest_patch_version)
+            jenkins.download_stable_war(container, latest_patch_version)
         except jenkins.JenkinsNetworkError as exc:
             logger.error("Failed to download Jenkins war. %s", exc)
-            self.unit.status = ActiveStatus("Failed to download executable.")
-            return
-
-        credentials = jenkins.get_admin_credentials(self._jenkins_container)
+            return ops.StatusBase.from_name(original_status, "Failed to download executable.")
         try:
-            jenkins.safe_restart(credentials)
+            jenkins.safe_restart(container)
             jenkins.wait_ready()
         except (jenkins.JenkinsError, TimeoutError) as exc:
             logger.error("Failed to safely restart Jenkins. %s", exc)
-            self.unit.status = BlockedStatus("Update restart failed.")
-            return
+            return ops.BlockedStatus("Update restart failed.")
 
         self.unit.set_workload_version(latest_patch_version)
-        self.unit.status = ActiveStatus()
+        return ops.ActiveStatus()
+
+    def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
+        """Handle update status event.
+
+        On Update status:
+        1. Remove plugins that are installed but are not allowed by plugins config value.
+        2. Update Jenkins patch version if available and is within restart-time-range config value.
+        """
+        container = self.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
+            return
+
+        if self.state.restart_time_range and not timerange.check_now_within_bound_hours(
+            self.state.restart_time_range.start, self.state.restart_time_range.end
+        ):
+            return
+
+        self.unit.status = status.get_priority_status(
+            (
+                self._remove_unlisted_plugins(container=container),
+                self._update_jenkins_version(container=container),
+            )
+        )
 
 
 if __name__ == "__main__":  # pragma: nocover
-    main(JenkinsK8sOperatorCharm)
+    ops.main.main(JenkinsK8sOperatorCharm)

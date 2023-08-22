@@ -17,10 +17,16 @@ Functions to operate Jenkins.
 - **RSS_FEED_URL**
 - **WAR_DOWNLOAD_URL**
 - **SYSTEM_PROPERTY_HEADLESS**
+- **PLUGIN_NAME_GROUP**
+- **WHITESPACE**
+- **VERSION_GROUP**
+- **DEPENDENCIES_GROUP**
+- **PLUGIN_CAPTURE**
+- **PLUGIN_LINE_CAPTURE**
 
 ---
 
-<a href="../src/jenkins.py#L131"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L134"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `wait_ready`
 
@@ -46,7 +52,7 @@ Wait until Jenkins service is up.
 
 ---
 
-<a href="../src/jenkins.py#L160"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L163"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_admin_credentials`
 
@@ -70,7 +76,7 @@ Retrieve admin credentials.
 
 ---
 
-<a href="../src/jenkins.py#L186"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L189"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `calculate_env`
 
@@ -88,7 +94,7 @@ Return a dictionary for Jenkins Pebble layer.
 
 ---
 
-<a href="../src/jenkins.py#L197"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L200"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_version`
 
@@ -112,7 +118,7 @@ Get the Jenkins server version.
 
 ---
 
-<a href="../src/jenkins.py#L373"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L376"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `bootstrap`
 
@@ -138,7 +144,7 @@ Initialize and install Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L409"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L412"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_node_secret`
 
@@ -174,7 +180,7 @@ Get node secret from jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L437"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L440"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `add_agent_node`
 
@@ -205,7 +211,7 @@ Add a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L467"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L470"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_agent_node`
 
@@ -236,7 +242,7 @@ Remove a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L581"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L584"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_updatable_version`
 
@@ -266,7 +272,7 @@ Get version to update to if available.
 
 ---
 
-<a href="../src/jenkins.py#L610"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L613"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `download_stable_war`
 
@@ -292,12 +298,12 @@ Download and replace the war executable.
 
 ---
 
-<a href="../src/jenkins.py#L670"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L673"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
 ```python
-safe_restart(credentials: Credentials, client: Jenkins | None = None) → None
+safe_restart(container: Container, client: Jenkins | None = None) → None
 ```
 
 Safely restart Jenkins server after all jobs are done executing. 
@@ -306,7 +312,7 @@ Safely restart Jenkins server after all jobs are done executing.
 
 **Args:**
  
- - <b>`credentials`</b>:  The credentials of a Jenkins user with access to the Jenkins API. 
+ - <b>`container`</b>:  The Jenkins workload container to interact with filesystem. 
  - <b>`client`</b>:  The API client used to communicate with the Jenkins server. 
 
 
@@ -318,7 +324,7 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-<a href="../src/jenkins.py#L698"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L701"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
@@ -338,6 +344,39 @@ Infer agent name from unit name.
 
 **Returns:**
  The agent node name registered on Jenkins server. 
+
+
+---
+
+<a href="../src/jenkins.py#L846"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+## <kbd>function</kbd> `remove_unlisted_plugins`
+
+```python
+remove_unlisted_plugins(
+    plugins: Optional[Iterable[str]],
+    container: Container,
+    client: Jenkins | None = None
+) → None
+```
+
+Remove plugins that are not in the list of desired plugins. 
+
+
+
+**Args:**
+ 
+ - <b>`plugins`</b>:  The list of plugins that can be installed. 
+ - <b>`container`</b>:  The workload container. 
+ - <b>`client`</b>:  The Jenkins API client. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsPluginError`</b>:  if there was an error removing unlisted plugin. 
+ - <b>`JenkinsError`</b>:  if there was an error restarting Jenkins after removing the plugin. 
+ - <b>`TimeoutError`</b>:  if it took too long to restart Jenkins after removing the plugin. 
 
 
 ---

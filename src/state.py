@@ -192,20 +192,22 @@ class State:
     """The Jenkins k8s operator charm state.
 
     Attributes:
-        update_time_range: Time range to allow Jenkins to update version.
+        restart_time_range: Time range to allow Jenkins to update version.
         agent_relation_meta: Metadata of all agents from units related through agent relation.
         deprecated_agent_relation_meta: Metadata of all agents from units related through
             deprecated agent relation.
         proxy_config: Proxy configuration to access Jenkins upstream through.
+        plugins: The list of allowed plugins to install.
         jenkins_service_name: The Jenkins service name. Note that the container name is the same.
     """
 
-    update_time_range: typing.Optional[Range]
+    restart_time_range: typing.Optional[Range]
     agent_relation_meta: typing.Optional[typing.Mapping[str, typing.Optional[AgentMeta]]]
     deprecated_agent_relation_meta: typing.Optional[
         typing.Mapping[str, typing.Optional[AgentMeta]]
     ]
     proxy_config: typing.Optional[ProxyConfig]
+    plugins: typing.Optional[typing.Iterable[str]]
     jenkins_service_name: str = "jenkins"
 
     @classmethod
@@ -222,17 +224,17 @@ class State:
             CharmConfigInvalidError: if invalid state values were encountered.
             CharmRelationDataInvalidError: if invalid relation data was received.
         """
-        time_range_str = charm.config.get("update-time-range")
+        time_range_str = charm.config.get("restart-time-range")
         if time_range_str:
             try:
-                update_time_range = Range.from_str(time_range_str)
+                restart_time_range = Range.from_str(time_range_str)
             except InvalidTimeRangeError as exc:
-                logger.error("Invalid config value for update-time-range, %s", exc)
+                logger.error("Invalid config value for restart-time-range, %s", exc)
                 raise CharmConfigInvalidError(
-                    "Invalid config value for update-time-range."
+                    "Invalid config value for restart-time-range."
                 ) from exc
         else:
-            update_time_range = None
+            restart_time_range = None
 
         try:
             agent_relation_meta_map = _get_agent_meta_map_from_relation(
@@ -266,9 +268,13 @@ class State:
             logger.error("Invalid juju model proxy configuration, %s", exc)
             raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
 
+        plugins_str = charm.config.get("allowed-plugins")
+        plugins = (plugin.strip() for plugin in plugins_str.split(",")) if plugins_str else None
+
         return cls(
-            update_time_range=update_time_range,
+            restart_time_range=restart_time_range,
             agent_relation_meta=agent_relation_meta_map,
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
+            plugins=plugins,
             proxy_config=proxy_config,
         )

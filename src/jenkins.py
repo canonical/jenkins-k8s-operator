@@ -5,7 +5,9 @@
 
 import dataclasses
 import functools
+import itertools
 import logging
+import re
 import typing
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -19,6 +21,7 @@ import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
 import ops
 import requests
+import yaml
 from pydantic import HttpUrl
 
 import state
@@ -668,18 +671,18 @@ def _wait_jenkins_job_shutdown(client: jenkinsapi.jenkins.Jenkins) -> None:
 
 
 def safe_restart(
-    credentials: Credentials, client: jenkinsapi.jenkins.Jenkins | None = None
+    container: ops.Container, client: jenkinsapi.jenkins.Jenkins | None = None
 ) -> None:
     """Safely restart Jenkins server after all jobs are done executing.
 
     Args:
-        credentials: The credentials of a Jenkins user with access to the Jenkins API.
+        container: The Jenkins workload container to interact with filesystem.
         client: The API client used to communicate with the Jenkins server.
 
     Raises:
         JenkinsError: if there was an API error calling safe restart.
     """
-    client = client if client is not None else _get_client(credentials)
+    client = client if client is not None else _get_client(get_admin_credentials(container))
     try:
         # There is a bug with wait_for_reboot in the jenkinsapi
         # https://github.com/pycontribs/jenkinsapi/issues/844
@@ -705,3 +708,196 @@ def get_agent_name(unit_name: str) -> str:
         The agent node name registered on Jenkins server.
     """
     return unit_name.replace("/", "-")
+
+
+PLUGIN_NAME_GROUP = r"^([a-zA-Z0-9-_]+)"
+WHITESPACE = r"\s*"
+VERSION_GROUP = r"\((.*?)\)"
+DEPENDENCIES_GROUP = r"\[(.*?)\]"
+PLUGIN_CAPTURE = rf"{PLUGIN_NAME_GROUP}{WHITESPACE}{VERSION_GROUP}"
+PLUGIN_LINE_CAPTURE = rf"{PLUGIN_CAPTURE} => {DEPENDENCIES_GROUP}"
+
+
+def _get_plugin_name(plugin_info: str) -> str:
+    """Get plugin name given a plugin info string of format <plugin-shortname> (<plugin-version>).
+
+    Args:
+        plugin_info: Text containing plugin name and plugin version.
+
+    Raises:
+        ValidationError: if the plugin info string does not conform to expected format.
+
+    Returns:
+        The plugin shortname.
+    """
+    match = re.match(PLUGIN_CAPTURE, plugin_info)
+    if not match:
+        raise ValidationError(f"No plugin matched in: {plugin_info}")
+    return match.group(1)
+
+
+def _build_dependencies_lookup(
+    plugin_dependency_outputs: typing.Iterable[str],
+) -> dict[str, tuple[str, ...]]:
+    """Build a lookup table of plugin short name to list of dependency plugin's short names.
+
+    Args:
+        plugin_dependency_outputs: The plugin dependency output from Jenkins Groovy script.
+
+    Returns:
+        The dependency lookup table.
+    """
+    dependency_lookup: dict[str, tuple[str, ...]] = {}
+    for line in plugin_dependency_outputs:
+        match = re.match(PLUGIN_LINE_CAPTURE, line)
+        if not match:
+            continue
+        plugin, dependencies = match.group(1), match.group(3)
+        if not dependencies:
+            dependency_lookup[plugin] = ()
+        try:
+            dependency_lookup[plugin] = tuple(
+                _get_plugin_name(dependency) for dependency in dependencies.split(", ")
+            )
+        except ValidationError as exc:
+            logger.error("Invalid plugin dependency, %s", exc)
+            continue
+
+    return dependency_lookup
+
+
+def _get_allowed_plugins(
+    allowed_plugins: typing.Iterable[str],
+    dependency_lookup: typing.Mapping[str, typing.Iterable[str]],
+    seen: set[str] | None = None,
+) -> typing.Iterable[str]:
+    """Get the plugin short names of allowed plugins and their dependencies.
+
+    Args:
+        allowed_plugins: The allowed plugins short names to add to allowed plugins with their
+            dependencies.
+        dependency_lookup: The plugin dependency lookup table.
+        seen: Whether the plugin has been yielded already during recursive traversal.
+
+    Yields:
+        The allowed plugin short name.
+    """
+    if seen is None:
+        seen = set()
+    for plugin in allowed_plugins:
+        if plugin in seen:
+            continue
+        yield plugin
+        seen.add(plugin)
+        try:
+            dependencies = dependency_lookup[plugin]
+        except KeyError:
+            logger.warning("Plugin %s not found in dependency lookup.", plugin)
+            continue
+        yield from _get_allowed_plugins(dependencies, dependency_lookup, seen)
+
+
+def _filter_dependent_plugins(
+    plugins: typing.Iterable[str], dependency_lookup: typing.Mapping[str, typing.Iterable[str]]
+) -> set[str]:
+    """Filter out dependencies from the iterable consisting of all plugins.
+
+    This method filters out any plugins that is a dependency of another plugin, returning top level
+    plugins only.
+
+    Args:
+        plugins: Plugins to filter out dependency plugins from.
+        dependency_lookup: The dependency lookup table.
+
+    Returns:
+        All plugins that are not dependency of another plugin.
+    """
+    dependent_plugins: set[str] = set()
+    for _, dependencies in dependency_lookup.items():
+        dependent_plugins = dependent_plugins.union(dependencies)
+
+    return set(plugins) - dependent_plugins
+
+
+def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
+    """Set a system message on Jenkins.
+
+    Args:
+        message: The system message to display.
+        container: The Jenkins workload container.
+
+    Raises:
+        ValidationError: if invalid JCasC file was encountered.
+    """
+    jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
+    config = yaml.safe_load(jcasc_yaml)
+    try:
+        config["jenkins"]["systemMessage"] = message
+    except KeyError as exc:
+        logger.error(
+            "Invalid JCasC config file, expected 'jenkins' and 'systemMessage' keys not found."
+        )
+        raise ValidationError("Invalid JCasC config file.") from exc
+    container.push(
+        JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
+    )
+
+
+def remove_unlisted_plugins(
+    plugins: typing.Iterable[str] | None,
+    container: ops.Container,
+    client: jenkinsapi.jenkins.Jenkins | None = None,
+) -> None:
+    """Remove plugins that are not in the list of desired plugins.
+
+    Args:
+        plugins: The list of plugins that can be installed.
+        container: The workload container.
+        client: The Jenkins API client.
+
+    Raises:
+        JenkinsPluginError: if there was an error removing unlisted plugin.
+        JenkinsError: if there was an error restarting Jenkins after removing the plugin.
+        TimeoutError: if it took too long to restart Jenkins after removing the plugin.
+    """
+    if not plugins:
+        return
+
+    client = client if client is not None else _get_client(get_admin_credentials(container))
+    res = client.run_groovy_script(
+        """
+def plugins = jenkins.model.Jenkins.instance.getPluginManager().getPlugins()
+plugins.each {
+    println "${it.getShortName()} (${it.getVersion()}) => ${it.getDependencies()}"
+}
+"""
+    )
+    dependency_lookup = _build_dependencies_lookup(res.splitlines())
+    allowed_plugins = _get_allowed_plugins(
+        itertools.chain(plugins, REQUIRED_PLUGINS), dependency_lookup
+    )
+    plugins_to_remove = set(dependency_lookup.keys()) - set(allowed_plugins)
+    if not plugins_to_remove:
+        return
+
+    try:
+        client.delete_plugins(plugin_list=plugins_to_remove, restart=False)
+    except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to remove the following plugins: %s, %s", plugins_to_remove, exc)
+        raise JenkinsPluginError("Failed to remove plugins.") from exc
+    logger.debug("Removed %s", plugins_to_remove)
+
+    top_level_plugins = _filter_dependent_plugins(plugins_to_remove, dependency_lookup)
+    _set_jenkins_system_message(
+        message="The following plugins have been removed by the system administrator: "
+        f"{', '.join(top_level_plugins)}\n"
+        f"To allow the plugins, please include them in the plugins configuration of the charm.",
+        container=container,
+    )
+
+    try:
+        safe_restart(container, client)
+        wait_ready()
+    except (JenkinsError, TimeoutError) as exc:
+        logger.error("Failed to restart Jenkins after removing plugins, %s", exc)
+        raise
