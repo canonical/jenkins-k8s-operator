@@ -782,14 +782,13 @@ def _get_allowed_plugins(
     Yields:
         The allowed plugin short name.
     """
-    # mypy doesn't understand that we can reassign the type and it cannot be None aftwards.
     if seen is None:
-        seen: set[str] = set()  # type: ignore
+        seen = set()
     for plugin in allowed_plugins:
-        if plugin in seen:  # type: ignore
+        if plugin in seen:
             continue
         yield plugin
-        seen.add(plugin)  # type: ignore
+        seen.add(plugin)
         try:
             yield from _get_allowed_plugins(dependency_lookup[plugin], dependency_lookup, seen)
         except KeyError:
