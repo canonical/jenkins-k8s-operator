@@ -824,6 +824,9 @@ def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
     Args:
         message: The system message to display.
         container: The Jenkins workload container.
+
+    Raises:
+        ValidationError: if invalid JCasC file was encountered.
     """
     jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
     config = yaml.safe_load(jcasc_yaml)
@@ -832,11 +835,11 @@ def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
         container.push(
             JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
         )
-    except KeyError:
+    except KeyError as exc:
         logger.error(
             "Invalid JCasC config file, expected 'jenkins' and 'systemMessage' keys not found."
         )
-        raise ValidationError("Invalid JCasC config file.")
+        raise ValidationError("Invalid JCasC config file.") from exc
 
 
 def remove_unlisted_plugins(
