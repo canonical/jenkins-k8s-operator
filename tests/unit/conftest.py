@@ -5,9 +5,11 @@
 
 import textwrap
 import typing
+import unittest.mock
 from pathlib import Path
 from secrets import token_hex
 
+import jenkinsapi.jenkins
 import pytest
 import requests
 import yaml
@@ -69,6 +71,12 @@ def mocked_get_request_fixture(jenkins_version: str):
 def admin_credentials_fixture() -> Credentials:
     """Admin credentials for Jenkins."""
     return Credentials(username="admin", password=token_hex(16))
+
+
+@pytest.fixture(scope="function", name="mock_client")
+def mock_client_fixture() -> unittest.mock.MagicMock:
+    """Mock Jenkins API client."""
+    return unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
 
 def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Harness):

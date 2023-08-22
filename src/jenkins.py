@@ -201,7 +201,6 @@ def calculate_env() -> Environment:
     )
 
 
-@functools.cache
 def get_version() -> str:
     """Get the Jenkins server version.
 
@@ -285,16 +284,13 @@ def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[s
 
 
 def _configure_proxy(
-    container: ops.Container,
-    proxy_config: state.ProxyConfig | None = None,
-    client: jenkinsapi.jenkins.Jenkins | None = None,
+    container: ops.Container, proxy_config: state.ProxyConfig | None = None
 ) -> None:
     """Configure Jenkins proxy settings if proxy configuration values are provided.
 
     Args:
         container: The Jenkins workload container
         proxy_config: The proxy settings to apply.
-        client: The API client used to communicate with the Jenkins server.
 
     Raises:
         JenkinsProxyError: if an error occurred running proxy configuration script.
@@ -302,7 +298,7 @@ def _configure_proxy(
     if not proxy_config:
         return
 
-    client = client if client is not None else _get_client(get_admin_credentials(container))
+    client = _get_client(get_admin_credentials(container))
     parsed_args = ", ".join(_get_groovy_proxy_args(proxy_config))
     try:
         client.run_groovy_script(f"proxy = new ProxyConfiguration({parsed_args})\nproxy.save()")
@@ -397,6 +393,7 @@ def bootstrap(container: ops.Container, proxy_config: state.ProxyConfig | None =
         raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
 
 
+@functools.cache
 def _get_client(client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
     """Get the Jenkins client.
 
@@ -414,17 +411,12 @@ def _get_client(client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
     )
 
 
-def get_node_secret(
-    node_name: str,
-    container: ops.Container,
-    client: jenkinsapi.jenkins.Jenkins | None = None,
-) -> str:
+def get_node_secret(node_name: str, container: ops.Container) -> str:
     """Get node secret from jenkins.
 
     Args:
         node_name: The registered node to fetch the secret from.
         container: The Jenkins workload container.
-        client: The API client used to communicate with the Jenkins server.
 
     Returns:
         The Jenkins agent node secret.
@@ -432,7 +424,7 @@ def get_node_secret(
     Raises:
         JenkinsError: if an error occurred running groovy script getting the node secret.
     """
-    client = client if client is not None else _get_client(get_admin_credentials(container))
+    client = _get_client(get_admin_credentials(container))
     try:
         return client.run_groovy_script(
             f'println(jenkins.model.Jenkins.getInstance().getComputer("{node_name}").getJnlpMac())'
@@ -442,22 +434,17 @@ def get_node_secret(
         raise JenkinsError("Failed to run groovy script getting node secret.") from exc
 
 
-def add_agent_node(
-    agent_meta: state.AgentMeta,
-    container: ops.Container,
-    client: jenkinsapi.jenkins.Jenkins | None = None,
-) -> None:
+def add_agent_node(agent_meta: state.AgentMeta, container: ops.Container) -> None:
     """Add a Jenkins agent node.
 
     Args:
         agent_meta: The Jenkins agent metadata to create the node from.
         container: The Jenkins workload container.
-        client: The API client used to communicate with the Jenkins server.
 
     Raises:
         JenkinsError: if an error occurred running groovy script creating the node.
     """
-    client = client if client is not None else _get_client(get_admin_credentials(container))
+    client = _get_client(get_admin_credentials(container))
     try:
         client.create_node(
             name=agent_meta.name,
@@ -581,7 +568,6 @@ def _get_latest_patch_version(current_version: str, proxy: state.ProxyConfig | N
     return sorted_versions[0]
 
 
-@functools.cache
 def get_updatable_version(proxy: state.ProxyConfig | None = None) -> str | None:
     """Get version to update to if available.
 
@@ -731,19 +717,16 @@ def _wait_jenkins_job_shutdown(client: jenkinsapi.jenkins.Jenkins) -> None:
         raise TimeoutError("Timed out waiting for Jenkins to be shutdown.") from exc
 
 
-def safe_restart(
-    container: ops.Container, client: jenkinsapi.jenkins.Jenkins | None = None
-) -> None:
+def safe_restart(container: ops.Container) -> None:
     """Safely restart Jenkins server after all jobs are done executing.
 
     Args:
         container: The Jenkins workload container to interact with filesystem.
-        client: The API client used to communicate with the Jenkins server.
 
     Raises:
         JenkinsError: if there was an API error calling safe restart.
     """
-    client = client if client is not None else _get_client(get_admin_credentials(container))
+    client = _get_client(get_admin_credentials(container))
     try:
         # There is a bug with wait_for_reboot in the jenkinsapi
         # https://github.com/pycontribs/jenkinsapi/issues/844
@@ -895,16 +878,13 @@ def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
 
 
 def remove_unlisted_plugins(
-    plugins: typing.Iterable[str] | None,
-    container: ops.Container,
-    client: jenkinsapi.jenkins.Jenkins | None = None,
+    plugins: typing.Iterable[str] | None, container: ops.Container
 ) -> None:
     """Remove plugins that are not in the list of desired plugins.
 
     Args:
         plugins: The list of plugins that can be installed.
         container: The workload container.
-        client: The Jenkins API client.
 
     Raises:
         JenkinsPluginError: if there was an error removing unlisted plugin.
@@ -914,7 +894,7 @@ def remove_unlisted_plugins(
     if not plugins:
         return
 
-    client = client if client is not None else _get_client(get_admin_credentials(container))
+    client = _get_client(get_admin_credentials(container))
     res = client.run_groovy_script(
         """
 def plugins = jenkins.model.Jenkins.instance.getPluginManager().getPlugins()
@@ -947,7 +927,7 @@ plugins.each {
     )
 
     try:
-        safe_restart(container, client)
+        safe_restart(container)
         wait_ready()
     except (JenkinsError, TimeoutError) as exc:
         logger.error("Failed to restart Jenkins after removing plugins, %s", exc)
