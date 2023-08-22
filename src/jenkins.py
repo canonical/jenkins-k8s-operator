@@ -793,12 +793,13 @@ def _get_allowed_plugins(
             dependencies = dependency_lookup[plugin]
         except KeyError:
             logger.warning("Plugin %s not found in dependency lookup.", plugin)
+            continue
         yield from _get_allowed_plugins(dependencies, dependency_lookup, seen)
 
 
 def _filter_dependent_plugins(
     plugins: typing.Iterable[str], dependency_lookup: typing.Mapping[str, typing.Iterable[str]]
-) -> typing.Iterable[str]:
+) -> set[str]:
     """Filter out dependencies from the iterable consisting of all plugins.
 
     This method filters out any plugins that is a dependency of another plugin, returning top level
