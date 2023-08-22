@@ -790,9 +790,10 @@ def _get_allowed_plugins(
         yield plugin
         seen.add(plugin)
         try:
-            yield from _get_allowed_plugins(dependency_lookup[plugin], dependency_lookup, seen)
+            dependencies = dependency_lookup[plugin]
         except KeyError:
             logger.warning("Plugin %s not found in dependency lookup.", plugin)
+        yield from _get_allowed_plugins(dependencies, dependency_lookup, seen)
 
 
 def _filter_dependent_plugins(
