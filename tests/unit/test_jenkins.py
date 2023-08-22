@@ -854,6 +854,157 @@ def test_download_stable_war(monkeypatch: pytest.MonkeyPatch, current_version: s
     )
 
 
+def test_has_lts_updates_get_version_error(
+    monkeypatch: pytest.MonkeyPatch, raise_exception: typing.Callable
+):
+    """
+    arrange: given a monkeypatched get_version that raises a JenkinsError.
+    act: when has_lts_updates is called.
+    assert: JenkinsUpdateError is raised.
+    """
+    monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(jenkins.JenkinsError))
+
+    with pytest.raises(jenkins.JenkinsUpdateError):
+        jenkins.has_lts_updates()
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        pytest.param(jenkins.JenkinsNetworkError, id="network error"),
+        pytest.param(jenkins.ValidationError, id="validation error"),
+    ],
+)
+def test_has_lts_updates_get_latest_patch_version_error(
+    monkeypatch: pytest.MonkeyPatch,
+    raise_exception: typing.Callable,
+    exception: jenkins.JenkinsError,
+    versions: Versions,
+):
+    """
+    arrange: given a monkeypatched _get_latest_patch_version that raises an exception.
+    act: when has_lts_updates is called.
+    assert: JenkinsUpdateError is raised.
+    """
+    monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
+    monkeypatch.setattr(
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: raise_exception(exception)
+    )
+
+    with pytest.raises(jenkins.JenkinsUpdateError):
+        jenkins.has_lts_updates()
+
+
+def test_has_lts_updates(monkeypatch: pytest.MonkeyPatch, versions: Versions):
+    """
+    arrange: given a monkeypatched _get_latest_patch_version that returns a patched lts version.
+    act: when has_lts_updates is called.
+    assert: True is returned.
+    """
+    monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
+    monkeypatch.setattr(
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
+    )
+
+    assert jenkins.has_lts_updates()
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        pytest.param(jenkins.JenkinsNetworkError, id="network error"),
+        pytest.param(jenkins.JenkinsError, id="jenkins api error"),
+        pytest.param(jenkins.ValidationError, id="invalid rss"),
+    ],
+)
+def test_update_jenkins_fetch_versions_error(
+    monkeypatch: pytest.MonkeyPatch,
+    raise_exception: typing.Callable,
+    exception: jenkins.JenkinsError,
+):
+    """
+    arrange: given a monkeypatched get_version that raises an exception.
+    act: when update_jenkins is called.
+    assert: JenkinsUpdateError is raised.
+    """
+    monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(exception))
+
+    with pytest.raises(jenkins.JenkinsUpdateError):
+        jenkins.update_jenkins(unittest.mock.MagicMock(spec=ops.Container))
+
+
+def test_update_jenkins_download_error(
+    monkeypatch: pytest.MonkeyPatch, raise_exception: typing.Callable, versions: Versions
+):
+    """
+    arrange: given a monkeypatched _download_stable_war that raises JenkinsNetworkError.
+    act: when update_jenkins is called.
+    assert: JenkinsUpdateError is raised.
+    """
+    monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
+    monkeypatch.setattr(
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
+    )
+    monkeypatch.setattr(
+        jenkins,
+        "_download_stable_war",
+        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsNetworkError),
+    )
+
+    with pytest.raises(jenkins.JenkinsUpdateError):
+        jenkins.update_jenkins(unittest.mock.MagicMock(spec=ops.Container))
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        pytest.param(jenkins.JenkinsError, id="api error"),
+        pytest.param(TimeoutError, id="timeout"),
+    ],
+)
+def test_update_jenkins_restart_error(
+    monkeypatch: pytest.MonkeyPatch,
+    raise_exception: typing.Callable,
+    exception: jenkins.JenkinsError,
+    versions: Versions,
+):
+    """
+    arrange: given a monkeypatched safe_restart that raises an exception.
+    act: when update_jenkins is called.
+    assert: JenkinsRestartError is raised.
+    """
+    monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
+    monkeypatch.setattr(
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
+    )
+    monkeypatch.setattr(jenkins, "_download_stable_war", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        jenkins, "safe_restart", lambda *_args, **_kwargs: raise_exception(exception)
+    )
+
+    with pytest.raises(jenkins.JenkinsRestartError):
+        jenkins.update_jenkins(unittest.mock.MagicMock(spec=ops.Container))
+
+
+def test_update_jenkins(monkeypatch: pytest.MonkeyPatch, versions: Versions):
+    """
+    arrange: given a monkeypatched _get_latest_patch_version that returns a patched version.
+    act: when update_jenkins is called.
+    assert: The patched version is returned.
+    """
+    monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
+    monkeypatch.setattr(
+        jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
+    )
+    monkeypatch.setattr(jenkins, "_download_stable_war", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(jenkins, "safe_restart", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(jenkins, "wait_ready", lambda: None)
+
+    version = jenkins.update_jenkins(unittest.mock.MagicMock(spec=ops.Container))
+
+    assert version == versions.patched, "Patched version should be returned."
+
+
 @pytest.mark.parametrize(
     "response_status",
     [
