@@ -1193,7 +1193,21 @@ def test__get_top_level_plugins(
     """
     top_level_plugins = jenkins._filter_dependent_plugins(all_plugins, plugins_lookup)
 
-    assert set(top_level_plugins) == expected_top_level_plugins
+    assert top_level_plugins == expected_top_level_plugins
+
+
+def test__set_jenkins_system_message_error(
+    container: ops.Container, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given a monkeypatched yaml.safe_load function that returns an empty dictionary.
+    act: when _set_jenkins_system_message is called.
+    assert: a ValidationError is raised.
+    """
+    monkeypatch.setattr(yaml, "safe_load", lambda *_args, **_kwargs: {})
+
+    with pytest.raises(jenkins.ValidationError):
+        jenkins._set_jenkins_system_message("test", container)
 
 
 def test__set_jenkins_system_message(container: ops.Container):

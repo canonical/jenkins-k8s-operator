@@ -833,14 +833,14 @@ def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
     config = yaml.safe_load(jcasc_yaml)
     try:
         config["jenkins"]["systemMessage"] = message
-        container.push(
-            JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
-        )
     except KeyError as exc:
         logger.error(
             "Invalid JCasC config file, expected 'jenkins' and 'systemMessage' keys not found."
         )
         raise ValidationError("Invalid JCasC config file.") from exc
+    container.push(
+        JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
+    )
 
 
 def remove_unlisted_plugins(
