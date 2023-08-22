@@ -183,8 +183,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 return ops.StatusBase.from_name(original_status, "")
         except jenkins.JenkinsUpdateError as exc:
             logger.error("Failed to get Jenkins updates, %s", exc)
-            self.unit.status = ops.ActiveStatus("Failed to get Jenkins patch version.")
-            return
+            return ops.StatusBase.from_name(
+                original_status, "Failed to get Jenkins patch version."
+            )
 
         self.unit.status = ops.MaintenanceStatus("Updating Jenkins.")
         try:
@@ -196,8 +197,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ops.StatusBase.from_name(original_status, "Failed to get update data.")
         except jenkins.JenkinsRestartError as exc:
             logger.error("Failed to safely restart Jenkins. %s", exc)
-            self.unit.status = ops.BlockedStatus("Update restart failed.")
-            return
+            return ops.BlockedStatus("Update restart failed.")
 
         self.unit.set_workload_version(updated_version)
         return ops.ActiveStatus()
