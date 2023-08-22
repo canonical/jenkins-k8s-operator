@@ -562,30 +562,38 @@ def test_add_agent_node(container: ops.Container):
     )
 
 
-def test_remove_agent_node_fail(admin_credentials: jenkins.Credentials):
+def test_remove_agent_node_fail(
+    container: ops.Container,
+    monkeypatch: pytest.MonkeyPatch,
+    mock_client: unittest.mock.MagicMock,
+):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
     assert: no exception is raised.
     """
-    mock_jenkins_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
-    mock_jenkins_client.delete_node.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
+    mock_client.delete_node.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
+    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     with pytest.raises(jenkins.JenkinsError):
-        jenkins.remove_agent_node("jekins-agent-0", admin_credentials, mock_jenkins_client)
+        jenkins.remove_agent_node("jekins-agent-0", container)
 
 
-def test_remove_agent_node(admin_credentials: jenkins.Credentials):
+def test_remove_agent_node(
+    container: ops.Container,
+    monkeypatch: pytest.MonkeyPatch,
+    mock_client: unittest.mock.MagicMock,
+):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
     assert: no exception is raised.
     """
     mock_delete = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins.delete_node)
-    mock_jenkins_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
-    mock_jenkins_client.delete_node = mock_delete
+    mock_client.delete_node = mock_delete
+    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
-    jenkins.remove_agent_node("jekins-agent-0", admin_credentials, mock_jenkins_client)
+    jenkins.remove_agent_node("jekins-agent-0", container)
 
     mock_delete.assert_called_once()
 

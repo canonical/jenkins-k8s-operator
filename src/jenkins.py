@@ -472,22 +472,17 @@ def add_agent_node(
         raise JenkinsError("Failed to add agent node.") from exc
 
 
-def remove_agent_node(
-    agent_name: str,
-    credentials: Credentials,
-    client: jenkinsapi.jenkins.Jenkins | None = None,
-) -> None:
+def remove_agent_node(agent_name: str, container: ops.Container) -> None:
     """Remove a Jenkins agent node.
 
     Args:
         agent_name: The agent node name to remove.
-        credentials: The credentials of a Jenkins user with access to the Jenkins API.
-        client: The API client used to communicate with the Jenkins server.
+        container: The Jenkins workload container.
 
     Raises:
         JenkinsError: if an error occurred running groovy script removing the node.
     """
-    client = client if client is not None else _get_client(credentials)
+    client = _get_client(get_admin_credentials(container))
     try:
         client.delete_node(nodename=agent_name)
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
