@@ -802,7 +802,7 @@ def _filter_dependent_plugins(
     """Filter out dependencies from the iterable consisting of all plugins.
 
     This method filters out any plugins that is a dependency of another plugin, returning top level
-    plugin only.
+    plugins only.
 
     Args:
         plugins: Plugins to filter out dependency plugins from.
