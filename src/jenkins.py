@@ -598,7 +598,10 @@ def get_updatable_version(proxy: state.ProxyConfig | None = None) -> str | None:
 
 
 def has_lts_updates(proxy: state.ProxyConfig | None = None) -> bool:
-    """Returns whether the Jenkins has a patched LTS update available.
+    """Return whether the Jenkins has a patched LTS update available.
+
+    Args:
+        proxy: Proxy server to route the requests through.
 
     Raises:
         JenkinsUpdateError: If there was an error fetching the Jenkins version information.
@@ -655,6 +658,7 @@ def update_jenkins(container: ops.Container, proxy: state.ProxyConfig | None = N
 
     Raises:
         JenkinsUpdateError: If there was an error updating Jenkins.
+        JenkinsRestartError: If there was an error restarting updated Jenkins.
 
     Returns:
         The updated Jenkins version.
