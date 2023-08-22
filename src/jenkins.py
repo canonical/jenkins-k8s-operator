@@ -830,27 +830,28 @@ def _get_allowed_plugins(
     Yields:
         The allowed plugin short name.
     """
-    # mypy doesn't understand that we can reassign the type and it cannot be None aftwards.
     if seen is None:
-        seen: set[str] = set()  # type: ignore
+        seen = set()
     for plugin in allowed_plugins:
-        if plugin in seen:  # type: ignore
+        if plugin in seen:
             continue
         yield plugin
-        seen.add(plugin)  # type: ignore
+        seen.add(plugin)
         try:
-            yield from _get_allowed_plugins(dependency_lookup[plugin], dependency_lookup, seen)
+            dependencies = dependency_lookup[plugin]
         except KeyError:
             logger.warning("Plugin %s not found in dependency lookup.", plugin)
+            continue
+        yield from _get_allowed_plugins(dependencies, dependency_lookup, seen)
 
 
 def _filter_dependent_plugins(
     plugins: typing.Iterable[str], dependency_lookup: typing.Mapping[str, typing.Iterable[str]]
-) -> typing.Iterable[str]:
+) -> set[str]:
     """Filter out dependencies from the iterable consisting of all plugins.
 
     This method filters out any plugins that is a dependency of another plugin, returning top level
-    plugin only.
+    plugins only.
 
     Args:
         plugins: Plugins to filter out dependency plugins from.
@@ -872,10 +873,19 @@ def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
     Args:
         message: The system message to display.
         container: The Jenkins workload container.
+
+    Raises:
+        ValidationError: if invalid JCasC file was encountered.
     """
     jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
     config = yaml.safe_load(jcasc_yaml)
-    config["jenkins"]["systemMessage"] = message
+    try:
+        config["jenkins"]["systemMessage"] = message
+    except KeyError as exc:
+        logger.error(
+            "Invalid JCasC config file, expected 'jenkins' and 'systemMessage' keys not found."
+        )
+        raise ValidationError("Invalid JCasC config file.") from exc
     container.push(
         JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
     )
