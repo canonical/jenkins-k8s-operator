@@ -1042,86 +1042,116 @@ def test__build_dependencies_lookup(
 @pytest.mark.parametrize(
     "top_level_plugins, plugins_lookup, expected_allowed_plugins",
     [
+        pytest.param((), {}, (), id="all empty"),
+        pytest.param(("plugin-a",), {}, ("plugin-a",), id="single top level, no lookup"),
+        pytest.param(
+            ("plugin-a",), {"plugin-b": ()}, ("plugin-a",), id="single top level, different lookup"
+        ),
+        pytest.param(
+            ("plugin-a",),
+            {"plugin-a": ()},
+            ("plugin-a",),
+            id="single top level, lookup with no dependencies",
+        ),
+        pytest.param(
+            ("plugin-a",),
+            {"plugin-a": ("plugin-a-a",), "plugin-a-a": ()},
+            ("plugin-a", "plugin-a-a"),
+            id="single top level, lookup with one dependency",
+        ),
+        pytest.param(
+            ("plugin-a",),
+            {"plugin-a": ("plugin-a-a",), "plugin-a-a": ("plugin-a-a-a",), "plugin-a-a-a": ()},
+            ("plugin-a", "plugin-a-a", "plugin-a-a-a"),
+            id="single top level, lookup with one nested dependency",
+        ),
+        pytest.param(
+            ("plugin-a",),
+            {"plugin-a": ("plugin-a-a", "plugin-a-b"), "plugin-a-a": (), "plugin-a-b": ()},
+            ("plugin-a", "plugin-a-a", "plugin-a-b"),
+            id="single top level, lookup with multiple dependencies",
+        ),
+        pytest.param(
+            ("plugin-a", "plugin-b"),
+            {"plugin-a": (), "plugin-b": ()},
+            ("plugin-a", "plugin-b"),
+            id="two top levels, no dependencies",
+        ),
+        pytest.param(
+            ("plugin-a", "plugin-b"),
+            {"plugin-a": ("plugin-a-a",), "plugin-b": (), "plugin-a-a": ()},
+            ("plugin-a", "plugin-a-a", "plugin-b"),
+            id="two top levels, plugin-a dependency exists",
+        ),
+        pytest.param(
+            ("plugin-a", "plugin-b"),
+            {"plugin-a": (), "plugin-b": ("plugin-b-a",), "plugin-b-a": ()},
+            ("plugin-a", "plugin-b", "plugin-b-a"),
+            id="two top levels, plugin-b dependency exists",
+        ),
         pytest.param(
             ("plugin-a", "plugin-b"),
             {
-                "plugin-a": ("dep-a-a", "dep-a-b"),
-                "plugin-b": ("dep-b-a", "dep-b-b"),
-                "dep-a-a": ("dep-a-b",),
-                "dep-a-b": (),
-                "dep-b-a": ("dep-b-b",),
-                "dep-b-b": (),
+                "plugin-a": ("plugin-a-a",),
+                "plugin-a-a": (),
+                "plugin-b": ("plugin-b-a",),
+                "plugin-b-a": (),
             },
-            set(("plugin-a", "dep-a-a", "dep-a-b", "plugin-b", "dep-b-a", "dep-b-b")),
-            id="all exists",
+            ("plugin-a", "plugin-a-a", "plugin-b", "plugin-b-a"),
+            id="two top levels, both have single dependency",
         ),
         pytest.param(
-            (
-                "plugin-a",
-                "plugin-c",
-            ),
+            ("plugin-a", "plugin-b"),
             {
-                "plugin-a": ("dep-a-a", "dep-a-b"),
-                "plugin-b": ("dep-b-a", "dep-b-b"),
-                "dep-a-a": ("dep-a-b",),
-                "dep-a-b": (),
-                "dep-b-a": ("dep-b-b",),
-                "dep-b-b": (),
+                "plugin-a": ("shared",),
+                "plugin-b": ("shared",),
+                "shared": (),
             },
-            set(("dep-a-b", "plugin-c", "dep-a-a", "plugin-a")),
-            id="missing top level plugin",
+            ("plugin-a", "shared", "plugin-b"),
+            id="two top levels, both share a dependency",
         ),
         pytest.param(
-            (
-                "plugin-a",
-                "plugin-b",
-            ),
+            ("plugin-a", "plugin-b"),
             {
-                "plugin-a": ("dep-a-a", "dep-a-b"),
-                "plugin-b": ("dep-b-a", "dep-b-b"),
-                "dep-a-a": ("dep-a-b",),
-                "dep-a-b": (),
+                "plugin-a": ("plugin-a-a", "plugin-a-b"),
+                "plugin-b": ("plugin-b-a", "plugin-b-b"),
+                "plugin-a-a": (),
+                "plugin-a-b": (),
+                "plugin-b-a": (),
+                "plugin-b-b": (),
             },
-            set(("dep-a-b", "dep-b-a", "dep-b-b", "plugin-a", "plugin-b", "dep-a-a")),
-            id="missing dependency",
+            ("plugin-a", "plugin-a-a", "plugin-a-b", "plugin-b", "plugin-b-a", "plugin-b-b"),
+            id="two top levels, both have multiple dependencies",
         ),
         pytest.param(
-            (
-                "plugin-a",
-                "plugin-b",
-            ),
+            ("plugin-a", "plugin-b"),
             {
-                "plugin-a": ("dep-a-a", "dep-a-b", "common-dep"),
-                "plugin-b": ("dep-b-a", "dep-b-b", "common-dep"),
-                "dep-a-a": ("dep-a-b",),
-                "dep-a-b": (),
-                "common-dep": (),
+                "plugin-a": ("plugin-a-a", "shared"),
+                "plugin-b": ("plugin-b-a", "shared"),
+                "plugin-a-a": (),
+                "plugin-b-a": (),
+                "shared": (),
             },
-            set(
-                ("plugin-a", "dep-a-a", "dep-a-b", "common-dep", "plugin-b", "dep-b-a", "dep-b-b")
-            ),
-            id="common dependency",
+            ("plugin-a", "plugin-a-a", "shared", "plugin-b", "plugin-b-a"),
+            id="two top levels, both have multiple dependencies, single shared",
         ),
         pytest.param(
-            ("plugin-a", "plugin-b", "common-dep"),
+            ("plugin-a", "plugin-b"),
             {
-                "plugin-a": ("dep-a-a", "dep-a-b", "common-dep"),
-                "plugin-b": ("dep-b-a", "dep-b-b", "common-dep"),
-                "dep-a-a": ("dep-a-b",),
-                "dep-a-b": (),
-                "common-dep": (),
+                "plugin-a": ("shared-a", "shared-b"),
+                "plugin-b": ("shared-a", "shared-b"),
+                "shared-a": (),
+                "shared-b": (),
             },
-            set(
-                ("plugin-a", "dep-a-a", "dep-a-b", "common-dep", "plugin-b", "dep-b-a", "dep-b-b")
-            ),
-            id="common dependency in top level plugin",
+            ("plugin-a", "shared-a", "shared-b", "plugin-b"),
+            id="two top levels, both have multiple dependencies, both shared",
         ),
     ],
 )
 def test__get_allowed_plugins(
     top_level_plugins: typing.Iterable[str],
     plugins_lookup: typing.Mapping[str, typing.Iterable[str]],
-    expected_allowed_plugins: set[str],
+    expected_allowed_plugins: tuple[str, ...],
 ):
     """
     arrange: given a list of top level plugins (not a dependency to another plugin).
@@ -1130,7 +1160,7 @@ def test__get_allowed_plugins(
     """
     allowed_plugins = jenkins._get_allowed_plugins(top_level_plugins, plugins_lookup)
 
-    assert set(allowed_plugins) == expected_allowed_plugins
+    assert tuple(allowed_plugins) == expected_allowed_plugins
 
 
 @pytest.mark.parametrize(
