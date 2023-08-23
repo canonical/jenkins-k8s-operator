@@ -612,12 +612,9 @@ def has_updates_for_lts(proxy: state.ProxyConfig | None = None) -> bool:
     try:
         current_version = get_version()
         latest_version = _get_latest_patch_version(current_version=current_version, proxy=proxy)
-    except (JenkinsNetworkError, ValidationError) as exc:
+    except (JenkinsError, ValidationError) as exc:
         logger.error("Failed to fetch latest patch version info, %s", exc)
         raise JenkinsUpdateError("Failed to fetch latest patch version info.") from exc
-    except JenkinsError as exc:
-        logger.error("Failed to get Jenkins version while fetching update, %s", exc)
-        raise JenkinsUpdateError("Failed to get Jenkins version.") from exc
 
     return current_version != latest_version
 
@@ -665,7 +662,7 @@ def update_jenkins(container: ops.Container, proxy: state.ProxyConfig | None = N
         current_version = get_version()
         latest_version = _get_latest_patch_version(current_version=current_version, proxy=proxy)
         _download_stable_war(container, latest_version)
-    except (JenkinsNetworkError, JenkinsError, ValidationError) as exc:
+    except (JenkinsError, ValidationError) as exc:
         logger.error("Failed to get Jenkins update version data, %s", exc)
         raise JenkinsUpdateError("Error fetching Jenkins update version data.") from exc
 
