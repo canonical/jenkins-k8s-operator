@@ -611,15 +611,13 @@ def has_updates_for_lts(proxy: state.ProxyConfig | None = None) -> bool:
     """
     try:
         current_version = get_version()
-    except JenkinsError as exc:
-        logger.error("Failed to get Jenkins version while fetching update, %s", exc)
-        raise JenkinsUpdateError("Failed to get Jenkins version.") from exc
-
-    try:
         latest_version = _get_latest_patch_version(current_version=current_version, proxy=proxy)
     except (JenkinsNetworkError, ValidationError) as exc:
         logger.error("Failed to fetch latest patch version info, %s", exc)
         raise JenkinsUpdateError("Failed to fetch latest patch version info.") from exc
+    except JenkinsError as exc:
+        logger.error("Failed to get Jenkins version while fetching update, %s", exc)
+        raise JenkinsUpdateError("Failed to get Jenkins version.") from exc
 
     return current_version != latest_version
 
@@ -666,15 +664,10 @@ def update_jenkins(container: ops.Container, proxy: state.ProxyConfig | None = N
     try:
         current_version = get_version()
         latest_version = _get_latest_patch_version(current_version=current_version, proxy=proxy)
-    except (JenkinsNetworkError, JenkinsError, ValidationError) as exc:
-        logger.error("Failed to get Jenkins version metadata, %s", exc)
-        raise JenkinsUpdateError("Error fetching Jenkins version metadata.") from exc
-
-    try:
         _download_stable_war(container, latest_version)
-    except JenkinsNetworkError as exc:
-        logger.error("Failed to download Jenkins executable, %s", exc)
-        raise JenkinsUpdateError("Error downloading Jenkins executable.") from exc
+    except (JenkinsNetworkError, JenkinsError, ValidationError) as exc:
+        logger.error("Failed to get Jenkins update version data, %s", exc)
+        raise JenkinsUpdateError("Error fetching Jenkins update version data.") from exc
 
     try:
         safe_restart(container)
