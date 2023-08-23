@@ -21,6 +21,7 @@ import jenkins
 import state
 from charm import JenkinsK8sOperatorCharm
 
+from .helpers import combine_root_paths
 from .types_ import HarnessWithContainer, Versions
 
 ROCKCRAFT_YAML = yaml.safe_load(Path("jenkins_rock/rockcraft.yaml").read_text(encoding="utf-8"))
@@ -167,13 +168,15 @@ def container_fixture(
     proxy_config: state.ProxyConfig,
 ) -> Container:
     """Harness Jenkins workload container that acts as a Jenkins container."""
-    harness.set_can_connect("jenkins", True)
-    container: Container = harness.model.unit.get_container("jenkins")
-    container.push(
-        jenkins.PASSWORD_FILE_PATH, admin_credentials.password, encoding="utf-8", make_dirs=True
-    )
+    jenkins_root = harness.get_filesystem_root("jenkins")
+    password_file_path = combine_root_paths(jenkins_root, jenkins.PASSWORD_FILE_PATH)
+    password_file_path.parent.mkdir(parents=True, exist_ok=True)
+    password_file_path.write_text(admin_credentials.password, encoding="utf-8")
+
     with open("templates/jenkins.yaml", encoding="utf-8") as jenkins_casc_config_file:
-        container.push(jenkins.JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file)
+        jcasc_file_path = combine_root_paths(jenkins_root, jenkins.JCASC_CONFIG_FILE_PATH)
+        jcasc_file_path.parent.mkdir(parents=True, exist_ok=True)
+        jcasc_file_path.write_text(jenkins_casc_config_file.read(), encoding="utf-8")
 
     def cmd_handler(argv: list[str]) -> tuple[int, str, str]:
         """Handle the python command execution inside the Flask container.
@@ -237,6 +240,8 @@ def container_fixture(
         return (0, "", "")
 
     inject_register_command_handler(monkeypatch, harness)
+    container = harness.model.unit.get_container("jenkins")
+    harness.set_can_connect(container, True)
     harness.register_command_handler(  # type: ignore # pylint: disable=no-member
         container=container, executable="java", handler=cmd_handler
     )
