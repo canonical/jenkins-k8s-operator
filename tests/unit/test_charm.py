@@ -186,11 +186,11 @@ def test__update_jenkins_version_already_latest(
     harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
 ):
     """
-    arrange: given latest jenkins, monkeypatched has_lts_updates that returns the None.
+    arrange: given latest jenkins, monkeypatched has_updates_for_lts that returns the None.
     act: when _update_jenkins_version is called.
     assert: original status is returned with no status message.
     """
-    monkeypatch.setattr(jenkins, "has_lts_updates", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda *_args, **_kwargs: None)
     mock_download_func = MagicMock(spec=jenkins._download_stable_war)
     monkeypatch.setattr(jenkins, "_download_stable_war", mock_download_func)
     harness, container = harness_container.harness, harness_container.container
@@ -205,19 +205,19 @@ def test__update_jenkins_version_already_latest(
     assert not returned_status.message, "The status message should not exist."
 
 
-def test__update_jenkins_version_has_lts_updates_error(
+def test__update_jenkins_version_has_updates_for_lts_error(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
     raise_exception: typing.Callable,
 ):
     """
-    arrange: given latest jenkins, monkeypatched has_lts_updates that raises exceptions.
+    arrange: given latest jenkins, monkeypatched has_updates_for_lts that raises exceptions.
     act: when _update_jenkins_version is called.
     assert: original status is returned with failed status message.
     """
     monkeypatch.setattr(
         jenkins,
-        "has_lts_updates",
+        "has_updates_for_lts",
         lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsUpdateError),
     )
     harness, container = harness_container.harness, harness_container.container
@@ -241,7 +241,7 @@ def test__update_jenkins_version_jenkins_update_error(
     act: when _update_jenkins_version is called.
     assert: original status is returned with failed status message.
     """
-    monkeypatch.setattr(jenkins, "has_lts_updates", lambda: True)
+    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda: True)
     monkeypatch.setattr(
         jenkins,
         "update_jenkins",
@@ -268,7 +268,7 @@ def test__update_jenkins_version_jenkins_restart_error(
     act: when _update_jenkins_version is called.
     assert: blocked status is returned with failed status message.
     """
-    monkeypatch.setattr(jenkins, "has_lts_updates", lambda: True)
+    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda: True)
     monkeypatch.setattr(
         jenkins,
         "update_jenkins",
@@ -294,7 +294,7 @@ def test__update_jenkins_version_update(
     act: when _update_jenkins_version is called.
     assert: active status is returned with no message.
     """
-    monkeypatch.setattr(jenkins, "has_lts_updates", lambda: True)
+    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda: True)
     monkeypatch.setattr(
         jenkins,
         "update_jenkins",
