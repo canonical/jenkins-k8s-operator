@@ -854,12 +854,12 @@ def test_download_stable_war(monkeypatch: pytest.MonkeyPatch, current_version: s
     )
 
 
-def test_has_lts_updates_get_version_error(
+def test_has_updates_for_lts_get_version_error(
     monkeypatch: pytest.MonkeyPatch, raise_exception: typing.Callable
 ):
     """
     arrange: given a monkeypatched get_version that raises a JenkinsError.
-    act: when has_lts_updates is called.
+    act: when has_updates_for_lts is called.
     assert: JenkinsUpdateError is raised.
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(jenkins.JenkinsError))
@@ -875,7 +875,7 @@ def test_has_lts_updates_get_version_error(
         pytest.param(jenkins.ValidationError, id="validation error"),
     ],
 )
-def test_has_lts_updates_get_latest_patch_version_error(
+def test_has_updates_for_lts_get_latest_patch_version_error(
     monkeypatch: pytest.MonkeyPatch,
     raise_exception: typing.Callable,
     exception: jenkins.JenkinsError,
@@ -883,7 +883,7 @@ def test_has_lts_updates_get_latest_patch_version_error(
 ):
     """
     arrange: given a monkeypatched _get_latest_patch_version that raises an exception.
-    act: when has_lts_updates is called.
+    act: when has_updates_for_lts is called.
     assert: JenkinsUpdateError is raised.
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
@@ -895,10 +895,10 @@ def test_has_lts_updates_get_latest_patch_version_error(
         jenkins.has_updates_for_lts()
 
 
-def test_has_lts_updates(monkeypatch: pytest.MonkeyPatch, versions: Versions):
+def test_has_updates_for_lts(monkeypatch: pytest.MonkeyPatch, versions: Versions):
     """
     arrange: given a monkeypatched _get_latest_patch_version that returns a patched lts version.
-    act: when has_lts_updates is called.
+    act: when has_updates_for_lts is called.
     assert: True is returned.
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: versions.current)
