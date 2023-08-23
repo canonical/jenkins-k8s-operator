@@ -68,9 +68,11 @@ def admin_credentials_fixture() -> jenkins.Credentials:
 
 
 @pytest.fixture(scope="function", name="mock_client")
-def mock_client_fixture() -> unittest.mock.MagicMock:
+def mock_client_fixture(monkeypatch: pytest.MonkeyPatch) -> unittest.mock.MagicMock:
     """Mock Jenkins API client."""
-    return unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
+    return mock_client
 
 
 def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Harness):

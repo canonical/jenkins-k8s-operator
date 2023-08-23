@@ -324,7 +324,6 @@ def test__configure_proxy_fail(
     proxy_config: state.ProxyConfig,
     mock_client: unittest.mock.MagicMock,
     raise_exception: typing.Callable,
-    monkeypatch: pytest.MonkeyPatch,
 ):
     """
     arrange: given a test proxy config and a monkeypatched jenkins client that raises an exception.
@@ -334,7 +333,6 @@ def test__configure_proxy_fail(
     mock_client.run_groovy_script = lambda *_args, **_kwargs: raise_exception(
         exception=jenkinsapi.custom_exceptions.JenkinsAPIException
     )
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     with pytest.raises(jenkins.JenkinsProxyError) as exc:
         jenkins._configure_proxy(harness_container.container, proxy_config)
@@ -345,7 +343,6 @@ def test__configure_proxy_fail(
 def test__configure_proxy_partial(
     harness_container: HarnessWithContainer,
     partial_proxy_config: state.ProxyConfig,
-    monkeypatch: pytest.MonkeyPatch,
     mock_client: unittest.mock.MagicMock,
 ):
     """
@@ -355,7 +352,6 @@ def test__configure_proxy_partial(
     """
     mock_run_groovy_script = unittest.mock.MagicMock()
     mock_client.run_groovy_script = mock_run_groovy_script
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     jenkins._configure_proxy(harness_container.container, partial_proxy_config)
 
@@ -370,7 +366,6 @@ def test__configure_proxy_partial(
 def test__configure_proxy_http(
     harness_container: HarnessWithContainer,
     http_partial_proxy_config: state.ProxyConfig,
-    monkeypatch: pytest.MonkeyPatch,
     mock_client: unittest.mock.MagicMock,
 ):
     """
@@ -380,7 +375,6 @@ def test__configure_proxy_http(
     """
     mock_run_groovy_script = unittest.mock.MagicMock()
     mock_client.run_groovy_script = mock_run_groovy_script
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     jenkins._configure_proxy(harness_container.container, http_partial_proxy_config)
 
@@ -397,7 +391,6 @@ def test__configure_proxy_http(
 def test__configure_proxy(
     harness_container: HarnessWithContainer,
     proxy_config: state.ProxyConfig,
-    monkeypatch: pytest.MonkeyPatch,
     mock_client: unittest.mock.MagicMock,
 ):
     """
@@ -407,7 +400,6 @@ def test__configure_proxy(
     """
     mock_run_groovy_script = unittest.mock.MagicMock()
     mock_client.run_groovy_script = mock_run_groovy_script
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     jenkins._configure_proxy(harness_container.container, proxy_config)
 
@@ -489,24 +481,19 @@ def test_get_client(admin_credentials: jenkins.Credentials):
         )
 
 
-def test_get_node_secret_api_error(
-    container: ops.Container, monkeypatch: pytest.MonkeyPatch, mock_client: unittest.mock.MagicMock
-):
+def test_get_node_secret_api_error(container: ops.Container, mock_client: unittest.mock.MagicMock):
     """
     arrange: given a mocked Jenkins client that raises an error.
     act: when a groovy script is executed through the client.
     assert: a Jenkins API exception is raised.
     """
     mock_client.run_groovy_script.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     with pytest.raises(jenkins.JenkinsError):
         jenkins.get_node_secret("jenkins-agent", container)
 
 
-def test_get_node_secret(
-    container: ops.Container, monkeypatch: pytest.MonkeyPatch, mock_client: unittest.mock.MagicMock
-):
+def test_get_node_secret(container: ops.Container, mock_client: unittest.mock.MagicMock):
     """
     arrange: given a mocked Jenkins client.
     act: when a groovy script getting a node secret is executed.
@@ -514,23 +501,19 @@ def test_get_node_secret(
     """
     secret = secrets.token_hex()
     mock_client.run_groovy_script.return_value = secret
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     node_secret = jenkins.get_node_secret("jenkins-agent", container)
 
     assert secret == node_secret, "Secret value mismatch."
 
 
-def test_add_agent_node_fail(
-    container: ops.Container, monkeypatch: pytest.MonkeyPatch, mock_client: unittest.mock.MagicMock
-):
+def test_add_agent_node_fail(container: ops.Container, mock_client: unittest.mock.MagicMock):
     """
     arrange: given a mocked jenkins client that raises an API exception.
     act: when add_agent is called
     assert: the exception is re-raised.
     """
     mock_client.create_node.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     with pytest.raises(jenkins.JenkinsError):
         jenkins.add_agent_node(
@@ -539,7 +522,7 @@ def test_add_agent_node_fail(
 
 
 def test_add_agent_node_already_exists(
-    container: ops.Container, monkeypatch: pytest.MonkeyPatch, mock_client: unittest.mock.MagicMock
+    container: ops.Container, mock_client: unittest.mock.MagicMock
 ):
     """
     arrange: given a mocked jenkins client that raises an Already exists exception.
@@ -547,7 +530,6 @@ def test_add_agent_node_already_exists(
     assert: no exception is raised.
     """
     mock_client.create_node.side_effect = jenkinsapi.custom_exceptions.AlreadyExists
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     jenkins.add_agent_node(
         state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
@@ -555,44 +537,32 @@ def test_add_agent_node_already_exists(
     )
 
 
-def test_add_agent_node(
-    container: ops.Container, monkeypatch: pytest.MonkeyPatch, mock_client: unittest.mock.MagicMock
-):
+def test_add_agent_node(container: ops.Container, mock_client: unittest.mock.MagicMock):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
     assert: no exception is raised.
     """
     mock_client.create_node.return_value = unittest.mock.MagicMock(spec=jenkinsapi.node.Node)
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     jenkins.add_agent_node(
         state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"), container
     )
 
 
-def test_remove_agent_node_fail(
-    container: ops.Container,
-    monkeypatch: pytest.MonkeyPatch,
-    mock_client: unittest.mock.MagicMock,
-):
+def test_remove_agent_node_fail(container: ops.Container, mock_client: unittest.mock.MagicMock):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
     assert: no exception is raised.
     """
     mock_client.delete_node.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     with pytest.raises(jenkins.JenkinsError):
         jenkins.remove_agent_node("jekins-agent-0", container)
 
 
-def test_remove_agent_node(
-    container: ops.Container,
-    monkeypatch: pytest.MonkeyPatch,
-    mock_client: unittest.mock.MagicMock,
-):
+def test_remove_agent_node(container: ops.Container, mock_client: unittest.mock.MagicMock):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
@@ -600,7 +570,6 @@ def test_remove_agent_node(
     """
     mock_delete = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins.delete_node)
     mock_client.delete_node = mock_delete
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     jenkins.remove_agent_node("jekins-agent-0", container)
 
@@ -1085,9 +1054,7 @@ def test__wait_jenkins_job_shutdown(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_safe_restart_failure(
-    harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
-    mock_client: unittest.mock.MagicMock,
+    harness_container: HarnessWithContainer, mock_client: unittest.mock.MagicMock
 ):
     """
     arrange: given a mocked Jenkins API client that raises JenkinsAPIException.
@@ -1095,7 +1062,6 @@ def test_safe_restart_failure(
     assert: JenkinsError is raised.
     """
     mock_client.safe_restart.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     with pytest.raises(jenkins.JenkinsError):
         jenkins.safe_restart(harness_container.container)
@@ -1112,7 +1078,6 @@ def test_safe_restart(
     assert: No exception is raised.
     """
     monkeypatch.setattr(jenkins, "_wait_jenkins_job_shutdown", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     jenkins.safe_restart(harness_container.container)
 
@@ -1419,7 +1384,6 @@ def test_remove_unlisted_plugins_delete_error(
     mock_client.delete_plugins.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
     monkeypatch.setattr(jenkins, "safe_restart", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "wait_ready", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     with pytest.raises(jenkins.JenkinsPluginError):
         jenkins.remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
@@ -1455,7 +1419,6 @@ def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-argu
     monkeypatch.setattr(
         jenkins, "safe_restart", lambda *_args, **_kwargs: raise_exception(expected_exception)
     )
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     # mypy doesn't understand that Exception type can match TypeVar("E", bound=BaseException)
     with pytest.raises(expected_exception):  # type: ignore
@@ -1537,7 +1500,6 @@ def test_remove_unlisted_plugins(  # pylint: disable=too-many-arguments
     mock_groovy_script.return_value = groovy_script_output
     monkeypatch.setattr(jenkins, "safe_restart", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "wait_ready", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
     jenkins.remove_unlisted_plugins(desired_plugins, container)
 
