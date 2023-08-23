@@ -17,15 +17,9 @@ from ops.model import Container
 from ops.pebble import ExecError
 from ops.testing import Harness
 
+import jenkins
 import state
 from charm import JenkinsK8sOperatorCharm
-from jenkins import (
-    JCASC_CONFIG_FILE_PATH,
-    PASSWORD_FILE_PATH,
-    PLUGINS_PATH,
-    REQUIRED_PLUGINS,
-    Credentials,
-)
 
 from .types_ import HarnessWithContainer, Versions
 
@@ -68,9 +62,9 @@ def mocked_get_request_fixture(jenkins_version: str):
 
 
 @pytest.fixture(scope="function", name="admin_credentials")
-def admin_credentials_fixture() -> Credentials:
+def admin_credentials_fixture() -> jenkins.Credentials:
     """Admin credentials for Jenkins."""
-    return Credentials(username="admin", password=token_hex(16))
+    return jenkins.Credentials(username="admin", password=token_hex(16))
 
 
 @pytest.fixture(scope="function", name="mock_client")
@@ -166,7 +160,7 @@ def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Ha
 @pytest.fixture(scope="function", name="container")
 def container_fixture(
     harness: Harness,
-    admin_credentials: Credentials,
+    admin_credentials: jenkins.Credentials,
     monkeypatch: pytest.MonkeyPatch,
     proxy_config: state.ProxyConfig,
 ) -> Container:
@@ -174,10 +168,10 @@ def container_fixture(
     harness.set_can_connect("jenkins", True)
     container: Container = harness.model.unit.get_container("jenkins")
     container.push(
-        PASSWORD_FILE_PATH, admin_credentials.password, encoding="utf-8", make_dirs=True
+        jenkins.PASSWORD_FILE_PATH, admin_credentials.password, encoding="utf-8", make_dirs=True
     )
     with open("templates/jenkins.yaml", encoding="utf-8") as jenkins_casc_config_file:
-        container.push(JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file)
+        container.push(jenkins.JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file)
 
     def cmd_handler(argv: list[str]) -> tuple[int, str, str]:
         """Handle the python command execution inside the Flask container.
@@ -191,7 +185,7 @@ def container_fixture(
         Raises:
             RuntimeError: if the handler for a command has not yet been registered.
         """
-        required_plugins = " ".join(set(REQUIRED_PLUGINS))
+        required_plugins = " ".join(set(jenkins.REQUIRED_PLUGINS))
         # type cast since the fixture contains no_proxy values
         no_proxy_hosts = "|".join(typing.cast(str, proxy_config.no_proxy).split(","))
         # assert for types that cannot be None.
@@ -208,7 +202,7 @@ def container_fixture(
                 "-w",
                 "jenkins.war",
                 "-d",
-                str(PLUGINS_PATH),
+                str(jenkins.PLUGINS_PATH),
                 "-p",
                 required_plugins,
             ] == argv:
@@ -229,7 +223,7 @@ def container_fixture(
                 "-w",
                 "jenkins.war",
                 "-d",
-                str(PLUGINS_PATH),
+                str(jenkins.PLUGINS_PATH),
                 "-p",
                 required_plugins,
             ] == argv:
