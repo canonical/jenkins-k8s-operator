@@ -259,10 +259,10 @@ Get version to update to if available.
 
 <a href="../src/jenkins.py#L600"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-## <kbd>function</kbd> `has_lts_updates`
+## <kbd>function</kbd> `has_updates_for_lts`
 
 ```python
-has_lts_updates(proxy: ProxyConfig | None = None) → bool
+has_updates_for_lts(proxy: ProxyConfig | None = None) → bool
 ```
 
 Return whether the Jenkins has a patched LTS update available. 
@@ -287,7 +287,7 @@ Return whether the Jenkins has a patched LTS update available.
 
 ---
 
-<a href="../src/jenkins.py#L652"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L650"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `update_jenkins`
 
@@ -319,7 +319,7 @@ Update Jenkins and return the updated version.
 
 ---
 
-<a href="../src/jenkins.py#L724"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L717"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
@@ -344,7 +344,7 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-<a href="../src/jenkins.py#L749"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L742"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
@@ -368,7 +368,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L894"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L887"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 

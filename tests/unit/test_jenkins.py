@@ -865,7 +865,7 @@ def test_has_lts_updates_get_version_error(
     monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(jenkins.JenkinsError))
 
     with pytest.raises(jenkins.JenkinsUpdateError):
-        jenkins.has_lts_updates()
+        jenkins.has_updates_for_lts()
 
 
 @pytest.mark.parametrize(
@@ -892,7 +892,7 @@ def test_has_lts_updates_get_latest_patch_version_error(
     )
 
     with pytest.raises(jenkins.JenkinsUpdateError):
-        jenkins.has_lts_updates()
+        jenkins.has_updates_for_lts()
 
 
 def test_has_lts_updates(monkeypatch: pytest.MonkeyPatch, versions: Versions):
@@ -906,7 +906,7 @@ def test_has_lts_updates(monkeypatch: pytest.MonkeyPatch, versions: Versions):
         jenkins, "_get_latest_patch_version", lambda *_args, **_kwargs: versions.patched
     )
 
-    assert jenkins.has_lts_updates()
+    assert jenkins.has_updates_for_lts()
 
 
 @pytest.mark.parametrize(

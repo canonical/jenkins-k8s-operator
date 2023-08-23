@@ -179,7 +179,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         original_status = self.unit.status.name
         self.unit.status = ops.StatusBase.from_name(original_status, "Checking for updates.")
         try:
-            if not jenkins.has_lts_updates():
+            if not jenkins.has_updates_for_lts():
                 return ops.StatusBase.from_name(original_status, "")
         except jenkins.JenkinsUpdateError as exc:
             logger.error("Failed to get Jenkins updates, %s", exc)

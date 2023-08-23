@@ -597,7 +597,7 @@ def get_updatable_version(proxy: state.ProxyConfig | None = None) -> str | None:
     return latest_version
 
 
-def has_lts_updates(proxy: state.ProxyConfig | None = None) -> bool:
+def has_updates_for_lts(proxy: state.ProxyConfig | None = None) -> bool:
     """Return whether the Jenkins has a patched LTS update available.
 
     Args:
