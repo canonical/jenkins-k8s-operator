@@ -179,30 +179,27 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         original_status = self.unit.status.name
         self.unit.status = ops.StatusBase.from_name(original_status, "Checking for updates.")
         try:
-            latest_patch_version = jenkins.get_updatable_version(proxy=self.state.proxy_config)
+            if not jenkins.has_updates_for_lts():
+                return ops.StatusBase.from_name(original_status, "")
         except jenkins.JenkinsUpdateError as exc:
             logger.error("Failed to get Jenkins updates, %s", exc)
             return ops.StatusBase.from_name(
                 original_status, "Failed to get Jenkins patch version."
             )
 
-        if not latest_patch_version:
-            return ops.StatusBase.from_name(original_status, "")
-
         self.unit.status = ops.MaintenanceStatus("Updating Jenkins.")
         try:
-            jenkins.download_stable_war(container, latest_patch_version)
-        except jenkins.JenkinsNetworkError as exc:
-            logger.error("Failed to download Jenkins war. %s", exc)
-            return ops.StatusBase.from_name(original_status, "Failed to download executable.")
-        try:
-            jenkins.safe_restart(container)
-            jenkins.wait_ready()
-        except (jenkins.JenkinsError, TimeoutError) as exc:
+            updated_version = jenkins.update_jenkins(
+                container=container, proxy=self.state.proxy_config
+            )
+        except jenkins.JenkinsUpdateError as exc:
+            logger.error("Failed to fetch required Jenkins update data, %s", exc)
+            return ops.StatusBase.from_name(original_status, "Failed to get update data.")
+        except jenkins.JenkinsRestartError as exc:
             logger.error("Failed to safely restart Jenkins. %s", exc)
             return ops.BlockedStatus("Update restart failed.")
 
-        self.unit.set_workload_version(latest_patch_version)
+        self.unit.set_workload_version(updated_version)
         return ops.ActiveStatus()
 
     def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:

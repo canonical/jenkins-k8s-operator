@@ -22,7 +22,7 @@ import timerange
 from charm import JenkinsK8sOperatorCharm
 
 from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME
-from .types_ import HarnessWithContainer, Versions
+from .types_ import HarnessWithContainer
 
 
 @pytest.mark.parametrize(
@@ -186,13 +186,13 @@ def test__update_jenkins_version_already_latest(
     harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
 ):
     """
-    arrange: given latest jenkins, monkeypatched get_updatable_version that returns the None.
+    arrange: given latest jenkins, monkeypatched has_updates_for_lts that returns the None.
     act: when _update_jenkins_version is called.
     assert: original status is returned with no status message.
     """
-    monkeypatch.setattr(jenkins, "get_updatable_version", lambda *_args, **_kwargs: None)
-    mock_download_func = MagicMock(spec=jenkins.download_stable_war)
-    monkeypatch.setattr(jenkins, "download_stable_war", mock_download_func)
+    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda *_args, **_kwargs: None)
+    mock_download_func = MagicMock(spec=jenkins._download_stable_war)
+    monkeypatch.setattr(jenkins, "_download_stable_war", mock_download_func)
     harness, container = harness_container.harness, harness_container.container
     harness.begin()
     original_status = harness.charm.unit.status.name
@@ -205,19 +205,19 @@ def test__update_jenkins_version_already_latest(
     assert not returned_status.message, "The status message should not exist."
 
 
-def test__update_jenkins_version_get_updatable_version_error(
+def test__update_jenkins_version_has_updates_for_lts_error(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
     raise_exception: typing.Callable,
 ):
     """
-    arrange: given latest jenkins, monkeypatched get_updatable_version that raises exceptions.
+    arrange: given latest jenkins, monkeypatched has_updates_for_lts that raises exceptions.
     act: when _update_jenkins_version is called.
     assert: original status is returned with failed status message.
     """
     monkeypatch.setattr(
         jenkins,
-        "get_updatable_version",
+        "has_updates_for_lts",
         lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsUpdateError),
     )
     harness, container = harness_container.harness, harness_container.container
@@ -231,26 +231,21 @@ def test__update_jenkins_version_get_updatable_version_error(
     assert returned_status.message == "Failed to get Jenkins patch version."
 
 
-def test__update_jenkins_version_dowload_stable_war_error(
+def test__update_jenkins_version_jenkins_update_error(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
     raise_exception: typing.Callable,
-    versions: Versions,
 ):
     """
-    arrange: given monkeypatched download_stable_war that raises a JenkinsNetworkError.
+    arrange: given monkeypatched update_jenkins that raises a JenkinsUpdateError.
     act: when _update_jenkins_version is called.
     assert: original status is returned with failed status message.
     """
+    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda: True)
     monkeypatch.setattr(
         jenkins,
-        "get_updatable_version",
-        lambda *_args, **_kwargs: versions.patched,
-    )
-    monkeypatch.setattr(
-        jenkins,
-        "download_stable_war",
-        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsNetworkError),
+        "update_jenkins",
+        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsUpdateError),
     )
     harness, container = harness_container.harness, harness_container.container
     harness.begin()
@@ -260,34 +255,24 @@ def test__update_jenkins_version_dowload_stable_war_error(
     returned_status = jenkins_charm._update_jenkins_version(container)
 
     assert returned_status.name == original_status
-    assert returned_status.message == "Failed to download executable."
+    assert returned_status.message == "Failed to get update data."
 
 
-def test__update_jenkins_version_safe_restart_error(
+def test__update_jenkins_version_jenkins_restart_error(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
     raise_exception: typing.Callable,
-    versions: Versions,
 ):
     """
-    arrange: given monkeypatched safe_restart that raises a JenkinsError exception.
+    arrange: given monkeypatched update_jenkins that raises a JenkinsRestartError exception.
     act: when _update_jenkins_version is called.
     assert: blocked status is returned with failed status message.
     """
+    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda: True)
     monkeypatch.setattr(
         jenkins,
-        "get_updatable_version",
-        lambda *_args, **_kwargs: versions.patched,
-    )
-    monkeypatch.setattr(
-        jenkins,
-        "download_stable_war",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        jenkins,
-        "safe_restart",
-        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsError),
+        "update_jenkins",
+        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsRestartError),
     )
     harness, container = harness_container.harness, harness_container.container
     harness.begin()
@@ -309,22 +294,12 @@ def test__update_jenkins_version_update(
     act: when _update_jenkins_version is called.
     assert: active status is returned with no message.
     """
+    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda: True)
     monkeypatch.setattr(
         jenkins,
-        "get_updatable_version",
+        "update_jenkins",
         lambda *_args, **_kwargs: patched_version,
     )
-    monkeypatch.setattr(
-        jenkins,
-        "download_stable_war",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        jenkins,
-        "safe_restart",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(jenkins, "wait_ready", lambda: None)
     harness, container = harness_container.harness, harness_container.container
     harness.begin()
 

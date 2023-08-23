@@ -5,9 +5,11 @@
 
 import textwrap
 import typing
+import unittest.mock
 from pathlib import Path
 from secrets import token_hex
 
+import jenkinsapi.jenkins
 import pytest
 import requests
 import yaml
@@ -15,16 +17,11 @@ from ops.model import Container
 from ops.pebble import ExecError
 from ops.testing import Harness
 
+import jenkins
 import state
 from charm import JenkinsK8sOperatorCharm
-from jenkins import (
-    JCASC_CONFIG_FILE_PATH,
-    PASSWORD_FILE_PATH,
-    PLUGINS_PATH,
-    REQUIRED_PLUGINS,
-    Credentials,
-)
 
+from .helpers import combine_root_paths
 from .types_ import HarnessWithContainer, Versions
 
 ROCKCRAFT_YAML = yaml.safe_load(Path("jenkins_rock/rockcraft.yaml").read_text(encoding="utf-8"))
@@ -66,9 +63,17 @@ def mocked_get_request_fixture(jenkins_version: str):
 
 
 @pytest.fixture(scope="function", name="admin_credentials")
-def admin_credentials_fixture() -> Credentials:
+def admin_credentials_fixture() -> jenkins.Credentials:
     """Admin credentials for Jenkins."""
-    return Credentials(username="admin", password=token_hex(16))
+    return jenkins.Credentials(username="admin", password=token_hex(16))
+
+
+@pytest.fixture(scope="function", name="mock_client")
+def mock_client_fixture(monkeypatch: pytest.MonkeyPatch) -> unittest.mock.MagicMock:
+    """Mock Jenkins API client."""
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
+    return mock_client
 
 
 def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Harness):
@@ -158,18 +163,20 @@ def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Ha
 @pytest.fixture(scope="function", name="container")
 def container_fixture(
     harness: Harness,
-    admin_credentials: Credentials,
+    admin_credentials: jenkins.Credentials,
     monkeypatch: pytest.MonkeyPatch,
     proxy_config: state.ProxyConfig,
 ) -> Container:
     """Harness Jenkins workload container that acts as a Jenkins container."""
-    harness.set_can_connect("jenkins", True)
-    container: Container = harness.model.unit.get_container("jenkins")
-    container.push(
-        PASSWORD_FILE_PATH, admin_credentials.password, encoding="utf-8", make_dirs=True
-    )
+    jenkins_root = harness.get_filesystem_root("jenkins")
+    password_file_path = combine_root_paths(jenkins_root, jenkins.PASSWORD_FILE_PATH)
+    password_file_path.parent.mkdir(parents=True, exist_ok=True)
+    password_file_path.write_text(admin_credentials.password, encoding="utf-8")
+
     with open("templates/jenkins.yaml", encoding="utf-8") as jenkins_casc_config_file:
-        container.push(JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file)
+        jcasc_file_path = combine_root_paths(jenkins_root, jenkins.JCASC_CONFIG_FILE_PATH)
+        jcasc_file_path.parent.mkdir(parents=True, exist_ok=True)
+        jcasc_file_path.write_text(jenkins_casc_config_file.read(), encoding="utf-8")
 
     def cmd_handler(argv: list[str]) -> tuple[int, str, str]:
         """Handle the python command execution inside the Flask container.
@@ -183,7 +190,7 @@ def container_fixture(
         Raises:
             RuntimeError: if the handler for a command has not yet been registered.
         """
-        required_plugins = " ".join(set(REQUIRED_PLUGINS))
+        required_plugins = " ".join(set(jenkins.REQUIRED_PLUGINS))
         # type cast since the fixture contains no_proxy values
         no_proxy_hosts = "|".join(typing.cast(str, proxy_config.no_proxy).split(","))
         # assert for types that cannot be None.
@@ -200,7 +207,7 @@ def container_fixture(
                 "-w",
                 "jenkins.war",
                 "-d",
-                str(PLUGINS_PATH),
+                str(jenkins.PLUGINS_PATH),
                 "-p",
                 required_plugins,
             ] == argv:
@@ -221,7 +228,7 @@ def container_fixture(
                 "-w",
                 "jenkins.war",
                 "-d",
-                str(PLUGINS_PATH),
+                str(jenkins.PLUGINS_PATH),
                 "-p",
                 required_plugins,
             ] == argv:
@@ -233,6 +240,8 @@ def container_fixture(
         return (0, "", "")
 
     inject_register_command_handler(monkeypatch, harness)
+    container = harness.model.unit.get_container("jenkins")
+    harness.set_can_connect(container, True)
     harness.register_command_handler(  # type: ignore # pylint: disable=no-member
         container=container, executable="java", handler=cmd_handler
     )

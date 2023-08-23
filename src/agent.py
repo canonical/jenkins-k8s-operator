@@ -154,10 +154,9 @@ class Observer(ops.Object):
         # See discussion: https://github.com/canonical/operator/issues/888
         # assert type since event unit cannot be None.
         agent_name = jenkins.get_agent_name(typing.cast(ops.Unit, event.unit).name)
-        credentials = jenkins.get_admin_credentials(container)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:
-            jenkins.remove_agent_node(agent_name=agent_name, credentials=credentials)
+            jenkins.remove_agent_node(agent_name=agent_name, container=container)
         except jenkins.JenkinsError as exc:
             logger.error("Failed to remove agent %s, %s", agent_name, exc)
             # There is no support for degraded status yet, however, this will not impact Jenkins
@@ -183,10 +182,9 @@ class Observer(ops.Object):
         # See discussion: https://github.com/canonical/operator/issues/888
         # assert type since event unit cannot be None.
         agent_name = jenkins.get_agent_name(typing.cast(ops.Unit, event.unit).name)
-        credentials = jenkins.get_admin_credentials(container)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:
-            jenkins.remove_agent_node(agent_name=agent_name, credentials=credentials)
+            jenkins.remove_agent_node(agent_name=agent_name, container=container)
         except jenkins.JenkinsError as exc:
             logger.error("Failed to remove agent %s, %s", agent_name, exc)
             # There is no support for degraded status yet, however, this will not impact Jenkins
