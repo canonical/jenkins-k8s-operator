@@ -6,7 +6,10 @@
 import typing
 
 import jenkinsapi
+import pytest
+from juju.application import Application
 from juju.client import client
+from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
 from .substrings import assert_substrings_not_in_string
@@ -29,9 +32,10 @@ async def test_jenkins_update_ui_disabled(
     )
 
 
+@pytest.mark.usefixtures("prepare_restart_time_range", "install_libfaketime_unit")
 async def test_jenkins_automatic_update_out_of_range(
     ops_test: OpsTest,
-    timerange_model_app_unit: ModelAppUnit,
+    application: Application,
     libfaketime_env: typing.Iterable[str],
     update_status_env: typing.Iterable[str],
     jenkins_version: str,
@@ -41,18 +45,19 @@ async def test_jenkins_automatic_update_out_of_range(
     act: when restart-time-range between 3AM to 5AM is applied.
     assert: the update does not take place.
     """
+    unit: Unit = application.units[0]
     ret_code, _, stderr = await ops_test.juju(
         "run",
         "--unit",
-        timerange_model_app_unit.unit.name,
+        unit.name,
         "--",
         f"{' '.join(libfaketime_env)} {' '.join(update_status_env)} ./dispatch",
     )
     assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
 
     # get patched application workload version
-    model_status: client.FullStatus = await timerange_model_app_unit.model.get_status()
-    app_status = model_status.applications.get(timerange_model_app_unit.app.name)
+    model_status: client.FullStatus = await application.model.get_status()
+    app_status = model_status.applications.get(application.name)
     assert app_status, "application status not found."
 
     assert app_status.workload_version == jenkins_version, "Application should not have updated."

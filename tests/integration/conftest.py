@@ -22,6 +22,7 @@ from juju.action import Action
 from juju.application import Application
 from juju.client._definitions import FullStatus, UnitStatus
 from juju.model import Controller, Model
+from juju.relation import Relation
 from juju.unit import Unit
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
@@ -156,11 +157,12 @@ def app_suffix_fixture():
     return app_suffix
 
 
-@pytest_asyncio.fixture(scope="module", name="jenkins_k8s_agent")
-async def jenkins_k8s_agent_fixture(
+@pytest_asyncio.fixture(scope="module", name="jenkins_k8s_agents")
+async def jenkins_k8s_agents_fixture(
     model: Model, app_suffix: str
 ) -> typing.AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
+    # TODO: CHANGE
     # agent_app: Application = await model.deploy(
     #     "jenkins-agent-k8s",
     #     config={"jenkins_agent_labels": "k8s"},
@@ -171,6 +173,7 @@ async def jenkins_k8s_agent_fixture(
         "/home/yanks/Documents/canonical/jenkins-agent-k8s-operator/jenkins-agent-k8s_ubuntu-22.04-amd64.charm",
         config={"jenkins_agent_labels": "k8s"},
         resources={"jenkins-agent-k8s-image": "jenkins-agent:rock"},
+        series="focal",
         application_name=f"jenkins-agentk8s-{app_suffix}",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
@@ -182,16 +185,30 @@ async def jenkins_k8s_agent_fixture(
 
 @pytest_asyncio.fixture(scope="function", name="prepare_k8s_agents_relation")
 async def prepare_k8s_agents_relation_fixture(
-    jenkins_k8s_agent: Application,
+    jenkins_k8s_agents: Application,
     application: Application,
 ):
     """The Jenkins-k8s server charm related to Jenkins-k8s agent charm through agent relation."""
     await application.relate(
-        state.AGENT_RELATION, f"{jenkins_k8s_agent.name}:{state.AGENT_RELATION}"
+        state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
     )
     await application.model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agent.name], wait_for_active=True
+        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
     )
+
+
+@pytest_asyncio.fixture(scope="function", name="cleanup_k8s_agents_relation")
+async def cleanup_k8s_agents_relation_fixture(
+    application: Application, jenkins_k8s_agents: Application
+):
+    yield
+
+    for relation in application.relations:
+        relation = typing.cast(Relation, relation)
+        await application.destroy_relation(
+            relation.requires.name, f"{jenkins_k8s_agents.name}:{relation.provides.name}"
+        )
+    await application.model.wait_for_idle(apps=[application.name, jenkins_k8s_agents.name])
 
 
 @pytest.fixture(scope="module", name="gen_jenkins_test_job_xml")
@@ -249,28 +266,6 @@ async def machine_model_fixture(
     await model.disconnect()
 
 
-@pytest_asyncio.fixture(scope="module", name="jenkins_machine_agent")
-async def jenkins_machine_agent_fixture(
-    machine_model: Model, app_suffix: str
-) -> typing.AsyncGenerator[Application, None]:
-    """The jenkins machine agent."""
-    # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
-    # stable.
-    app = await machine_model.deploy(
-        "jenkins-agent",
-        channel="latest/edge",
-        config={"labels": "machine"},
-        application_name=f"jenkins-agent-{app_suffix}",
-    )
-    await machine_model.create_offer(f"{app.name}:slave")
-    await machine_model.wait_for_idle(apps=[app.name], status="blocked", timeout=1200)
-
-    yield app
-
-    await machine_model.remove_offer(f"admin/{machine_model.name}.{app.name}", force=True)
-    await machine_model.remove_application(app.name, force=True)
-
-
 @pytest_asyncio.fixture(scope="module", name="jenkins_machine_agents")
 async def jenkins_machine_agents_fixture(
     machine_model: Model, num_units: int, app_suffix: str
@@ -286,6 +281,7 @@ async def jenkins_machine_agents_fixture(
         num_units=num_units,
     )
     await machine_model.create_offer(f"{app.name}:{state.AGENT_RELATION}")
+    await machine_model.create_offer(f"{app.name}:slave")
     await machine_model.wait_for_idle(
         apps=[app.name], status="blocked", idle_period=30, timeout=1200
     )
@@ -310,6 +306,19 @@ async def prepare_machine_agents_relation_fixture(
     )
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+
+
+@pytest_asyncio.fixture(scope="function", name="cleanup_machine_agents_relation")
+async def cleanup_machine_agents_relation_fixture(
+    application: Application, jenkins_machine_agents: Application
+):
+    yield
+
+    for relation in application.relations:
+        relation = typing.cast(Relation, relation)
+        await application.destroy_relation(relation.requires.name, jenkins_machine_agents.name)
+    await application.model.wait_for_idle(apps=[application.name])
+    await jenkins_machine_agents.model.wait_for_idle(apps=[jenkins_machine_agents.name])
 
 
 @pytest.fixture(scope="module", name="jenkins_version")
