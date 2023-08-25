@@ -88,7 +88,7 @@ async def application_fixture(
     async with ops_test.fast_forward(fast_interval="5h"):
         yield application
 
-    await model.remove_application(application.name, force=True, block_until_done=True)
+    # await model.remove_application(application.name, force=True, block_until_done=True)
 
 
 @pytest.fixture(scope="module", name="unit")
@@ -121,7 +121,7 @@ def web_address_fixture(unit_ip: str):
     return f"http://{unit_ip}:8080"
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_client")
+@pytest_asyncio.fixture(scope="module", name="jenkins_client")
 async def jenkins_client_fixture(
     application: Application,
     web_address: str,
@@ -139,7 +139,7 @@ async def jenkins_client_fixture(
     )
 
 
-@pytest.fixture(scope="function", name="unit_web_client")
+@pytest.fixture(scope="module", name="unit_web_client")
 def unit_web_client_fixture(
     unit: Unit, web_address: str, jenkins_client: jenkinsapi.jenkins.Jenkins
 ):
@@ -147,7 +147,7 @@ def unit_web_client_fixture(
     return UnitWebClient(unit=unit, web=web_address, client=jenkins_client)
 
 
-@pytest.fixture(scope="function", name="app_suffix")
+@pytest.fixture(scope="module", name="app_suffix")
 def app_suffix_fixture():
     """Get random 4 char length application suffix."""
     # secrets random hex cannot be used because it has chances to generate numeric only suffix
@@ -156,58 +156,42 @@ def app_suffix_fixture():
     return app_suffix
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agent")
+@pytest_asyncio.fixture(scope="module", name="jenkins_k8s_agent")
 async def jenkins_k8s_agent_fixture(
     model: Model, app_suffix: str
 ) -> typing.AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
+    # agent_app: Application = await model.deploy(
+    #     "jenkins-agent-k8s",
+    #     config={"jenkins_agent_labels": "k8s"},
+    #     channel="latest/edge",
+    #     application_name=f"jenkins-agentk8s-{app_suffix}",
+    # )
     agent_app: Application = await model.deploy(
-        "jenkins-agent-k8s",
+        "/home/yanks/Documents/canonical/jenkins-agent-k8s-operator/jenkins-agent-k8s_ubuntu-22.04-amd64.charm",
         config={"jenkins_agent_labels": "k8s"},
-        channel="latest/edge",
+        resources={"jenkins-agent-k8s-image": "jenkins-agent:rock"},
         application_name=f"jenkins-agentk8s-{app_suffix}",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
 
     yield agent_app
 
-    await model.remove_application(agent_app.name, force=True)
+    # await model.remove_application(agent_app.name, force=True)
 
 
-@pytest_asyncio.fixture(scope="function", name="new_relation_k8s_agents")
-async def new_relation_k8s_agents_fixture(
-    model: Model, num_units: int, app_suffix: str
-) -> typing.AsyncGenerator[Application, None]:
-    """The Jenkins k8s agent to be used for new agent relation with multiple units."""
-    agent_app: Application = await model.deploy(
-        "jenkins-agent-k8s",
-        config={"jenkins_agent_labels": "k8s"},
-        channel="edge",
-        num_units=num_units,
-        application_name=f"jenkins-agentk8s-{app_suffix}",
-    )
-    await model.wait_for_idle(apps=[agent_app.name], status="blocked")
-
-    yield agent_app
-
-    await model.remove_application(agent_app.name, force=True)
-
-
-@pytest_asyncio.fixture(scope="function", name="new_relation_k8s_agents_related")
-async def new_relation_k8s_agents_related_fixture(
-    model: Model,
-    new_relation_k8s_agents: Application,
+@pytest_asyncio.fixture(scope="function", name="prepare_k8s_agents_relation")
+async def prepare_k8s_agents_relation_fixture(
+    jenkins_k8s_agent: Application,
     application: Application,
 ):
     """The Jenkins-k8s server charm related to Jenkins-k8s agent charm through agent relation."""
     await application.relate(
-        state.AGENT_RELATION, f"{new_relation_k8s_agents.name}:{state.AGENT_RELATION}"
+        state.AGENT_RELATION, f"{jenkins_k8s_agent.name}:{state.AGENT_RELATION}"
     )
-    await model.wait_for_idle(
-        apps=[application.name, new_relation_k8s_agents.name], wait_for_active=True
+    await application.model.wait_for_idle(
+        apps=[application.name, jenkins_k8s_agent.name], wait_for_active=True
     )
-
-    return application
 
 
 @pytest.fixture(scope="module", name="gen_jenkins_test_job_xml")
@@ -265,7 +249,7 @@ async def machine_model_fixture(
     await model.disconnect()
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_machine_agent")
+@pytest_asyncio.fixture(scope="module", name="jenkins_machine_agent")
 async def jenkins_machine_agent_fixture(
     machine_model: Model, app_suffix: str
 ) -> typing.AsyncGenerator[Application, None]:
@@ -287,8 +271,8 @@ async def jenkins_machine_agent_fixture(
     await machine_model.remove_application(app.name, force=True)
 
 
-@pytest_asyncio.fixture(scope="function", name="new_relation_machine_agents")
-async def new_relation_machine_agents_fixture(
+@pytest_asyncio.fixture(scope="module", name="jenkins_machine_agents")
+async def jenkins_machine_agents_fixture(
     machine_model: Model, num_units: int, app_suffix: str
 ) -> typing.AsyncGenerator[Application, None]:
     """The jenkins machine agent with 3 units to be used for new agent relation."""
@@ -312,25 +296,20 @@ async def new_relation_machine_agents_fixture(
     await machine_model.remove_application(app.name, force=True, block_until_done=True)
 
 
-@pytest_asyncio.fixture(scope="function", name="new_relation_agent_related")
-async def new_relation_agents_related_fixture(
-    model: Model,
-    new_relation_machine_agents: Application,
+@pytest_asyncio.fixture(scope="function", name="prepare_machine_agents_relation")
+async def prepare_machine_agents_relation_fixture(
+    jenkins_machine_agents: Application,
     application: Application,
 ):
     """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
-    machine_model: Model = new_relation_machine_agents.model
-    await machine_model.create_offer(f"{new_relation_machine_agents.name}:{state.AGENT_RELATION}")
+    model: Model = application.model
+    machine_model: Model = jenkins_machine_agents.model
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{new_relation_machine_agents.name}",
+        f"localhost:admin/{machine_model.name}.{jenkins_machine_agents.name}",
     )
-    await machine_model.wait_for_idle(
-        apps=[new_relation_machine_agents.name], wait_for_active=True
-    )
+    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
-
-    return application
 
 
 @pytest.fixture(scope="module", name="jenkins_version")
@@ -365,33 +344,23 @@ def freeze_time_fixture() -> str:
     return "2022-01-01 15:00:00"
 
 
-@pytest_asyncio.fixture(scope="function", name="restart_time_range_app")
-async def restart_time_range_app_fixture(application: Application):
+@pytest_asyncio.fixture(scope="function", name="prepare_restart_time_range")
+async def prepare_restart_time_range_fixture(application: Application):
     """Application with restart-time-range configured."""
     await application.set_config({"restart-time-range": "03-05"})
 
-    yield application
+    yield
 
     await application.reset_config(["restart-time-range"])
 
 
-@pytest_asyncio.fixture(scope="function", name="libfaketime_unit")
-async def libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit):
+@pytest_asyncio.fixture(scope="function", name="install_libfaketime_unit")
+async def install_libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit):
     """Unit with libfaketime installed."""
     await ops_test.juju("run", "--unit", f"{unit.name}", "--", "apt", "update")
     await ops_test.juju(
         "run", "--unit", f"{unit.name}", "--", "apt", "install", "-y", "libfaketime"
     )
-
-    return unit
-
-
-@pytest.fixture(scope="function", name="timerange_model_app_unit")
-def timerange_model_app_unit_fixture(
-    model: Model, restart_time_range_app: Application, libfaketime_unit: Unit
-):
-    """The packaged model, application, unit of Jenkins to reduce number of parameters in tests."""
-    return ModelAppUnit(model=model, app=restart_time_range_app, unit=libfaketime_unit)
 
 
 @pytest.fixture(scope="function", name="libfaketime_env")
@@ -594,19 +563,19 @@ async def jenkins_with_proxy_client_fixture(
     )
 
 
-@pytest.fixture(scope="function", name="plugins_config")
+@pytest.fixture(scope="module", name="plugins_config")
 def plugins_config_fixture() -> typing.Iterable[str]:
     """The test Jenkins plugins configuration values."""
     return ("structs", "script-security")
 
 
-@pytest.fixture(scope="function", name="plugins_to_install")
+@pytest.fixture(scope="module", name="plugins_to_install")
 def plugins_to_install_fixture() -> typing.Iterable[str]:
     """The plugins to install on Jenkins."""
     return ("structs", "script-security", "git")
 
 
-@pytest.fixture(scope="function", name="plugins_to_remove")
+@pytest.fixture(scope="module", name="plugins_to_remove")
 def plugins_to_remove_fixture(
     plugins_config: typing.Iterable[str],
     plugins_to_install: typing.Iterable[str],
@@ -615,7 +584,7 @@ def plugins_to_remove_fixture(
     return set(plugins_to_install) - set(plugins_config)
 
 
-@pytest.fixture(scope="function", name="plugins_meta")
+@pytest.fixture(scope="module", name="plugins_meta")
 def plugins_meta_fixture(
     plugins_config: typing.Iterable[str],
     plugins_to_install: typing.Iterable[str],
@@ -625,57 +594,115 @@ def plugins_meta_fixture(
     return PluginsMeta(config=plugins_config, install=plugins_to_install, remove=plugins_to_remove)
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_with_plugin_config")
-async def jenkins_with_plugin_config_fixture(
-    application: Application,
-    plugins_config: typing.Iterable[str],
+@pytest_asyncio.fixture(scope="function", name="prepare_allowed_plugins_config")
+async def prepare_allowed_plugins_config_fixture(
+    application: Application, plugins_config: typing.Iterable[str]
 ) -> Application:
     """Jenkins charm with plugins configured."""
     await application.set_config({"allowed-plugins": ",".join(plugins_config)})
 
-    yield application
+    yield
 
     await application.reset_config(to_default=["allowed-plugins"])
 
 
-@pytest_asyncio.fixture(scope="function", name="install_plugins")
-async def install_plugins_fixture(
-    model: Model,
-    jenkins_with_plugin_config: Application,
+@pytest.fixture(scope="module", name="install_plugins")
+def install_plugins_fixture(
+    application: Application,
     kube_core_client: kubernetes.client.CoreV1Api,
-    plugins_to_install: typing.Iterable[str],
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ):
     """Install plugins using kubernetes container command."""
-    unit: Unit = jenkins_with_plugin_config.units[0]
-    stdout = kubernetes.stream.stream(
-        kube_core_client.connect_get_namespaced_pod_exec,
-        unit.name.replace("/", "-"),
-        model.name,
-        container="jenkins",
-        command=[
-            "java",
-            "-jar",
-            f"{jenkins.EXECUTABLES_PATH / 'jenkins-plugin-manager-2.12.11.jar'}",
-            "-w",
-            f"{jenkins.EXECUTABLES_PATH / 'jenkins.war'}",
-            "-d",
-            str(jenkins.PLUGINS_PATH),
-            "-p",
-            " ".join(plugins_to_install),
-        ],
-        stderr=True,
-        stdin=False,
-        stdout=True,
-        tty=False,
-    )
-    assert "Done" in stdout, f"Failed to install plugins via kube exec, {stdout}"
+    unit: Unit = application.units[0]
 
-    # the library will return 503 or other status codes that are not 200, hence restart and wait
-    # rather than check for status code.
-    jenkins_client.safe_restart()
-    await model.block_until(
-        lambda: requests.get(jenkins_client.baseurl, timeout=10).status_code == 403,
-        timeout=300,
-        wait_period=10,
+    async def install_plugins(plugins: typing.Iterable[str]):
+        """Install plugins using jenkins plugin manager.
+
+        Args:
+            plugins: Plugins to install.
+        """
+        stdout = kubernetes.stream.stream(
+            kube_core_client.connect_get_namespaced_pod_exec,
+            unit.name.replace("/", "-"),
+            application.model.name,
+            container="jenkins",
+            command=[
+                "java",
+                "-jar",
+                f"{jenkins.EXECUTABLES_PATH / 'jenkins-plugin-manager-2.12.11.jar'}",
+                "-w",
+                f"{jenkins.EXECUTABLES_PATH / 'jenkins.war'}",
+                "-d",
+                str(jenkins.PLUGINS_PATH),
+                "-p",
+                " ".join(plugins),
+            ],
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        print("OUT: ", stdout)
+        assert "Done" in stdout, f"Failed to install plugins via kube exec, {stdout}"
+
+        # the library will return 503 or other status codes that are not 200, hence restart and
+        # wait rather than check for status code.
+        print("RESTART")
+        jenkins_client.safe_restart()
+        print("BLOCK")
+        await application.model.block_until(
+            lambda: requests.get(jenkins_client.baseurl, timeout=10).status_code == 403,
+            timeout=300,
+            wait_period=10,
+        )
+        print("DONE")
+
+    return install_plugins
+
+
+@pytest.fixture(scope="module", name="gen_git_plugin_job_xml")
+def gen_git_plugin_job_xml_fixture() -> typing.Callable[[str], str]:
+    """The Jenkins test job xml with given node label on an agent node."""
+    return lambda label: textwrap.dedent(
+        f"""
+        <project>
+            <actions />
+            <description></description>
+            <keepDependencies>false</keepDependencies>
+            <properties />
+            <scm class="hudson.plugins.git.GitSCM" plugin="git@5.0.2">
+                <configVersion>2</configVersion>
+                <userRemoteConfigs>
+                    <hudson.plugins.git.UserRemoteConfig>
+                        <url>https://github.com/canonical/jenkins-k8s-operator</url>
+                    </hudson.plugins.git.UserRemoteConfig>
+                </userRemoteConfigs>
+                <branches>
+                    <hudson.plugins.git.BranchSpec>
+                        <name>*/main</name>
+                    </hudson.plugins.git.BranchSpec>
+                </branches>
+                <doGenerateSubmoduleConfigurations>
+                    false</doGenerateSubmoduleConfigurations>
+                <submoduleCfg class="empty-list" />
+                <extensions />
+            </scm>
+            <assignedNode>{label}</assignedNode>
+            <canRoam>true</canRoam>
+            <disabled>false</disabled>
+            <blockBuildWhenDownstreamBuilding>
+                false</blockBuildWhenDownstreamBuilding>
+            <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+            <triggers />
+            <concurrentBuild>false</concurrentBuild>
+            <builders>
+                <hudson.tasks.Shell>
+                    <command>git checkout main\ngit pull</command>
+                    <configuredLocalRules />
+                </hudson.tasks.Shell>
+            </builders>
+            <publishers />
+            <buildWrappers />
+        </project>
+        """
     )
