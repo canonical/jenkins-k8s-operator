@@ -642,20 +642,16 @@ def install_plugins_fixture(
             stdout=True,
             tty=False,
         )
-        print("OUT: ", stdout)
         assert "Done" in stdout, f"Failed to install plugins via kube exec, {stdout}"
 
         # the library will return 503 or other status codes that are not 200, hence restart and
         # wait rather than check for status code.
-        print("RESTART")
         jenkins_client.safe_restart()
-        print("BLOCK")
         await application.model.block_until(
             lambda: requests.get(jenkins_client.baseurl, timeout=10).status_code == 403,
             timeout=300,
             wait_period=10,
         )
-        print("DONE")
 
     return install_plugins
 
