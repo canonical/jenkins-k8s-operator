@@ -179,10 +179,9 @@ async def test_jenkins_machine_agent_relation(
     assert build.get_status() == "SUCCESS"
 
     # 2. Remove the relation
-    await application.remove_relation(
-        state.AGENT_RELATION, f"{jenkins_machine_agents.name}:{state.AGENT_RELATION}"
-    )
-    await model.wait_for_idle(apps=[application.name, jenkins_machine_agents.name])
+    await application.remove_relation(state.AGENT_RELATION, jenkins_machine_agents.name)
+    await model.wait_for_idle(apps=[application.name])
+    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name])
 
     # 2. Assert that the agent nodes are deregistered from Jenkins.
     assert not any((application.name in key for key in jenkins_client.get_nodes().keys()))
