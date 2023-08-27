@@ -79,7 +79,7 @@ async def test_jenkins_machine_deprecated_agent_relation(
     machine_model: Model = jenkins_machine_agents.model
     await application.relate(
         state.DEPRECATED_AGENT_RELATION,
-        f"localhost:admin/{machine_model.name}.{jenkins_machine_agents.name}",
+        f"localhost:admin/{machine_model.name}.{state.DEPRECATED_AGENT_RELATION}",
     )
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
@@ -160,7 +160,7 @@ async def test_jenkins_machine_agent_relation(
     machine_model: Model = jenkins_machine_agents.model
     await application.relate(
         state.AGENT_RELATION,
-        f"localhost:admin/{machine_model.name}.{jenkins_machine_agents.name}",
+        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
@@ -179,7 +179,7 @@ async def test_jenkins_machine_agent_relation(
     assert build.get_status() == "SUCCESS"
 
     # 2. Remove the relation
-    await application.remove_relation(state.AGENT_RELATION, jenkins_machine_agents.name)
+    await application.remove_relation(state.AGENT_RELATION, state.AGENT_RELATION)
     await model.wait_for_idle(apps=[application.name])
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name])
 

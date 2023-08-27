@@ -793,6 +793,7 @@ def _build_dependencies_lookup(
         plugin, dependencies = match.group(1), match.group(3)
         if not dependencies:
             dependency_lookup[plugin] = ()
+            continue
         try:
             dependency_lookup[plugin] = tuple(
                 _get_plugin_name(dependency) for dependency in dependencies.split(", ")

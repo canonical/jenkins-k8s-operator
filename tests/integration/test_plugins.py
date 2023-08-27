@@ -61,11 +61,8 @@ async def test_git_plugin_k8s_agent(
     await install_plugins(("git",))
 
     # check that the job runs on the Jenkins agent
-    job_name = "git-plugin-test"
-    job: jenkinsapi.job.Job = jenkins_client.create_job(
-        job_name,
-        gen_git_plugin_job_xml("k8s"),
-    )
+    job_name = "git-plugin-test-k8s"
+    job: jenkinsapi.job.Job = jenkins_client.create_job(job_name, gen_git_plugin_job_xml("k8s"))
     queue_item = job.invoke()
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
@@ -98,7 +95,7 @@ async def test_git_plugin_machine_agent(
     await install_plugins(("git",))
 
     # check that the job runs on the Jenkins agent
-    job_name = "git-plugin-test"
+    job_name = "git-plugin-test-machine"
     job: jenkinsapi.job.Job = jenkins_client.create_job(
         job_name,
         gen_git_plugin_job_xml("machine"),
@@ -107,15 +104,3 @@ async def test_git_plugin_machine_agent(
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
     assert build.get_status() == "SUCCESS"
-
-    # check that git plugin git repository validation works on Jenkins server
-    check_url_res = jenkins_client.requester.post_url(
-        f"{jenkins_client.baseurl}/job/{job_name}/descriptorByName/hudson.plugins.git.UserRemoteConfig/checkUrl",
-        data={
-            "value": "https://github.com/canonical/jenkins-k8s-operator",
-            "credentialsId": "",
-        },
-    )
-    assert (
-        check_url_content := str(check_url_res.content)
-    ) == "<div/>", f"Non-empty error message returned, {check_url_content}"

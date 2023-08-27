@@ -180,8 +180,6 @@ async def jenkins_k8s_agents_fixture(
 
     yield agent_app
 
-    # await model.remove_application(agent_app.name, force=True)
-
 
 @pytest_asyncio.fixture(scope="function", name="prepare_k8s_agents_relation")
 async def prepare_k8s_agents_relation_fixture(
@@ -280,16 +278,13 @@ async def jenkins_machine_agents_fixture(
         application_name=f"jenkins-agent-{app_suffix}",
         num_units=num_units,
     )
-    await machine_model.create_offer(f"{app.name}:{state.AGENT_RELATION}")
-    await machine_model.create_offer(f"{app.name}:slave")
+    await machine_model.create_offer(f"{app.name}:{state.AGENT_RELATION}", state.AGENT_RELATION)
+    await machine_model.create_offer(f"{app.name}:slave", state.DEPRECATED_AGENT_RELATION)
     await machine_model.wait_for_idle(
         apps=[app.name], status="blocked", idle_period=30, timeout=1200
     )
 
     yield app
-
-    await machine_model.remove_offer(f"admin/{machine_model.name}.{app.name}", force=True)
-    await machine_model.remove_application(app.name, force=True, block_until_done=True)
 
 
 @pytest_asyncio.fixture(scope="function", name="prepare_machine_agents_relation")
@@ -300,9 +295,9 @@ async def prepare_machine_agents_relation_fixture(
     """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
     model: Model = application.model
     machine_model: Model = jenkins_machine_agents.model
-    await model.relate(
-        f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{jenkins_machine_agents.name}",
+    await application.relate(
+        state.AGENT_RELATION,
+        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
@@ -316,7 +311,7 @@ async def cleanup_machine_agents_relation_fixture(
 
     for relation in application.relations:
         relation = typing.cast(Relation, relation)
-        await application.destroy_relation(relation.requires.name, jenkins_machine_agents.name)
+        await application.destroy_relation(relation.requires.name, relation.endpoints[0].name)
     await application.model.wait_for_idle(apps=[application.name])
     await jenkins_machine_agents.model.wait_for_idle(apps=[jenkins_machine_agents.name])
 
@@ -575,13 +570,13 @@ async def jenkins_with_proxy_client_fixture(
 @pytest.fixture(scope="module", name="plugins_config")
 def plugins_config_fixture() -> typing.Iterable[str]:
     """The test Jenkins plugins configuration values."""
-    return ("structs", "script-security")
+    return ("git",)
 
 
 @pytest.fixture(scope="module", name="plugins_to_install")
 def plugins_to_install_fixture() -> typing.Iterable[str]:
     """The plugins to install on Jenkins."""
-    return ("structs", "script-security", "git")
+    return ("git", "timestamper")
 
 
 @pytest.fixture(scope="module", name="plugins_to_remove")
@@ -630,6 +625,10 @@ def install_plugins_fixture(
         Args:
             plugins: Plugins to install.
         """
+        plugins = tuple(plugin for plugin in plugins if not jenkins_client.has_plugin(plugin))
+        if not plugins:
+            return
+
         stdout = kubernetes.stream.stream(
             kube_core_client.connect_get_namespaced_pod_exec,
             unit.name.replace("/", "-"),
