@@ -140,6 +140,7 @@ async def test_jenkins_k8s_agent_relation(
     assert not any((application.name in key for key in jenkins_client.get_nodes().keys()))
 
 
+@pytest.mark.usefixtures("prepare_machine_agents_relation")
 async def test_jenkins_machine_agent_relation(
     application: Application,
     jenkins_machine_agents: Application,
@@ -155,16 +156,6 @@ async def test_jenkins_machine_agent_relation(
         1. the relation succeeds and the machine agent is able to run jobs successfully.
         2. the machine agent is deregistered from Jenkins.
     """
-    # 1. Relate jenkins-k8s charm to the jenkins-k8s-agent charm.
-    model: Model = application.model
-    machine_model: Model = jenkins_machine_agents.model
-    await application.relate(
-        state.AGENT_RELATION,
-        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
-    )
-    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
-    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
-
     # 1. Assert that the node is registered and is able to run jobs successfully.
     assert any(
         (jenkins_machine_agents.name in key for key in jenkins_client.get_nodes().keys())
@@ -179,6 +170,8 @@ async def test_jenkins_machine_agent_relation(
     assert build.get_status() == "SUCCESS"
 
     # 2. Remove the relation
+    model: Model = application.model
+    machine_model: Model = jenkins_machine_agents.model
     await application.remove_relation(state.AGENT_RELATION, state.AGENT_RELATION)
     await model.wait_for_idle(apps=[application.name])
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name])
