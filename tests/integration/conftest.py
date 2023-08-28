@@ -162,18 +162,10 @@ async def jenkins_k8s_agents_fixture(
     model: Model, app_suffix: str
 ) -> typing.AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
-    # TODO: CHANGE
-    # agent_app: Application = await model.deploy(
-    #     "jenkins-agent-k8s",
-    #     config={"jenkins_agent_labels": "k8s"},
-    #     channel="latest/edge",
-    #     application_name=f"jenkins-agentk8s-{app_suffix}",
-    # )
     agent_app: Application = await model.deploy(
-        "/home/yanks/Documents/canonical/jenkins-agent-k8s-operator/jenkins-agent-k8s_ubuntu-22.04-amd64.charm",
+        "jenkins-agent-k8s",
         config={"jenkins_agent_labels": "k8s"},
-        resources={"jenkins-agent-k8s-image": "jenkins-agent:rock"},
-        series="focal",
+        channel="latest/edge",
         application_name=f"jenkins-agentk8s-{app_suffix}",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
