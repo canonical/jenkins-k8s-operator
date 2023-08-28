@@ -191,6 +191,12 @@ async def prepare_k8s_agents_relation_fixture(
 async def cleanup_k8s_agents_relation_fixture(
     application: Application, jenkins_k8s_agents: Application
 ):
+    """Cleanup existing relations if any.
+
+    Args:
+        application: The Jenkins charm application.
+        jenkins_k8s_agents: The Jenkins agent-k8s charm application.
+    """
     yield
 
     for relation in application.relations:
@@ -299,6 +305,12 @@ async def prepare_machine_agents_relation_fixture(
 async def cleanup_machine_agents_relation_fixture(
     application: Application, jenkins_machine_agents: Application
 ):
+    """Cleanup existing relations if any.
+
+    Args:
+        application: The Jenkins charm application.
+        jenkins_machine_agents: The Jenkins machine agent charm application.
+    """
     yield
 
     for relation in application.relations:
