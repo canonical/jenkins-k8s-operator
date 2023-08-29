@@ -120,7 +120,7 @@ def web_address_fixture(unit_ip: str):
     return f"http://{unit_ip}:8080"
 
 
-@pytest_asyncio.fixture(scope="module", name="jenkins_client")
+@pytest_asyncio.fixture(scope="function", name="jenkins_client")
 async def jenkins_client_fixture(
     application: Application,
     web_address: str,
