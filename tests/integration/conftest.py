@@ -138,7 +138,7 @@ async def jenkins_client_fixture(
     )
 
 
-@pytest.fixture(scope="module", name="unit_web_client")
+@pytest.fixture(scope="function", name="unit_web_client")
 def unit_web_client_fixture(
     unit: Unit, web_address: str, jenkins_client: jenkinsapi.jenkins.Jenkins
 ):
@@ -612,7 +612,7 @@ async def prepare_allowed_plugins_config_fixture(
     await application.reset_config(to_default=["allowed-plugins"])
 
 
-@pytest.fixture(scope="module", name="install_plugins")
+@pytest.fixture(scope="function", name="install_plugins")
 def install_plugins_fixture(
     application: Application,
     kube_core_client: kubernetes.client.CoreV1Api,
