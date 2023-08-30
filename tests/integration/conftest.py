@@ -30,7 +30,8 @@ from pytest_operator.plugin import OpsTest
 import jenkins
 import state
 
-from .types_ import ModelAppUnit, PluginsMeta, UnitWebClient
+from .constants import ALLOWED_PLUGINS
+from .types_ import ModelAppUnit, UnitWebClient
 
 
 @pytest.fixture(scope="module", name="model")
@@ -569,43 +570,10 @@ async def jenkins_with_proxy_client_fixture(
     )
 
 
-@pytest.fixture(scope="module", name="plugins_config")
-def plugins_config_fixture() -> typing.Iterable[str]:
-    """The test Jenkins plugins configuration values."""
-    return ("git",)
-
-
-@pytest.fixture(scope="module", name="plugins_to_install")
-def plugins_to_install_fixture() -> typing.Iterable[str]:
-    """The plugins to install on Jenkins."""
-    return ("git", "timestamper")
-
-
-@pytest.fixture(scope="module", name="plugins_to_remove")
-def plugins_to_remove_fixture(
-    plugins_config: typing.Iterable[str],
-    plugins_to_install: typing.Iterable[str],
-) -> typing.Iterable[str]:
-    """Plugins that are installed but not part of the plugins config."""
-    return set(plugins_to_install) - set(plugins_config)
-
-
-@pytest.fixture(scope="module", name="plugins_meta")
-def plugins_meta_fixture(
-    plugins_config: typing.Iterable[str],
-    plugins_to_install: typing.Iterable[str],
-    plugins_to_remove: typing.Iterable[str],
-) -> PluginsMeta:
-    """The wrapper around plugins configuration, plugins to install and plugins to remove."""
-    return PluginsMeta(config=plugins_config, install=plugins_to_install, remove=plugins_to_remove)
-
-
 @pytest_asyncio.fixture(scope="function", name="prepare_allowed_plugins_config")
-async def prepare_allowed_plugins_config_fixture(
-    application: Application, plugins_config: typing.Iterable[str]
-) -> Application:
+async def prepare_allowed_plugins_config_fixture(application: Application) -> Application:
     """Jenkins charm with plugins configured."""
-    await application.set_config({"allowed-plugins": ",".join(plugins_config)})
+    await application.set_config({"allowed-plugins": ",".join(ALLOWED_PLUGINS)})
 
     yield
 

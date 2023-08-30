@@ -40,18 +40,3 @@ class UnitWebClient:
     unit: Unit
     web: str
     client: jenkinsapi.jenkins.Jenkins
-
-
-@dataclasses.dataclass
-class PluginsMeta:
-    """The plugin config, plugin to install, plugin to remove wrapper dataclass.
-
-    Attributes:
-        config: The plugins applied on charm config.
-        install: The plugins to be installed on jenkins.
-        remove: The plugins that should be removed.
-    """
-
-    config: typing.Iterable[str]
-    install: typing.Iterable[str]
-    remove: typing.Iterable[str]
