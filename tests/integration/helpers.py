@@ -52,7 +52,7 @@ async def install_plugins(
     jenkins_client.safe_restart()
     model = ops_test.model
     assert model, "Model not initialized."
-    await ops_test.model.block_until(
+    await model.block_until(
         lambda: requests.get(jenkins_client.baseurl, timeout=10).status_code == 403,
         timeout=300,
         wait_period=10,

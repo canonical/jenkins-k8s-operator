@@ -76,7 +76,7 @@ async def test_git_plugin_k8s_agent(
 
     # check that git plugin git repository validation works on Jenkins server
     check_url_res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.clientlient.baseurl}/job/{job_name}/descriptorByName/"
+        f"{unit_web_client.client.baseurl}/job/{job_name}/descriptorByName/"
         "hudson.plugins.git.UserRemoteConfig/checkUrl",
         data={
             "value": "https://github.com/canonical/jenkins-k8s-operator",

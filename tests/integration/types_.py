@@ -4,7 +4,6 @@
 """Types for integration tests module."""
 
 import dataclasses
-import typing
 
 import jenkinsapi.jenkins
 from juju.application import Application
