@@ -22,7 +22,6 @@ from juju.action import Action
 from juju.application import Application
 from juju.client._definitions import FullStatus, UnitStatus
 from juju.model import Controller, Model
-from juju.relation import Relation
 from juju.unit import Unit
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
@@ -258,7 +257,7 @@ async def machine_controller_fixture() -> typing.AsyncGenerator[Controller, None
 
 @pytest_asyncio.fixture(scope="module", name="machine_model")
 async def machine_model_fixture(
-    machine_controller: Controller, request: pytest.FixtureRequest
+    machine_controller: Controller,
 ) -> typing.AsyncGenerator[Model, None]:
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
