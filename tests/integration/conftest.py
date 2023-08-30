@@ -172,8 +172,8 @@ async def jenkins_k8s_agents_fixture(
     yield agent_app
 
 
-@pytest_asyncio.fixture(scope="function", name="prepare_k8s_agents_relation")
-async def prepare_k8s_agents_relation_fixture(
+@pytest_asyncio.fixture(scope="function", name="app_k8s_agent_related")
+async def app_k8s_agent_related_fixture(
     jenkins_k8s_agents: Application,
     application: Application,
 ):
@@ -185,25 +185,33 @@ async def prepare_k8s_agents_relation_fixture(
         apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
     )
 
+    yield application
 
-@pytest_asyncio.fixture(scope="function", name="cleanup_k8s_agents_relation")
-async def cleanup_k8s_agents_relation_fixture(
-    application: Application, jenkins_k8s_agents: Application
+    await application.destroy_relation(
+        state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
+    )
+    await application.model.wait_for_idle(
+        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
+    )
+
+
+@pytest_asyncio.fixture(scope="function", name="app_k8s_deprecated_agent_related")
+async def app_k8s_deprecated_agent_related_fixture(
+    jenkins_k8s_agents: Application,
+    application: Application,
 ):
-    """Cleanup existing relations if any.
+    """The Jenkins-k8s charm related to Jenkins-k8s agent through deprecated agent relation."""
+    await application.relate(state.DEPRECATED_AGENT_RELATION, jenkins_k8s_agents.name)
+    await application.model.wait_for_idle(
+        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
+    )
 
-    Args:
-        application: The Jenkins charm application.
-        jenkins_k8s_agents: The Jenkins agent-k8s charm application.
-    """
-    yield
+    yield application
 
-    for relation in application.relations:
-        relation = typing.cast(Relation, relation)
-        await application.destroy_relation(
-            relation.requires.name, f"{jenkins_k8s_agents.name}:{relation.provides.name}"
-        )
-    await application.model.wait_for_idle(apps=[application.name, jenkins_k8s_agents.name])
+    await application.destroy_relation(state.DEPRECATED_AGENT_RELATION, jenkins_k8s_agents.name)
+    await application.model.wait_for_idle(
+        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
+    )
 
 
 @pytest.fixture(scope="module", name="gen_jenkins_test_job_xml")
@@ -250,7 +258,7 @@ async def machine_controller_fixture() -> typing.AsyncGenerator[Controller, None
 
 @pytest_asyncio.fixture(scope="module", name="machine_model")
 async def machine_model_fixture(
-    machine_controller: Controller,
+    machine_controller: Controller, request: pytest.FixtureRequest
 ) -> typing.AsyncGenerator[Model, None]:
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
@@ -284,8 +292,8 @@ async def jenkins_machine_agents_fixture(
     yield app
 
 
-@pytest_asyncio.fixture(scope="function", name="prepare_machine_agents_relation")
-async def prepare_machine_agents_relation_fixture(
+@pytest_asyncio.fixture(scope="function", name="app_machine_agent_related")
+async def app_machine_agent_related_fixture(
     jenkins_machine_agents: Application,
     application: Application,
 ):
@@ -299,24 +307,38 @@ async def prepare_machine_agents_relation_fixture(
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
+    yield application
 
-@pytest_asyncio.fixture(scope="function", name="cleanup_machine_agents_relation")
-async def cleanup_machine_agents_relation_fixture(
-    application: Application, jenkins_machine_agents: Application
+    await application.destroy_relation(
+        state.AGENT_RELATION, f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}"
+    )
+    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+
+
+@pytest_asyncio.fixture(scope="function", name="app_machine_deprecated_agent_related")
+async def app_machine_deprecated_agent_related_fixture(
+    jenkins_machine_agents: Application,
+    application: Application,
 ):
-    """Cleanup existing relations if any.
+    """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
+    model: Model = application.model
+    machine_model: Model = jenkins_machine_agents.model
+    await model.relate(
+        f"{application.name}:{state.DEPRECATED_AGENT_RELATION}",
+        f"localhost:admin/{machine_model.name}.{state.DEPRECATED_AGENT_RELATION}",
+    )
+    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
-    Args:
-        application: The Jenkins charm application.
-        jenkins_machine_agents: The Jenkins machine agent charm application.
-    """
-    yield
+    yield application
 
-    for relation in application.relations:
-        relation = typing.cast(Relation, relation)
-        await application.destroy_relation(relation.requires.name, relation.endpoints[0].name)
-    await application.model.wait_for_idle(apps=[application.name])
-    await jenkins_machine_agents.model.wait_for_idle(apps=[jenkins_machine_agents.name])
+    await application.destroy_relation(
+        state.AGENT_RELATION,
+        f"localhost:admin/{machine_model.name}.{state.DEPRECATED_AGENT_RELATION}",
+    )
+    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
 
 @pytest.fixture(scope="module", name="jenkins_version")

@@ -33,10 +33,8 @@ async def test_jenkins_wizard_bypass(web_address: str):
     assert "Welcome to Jenkins!" in str(response.content)
 
 
-@pytest.mark.usefixtures("cleanup_k8s_agents_relation")
+@pytest.mark.usefixtures("app_k8s_deprecated_agent_related")
 async def test_jenkins_k8s_deprecated_agent_relation(
-    model: Model,
-    application: Application,
     jenkins_k8s_agents: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
     gen_jenkins_test_job_xml: typing.Callable[[str], str],
@@ -46,11 +44,6 @@ async def test_jenkins_k8s_deprecated_agent_relation(
     act: when the server charm is related to the k8s agent charm.
     assert: the relation succeeds and the agent is able to run jobs successfully.
     """
-    await application.relate(state.DEPRECATED_AGENT_RELATION, f"{jenkins_k8s_agents.name}")
-    await model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
-    )
-
     nodes = jenkins_client.get_nodes()
     assert any(
         (jenkins_k8s_agents.name in key for key in nodes.keys())
@@ -63,10 +56,9 @@ async def test_jenkins_k8s_deprecated_agent_relation(
     assert build.get_status() == "SUCCESS"
 
 
-@pytest.mark.usefixtures("cleanup_machine_agents_relation")
+@pytest.mark.usefixtures("app_machine_deprecated_agent_related")
 async def test_jenkins_machine_deprecated_agent_relation(
     jenkins_machine_agents: Application,
-    application: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
     gen_jenkins_test_job_xml: typing.Callable[[str], str],
 ):
@@ -75,15 +67,6 @@ async def test_jenkins_machine_deprecated_agent_relation(
     act: when the relation is setup through the offer.
     assert: the relation succeeds and the agent is able to run jobs successfully.
     """
-    model: Model = application.model
-    machine_model: Model = jenkins_machine_agents.model
-    await application.relate(
-        state.DEPRECATED_AGENT_RELATION,
-        f"localhost:admin/{machine_model.name}.{state.DEPRECATED_AGENT_RELATION}",
-    )
-    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
-    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
-
     nodes = jenkins_client.get_nodes()
     assert any(
         (jenkins_machine_agents.name in key for key in nodes.keys())
@@ -140,9 +123,8 @@ async def test_jenkins_k8s_agent_relation(
     assert not any((application.name in key for key in jenkins_client.get_nodes().keys()))
 
 
-@pytest.mark.usefixtures("prepare_machine_agents_relation")
 async def test_jenkins_machine_agent_relation(
-    application: Application,
+    app_machine_agent_related: Application,
     jenkins_machine_agents: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
     gen_jenkins_test_job_xml: typing.Callable[[str], str],
@@ -156,6 +138,8 @@ async def test_jenkins_machine_agent_relation(
         1. the relation succeeds and the machine agent is able to run jobs successfully.
         2. the machine agent is deregistered from Jenkins.
     """
+    application = app_machine_agent_related
+
     # 1. Assert that the node is registered and is able to run jobs successfully.
     assert any(
         (jenkins_machine_agents.name in key for key in jenkins_client.get_nodes().keys())

@@ -49,7 +49,7 @@ async def test_jenkins_plugins_config(
     assert all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
 
 
-@pytest.mark.usefixtures("prepare_k8s_agents_relation", "cleanup_k8s_agents_relation")
+@pytest.mark.usefixtures("app_k8s_agent_related")
 async def test_git_plugin_k8s_agent(
     ops_test: OpsTest,
     unit_web_client: UnitWebClient,
@@ -88,7 +88,7 @@ async def test_git_plugin_k8s_agent(
     ) == "<div/>", f"Non-empty error message returned, {check_url_content}"
 
 
-@pytest.mark.usefixtures("prepare_machine_agents_relation", "cleanup_machine_agents_relation")
+@pytest.mark.usefixtures("app_machine_agent_related")
 async def test_git_plugin_machine_agent(
     ops_test: OpsTest,
     unit_web_client: UnitWebClient,
