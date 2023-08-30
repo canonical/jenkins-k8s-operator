@@ -10,6 +10,7 @@ import pytest
 from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
+from .helpers import install_plugins
 from .types_ import UnitWebClient
 
 
@@ -18,14 +19,13 @@ async def test_jenkins_plugins_config(
     ops_test: OpsTest,
     unit_web_client: UnitWebClient,
     update_status_env: typing.Iterable[str],
-    install_plugins: typing.Callable[[typing.Iterable[str]], typing.Awaitable],
 ):
     """
     arrange: given a jenkins charm with plugin config and plugins installed not in the config.
     act: when update_status_hook is fired.
     assert: the plugin is uninstalled and the system message is set on Jenkins.
     """
-    await install_plugins(INSTALLED_PLUGINS)
+    await install_plugins(ops_test, unit_web_client.unit, INSTALLED_PLUGINS)
 
     ret_code, _, stderr = await ops_test.juju(
         "exec",
@@ -49,8 +49,8 @@ async def test_jenkins_plugins_config(
 
 @pytest.mark.usefixtures("prepare_k8s_agents_relation", "cleanup_k8s_agents_relation")
 async def test_git_plugin_k8s_agent(
-    jenkins_client: jenkinsapi.jenkins.Jenkins,
-    install_plugins: typing.Callable[[typing.Iterable[str]], typing.Awaitable],
+    ops_test: OpsTest,
+    unit_web_client: UnitWebClient,
     gen_git_plugin_job_xml: typing.Callable[[str], str],
 ):
     """
@@ -58,19 +58,21 @@ async def test_git_plugin_k8s_agent(
     act: when a job is dispatched with a git workflow.
     assert: job completes successfully.
     """
-    await install_plugins(INSTALLED_PLUGINS)
+    await install_plugins(ops_test, unit_web_client.unit, INSTALLED_PLUGINS)
 
     # check that the job runs on the Jenkins agent
     job_name = "git-plugin-test-k8s"
-    job: jenkinsapi.job.Job = jenkins_client.create_job(job_name, gen_git_plugin_job_xml("k8s"))
+    job: jenkinsapi.job.Job = unit_web_client.client.create_job(
+        job_name, gen_git_plugin_job_xml("k8s")
+    )
     queue_item = job.invoke()
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
     assert build.get_status() == "SUCCESS"
 
     # check that git plugin git repository validation works on Jenkins server
-    check_url_res = jenkins_client.requester.post_url(
-        f"{jenkins_client.baseurl}/job/{job_name}/descriptorByName/"
+    check_url_res = unit_web_client.client.requester.post_url(
+        f"{jenkins_cunit_web_client.clientlient.baseurl}/job/{job_name}/descriptorByName/"
         "hudson.plugins.git.UserRemoteConfig/checkUrl",
         data={
             "value": "https://github.com/canonical/jenkins-k8s-operator",
@@ -84,8 +86,8 @@ async def test_git_plugin_k8s_agent(
 
 @pytest.mark.usefixtures("prepare_machine_agents_relation", "cleanup_machine_agents_relation")
 async def test_git_plugin_machine_agent(
-    jenkins_client: jenkinsapi.jenkins.Jenkins,
-    install_plugins: typing.Callable[[typing.Iterable[str]], typing.Awaitable],
+    ops_test: OpsTest,
+    unit_web_client: UnitWebClient,
     gen_git_plugin_job_xml: typing.Callable[[str], str],
 ):
     """
@@ -93,11 +95,11 @@ async def test_git_plugin_machine_agent(
     act: when a job is dispatched with a git workflow.
     assert: job completes successfully.
     """
-    await install_plugins(INSTALLED_PLUGINS)
+    await install_plugins(ops_test, unit_web_client.unit, INSTALLED_PLUGINS)
 
     # check that the job runs on the Jenkins agent
     job_name = "git-plugin-test-machine"
-    job: jenkinsapi.job.Job = jenkins_client.create_job(
+    job: jenkinsapi.job.Job = unit_web_client.client.create_job(
         job_name,
         gen_git_plugin_job_xml("machine"),
     )

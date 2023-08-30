@@ -580,60 +580,6 @@ async def prepare_allowed_plugins_config_fixture(application: Application) -> Ap
     await application.reset_config(to_default=["allowed-plugins"])
 
 
-@pytest.fixture(scope="function", name="install_plugins")
-def install_plugins_fixture(
-    application: Application,
-    kube_core_client: kubernetes.client.CoreV1Api,
-    jenkins_client: jenkinsapi.jenkins.Jenkins,
-):
-    """Install plugins using kubernetes container command."""
-    unit: Unit = application.units[0]
-
-    async def install_plugins(plugins: typing.Iterable[str]):
-        """Install plugins using jenkins plugin manager.
-
-        Args:
-            plugins: Plugins to install.
-        """
-        plugins = tuple(plugin for plugin in plugins if not jenkins_client.has_plugin(plugin))
-        if not plugins:
-            return
-
-        stdout = kubernetes.stream.stream(
-            kube_core_client.connect_get_namespaced_pod_exec,
-            unit.name.replace("/", "-"),
-            application.model.name,
-            container="jenkins",
-            command=[
-                "java",
-                "-jar",
-                f"{jenkins.EXECUTABLES_PATH / 'jenkins-plugin-manager-2.12.11.jar'}",
-                "-w",
-                f"{jenkins.EXECUTABLES_PATH / 'jenkins.war'}",
-                "-d",
-                str(jenkins.PLUGINS_PATH),
-                "-p",
-                " ".join(plugins),
-            ],
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        assert "Done" in stdout, f"Failed to install plugins via kube exec, {stdout}"
-
-        # the library will return 503 or other status codes that are not 200, hence restart and
-        # wait rather than check for status code.
-        jenkins_client.safe_restart()
-        await application.model.block_until(
-            lambda: requests.get(jenkins_client.baseurl, timeout=10).status_code == 403,
-            timeout=300,
-            wait_period=10,
-        )
-
-    return install_plugins
-
-
 @pytest.fixture(scope="module", name="gen_git_plugin_job_xml")
 def gen_git_plugin_job_xml_fixture() -> typing.Callable[[str], str]:
     """The Jenkins test job xml with given node label on an agent node."""
