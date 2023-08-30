@@ -25,7 +25,9 @@ async def test_jenkins_plugins_config(
     act: when update_status_hook is fired.
     assert: the plugin is uninstalled and the system message is set on Jenkins.
     """
-    await install_plugins(ops_test, unit_web_client.unit, INSTALLED_PLUGINS)
+    await install_plugins(
+        ops_test, unit_web_client.unit, unit_web_client.client, INSTALLED_PLUGINS
+    )
 
     ret_code, _, stderr = await ops_test.juju(
         "exec",
@@ -58,7 +60,9 @@ async def test_git_plugin_k8s_agent(
     act: when a job is dispatched with a git workflow.
     assert: job completes successfully.
     """
-    await install_plugins(ops_test, unit_web_client.unit, INSTALLED_PLUGINS)
+    await install_plugins(
+        ops_test, unit_web_client.unit, unit_web_client.client, INSTALLED_PLUGINS
+    )
 
     # check that the job runs on the Jenkins agent
     job_name = "git-plugin-test-k8s"
@@ -95,7 +99,9 @@ async def test_git_plugin_machine_agent(
     act: when a job is dispatched with a git workflow.
     assert: job completes successfully.
     """
-    await install_plugins(ops_test, unit_web_client.unit, INSTALLED_PLUGINS)
+    await install_plugins(
+        ops_test, unit_web_client.unit, unit_web_client.client, INSTALLED_PLUGINS
+    )
 
     # check that the job runs on the Jenkins agent
     job_name = "git-plugin-test-machine"
