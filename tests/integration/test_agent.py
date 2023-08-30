@@ -124,7 +124,7 @@ async def test_jenkins_k8s_agent_relation(
 
 
 async def test_jenkins_machine_agent_relation(
-    app_machine_agent_related: Application,
+    application: Application,
     jenkins_machine_agents: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
     gen_jenkins_test_job_xml: typing.Callable[[str], str],
@@ -138,7 +138,15 @@ async def test_jenkins_machine_agent_relation(
         1. the relation succeeds and the machine agent is able to run jobs successfully.
         2. the machine agent is deregistered from Jenkins.
     """
-    application = app_machine_agent_related
+    # 1. Relate jenkins-k8s charm to the jenkins-agent charm.
+    model = application.model
+    machine_model = jenkins_machine_agents.model
+    await model.relate(
+        f"{application.name}:{state.AGENT_RELATION}",
+        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
+    )
+    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
     # 1. Assert that the node is registered and is able to run jobs successfully.
     assert any(

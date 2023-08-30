@@ -304,7 +304,9 @@ async def app_machine_agent_related_fixture(
 
     yield application
 
-    await application.destroy_relation(state.AGENT_RELATION, state.AGENT_RELATION)
+    await application.destroy_relation(
+        state.AGENT_RELATION, f"{state.AGENT_RELATION}:{state.AGENT_RELATION}"
+    )
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name])
     await model.wait_for_idle(apps=[application.name])
 
@@ -327,7 +329,7 @@ async def app_machine_deprecated_agent_related_fixture(
     yield application
 
     await application.destroy_relation(
-        state.DEPRECATED_AGENT_RELATION, state.DEPRECATED_AGENT_RELATION
+        state.DEPRECATED_AGENT_RELATION, f"{state.DEPRECATED_AGENT_RELATION}:slave"
     )
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name])
     await model.wait_for_idle(apps=[application.name])
