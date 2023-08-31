@@ -19,4 +19,4 @@ def pytest_addoption(parser: pytest.Parser):
     # The path to kubernetes config.
     parser.addoption("--kube-config", action="store", default="~/.kube/config")
     # The number of jenkins agents to deploy and relate.
-    parser.addoption("--num-units", action="store", default="3")
+    parser.addoption("--num-units", action="store", default="1")
