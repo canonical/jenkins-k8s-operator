@@ -181,15 +181,15 @@ async def app_k8s_agent_related_fixture(
         state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
     )
     await application.model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
+        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
     )
 
     yield application
 
-    await application.destroy_relation(
-        state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
+    await application.destroy_relation(state.AGENT_RELATION, jenkins_k8s_agents.name)
+    await application.model.wait_for_idle(
+        apps=[application.name, jenkins_k8s_agents.name], check_freq=5
     )
-    await application.model.wait_for_idle(apps=[application.name, jenkins_k8s_agents.name])
 
 
 @pytest_asyncio.fixture(scope="function", name="app_k8s_deprecated_agent_related")
