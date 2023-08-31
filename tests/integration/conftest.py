@@ -205,6 +205,7 @@ async def app_k8s_deprecated_agent_related_fixture(
 
     yield application
 
+    await application.model.connect(application.model.name)
     await application.destroy_relation(state.DEPRECATED_AGENT_RELATION, jenkins_k8s_agents.name)
     await application.model.wait_for_idle(apps=[application.name, jenkins_k8s_agents.name])
 
