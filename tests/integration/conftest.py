@@ -186,7 +186,9 @@ async def app_k8s_agent_related_fixture(
 
     yield application
 
-    await application.destroy_relation(state.AGENT_RELATION, jenkins_k8s_agents.name)
+    await application.destroy_relation(
+        state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
+    )
     await application.model.wait_for_idle(
         apps=[application.name, jenkins_k8s_agents.name], check_freq=5
     )
