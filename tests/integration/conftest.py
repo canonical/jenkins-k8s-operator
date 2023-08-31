@@ -279,10 +279,13 @@ async def jenkins_machine_agents_fixture(
         application_name=f"jenkins-agent-{app_suffix}",
         num_units=num_units,
     )
+    await machine_model.wait_for_idle(
+        apps=[app.name], status="blocked", idle_period=30, timeout=1200, check_freq=5
+    )
     await machine_model.create_offer(f"{app.name}:{state.AGENT_RELATION}", state.AGENT_RELATION)
     await machine_model.create_offer(f"{app.name}:slave", state.DEPRECATED_AGENT_RELATION)
     await machine_model.wait_for_idle(
-        apps=[app.name], status="blocked", idle_period=30, timeout=1200
+        apps=[app.name], status="blocked", idle_period=30, timeout=1200, check_freq=5
     )
 
     yield app
