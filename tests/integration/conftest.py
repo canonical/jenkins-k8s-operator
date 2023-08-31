@@ -258,7 +258,7 @@ async def machine_model_fixture(
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
     model = await machine_controller.add_model(machine_model_name)
-    await model.connect()
+    await model.connect(f"localhost:admin/{model.name}")
 
     yield model
 
