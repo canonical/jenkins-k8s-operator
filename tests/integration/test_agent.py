@@ -141,12 +141,16 @@ async def test_jenkins_machine_agent_relation(
     # 1. Relate jenkins-k8s charm to the jenkins-agent charm.
     model = application.model
     machine_model = jenkins_machine_agents.model
+    # this code is similar to the app_machine_agent_related fixture but shouldn't be using the
+    # fixture since this test tests for teardown of relation as well.
+    # pylint: disable=duplicate-code
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+    # pylint: enable=duplicate-code
 
     # 1. Assert that the node is registered and is able to run jobs successfully.
     assert any(
@@ -162,8 +166,6 @@ async def test_jenkins_machine_agent_relation(
     assert build.get_status() == "SUCCESS"
 
     # 2. Remove the relation
-    model: Model = application.model
-    machine_model: Model = jenkins_machine_agents.model
     await application.remove_relation(state.AGENT_RELATION, state.AGENT_RELATION)
     await model.wait_for_idle(apps=[application.name])
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name])
