@@ -67,7 +67,7 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
     return charm
 
 
-@pytest_asyncio.fixture(scope="function", name="application")
+@pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
     ops_test: OpsTest, charm: str, model: Model, jenkins_image: str, app_suffix: str
 ) -> typing.AsyncGenerator[Application, None]:
