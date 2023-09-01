@@ -169,8 +169,6 @@ async def jenkins_k8s_agents_fixture(
 
     yield agent_app
 
-    await model.remove_application(agent_app.name, block_until_done=True, force=True)
-
 
 @pytest_asyncio.fixture(scope="function", name="app_k8s_agent_related")
 async def app_k8s_agent_related_fixture(
@@ -251,8 +249,6 @@ async def jenkins_machine_agents_fixture(
     )
 
     yield app
-
-    await machine_model.remove_application(app.name, block_until_done=True, force=True)
 
 
 @pytest_asyncio.fixture(scope="function", name="app_machine_agent_related")
