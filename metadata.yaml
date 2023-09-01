@@ -41,6 +41,8 @@ requires:
   agent-deprecated:
     interface: jenkins-slave
     optional: true
+    limit: 2
   agent:
     interface: jenkins_agent_v0
     optional: true
+    limit: 2

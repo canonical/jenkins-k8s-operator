@@ -186,11 +186,6 @@ async def app_k8s_agent_related_fixture(
 
     yield application
 
-    await application.destroy_relation(state.AGENT_RELATION, jenkins_k8s_agents.name)
-    await application.model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agents.name], check_freq=5
-    )
-
 
 @pytest_asyncio.fixture(scope="function", name="app_k8s_deprecated_agent_related")
 async def app_k8s_deprecated_agent_related_fixture(
@@ -204,10 +199,6 @@ async def app_k8s_deprecated_agent_related_fixture(
     )
 
     yield application
-
-    await application.model.connect(application.model.name)
-    await application.destroy_relation(state.DEPRECATED_AGENT_RELATION, jenkins_k8s_agents.name)
-    await application.model.wait_for_idle(apps=[application.name, jenkins_k8s_agents.name])
 
 
 @pytest.fixture(scope="module", name="gen_jenkins_test_job_xml")
@@ -309,12 +300,6 @@ async def app_machine_agent_related_fixture(
 
     yield application
 
-    await application.destroy_relation(
-        state.AGENT_RELATION, f"{state.AGENT_RELATION}:{state.AGENT_RELATION}"
-    )
-    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name])
-    await model.wait_for_idle(apps=[application.name])
-
 
 @pytest_asyncio.fixture(scope="function", name="app_machine_deprecated_agent_related")
 async def app_machine_deprecated_agent_related_fixture(
@@ -332,12 +317,6 @@ async def app_machine_deprecated_agent_related_fixture(
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
     yield application
-
-    await application.destroy_relation(
-        state.DEPRECATED_AGENT_RELATION, f"{state.DEPRECATED_AGENT_RELATION}:slave"
-    )
-    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name])
-    await model.wait_for_idle(apps=[application.name])
 
 
 @pytest.fixture(scope="module", name="jenkins_version")
