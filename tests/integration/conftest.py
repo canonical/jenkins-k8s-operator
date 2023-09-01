@@ -67,15 +67,17 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
     return charm
 
 
-@pytest_asyncio.fixture(scope="module", name="application")
+@pytest_asyncio.fixture(scope="function", name="application")
 async def application_fixture(
-    ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
+    ops_test: OpsTest, charm: str, model: Model, jenkins_image: str, app_suffix: str
 ) -> typing.AsyncGenerator[Application, None]:
     """Deploy the charm."""
     resources = {"jenkins-image": jenkins_image}
 
     # Deploy the charm and wait for active/idle status
-    application = await model.deploy(charm, resources=resources, series="jammy")
+    application = await model.deploy(
+        charm, resources=resources, series="jammy", application_name=f"jenkins-k8s-{app_suffix}"
+    )
     await model.wait_for_idle(
         apps=[application.name],
         wait_for_active=True,
@@ -89,19 +91,19 @@ async def application_fixture(
         yield application
 
 
-@pytest.fixture(scope="module", name="unit")
+@pytest.fixture(scope="function", name="unit")
 def unit_fixture(application: Application) -> Unit:
     """The Jenkins-k8s charm application unit."""
     return application.units[0]
 
 
-@pytest.fixture(scope="module", name="model_app_unit")
+@pytest.fixture(scope="function", name="model_app_unit")
 def model_app_unit_fixture(model: Model, application: Application, unit: Unit):
     """The packaged model, application, unit of Jenkins to reduce number of parameters in tests."""
     return ModelAppUnit(model=model, app=application, unit=unit)
 
 
-@pytest_asyncio.fixture(scope="module", name="unit_ip")
+@pytest_asyncio.fixture(scope="function", name="unit_ip")
 async def unit_ip_fixture(model: Model, application: Application):
     """Get Jenkins charm unit IP."""
     status: FullStatus = await model.get_status([application.name])
@@ -113,7 +115,7 @@ async def unit_ip_fixture(model: Model, application: Application):
         raise StopIteration("Invalid unit status") from exc
 
 
-@pytest.fixture(scope="module", name="web_address")
+@pytest.fixture(scope="function", name="web_address")
 def web_address_fixture(unit_ip: str):
     """Get Jenkins charm web address."""
     return f"http://{unit_ip}:8080"
@@ -145,7 +147,7 @@ def unit_web_client_fixture(
     return UnitWebClient(unit=unit, web=web_address, client=jenkins_client)
 
 
-@pytest.fixture(scope="module", name="app_suffix")
+@pytest.fixture(scope="function", name="app_suffix")
 def app_suffix_fixture():
     """Get random 4 char length application suffix."""
     # secrets random hex cannot be used because it has chances to generate numeric only suffix
