@@ -14,4 +14,4 @@ jobs:
         ./tests/integration/pre_run_script.sh"
       extra-arguments: |
         --kube-config ${GITHUB_WORKSPACE}/kube-config
-      modules: '["test_agent.py", "test_deprecated_agent.py", "test_jenkins.py", "test_plugins.py", "test_proxy.py"]'
+      modules: '["test_agent.py", "test_deprecated_agent.py", "test_jenkins.py", "test_plugins.py", "test_plugins_machine.py", "test_proxy.py"]'

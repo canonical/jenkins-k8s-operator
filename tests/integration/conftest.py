@@ -69,15 +69,13 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
 
 @pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
-    ops_test: OpsTest, charm: str, model: Model, jenkins_image: str, app_suffix: str
+    ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
 ) -> typing.AsyncGenerator[Application, None]:
     """Deploy the charm."""
     resources = {"jenkins-image": jenkins_image}
 
     # Deploy the charm and wait for active/idle status
-    application = await model.deploy(
-        charm, resources=resources, series="jammy", application_name=f"jenkins-k8s-{app_suffix}"
-    )
+    application = await model.deploy(charm, resources=resources, series="jammy")
     await model.wait_for_idle(
         apps=[application.name],
         wait_for_active=True,

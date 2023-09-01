@@ -75,19 +75,3 @@ async def test_git_plugin_k8s_agent(ops_test: OpsTest, unit_web_client: UnitWebC
     assert (
         check_url_content := str(check_url_res.content, encoding="utf-8")
     ) == "<div/>", f"Non-empty error message returned, {check_url_content}"
-
-
-@pytest.mark.usefixtures("app_machine_agent_related")
-async def test_git_plugin_machine_agent(ops_test: OpsTest, unit_web_client: UnitWebClient):
-    """
-    arrange: given a jenkins charm with git plugin installed.
-    act: when a job is dispatched with a git workflow.
-    assert: job completes successfully.
-    """
-    await install_plugins(
-        ops_test, unit_web_client.unit, unit_web_client.client, INSTALLED_PLUGINS
-    )
-
-    # check that the job runs on the Jenkins agent
-    job_name = "git-plugin-test-machine"
-    assert_git_job_success(unit_web_client.client, job_name, "machine")
