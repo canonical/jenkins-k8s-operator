@@ -5,12 +5,11 @@
 
 import typing
 
-import jenkinsapi.jenkins
 import pytest
 from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
-from .helpers import install_plugins
+from .helpers import assert_git_job_success, install_plugins
 from .types_ import UnitWebClient
 
 
@@ -50,11 +49,7 @@ async def test_jenkins_plugins_config(
 
 
 @pytest.mark.usefixtures("app_k8s_agent_related")
-async def test_git_plugin_k8s_agent(
-    ops_test: OpsTest,
-    unit_web_client: UnitWebClient,
-    gen_git_plugin_job_xml: typing.Callable[[str], str],
-):
+async def test_git_plugin_k8s_agent(ops_test: OpsTest, unit_web_client: UnitWebClient):
     """
     arrange: given a jenkins charm with git plugin installed.
     act: when a job is dispatched with a git workflow.
@@ -66,13 +61,7 @@ async def test_git_plugin_k8s_agent(
 
     # check that the job runs on the Jenkins agent
     job_name = "git-plugin-test-k8s"
-    job: jenkinsapi.job.Job = unit_web_client.client.create_job(
-        job_name, gen_git_plugin_job_xml("k8s")
-    )
-    queue_item = job.invoke()
-    queue_item.block_until_complete()
-    build: jenkinsapi.build.Build = queue_item.get_build()
-    assert build.get_status() == "SUCCESS"
+    assert_git_job_success(unit_web_client.client, job_name, "k8s")
 
     # check that git plugin git repository validation works on Jenkins server
     check_url_res = unit_web_client.client.requester.post_url(
@@ -89,11 +78,7 @@ async def test_git_plugin_k8s_agent(
 
 
 @pytest.mark.usefixtures("app_machine_agent_related")
-async def test_git_plugin_machine_agent(
-    ops_test: OpsTest,
-    unit_web_client: UnitWebClient,
-    gen_git_plugin_job_xml: typing.Callable[[str], str],
-):
+async def test_git_plugin_machine_agent(ops_test: OpsTest, unit_web_client: UnitWebClient):
     """
     arrange: given a jenkins charm with git plugin installed.
     act: when a job is dispatched with a git workflow.
@@ -105,11 +90,4 @@ async def test_git_plugin_machine_agent(
 
     # check that the job runs on the Jenkins agent
     job_name = "git-plugin-test-machine"
-    job: jenkinsapi.job.Job = unit_web_client.client.create_job(
-        job_name,
-        gen_git_plugin_job_xml("machine"),
-    )
-    queue_item = job.invoke()
-    queue_item.block_until_complete()
-    build: jenkinsapi.build.Build = queue_item.get_build()
-    assert build.get_status() == "SUCCESS"
+    assert_git_job_success(unit_web_client.client, job_name, "machine")

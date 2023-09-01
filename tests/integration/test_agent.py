@@ -4,7 +4,6 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import logging
-import typing
 from pathlib import Path
 
 import jenkinsapi.jenkins
@@ -14,6 +13,8 @@ from juju.application import Application
 from juju.model import Model
 
 import state
+
+from .helpers import assert_job_success
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,6 @@ async def test_jenkins_k8s_agent_relation(
     application: Application,
     jenkins_k8s_agents: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
-    gen_jenkins_test_job_xml: typing.Callable[[str], str],
 ):
     """
     arrange: given jenkins-k8s-agent and jenkins server charms.
@@ -55,14 +55,7 @@ async def test_jenkins_k8s_agent_relation(
     )
 
     # 1. Assert that the node is registered and is able to run jobs successfully.
-    assert any(
-        (jenkins_k8s_agents.name in key for key in jenkins_client.get_nodes().keys())
-    ), "Jenkins k8s agent node not registered."
-    job = jenkins_client.create_job(jenkins_k8s_agents.name, gen_jenkins_test_job_xml("k8s"))
-    queue_item = job.invoke()
-    queue_item.block_until_complete()
-    build: jenkinsapi.build.Build = queue_item.get_build()
-    assert build.get_status() == "SUCCESS"
+    assert_job_success(jenkins_client, jenkins_k8s_agents.name, "k8s")
 
     # 2. Remove the relation
     await application.remove_relation(
@@ -78,7 +71,6 @@ async def test_jenkins_machine_agent_relation(
     application: Application,
     jenkins_machine_agents: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
-    gen_jenkins_test_job_xml: typing.Callable[[str], str],
 ):
     """
     arrange: given a cross controller cross model jenkins machine agent with an offer.
@@ -104,17 +96,7 @@ async def test_jenkins_machine_agent_relation(
     # pylint: enable=duplicate-code
 
     # 1. Assert that the node is registered and is able to run jobs successfully.
-    assert any(
-        (jenkins_machine_agents.name in key for key in jenkins_client.get_nodes().keys())
-    ), "Jenkins agent nodes not registered."
-
-    job = jenkins_client.create_job(
-        jenkins_machine_agents.name, gen_jenkins_test_job_xml("machine")
-    )
-    queue_item = job.invoke()
-    queue_item.block_until_complete()
-    build: jenkinsapi.build.Build = queue_item.get_build()
-    assert build.get_status() == "SUCCESS"
+    assert_job_success(jenkins_client, jenkins_machine_agents.name, "machine")
 
     # 2. Remove the relation
     await application.remove_relation(state.AGENT_RELATION, state.AGENT_RELATION)

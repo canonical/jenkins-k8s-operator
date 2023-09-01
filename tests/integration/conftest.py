@@ -7,7 +7,6 @@ import random
 import re
 import secrets
 import string
-import textwrap
 import typing
 
 import jenkinsapi.jenkins
@@ -201,37 +200,6 @@ async def app_k8s_deprecated_agent_related_fixture(
     )
 
     yield application
-
-
-@pytest.fixture(scope="module", name="gen_jenkins_test_job_xml")
-def gen_jenkins_test_job_xml_fixture() -> typing.Callable[[str], str]:
-    """The Jenkins test job xml with given node label on an agent node."""
-    return lambda label: textwrap.dedent(
-        f"""
-        <project>
-            <actions/>
-            <description/>
-            <keepDependencies>false</keepDependencies>
-            <properties/>
-            <scm class="hudson.scm.NullSCM"/>
-            <assignedNode>{label}</assignedNode>
-            <canRoam>false</canRoam>
-            <disabled>false</disabled>
-            <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
-            <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
-            <triggers/>
-            <concurrentBuild>false</concurrentBuild>
-            <builders>
-                <hudson.tasks.Shell>
-                    <command>echo "hello world"</command>
-                    <configuredLocalRules/>
-                </hudson.tasks.Shell>
-            </builders>
-            <publishers/>
-            <buildWrappers/>
-        </project>
-        """
-    )
 
 
 @pytest_asyncio.fixture(scope="module", name="machine_controller")
@@ -582,51 +550,3 @@ async def prepare_allowed_plugins_config_fixture(application: Application) -> Ap
     yield
 
     await application.reset_config(to_default=["allowed-plugins"])
-
-
-@pytest.fixture(scope="module", name="gen_git_plugin_job_xml")
-def gen_git_plugin_job_xml_fixture() -> typing.Callable[[str], str]:
-    """The Jenkins test job xml with given node label on an agent node."""
-    return lambda label: textwrap.dedent(
-        f"""
-        <project>
-            <actions />
-            <description></description>
-            <keepDependencies>false</keepDependencies>
-            <properties />
-            <scm class="hudson.plugins.git.GitSCM" plugin="git@5.0.2">
-                <configVersion>2</configVersion>
-                <userRemoteConfigs>
-                    <hudson.plugins.git.UserRemoteConfig>
-                        <url>https://github.com/canonical/jenkins-k8s-operator</url>
-                    </hudson.plugins.git.UserRemoteConfig>
-                </userRemoteConfigs>
-                <branches>
-                    <hudson.plugins.git.BranchSpec>
-                        <name>*/main</name>
-                    </hudson.plugins.git.BranchSpec>
-                </branches>
-                <doGenerateSubmoduleConfigurations>
-                    false</doGenerateSubmoduleConfigurations>
-                <submoduleCfg class="empty-list" />
-                <extensions />
-            </scm>
-            <assignedNode>{label}</assignedNode>
-            <canRoam>true</canRoam>
-            <disabled>false</disabled>
-            <blockBuildWhenDownstreamBuilding>
-                false</blockBuildWhenDownstreamBuilding>
-            <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
-            <triggers />
-            <concurrentBuild>false</concurrentBuild>
-            <builders>
-                <hudson.tasks.Shell>
-                    <command>git checkout main\ngit pull</command>
-                    <configuredLocalRules />
-                </hudson.tasks.Shell>
-            </builders>
-            <publishers />
-            <buildWrappers />
-        </project>
-        """
-    )
