@@ -44,4 +44,3 @@ requires:
   agent:
     interface: jenkins_agent_v0
     optional: true
-    limit: 2
