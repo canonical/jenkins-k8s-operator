@@ -85,7 +85,9 @@ async def application_fixture(
     )
 
     # slow down update-status so that it doesn't intervene currently running tests
-    await ops_test.fast_forward(fast_interval="5h", slow_interval="5h")
+    # don't yield inside the context since juju cleanup will fail and crash
+    async with ops_test.fast_forward(fast_interval="5h", slow_interval="5h"):
+        pass
     yield application
 
 
