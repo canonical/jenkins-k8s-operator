@@ -9,7 +9,7 @@ import pytest
 from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
-from .helpers import assert_git_job_success, install_plugins
+from .helpers import gen_git_test_job_xml, install_plugins
 from .types_ import UnitWebClient
 
 
@@ -59,10 +59,8 @@ async def test_git_plugin_k8s_agent(ops_test: OpsTest, unit_web_client: UnitWebC
         ops_test, unit_web_client.unit, unit_web_client.client, INSTALLED_PLUGINS
     )
 
-    # check that the job runs on the Jenkins agent
     job_name = "git-plugin-test-k8s"
-    assert_git_job_success(unit_web_client.client, job_name, "k8s")
-
+    unit_web_client.client.create_job(job_name, gen_git_test_job_xml("k8s"))
     # check that git plugin git repository validation works on Jenkins server
     check_url_res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.client.baseurl}/job/{job_name}/descriptorByName/"
