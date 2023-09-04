@@ -257,6 +257,7 @@ async def app_machine_agent_related_fixture(
     """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
     model: Model = application.model
     machine_model: Model = jenkins_machine_agents.model
+    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
