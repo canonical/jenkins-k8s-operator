@@ -13,7 +13,7 @@ from .helpers import gen_git_test_job_xml, install_plugins
 from .types_ import UnitWebClient
 
 
-@pytest.mark.usefixtures("prepare_allowed_plugins_config")
+@pytest.mark.usefixtures("app_with_allowed_plugins")
 async def test_jenkins_plugins_config(
     ops_test: OpsTest,
     unit_web_client: UnitWebClient,
