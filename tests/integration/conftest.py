@@ -85,8 +85,8 @@ async def application_fixture(
     )
 
     # slow down update-status so that it doesn't intervene currently running tests
-    async with ops_test.fast_forward(fast_interval="5h"):
-        yield application
+    await ops_test.fast_forward(fast_interval="5h", slow_interval="5h")
+    yield application
 
 
 @pytest.fixture(scope="function", name="unit")
