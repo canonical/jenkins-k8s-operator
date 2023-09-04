@@ -32,7 +32,7 @@ async def test_jenkins_update_ui_disabled(
     )
 
 
-@pytest.mark.usefixtures("prepare_restart_time_range", "install_libfaketime_unit")
+@pytest.mark.usefixtures("prepare_restart_time_range", "libfaketime_unit")
 async def test_jenkins_automatic_update_out_of_range(
     ops_test: OpsTest,
     application: Application,

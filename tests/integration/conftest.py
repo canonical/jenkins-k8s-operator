@@ -69,7 +69,7 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
 
 @pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
-    ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
+    charm: str, model: Model, jenkins_image: str
 ) -> typing.AsyncGenerator[Application, None]:
     """Deploy the charm."""
     resources = {"jenkins-image": jenkins_image}
@@ -83,27 +83,26 @@ async def application_fixture(
         timeout=20 * 60,
         idle_period=30,
     )
-
     # slow down update-status so that it doesn't intervene currently running tests
-    # don't yield inside the context since juju cleanup will fail and crash
-    async with ops_test.fast_forward(fast_interval="5h", slow_interval="5h"):
-        pass
-    yield application
+    # `with ops_test.fast_forward` is not used here since juju cleanup will cause the tests to
+    # fail.
+    await model.set_config({"update-status-hook-interval": "5h"})
+    return application
 
 
-@pytest.fixture(scope="function", name="unit")
+@pytest.fixture(scope="module", name="unit")
 def unit_fixture(application: Application) -> Unit:
     """The Jenkins-k8s charm application unit."""
     return application.units[0]
 
 
-@pytest.fixture(scope="function", name="model_app_unit")
+@pytest.fixture(scope="module", name="model_app_unit")
 def model_app_unit_fixture(model: Model, application: Application, unit: Unit):
     """The packaged model, application, unit of Jenkins to reduce number of parameters in tests."""
     return ModelAppUnit(model=model, app=application, unit=unit)
 
 
-@pytest_asyncio.fixture(scope="function", name="unit_ip")
+@pytest_asyncio.fixture(scope="module", name="unit_ip")
 async def unit_ip_fixture(model: Model, application: Application):
     """Get Jenkins charm unit IP."""
     status: FullStatus = await model.get_status([application.name])
@@ -115,13 +114,13 @@ async def unit_ip_fixture(model: Model, application: Application):
         raise StopIteration("Invalid unit status") from exc
 
 
-@pytest.fixture(scope="function", name="web_address")
+@pytest.fixture(scope="module", name="web_address")
 def web_address_fixture(unit_ip: str):
     """Get Jenkins charm web address."""
     return f"http://{unit_ip}:8080"
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_client")
+@pytest_asyncio.fixture(scope="module", name="jenkins_client")
 async def jenkins_client_fixture(
     application: Application,
     web_address: str,
@@ -139,7 +138,7 @@ async def jenkins_client_fixture(
     )
 
 
-@pytest.fixture(scope="function", name="unit_web_client")
+@pytest.fixture(scope="module", name="unit_web_client")
 def unit_web_client_fixture(
     unit: Unit, web_address: str, jenkins_client: jenkinsapi.jenkins.Jenkins
 ):
@@ -182,7 +181,7 @@ async def app_k8s_agent_related_fixture(
         state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
     )
     await application.model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
+        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
     )
 
     yield application
@@ -220,7 +219,6 @@ async def machine_model_fixture(
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
     model = await machine_controller.add_model(machine_model_name)
-    await model.connect(f"localhost:admin/{model.name}")
 
     yield model
 
@@ -241,13 +239,10 @@ async def jenkins_machine_agents_fixture(
         application_name=f"jenkins-agent-{app_suffix}",
         num_units=num_units,
     )
-    await machine_model.wait_for_idle(
-        apps=[app.name], status="blocked", idle_period=30, timeout=1200, check_freq=5
-    )
     await machine_model.create_offer(f"{app.name}:{state.AGENT_RELATION}", state.AGENT_RELATION)
     await machine_model.create_offer(f"{app.name}:slave", state.DEPRECATED_AGENT_RELATION)
     await machine_model.wait_for_idle(
-        apps=[app.name], status="blocked", idle_period=30, timeout=1200, check_freq=5
+        apps=[app.name], status="blocked", idle_period=30, timeout=1200
     )
 
     yield app
@@ -331,13 +326,14 @@ async def prepare_restart_time_range_fixture(application: Application):
     await application.reset_config(["restart-time-range"])
 
 
-@pytest_asyncio.fixture(scope="function", name="install_libfaketime_unit")
-async def install_libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit):
+@pytest_asyncio.fixture(scope="function", name="libfaketime_unit")
+async def libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit) -> Unit:
     """Unit with libfaketime installed."""
     await ops_test.juju("run", "--unit", f"{unit.name}", "--", "apt", "update")
     await ops_test.juju(
         "run", "--unit", f"{unit.name}", "--", "apt", "install", "-y", "libfaketime"
     )
+    return unit
 
 
 @pytest.fixture(scope="function", name="libfaketime_env")
@@ -540,11 +536,13 @@ async def jenkins_with_proxy_client_fixture(
     )
 
 
-@pytest_asyncio.fixture(scope="function", name="prepare_allowed_plugins_config")
-async def prepare_allowed_plugins_config_fixture(application: Application) -> Application:
+@pytest_asyncio.fixture(scope="function", name="app_with_allowed_plugins")
+async def app_with_allowed_plugins_fixture(
+    application: Application,
+) -> typing.AsyncGenerator[Application, None]:
     """Jenkins charm with plugins configured."""
     await application.set_config({"allowed-plugins": ",".join(ALLOWED_PLUGINS)})
 
-    yield
+    yield application
 
     await application.reset_config(to_default=["allowed-plugins"])
