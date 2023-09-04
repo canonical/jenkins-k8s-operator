@@ -69,7 +69,7 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
 
 @pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
-    charm: str, model: Model, jenkins_image: str
+    ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
 ) -> typing.AsyncGenerator[Application, None]:
     """Deploy the charm."""
     resources = {"jenkins-image": jenkins_image}
@@ -86,8 +86,9 @@ async def application_fixture(
     # slow down update-status so that it doesn't intervene currently running tests
     # `with ops_test.fast_forward` is not used here since juju cleanup will cause the tests to
     # fail.
-    await model.set_config({"update-status-hook-interval": "5h"})
-    return application
+    async with ops_test.fast_forward(fast_interval="5h", slow_interval="5h"):
+        pass
+    yield application
 
 
 @pytest.fixture(scope="module", name="unit")
