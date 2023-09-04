@@ -177,20 +177,3 @@ def gen_git_test_job_xml(node_label: str):
         </project>
         """
     )
-
-
-def assert_git_job_success(
-    client: jenkinsapi.jenkins.Jenkins, job_name: str, test_target_label: str
-):
-    """Assert that a test git job can be created and ran successfully.
-
-    Args:
-        client: The Jenkins API client.
-        job_name: The test job name.
-        test_target_label: The Jenkins agent node label.
-    """
-    job: jenkinsapi.job.Job = client.create_job(job_name, gen_git_test_job_xml(test_target_label))
-    queue_item = job.invoke()
-    queue_item.block_until_complete()
-    build: jenkinsapi.build.Build = queue_item.get_build()
-    assert build.get_status() == "SUCCESS"
