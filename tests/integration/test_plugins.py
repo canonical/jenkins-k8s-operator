@@ -25,11 +25,7 @@ async def test_jenkins_plugins_config(
     assert: the plugin is uninstalled and the system message is set on Jenkins.
     """
     await install_plugins(
-        ops_test,
-        unit_web_client.unit.model,
-        unit_web_client.unit,
-        unit_web_client.client,
-        INSTALLED_PLUGINS,
+        ops_test, unit_web_client.unit, unit_web_client.client, INSTALLED_PLUGINS
     )
 
     ret_code, _, stderr = await ops_test.juju(
@@ -60,11 +56,7 @@ async def test_git_plugin_k8s_agent(ops_test: OpsTest, unit_web_client: UnitWebC
     assert: job completes successfully.
     """
     await install_plugins(
-        ops_test,
-        unit_web_client.unit.model,
-        unit_web_client.unit,
-        unit_web_client.client,
-        INSTALLED_PLUGINS,
+        ops_test, unit_web_client.unit, unit_web_client.client, INSTALLED_PLUGINS
     )
 
     job_name = "git-plugin-test-k8s"
