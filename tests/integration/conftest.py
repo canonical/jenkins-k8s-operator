@@ -84,8 +84,8 @@ async def application_fixture(
         idle_period=30,
     )
     # slow down update-status so that it doesn't intervene currently running tests
-    # `with ops_test.fast_forward` is not used here since juju cleanup will cause the tests to
-    # fail.
+    # don't yield inside the context since juju cleanup is not reliable.
+    # model.set_config(...) also doesn't work as well as the following code.
     async with ops_test.fast_forward(fast_interval="5h", slow_interval="5h"):
         pass
     yield application
@@ -182,7 +182,7 @@ async def app_k8s_agent_related_fixture(
         state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
     )
     await application.model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
+        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
     )
 
     yield application
@@ -244,7 +244,7 @@ async def jenkins_machine_agents_fixture(
     await machine_model.create_offer(f"{app.name}:{state.AGENT_RELATION}", state.AGENT_RELATION)
     await machine_model.create_offer(f"{app.name}:slave", state.DEPRECATED_AGENT_RELATION)
     await machine_model.wait_for_idle(
-        apps=[app.name], status="blocked", idle_period=30, timeout=1200
+        apps=[app.name], status="blocked", idle_period=30, timeout=1200, check_freq=5
     )
 
     yield app
@@ -258,12 +258,16 @@ async def app_machine_agent_related_fixture(
     """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
     model: Model = application.model
     machine_model: Model = jenkins_machine_agents.model
-    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
+    await machine_model.wait_for_idle(
+        apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5
+    )
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
-    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
+    await machine_model.wait_for_idle(
+        apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5
+    )
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
     yield application
