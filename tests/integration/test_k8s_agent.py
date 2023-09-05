@@ -30,7 +30,9 @@ async def test_jenkins_wizard_bypass(web_address: str):
     """
     response = requests.get(f"{web_address}/login", params={"from": "/"}, timeout=10)
 
-    assert "Unlock Jenkins" not in str(response.content)
+    # This should not appear since when Jenkins setup is complete, the wizard should have been
+    # bypassed.
+    assert "Unlock Jenkins" not in str(response.content), "Jenkins setup wizard not bypassed."
     assert "Welcome to Jenkins!" in str(response.content)
 
 

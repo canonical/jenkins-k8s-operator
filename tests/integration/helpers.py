@@ -7,6 +7,7 @@ import typing
 
 import jenkinsapi.jenkins
 import requests
+from juju.model import Model
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
@@ -15,6 +16,7 @@ import jenkins
 
 async def install_plugins(
     ops_test: OpsTest,
+    model: Model,
     unit: Unit,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
     plugins: typing.Iterable[str],
@@ -49,7 +51,8 @@ async def install_plugins(
     assert (
         not returncode
     ), f"Non-zero return code {returncode} received, stdout: {stdout} stderr: {stderr}"
-    # When there are connectivity issues, it prints in stderr and if not it prints in stdout.
+    # When there are connectivity issues it retries with other mirrors/links which the output gets
+    # printed in stderr and if not it prints in stdout.
     assert any(
         ("Done" in stdout, "Done" in stderr)
     ), f"Failed to install plugins via juju ssh, {stdout}, {stderr}"
@@ -57,8 +60,6 @@ async def install_plugins(
     # the library will return 503 or other status codes that are not 200, hence restart and
     # wait rather than check for status code.
     jenkins_client.safe_restart()
-    model = ops_test.model
-    assert model, "Model not initialized."
     await model.block_until(
         lambda: requests.get(jenkins_client.baseurl, timeout=10).status_code == 403,
         timeout=300,

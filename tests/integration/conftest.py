@@ -319,12 +319,12 @@ def freeze_time_fixture() -> str:
     return "2022-01-01 15:00:00"
 
 
-@pytest_asyncio.fixture(scope="function", name="prepare_restart_time_range")
-async def prepare_restart_time_range_fixture(application: Application):
+@pytest_asyncio.fixture(scope="function", name="app_with_restart_time_range")
+async def app_with_restart_time_range_fixture(application: Application):
     """Application with restart-time-range configured."""
     await application.set_config({"restart-time-range": "03-05"})
 
-    yield
+    yield application
 
     await application.reset_config(["restart-time-range"])
 
