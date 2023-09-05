@@ -86,7 +86,8 @@ async def application_fixture(
     # slow down update-status so that it doesn't intervene currently running tests
     # `with ops_test.fast_forward` is not used here since juju cleanup will cause the tests to
     # fail.
-    await model.set_config({"update-status-hook-interval": "5h"})
+    async with ops_test.fast_forward(fast_interval="5h", slow_interval="5h"):
+        pass
     yield application
 
 
