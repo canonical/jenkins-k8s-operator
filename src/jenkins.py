@@ -46,7 +46,6 @@ PLUGINS_PATH = HOME_PATH / "plugins"
 # The plugins that are required for Jenkins to work
 REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
-    "configuration-as-code",  # required to disable automatic jenkins update messages
 ]
 
 USER = "jenkins"
