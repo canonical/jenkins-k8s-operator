@@ -8,6 +8,7 @@ import functools
 import itertools
 import logging
 import re
+import textwrap
 import typing
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -783,6 +784,7 @@ def _build_dependencies_lookup(
         plugin, dependencies = match.group(1), match.group(3)
         if not dependencies:
             dependency_lookup[plugin] = ()
+            continue
         try:
             dependency_lookup[plugin] = tuple(
                 _get_plugin_name(dependency) for dependency in dependencies.split(", ")
@@ -858,11 +860,15 @@ def _set_jenkins_system_message(message: str, client: jenkinsapi.jenkins.Jenkins
         JenkinsError: if the groovy script to set system message failed.
     """
     try:
+        # escape newline character to set the message in the script as a single line string.
+        message = "\\n".join(message.split("\n"))
         client.run_groovy_script(
-            f"""
-    Jenkins j = Jenkins.instance
-    j.systemMessage = {message}
-    """
+            textwrap.dedent(
+                f"""
+                Jenkins j = Jenkins.instance
+                j.systemMessage = "{message}"
+                """
+            )
         )
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to set system message, %s", exc)
@@ -911,12 +917,6 @@ plugins.each {
     logger.debug("Removed %s", plugins_to_remove)
 
     top_level_plugins = _filter_dependent_plugins(plugins_to_remove, dependency_lookup)
-    _set_jenkins_system_message(
-        message="The following plugins have been removed by the system administrator: "
-        f"{', '.join(top_level_plugins)}\n"
-        f"To allow the plugins, please include them in the plugins configuration of the charm.",
-        client=client,
-    )
 
     try:
         safe_restart(container)
@@ -924,3 +924,10 @@ plugins.each {
     except (JenkinsError, TimeoutError) as exc:
         logger.error("Failed to restart Jenkins after removing plugins, %s", exc)
         raise
+
+    _set_jenkins_system_message(
+        message="The following plugins have been removed by the system administrator: "
+        f"{', '.join(top_level_plugins)}\n"
+        f"To allow the plugins, please include them in the plugins configuration of the charm.",
+        client=client,
+    )

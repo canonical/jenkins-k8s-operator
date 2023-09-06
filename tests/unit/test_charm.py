@@ -452,8 +452,8 @@ def test__on_update_status_not_in_time_range(
             id="Failed update jenkins status (waiting status).",
         ),
         pytest.param(
-            expected_status := ops.ActiveStatus("Failed to remove unlisted plugin."),
-            ops.ActiveStatus("Failed to get Jenkins patch version."),
+            ops.ActiveStatus("Failed to remove unlisted plugin."),
+            expected_status := ops.ActiveStatus("Failed to get Jenkins patch version."),
             expected_status,
             id="Both failed (active status)",
         ),

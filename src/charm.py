@@ -220,8 +220,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.unit.status = status.get_priority_status(
             (
-                self._remove_unlisted_plugins(container=container),
                 self._update_jenkins_version(container=container),
+                self._remove_unlisted_plugins(container=container),
             )
         )
 
