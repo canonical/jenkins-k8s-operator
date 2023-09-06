@@ -10,4 +10,7 @@
     <enableCaptcha>false</enableCaptcha>
   </securityRealm>
   <slaveAgentPort>50000</slaveAgentPort>
+  <disabledAdministrativeMonitors>
+    <string>hudson.model.UpdateCenter$CoreUpdateMonitor</string>
+  </disabledAdministrativeMonitors>
 </hudson>
