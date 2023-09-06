@@ -8,6 +8,7 @@ import functools
 import itertools
 import logging
 import re
+import textwrap
 import typing
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -21,7 +22,6 @@ import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
 import ops
 import requests
-import yaml
 from pydantic import HttpUrl
 
 import state
@@ -41,15 +41,12 @@ LAST_EXEC_VERSION_PATH = HOME_PATH / Path("jenkins.install.InstallUtil.lastExecV
 WIZARD_VERSION_PATH = HOME_PATH / Path("jenkins.install.UpgradeWizard.state")
 # The Jenkins bootstrapping config path
 CONFIG_FILE_PATH = HOME_PATH / "config.xml"
-# The Jenkins configuration-as-code plugin default config path
-JCASC_CONFIG_FILE_PATH = HOME_PATH / "jenkins.yaml"
 # The Jenkins plugins installation directory
 PLUGINS_PATH = HOME_PATH / "plugins"
 
 # The plugins that are required for Jenkins to work
 REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
-    "configuration-as-code",  # required to disable automatic jenkins update messages
 ]
 
 USER = "jenkins"
@@ -183,11 +180,9 @@ class Environment(typing.TypedDict):
 
     Attributes:
         JENKINS_HOME: The Jenkins home directory.
-        CASC_JENKINS_CONFIG: The Jenkins configuration-as-code plugin config path.
     """
 
     JENKINS_HOME: str
-    CASC_JENKINS_CONFIG: str
 
 
 def calculate_env() -> Environment:
@@ -196,9 +191,7 @@ def calculate_env() -> Environment:
     Returns:
         The dictionary mapping of environment variables for the Jenkins service.
     """
-    return Environment(
-        JENKINS_HOME=str(HOME_PATH), CASC_JENKINS_CONFIG=str(JCASC_CONFIG_FILE_PATH)
-    )
+    return Environment(JENKINS_HOME=str(HOME_PATH))
 
 
 def get_version() -> str:
@@ -253,8 +246,6 @@ def _install_configs(container: ops.Container) -> None:
     """
     with open("templates/jenkins-config.xml", encoding="utf-8") as jenkins_config_file:
         container.push(CONFIG_FILE_PATH, jenkins_config_file, user=USER, group=GROUP)
-    with open("templates/jenkins.yaml", encoding="utf-8") as jenkins_casc_config_file:
-        container.push(JCASC_CONFIG_FILE_PATH, jenkins_casc_config_file, user=USER, group=GROUP)
 
 
 def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
@@ -858,28 +849,30 @@ def _filter_dependent_plugins(
     return set(plugins) - dependent_plugins
 
 
-def _set_jenkins_system_message(message: str, container: ops.Container) -> None:
+def _set_jenkins_system_message(message: str, client: jenkinsapi.jenkins.Jenkins) -> None:
     """Set a system message on Jenkins.
 
     Args:
         message: The system message to display.
-        container: The Jenkins workload container.
+        client: The API client used to communicate with the Jenkins server.
 
     Raises:
-        ValidationError: if invalid JCasC file was encountered.
+        JenkinsError: if the groovy script to set system message failed.
     """
-    jcasc_yaml = container.pull(JCASC_CONFIG_FILE_PATH, encoding="utf-8").read()
-    config = yaml.safe_load(jcasc_yaml)
     try:
-        config["jenkins"]["systemMessage"] = message
-    except KeyError as exc:
-        logger.error(
-            "Invalid JCasC config file, expected 'jenkins' and 'systemMessage' keys not found."
+        # escape newline character to set the message in the script as a single line string.
+        message = "\\n".join(message.split("\n"))
+        client.run_groovy_script(
+            textwrap.dedent(
+                f"""
+                Jenkins j = Jenkins.instance
+                j.systemMessage = "{message}"
+                """
+            )
         )
-        raise ValidationError("Invalid JCasC config file.") from exc
-    container.push(
-        JCASC_CONFIG_FILE_PATH, yaml.dump(config), encoding="utf-8", user=USER, group=GROUP
-    )
+    except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to set system message, %s", exc)
+        raise JenkinsError("Failed to set system message.") from exc
 
 
 def remove_unlisted_plugins(
@@ -924,12 +917,6 @@ plugins.each {
     logger.debug("Removed %s", plugins_to_remove)
 
     top_level_plugins = _filter_dependent_plugins(plugins_to_remove, dependency_lookup)
-    _set_jenkins_system_message(
-        message="The following plugins have been removed by the system administrator: "
-        f"{', '.join(top_level_plugins)}\n"
-        f"To allow the plugins, please include them in the plugins configuration of the charm.",
-        container=container,
-    )
 
     try:
         safe_restart(container)
@@ -937,3 +924,10 @@ plugins.each {
     except (JenkinsError, TimeoutError) as exc:
         logger.error("Failed to restart Jenkins after removing plugins, %s", exc)
         raise
+
+    _set_jenkins_system_message(
+        message="The following plugins have been removed by the system administrator: "
+        f"{', '.join(top_level_plugins)}\n"
+        f"To allow the plugins, please include them in the plugins configuration of the charm.",
+        client=client,
+    )

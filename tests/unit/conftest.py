@@ -173,11 +173,6 @@ def container_fixture(
     password_file_path.parent.mkdir(parents=True, exist_ok=True)
     password_file_path.write_text(admin_credentials.password, encoding="utf-8")
 
-    with open("templates/jenkins.yaml", encoding="utf-8") as jenkins_casc_config_file:
-        jcasc_file_path = combine_root_paths(jenkins_root, jenkins.JCASC_CONFIG_FILE_PATH)
-        jcasc_file_path.parent.mkdir(parents=True, exist_ok=True)
-        jcasc_file_path.write_text(jenkins_casc_config_file.read(), encoding="utf-8")
-
     def cmd_handler(argv: list[str]) -> tuple[int, str, str]:
         """Handle the python command execution inside the Flask container.
 

@@ -19,7 +19,6 @@ import jenkinsapi.jenkins
 import ops
 import pytest
 import requests
-import yaml
 from ops.pebble import ExecError, ExecProcess
 
 import jenkins
@@ -141,10 +140,7 @@ def test_calculate_env():
     """
     env = jenkins.calculate_env()
 
-    assert env == {
-        "JENKINS_HOME": str(jenkins.HOME_PATH),
-        "CASC_JENKINS_CONFIG": str(jenkins.JCASC_CONFIG_FILE_PATH),
-    }
+    assert env == {"JENKINS_HOME": str(jenkins.HOME_PATH)}
 
 
 @pytest.mark.parametrize(
@@ -1336,32 +1332,33 @@ def test__get_top_level_plugins(
     assert top_level_plugins == expected_top_level_plugins
 
 
-def test__set_jenkins_system_message_error(
-    container: ops.Container, monkeypatch: pytest.MonkeyPatch
-):
+def test__set_jenkins_system_message_error(mock_client: unittest.mock.MagicMock):
     """
     arrange: given a monkeypatched yaml.safe_load function that returns an empty dictionary.
     act: when _set_jenkins_system_message is called.
-    assert: a ValidationError is raised.
+    assert: a JenkinsError is raised.
     """
-    monkeypatch.setattr(yaml, "safe_load", lambda *_args, **_kwargs: {})
+    mock_client.run_groovy_script.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
 
-    with pytest.raises(jenkins.ValidationError):
-        jenkins._set_jenkins_system_message("test", container)
+    with pytest.raises(jenkins.JenkinsError):
+        jenkins._set_jenkins_system_message("test", mock_client)
 
 
-def test__set_jenkins_system_message(container: ops.Container):
+def test__set_jenkins_system_message(mock_client: unittest.mock.MagicMock):
     """
-    arrange: given a container with jenkins.yaml (JCasC config file) and a system message.
+    arrange: given a mock_client and a system message.
     act: when _set_jenkins_system_message is called.
-    assert: the jenkins.yaml file pushed to the container has systemMessage property defined.
+    assert: the groovys script setting the Jenkins system message is called.
     """
     message = "hello world!"
-    jenkins._set_jenkins_system_message(message, container)
+    mock_client.run_groovy_script = (
+        mock_groovy_script := unittest.mock.MagicMock(
+            spec=jenkinsapi.jenkins.Jenkins.run_groovy_script
+        )
+    )
+    jenkins._set_jenkins_system_message(message, mock_client)
 
-    contents = str(container.pull(jenkins.JCASC_CONFIG_FILE_PATH, encoding="utf-8").read())
-    config = yaml.safe_load(contents)
-    assert config["jenkins"]["systemMessage"] == message
+    mock_groovy_script.assert_called()
 
 
 def test_remove_unlisted_plugins_delete_error(
