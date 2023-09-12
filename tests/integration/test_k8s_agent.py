@@ -40,6 +40,7 @@ async def test_jenkins_k8s_agent_relation(
     model: Model,
     application: Application,
     jenkins_k8s_agents: Application,
+    extra_jenkins_k8s_agents: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ):
     """
@@ -53,21 +54,32 @@ async def test_jenkins_k8s_agent_relation(
     """
     # 1. Relate jenkins-k8s charm to the jenkins-k8s-agent charm.
     await application.relate(state.AGENT_RELATION, jenkins_k8s_agents.name)
+    await application.relate(state.AGENT_RELATION, extra_jenkins_k8s_agents.name)
     await model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
+        apps=[application.name, jenkins_k8s_agents.name, extra_jenkins_k8s_agents.name],
+        wait_for_active=True,
     )
 
     # 1. Assert that the node is registered and is able to run jobs successfully.
     assert_job_success(jenkins_client, jenkins_k8s_agents.name, "k8s")
+    assert_job_success(jenkins_client, extra_jenkins_k8s_agents.name, "k8s-extra")
 
     # 2. Remove the relation
     await application.remove_relation(
         state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
     )
-    await model.wait_for_idle(apps=[application.name, jenkins_k8s_agents.name])
+    await application.remove_relation(
+        state.AGENT_RELATION, f"{extra_jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
+    )
+    await model.wait_for_idle(
+        apps=[application.name, jenkins_k8s_agents.name, extra_jenkins_k8s_agents.name]
+    )
 
     # 2. Assert that the agent nodes are deregistered from Jenkins.
-    assert not any((application.name in key for key in jenkins_client.get_nodes().keys()))
+    assert not any((jenkins_k8s_agents.name in key for key in jenkins_client.get_nodes().keys()))
+    assert not any(
+        (extra_jenkins_k8s_agents.name in key for key in jenkins_client.get_nodes().keys())
+    )
 
 
 @pytest.mark.usefixtures("app_k8s_deprecated_agent_related")

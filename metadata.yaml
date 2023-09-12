@@ -33,10 +33,16 @@ tags:
 containers:
   jenkins:
     resource: jenkins-image
+  telemetry:
+    resource: opentelemetry-collector
 resources:
   jenkins-image:
     type: oci-image
     description: OCI image for Jenkins
+  opentelemetry-collector:
+    type: oci-image
+    description: OCI image for opentelemetry-collector
+    upstream-source: otel/opentelemetry-collector:0.84.0
 requires:
   agent-deprecated:
     interface: jenkins-slave
@@ -44,3 +50,4 @@ requires:
   agent:
     interface: jenkins_agent_v0
     optional: true
+    limit: 2
