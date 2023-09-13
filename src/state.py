@@ -134,26 +134,37 @@ def _is_remote_unit(app_name: str, unit: ops.Unit) -> bool:
 
 
 def _get_agent_meta_map_from_relation(
-    relation: typing.Optional[ops.Relation], current_app_name: str
+    relations: typing.List[ops.Relation], current_app_name: str
 ) -> typing.Optional[typing.Mapping[str, typing.Optional[AgentMeta]]]:
     """Return a mapping of unit name to AgentMetadata from agent or deprecated agent relation.
 
     Args:
-        relation: The agent or deprecated agent relation.
+        relations: The agent or deprecated agent relations.
         current_app_name: Current application name, i.e. "jenkins-k8s-operator".
 
     Returns:
         A mapping of ops.Unit to AgentMetadata.
     """
-    if not relation:
+    if not relations:
         return None
-    remote_units = filter(functools.partial(_is_remote_unit, current_app_name), relation.units)
-    if relation.name == DEPRECATED_AGENT_RELATION:
-        return {
-            unit.name: AgentMeta.from_deprecated_agent_relation(relation.data[unit])
-            for unit in remote_units
-        }
-    return {unit.name: AgentMeta.from_agent_relation(relation.data[unit]) for unit in remote_units}
+    unit_metadata_mapping = {}
+    for relation in relations:
+        remote_units = filter(functools.partial(_is_remote_unit, current_app_name), relation.units)
+        if relation.name == DEPRECATED_AGENT_RELATION:
+            unit_metadata_mapping.update(
+                {
+                    unit.name: AgentMeta.from_deprecated_agent_relation(relation.data[unit])
+                    for unit in remote_units
+                }
+            )
+            continue
+        unit_metadata_mapping.update(
+            {
+                unit.name: AgentMeta.from_agent_relation(relation.data[unit])
+                for unit in remote_units
+            }
+        )
+    return unit_metadata_mapping
 
 
 class ProxyConfig(BaseModel):
@@ -238,7 +249,7 @@ class State:
 
         try:
             agent_relation_meta_map = _get_agent_meta_map_from_relation(
-                charm.model.get_relation(AGENT_RELATION), charm.app.name
+                charm.model.relations[AGENT_RELATION], charm.app.name
             )
         except ValidationError as exc:
             logger.error(
@@ -250,7 +261,7 @@ class State:
 
         try:
             deprecated_agent_meta_map = _get_agent_meta_map_from_relation(
-                charm.model.get_relation(DEPRECATED_AGENT_RELATION), charm.app.name
+                charm.model.relations[DEPRECATED_AGENT_RELATION], charm.app.name
             )
         except ValidationError as exc:
             logger.error(

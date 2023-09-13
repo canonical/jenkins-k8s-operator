@@ -188,6 +188,22 @@ async def app_k8s_agent_related_fixture(
     yield application
 
 
+@pytest_asyncio.fixture(scope="function", name="extra_jenkins_k8s_agents")
+async def extra_jenkins_k8s_agents_fixture(
+    model: Model,
+) -> typing.AsyncGenerator[Application, None]:
+    """The Jenkins k8s agent."""
+    agent_app: Application = await model.deploy(
+        "jenkins-agent-k8s",
+        config={"jenkins_agent_labels": "k8s-extra"},
+        channel="latest/edge",
+        application_name="jenkins-agentk8s-extra",
+    )
+    await model.wait_for_idle(apps=[agent_app.name], status="blocked")
+
+    yield agent_app
+
+
 @pytest_asyncio.fixture(scope="function", name="app_k8s_deprecated_agent_related")
 async def app_k8s_deprecated_agent_related_fixture(
     jenkins_k8s_agents: Application,
