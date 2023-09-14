@@ -132,7 +132,7 @@ def dashboard_exist(loggedin_session: requests.Session, unit_address: str):
     dashboards = loggedin_session.get(
         f"http://{unit_address}:3000/api/search",
         timeout=10,
-        params={"query": "Jenkins "},
+        params={"query": "Jenkins: Performance and Health Overview"},
     ).json()
     return len(dashboards)
 
