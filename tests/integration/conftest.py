@@ -583,7 +583,7 @@ async def prometheus_related_fixture(application: Application):
         status="active",
         apps=[prometheus.name, application.name],
         timeout=20 * 60,
-        idle_period=60,
+        idle_period=30,
         raise_on_error=False,
     )
     return prometheus
@@ -601,7 +601,7 @@ async def loki_related_fixture(application: Application):
         status="active",
         apps=[loki.name, application.name],
         timeout=20 * 60,
-        idle_period=60,
+        idle_period=30,
         raise_on_error=False,
     )
     return loki
@@ -619,7 +619,7 @@ async def grafana_related_fixture(application: Application):
         status="active",
         apps=[grafana.name, application.name],
         timeout=20 * 60,
-        idle_period=60,
+        idle_period=30,
         raise_on_error=False,
     )
     return grafana
