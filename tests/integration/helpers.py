@@ -194,6 +194,9 @@ async def wait_for(
 
     Raises:
         TimeoutError: if the callback function did not return a truthy value within timeout.
+
+    Returns:
+        The result of the function if any.
     """
     deadline = time.time() + timeout
     is_awaitable = inspect.iscoroutinefunction(func)
