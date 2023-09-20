@@ -2,7 +2,7 @@
 
 ### agent
 
-_Interface_: jenkins_agent_v0  
+_Interface_: jenkins_agent_v0
 _Supported charms_: [jenkins-agent-k8s](https://charmhub.io/jenkins-agent-k8s),
 [jenkins-agent](https://charmhub.io/jenkins-agent)
 
@@ -28,7 +28,7 @@ localhost
 
 ### logging
 
-_Interface_: loki_push_api  
+_Interface_: loki_push_api
 _Supported charms_: [loki-k8s](https://charmhub.io/loki-k8s)
 
 Logging relation provides a way to scrape logs produced from the Jenkins server charm. The Jenkins 
@@ -40,7 +40,7 @@ Example agent relate command: `juju relate jenkins-k8s:logging loki-k8s:logging`
 
 ### metrics-endpoint
 
-_Interface_: prometheus_scrape  
+_Interface_: prometheus_scrape
 _Supported charms_: [prometheus-k8s](https://charmhub.io/prometheus-k8s)
 
 Metrics-endpoint relation allows scraping the `/prometheus` endpoint provided by Jenkins
@@ -55,7 +55,7 @@ Example metrics-endpoint relate command:
 
 ### grafana-dashboard
 
-_Interface_: grafana_dashboard  
+_Interface_: grafana_dashboard
 _Supported charms_: [grafana-k8s](https://charmhub.io/grafana-k8s)
 
 Grafana-dashboard relation enables quick dashboard access already tailored to fit the needs of 
