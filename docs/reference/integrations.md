@@ -65,5 +65,5 @@ Performance and Health Overview” under the General section of the dashboard br
 (`/dashboards`). Modifications to the dashboard can be made but will not be persisted upon
 restart/redeployment of the charm.
 
-Grafana-Prometheus relate command: juju relate grafana-k8s:grafana-source prometheus-k8s:grafana-source
-Grafana-dashboard relate command: juju relate jenkins-k8s:grafana-dashboard grafana-k8s:grafana-dashboard
+Grafana-Prometheus relate command: `juju relate grafana-k8s:grafana-source prometheus-k8s:grafana-source`
+Grafana-dashboard relate command: `juju relate jenkins-k8s:grafana-dashboard grafana-k8s:grafana-dashboard`
