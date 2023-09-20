@@ -50,7 +50,7 @@ only be scraped by Prometheus once the relation becomes active. For more informa
 metrics exposed, please refer to the
 [`prometheus` plugin documentation](https://plugins.jenkins.io/prometheus/).
 
-Example agent relate command: 
+Example metrics-endpoint relate command: 
 `juju relate jenkins-k8s:metrics-endpoint prometheus-k8s:metrics-endpoint`
 
 ### grafana-dashboard
