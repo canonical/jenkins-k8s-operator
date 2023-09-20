@@ -23,8 +23,8 @@ async def test_prometheus_integration(
     unit_web_client: UnitWebClient, prometheus_related: Application
 ):
     """
-    arrange: none.
-    act: deploy the WordPress charm and relations established with prometheus.
+    arrange: deploy the Jenkins charm and establish relations with prometheus.
+    act: send a request to the metrics endpoint (/prometheus).
     assert: prometheus metrics endpoint for prometheus is active and prometheus has active scrape
         targets.
     """
@@ -75,7 +75,7 @@ async def test_loki_integration(
     kube_core_client: CoreV1Api,
 ):
     """
-    arrange: after WordPress charm has been deployed and relations established.
+    arrange: after Jenkins charm has been deployed and relations established.
     act: loki charm joins relation
     assert: loki joins relation successfully, logs are being output to container and to files for
         loki to scrape.
@@ -120,7 +120,7 @@ def datasources_exist(
 
 
 def dashboard_exist(loggedin_session: requests.Session, unit_address: str):
-    """Checks if the WordPress dashboard is registered in Grafana.
+    """Checks if the Jenkins dashboard is registered in Grafana.
 
     Args:
         loggedin_session: Requests session that's authorized to make API calls.
@@ -142,9 +142,9 @@ async def test_grafana_integration(
     grafana_related: Application,
 ):
     """
-    arrange: after WordPress charm has been deployed and relations established among cos.
+    arrange: after Jenkins charm has been deployed and relations established with Grafana.
     act: grafana charm joins relation
-    assert: grafana wordpress dashboard can be found
+    assert: grafana Jenkins dashboard can be found
     """
     model: Model = application.model
     status: FullStatus = await model.get_status(filters=[grafana_related.name])
