@@ -201,9 +201,19 @@ async def wait_for(
     deadline = time.time() + timeout
     is_awaitable = inspect.iscoroutinefunction(func)
     while time.time() < deadline:
-        if is_awaitable and (result := await func()):
-            return result
-        if result := func():
-            return result
+        if is_awaitable:
+            if result := await func():
+                return result
+        else:
+            if result := func():
+                return result
         time.sleep(check_interval)
+
+    # final check before raising TimeoutError.
+    if is_awaitable:
+        if result := await func():
+            return result
+        else:
+            if result := func():
+                return result
     raise TimeoutError()
