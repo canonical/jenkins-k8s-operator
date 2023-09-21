@@ -213,7 +213,7 @@ async def wait_for(
     if is_awaitable:
         if result := await func():
             return result
-        else:
-            if result := func():
-                return result
+    else:
+        if result := func():
+            return result
     raise TimeoutError()
