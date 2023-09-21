@@ -45,3 +45,10 @@ requires:
     interface: jenkins_agent_v0
     optional: true
     limit: 2
+  logging:
+    interface: loki_push_api
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+  grafana-dashboard:
+    interface: grafana_dashboard
