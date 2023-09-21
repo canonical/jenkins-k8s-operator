@@ -11,6 +11,7 @@ import typing
 import ops
 
 import agent
+import cos
 import jenkins
 import status
 import timerange
@@ -45,6 +46,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             raise RuntimeError("Invalid relation data received.") from exc
 
         self.agent_observer = agent.Observer(self, self.state)
+        self.cos_observer = cos.Observer(self)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.update_status, self._on_update_status)
@@ -66,6 +68,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     "override": "replace",
                     "summary": "jenkins",
                     "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
+                    f"-D{jenkins.SYSTEM_PROPERTY_LOGGING} "
                     f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war",
                     "startup": "enabled",
                     # TypedDict and Dict[str,str] are not compatible.
