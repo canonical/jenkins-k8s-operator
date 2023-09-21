@@ -39,3 +39,18 @@ class UnitWebClient:
     unit: Unit
     web: str
     client: jenkinsapi.jenkins.Jenkins
+
+
+@dataclasses.dataclass
+class TestLDAPSettings:
+    """The testing LDAP settings.
+
+    Attributes:
+        CONTAINER_PORT: The LDAP server container port.
+        USER_NAME: The LDAP test user.
+        USER_PASSWORD: The LDAP test user password.
+    """
+
+    CONTAINER_PORT: int
+    USER_NAME: str
+    USER_PASSWORD: str

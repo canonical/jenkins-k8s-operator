@@ -10,7 +10,7 @@ from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
 from .helpers import gen_git_test_job_xml, install_plugins
-from .types_ import UnitWebClient
+from .types_ import TestLDAPSettings, UnitWebClient
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -73,3 +73,67 @@ async def test_git_plugin_k8s_agent(ops_test: OpsTest, unit_web_client: UnitWebC
     assert (
         check_url_content := str(check_url_res.content, encoding="utf-8")
     ) == "<div/>", f"Non-empty error message returned, {check_url_content}"
+
+
+@pytest.mark.usefixtures("app_with_allowed_plugins")
+async def test_ldap_plugin(
+    ops_test: OpsTest,
+    unit_web_client: UnitWebClient,
+    ldap_server_ip: str,
+    ldap_settings: TestLDAPSettings,
+):
+    """
+    arrange: given an ldap server with user setup and ldap plugin installed on Jenkins server.
+    act: when ldap plugin is configured and the user is queried.
+    assert: the user is authenticated successfully.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("ldap",))
+
+    # This is same as: Manage Jenkins > Configure Global Security > Authentication >
+    # Security Realm > LDAP > Test LDAP Settings.
+    res = unit_web_client.client.requester.post_url(
+        f"{unit_web_client.client.baseurl}/manage/descriptorByName/hudson.security.LDAPSecurityRealm/validate",
+        {
+            "securityRealm": {
+                "configurations": {
+                    "server": f"ldap://{ldap_server_ip}:{ldap_settings.CONTAINER_PORT}",
+                    "rootDN": "dc=example,dc=org",  # default example server settings.
+                    "inhibitInferRootDN": False,
+                    "userSearchBase": "",
+                    "userSearch": "uid={0}",
+                    "groupSearchBase": "",
+                    "groupSearchFilter": "",
+                    "groupMembershipStrategy": {
+                        "value": "1",
+                        "filter": "",
+                        "stapler-class": "jenkins.security.plugins.ldap.FromGroupSearchLDAPGroupMembershipStrategy",
+                        "$class": "jenkins.security.plugins.ldap.FromGroupSearchLDAPGroupMembershipStrategy",
+                    },
+                    "managerDN": "",
+                    "managerPasswordSecret": "",
+                    "$redact": "managerPasswordSecret",
+                    "displayNameAttributeName": "displayname",
+                    "mailAddressAttributeName": "mail",
+                    "ignoreIfUnavailable": False,
+                },
+                "": ["0", "0"],
+                "userIdStrategy": {
+                    "stapler-class": "jenkins.model.IdStrategy$CaseInsensitive",
+                    "$class": "jenkins.model.IdStrategy$CaseInsensitive",
+                },
+                "groupIdStrategy": {
+                    "stapler-class": "jenkins.model.IdStrategy$CaseInsensitive",
+                    "$class": "jenkins.model.IdStrategy$CaseInsensitive",
+                },
+                "disableMailAddressResolver": False,
+                "disableRolePrefixing": True,
+                "stapler-class": "hudson.security.LDAPSecurityRealm",
+                "$class": "hudson.security.LDAPSecurityRealm",
+            },
+            "testUser": ldap_settings.USER_NAME,
+            "testPassword": ldap_settings.USER_PASSWORD,
+        },
+    )
+    assert "User lookup: successful" in str(
+        res.content, encoding="utf-8"
+    ), f"User lookup unsuccessful, {res.content}"

@@ -6,7 +6,9 @@ import textwrap
 import typing
 
 import jenkinsapi.jenkins
+import kubernetes.client
 import requests
+from juju.model import Model
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
@@ -176,3 +178,30 @@ def gen_git_test_job_xml(node_label: str):
         </project>
         """
     )
+
+
+async def get_pod_ip(model: Model, kube_core_client: kubernetes.client.CoreV1Api, app_label: str):
+    """Get pod IP of a kubernetes application."""
+
+    def get_ready_pod_ip() -> str | None:
+        """Get pod IP when ready.
+
+        Returns:
+            Pod IP when pod is ready. None otherwise.
+        """
+        podlist: kubernetes.client.V1PodList = kube_core_client.list_namespaced_pod(
+            namespace=model.name, label_selector=f"app={app_label}"
+        )
+        pods: list[kubernetes.client.V1Pod] = podlist.items
+        for pod in pods:
+            status: kubernetes.client.V1PodStatus = pod.status
+            if status.conditions is None:
+                return None
+            for condition in status.conditions:
+                if condition.type == "Ready" and condition.status == "True":
+                    return status.pod_ip
+        return None
+
+    await model.block_until(get_ready_pod_ip, timeout=300, wait_period=5)
+
+    return typing.cast(str, get_ready_pod_ip())
