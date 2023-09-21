@@ -572,13 +572,12 @@ async def ldap_server_fixture(
         image_pull_policy="IfNotPresent",
         ports=[
             kubernetes.client.V1ContainerPort(
-                container_port=ldap_settings.CONTAINER_PORT, host_port=ldap_settings.CONTAINER_PORT
+                container_port=ldap_settings.CONTAINER_PORT
             )
         ],
-        args=["ANY"],
         env=[
             kubernetes.client.V1EnvVar(name="LDAP_ADMIN_USERNAME", value="admin"),
-            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_PASSWORD", value="adminpassword"),
+            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_PASSWORD", value=secrets.token_hex(16)),
             kubernetes.client.V1EnvVar(name="LDAP_USERS", value=ldap_settings.USER_NAME),
             kubernetes.client.V1EnvVar(name="LDAP_PASSWORDS", value=ldap_settings.USER_PASSWORD),
         ],

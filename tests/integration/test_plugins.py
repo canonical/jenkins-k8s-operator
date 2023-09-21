@@ -91,49 +91,51 @@ async def test_ldap_plugin(
 
     # This is same as: Manage Jenkins > Configure Global Security > Authentication >
     # Security Realm > LDAP > Test LDAP Settings.
+    data = {
+        "securityRealm": {
+            "configurations": {
+                "server": f"ldap://{ldap_server_ip}:{ldap_settings.CONTAINER_PORT}",
+                "rootDN": "dc=example,dc=org",  # default example server settings.
+                "inhibitInferRootDN": False,
+                "userSearchBase": "",
+                "userSearch": "uid={0}",
+                "groupSearchBase": "",
+                "groupSearchFilter": "",
+                "groupMembershipStrategy": {
+                    "value": "1",
+                    "filter": "",
+                    "stapler-class": "jenkins.security.plugins.ldap.FromGroupSearchLDAPGroupMembershipStrategy",
+                    "$class": "jenkins.security.plugins.ldap.FromGroupSearchLDAPGroupMembershipStrategy",
+                },
+                "managerDN": "",
+                "managerPasswordSecret": "",
+                "$redact": "managerPasswordSecret",
+                "displayNameAttributeName": "displayname",
+                "mailAddressAttributeName": "mail",
+                "ignoreIfUnavailable": False,
+            },
+            "": ["0", "0"],
+            "userIdStrategy": {
+                "stapler-class": "jenkins.model.IdStrategy$CaseInsensitive",
+                "$class": "jenkins.model.IdStrategy$CaseInsensitive",
+            },
+            "groupIdStrategy": {
+                "stapler-class": "jenkins.model.IdStrategy$CaseInsensitive",
+                "$class": "jenkins.model.IdStrategy$CaseInsensitive",
+            },
+            "disableMailAddressResolver": False,
+            "disableRolePrefixing": True,
+            "stapler-class": "hudson.security.LDAPSecurityRealm",
+            "$class": "hudson.security.LDAPSecurityRealm",
+        },
+        "testUser": ldap_settings.USER_NAME,
+        "testPassword": ldap_settings.USER_PASSWORD,
+    }
     res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.client.baseurl}/manage/descriptorByName/hudson.security.LDAPSecurityRealm/validate",
-        {
-            "securityRealm": {
-                "configurations": {
-                    "server": f"ldap://{ldap_server_ip}:{ldap_settings.CONTAINER_PORT}",
-                    "rootDN": "dc=example,dc=org",  # default example server settings.
-                    "inhibitInferRootDN": False,
-                    "userSearchBase": "",
-                    "userSearch": "uid={0}",
-                    "groupSearchBase": "",
-                    "groupSearchFilter": "",
-                    "groupMembershipStrategy": {
-                        "value": "1",
-                        "filter": "",
-                        "stapler-class": "jenkins.security.plugins.ldap.FromGroupSearchLDAPGroupMembershipStrategy",
-                        "$class": "jenkins.security.plugins.ldap.FromGroupSearchLDAPGroupMembershipStrategy",
-                    },
-                    "managerDN": "",
-                    "managerPasswordSecret": "",
-                    "$redact": "managerPasswordSecret",
-                    "displayNameAttributeName": "displayname",
-                    "mailAddressAttributeName": "mail",
-                    "ignoreIfUnavailable": False,
-                },
-                "": ["0", "0"],
-                "userIdStrategy": {
-                    "stapler-class": "jenkins.model.IdStrategy$CaseInsensitive",
-                    "$class": "jenkins.model.IdStrategy$CaseInsensitive",
-                },
-                "groupIdStrategy": {
-                    "stapler-class": "jenkins.model.IdStrategy$CaseInsensitive",
-                    "$class": "jenkins.model.IdStrategy$CaseInsensitive",
-                },
-                "disableMailAddressResolver": False,
-                "disableRolePrefixing": True,
-                "stapler-class": "hudson.security.LDAPSecurityRealm",
-                "$class": "hudson.security.LDAPSecurityRealm",
-            },
-            "testUser": ldap_settings.USER_NAME,
-            "testPassword": ldap_settings.USER_PASSWORD,
-        },
+        json=data,
     )
+
     assert "User lookup: successful" in str(
         res.content, encoding="utf-8"
     ), f"User lookup unsuccessful, {res.content}"
