@@ -568,7 +568,7 @@ async def ldap_server_fixture(
     """Testing LDAP server pod."""
     container = kubernetes.client.V1Container(
         name="ldap",
-        image="bitnami/openldap:latest",
+        image="bitnami/openldap:2.5.16-debian-11-r46",
         image_pull_policy="IfNotPresent",
         ports=[kubernetes.client.V1ContainerPort(container_port=ldap_settings.container_port)],
         env=[
