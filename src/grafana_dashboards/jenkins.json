@@ -978,7 +978,7 @@
         }
       ],
       "thresholds": "0,0",
-      "title": "Sucessful Jobs",
+      "title": "Successful Jobs",
       "type": "singlestat",
       "valueFontSize": "150%",
       "valueMaps": [
