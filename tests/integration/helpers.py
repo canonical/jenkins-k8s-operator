@@ -183,7 +183,16 @@ def gen_git_test_job_xml(node_label: str):
 
 
 async def get_pod_ip(model: Model, kube_core_client: kubernetes.client.CoreV1Api, app_label: str):
-    """Get pod IP of a kubernetes application."""
+    """Get pod IP of a kubernetes application.
+
+    Args:
+        model: The juju model under test.
+        kube_core_client: The Kubernetes V1 client.
+        app_label: Target pod's app label.
+
+    Returns:
+        The IP of the pod.
+    """
 
     def get_ready_pod_ip() -> str | None:
         """Get pod IP when ready.
@@ -207,6 +216,7 @@ async def get_pod_ip(model: Model, kube_core_client: kubernetes.client.CoreV1Api
     await model.block_until(get_ready_pod_ip, timeout=300, wait_period=5)
 
     return typing.cast(str, get_ready_pod_ip())
+
 
 async def wait_for(
     func: typing.Callable[[], typing.Union[typing.Awaitable, typing.Any]],

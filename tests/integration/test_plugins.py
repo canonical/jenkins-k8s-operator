@@ -94,7 +94,7 @@ async def test_ldap_plugin(
     data = {
         "securityRealm": {
             "configurations": {
-                "server": f"ldap://{ldap_server_ip}:{ldap_settings.CONTAINER_PORT}",
+                "server": f"ldap://{ldap_server_ip}:{ldap_settings.container_port}",
                 "rootDN": "dc=example,dc=org",  # default example server settings.
                 "inhibitInferRootDN": False,
                 "userSearchBase": "",
@@ -104,8 +104,10 @@ async def test_ldap_plugin(
                 "groupMembershipStrategy": {
                     "value": "1",
                     "filter": "",
-                    "stapler-class": "jenkins.security.plugins.ldap.FromGroupSearchLDAPGroupMembershipStrategy",
-                    "$class": "jenkins.security.plugins.ldap.FromGroupSearchLDAPGroupMembershipStrategy",
+                    "stapler-class": "jenkins.security.plugins.ldap"
+                    ".FromGroupSearchLDAPGroupMembershipStrategy",
+                    "$class": "jenkins.security.plugins.ldap"
+                    ".FromGroupSearchLDAPGroupMembershipStrategy",
                 },
                 "managerDN": "",
                 "managerPasswordSecret": "",
@@ -128,11 +130,12 @@ async def test_ldap_plugin(
             "stapler-class": "hudson.security.LDAPSecurityRealm",
             "$class": "hudson.security.LDAPSecurityRealm",
         },
-        "testUser": ldap_settings.USER_NAME,
-        "testPassword": ldap_settings.USER_PASSWORD,
+        "testUser": ldap_settings.username,
+        "testPassword": ldap_settings.password,
     }
     res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.client.baseurl}/manage/descriptorByName/hudson.security.LDAPSecurityRealm/validate",
+        f"{unit_web_client.client.baseurl}/manage/descriptorByName/hudson.security"
+        ".LDAPSecurityRealm/validate",
         json=data,
     )
 

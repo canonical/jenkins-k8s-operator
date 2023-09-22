@@ -46,11 +46,11 @@ class TestLDAPSettings:
     """The testing LDAP settings.
 
     Attributes:
-        CONTAINER_PORT: The LDAP server container port.
-        USER_NAME: The LDAP test user.
-        USER_PASSWORD: The LDAP test user password.
+        container_port: The LDAP server container port.
+        username: The LDAP test user.
+        password: The LDAP test user password.
     """
 
-    CONTAINER_PORT: int
-    USER_NAME: str
-    USER_PASSWORD: str
+    container_port: int
+    username: str
+    password: str

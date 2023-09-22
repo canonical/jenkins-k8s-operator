@@ -555,9 +555,9 @@ async def app_with_allowed_plugins_fixture(
 def ldap_settings_fixture() -> TestLDAPSettings:
     """LDAP user for testing."""
     return TestLDAPSettings(
-        CONTAINER_PORT=1389,
-        USER_NAME="customuser",
-        USER_PASSWORD=secrets.token_hex(16),
+        container_port=1389,
+        username="customuser",
+        password=secrets.token_hex(16),
     )
 
 
@@ -570,16 +570,12 @@ async def ldap_server_fixture(
         name="ldap",
         image="bitnami/openldap:latest",
         image_pull_policy="IfNotPresent",
-        ports=[
-            kubernetes.client.V1ContainerPort(
-                container_port=ldap_settings.CONTAINER_PORT
-            )
-        ],
+        ports=[kubernetes.client.V1ContainerPort(container_port=ldap_settings.container_port)],
         env=[
             kubernetes.client.V1EnvVar(name="LDAP_ADMIN_USERNAME", value="admin"),
             kubernetes.client.V1EnvVar(name="LDAP_ADMIN_PASSWORD", value=secrets.token_hex(16)),
-            kubernetes.client.V1EnvVar(name="LDAP_USERS", value=ldap_settings.USER_NAME),
-            kubernetes.client.V1EnvVar(name="LDAP_PASSWORDS", value=ldap_settings.USER_PASSWORD),
+            kubernetes.client.V1EnvVar(name="LDAP_USERS", value=ldap_settings.username),
+            kubernetes.client.V1EnvVar(name="LDAP_PASSWORDS", value=ldap_settings.password),
         ],
     )
     template = kubernetes.client.V1PodTemplateSpec(
@@ -614,6 +610,7 @@ async def ldap_server_ip_fixture(
     metadata: kubernetes.client.V1ObjectMeta = template.metadata
 
     return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
+
 
 @pytest_asyncio.fixture(scope="module", name="prometheus_related")
 async def prometheus_related_fixture(application: Application):
