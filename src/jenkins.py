@@ -43,10 +43,15 @@ WIZARD_VERSION_PATH = HOME_PATH / Path("jenkins.install.UpgradeWizard.state")
 CONFIG_FILE_PATH = HOME_PATH / "config.xml"
 # The Jenkins plugins installation directory
 PLUGINS_PATH = HOME_PATH / "plugins"
+# The Jenkins logging configuration path
+LOGGING_CONFIG_PATH = HOME_PATH / "logging.properties"
+# The Jenkins logging path as defined in templates/logging.properties file
+LOGGING_PATH = HOME_PATH / "jenkins.log"
 
 # The plugins that are required for Jenkins to work
 REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
+    "prometheus",  # required for COS integration
 ]
 
 USER = "jenkins"
@@ -60,6 +65,8 @@ WAR_DOWNLOAD_URL = "https://updates.jenkins.io/download/war"
 
 # Java system property to run Jenkins in headless mode
 SYSTEM_PROPERTY_HEADLESS = "java.awt.headless=true"
+# Java system property to load logging configuration from file
+SYSTEM_PROPERTY_LOGGING = f"java.util.logging.config.file={LOGGING_CONFIG_PATH}"
 
 
 class JenkinsError(Exception):
@@ -246,6 +253,8 @@ def _install_configs(container: ops.Container) -> None:
     """
     with open("templates/jenkins-config.xml", encoding="utf-8") as jenkins_config_file:
         container.push(CONFIG_FILE_PATH, jenkins_config_file, user=USER, group=GROUP)
+    with open("templates/logging.properties", encoding="utf-8") as jenkins_logging_config_file:
+        container.push(LOGGING_CONFIG_PATH, jenkins_logging_config_file, user=USER, group=GROUP)
 
 
 def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:

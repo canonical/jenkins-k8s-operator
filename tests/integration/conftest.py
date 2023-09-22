@@ -614,3 +614,56 @@ async def ldap_server_ip_fixture(
     metadata: kubernetes.client.V1ObjectMeta = template.metadata
 
     return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
+
+@pytest_asyncio.fixture(scope="module", name="prometheus_related")
+async def prometheus_related_fixture(application: Application):
+    """The prometheus-k8s application related to Jenkins via metrics-endpoint relation."""
+    prometheus = await application.model.deploy("prometheus-k8s", channel="1.0/stable", trust=True)
+    await application.model.wait_for_idle(
+        status="active", apps=[prometheus.name], raise_on_error=False, timeout=30 * 60
+    )
+    await application.model.add_relation(f"{application.name}:metrics-endpoint", prometheus.name)
+    await application.model.wait_for_idle(
+        status="active",
+        apps=[prometheus.name, application.name],
+        timeout=20 * 60,
+        idle_period=30,
+        raise_on_error=False,
+    )
+    return prometheus
+
+
+@pytest_asyncio.fixture(scope="module", name="loki_related")
+async def loki_related_fixture(application: Application):
+    """The loki-k8s application related to Jenkins via logging relation."""
+    loki = await application.model.deploy("loki-k8s", channel="1.0/stable", trust=True)
+    await application.model.wait_for_idle(
+        status="active", apps=[loki.name], raise_on_error=False, timeout=30 * 60
+    )
+    await application.model.add_relation(f"{application.name}:logging", loki.name)
+    await application.model.wait_for_idle(
+        status="active",
+        apps=[loki.name, application.name],
+        timeout=20 * 60,
+        idle_period=30,
+        raise_on_error=False,
+    )
+    return loki
+
+
+@pytest_asyncio.fixture(scope="module", name="grafana_related")
+async def grafana_related_fixture(application: Application):
+    """The grafana-k8s application related to Jenkins via grafana-dashboard relation."""
+    grafana = await application.model.deploy("grafana-k8s", channel="1.0/stable", trust=True)
+    await application.model.wait_for_idle(
+        status="active", apps=[grafana.name], raise_on_error=False, timeout=30 * 60
+    )
+    await application.model.add_relation(f"{application.name}:grafana-dashboard", grafana.name)
+    await application.model.wait_for_idle(
+        status="active",
+        apps=[grafana.name, application.name],
+        timeout=20 * 60,
+        idle_period=30,
+        raise_on_error=False,
+    )
+    return grafana
