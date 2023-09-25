@@ -164,7 +164,7 @@ async def test_matrix_combinations_parameter_plugin(
     matrix_combinations_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
         "matrix-combinations-parameter"
     ]
-    environment = Environment(loader=FileSystemLoader("tests/integration/files/"))
+    environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
     template = environment.get_template("matrix_combinations_plugin_job_xml.j2")
     job_xml = template.render(
         matrix_project_plugin_version=matrix_project_plugin.version,
