@@ -29,7 +29,8 @@ import jenkins
 import state
 
 from .constants import ALLOWED_PLUGINS
-from .types_ import ModelAppUnit, UnitWebClient
+from .helpers import get_pod_ip
+from .types_ import ModelAppUnit, TestLDAPSettings, UnitWebClient
 
 
 @pytest.fixture(scope="module", name="model")
@@ -455,28 +456,7 @@ async def tinyproxy_ip_fixture(
     template: kubernetes.client.V1PodTemplateSpec = spec.template
     metadata: kubernetes.client.V1ObjectMeta = template.metadata
 
-    def get_tinyproxy_ip() -> str | None:
-        """Get tinyproxy pod IP when ready.
-
-        Returns:
-            Pod IP when pod is ready. None otherwise.
-        """
-        podlist: kubernetes.client.V1PodList = kube_core_client.list_namespaced_pod(
-            namespace=model.name, label_selector=f"app={metadata.labels['app']}"
-        )
-        pods: list[kubernetes.client.V1Pod] = podlist.items
-        for pod in pods:
-            status: kubernetes.client.V1PodStatus = pod.status
-            if status.conditions is None:
-                return None
-            for condition in status.conditions:
-                if condition.type == "Ready" and condition.status == "True":
-                    return status.pod_ip
-        return None
-
-    await model.block_until(get_tinyproxy_ip, timeout=300, wait_period=5)
-
-    return typing.cast(str, get_tinyproxy_ip())
+    return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
 
 
 @pytest_asyncio.fixture(scope="module", name="model_with_proxy")
@@ -569,6 +549,67 @@ async def app_with_allowed_plugins_fixture(
     yield application
 
     await application.reset_config(to_default=["allowed-plugins"])
+
+
+@pytest.fixture(scope="module", name="ldap_settings")
+def ldap_settings_fixture() -> TestLDAPSettings:
+    """LDAP user for testing."""
+    return TestLDAPSettings(
+        container_port=1389,
+        username="customuser",
+        password=secrets.token_hex(16),
+    )
+
+
+@pytest_asyncio.fixture(scope="module", name="ldap_server")
+async def ldap_server_fixture(
+    model: Model, kube_apps_client: kubernetes.client.AppsV1Api, ldap_settings: TestLDAPSettings
+):
+    """Testing LDAP server pod."""
+    container = kubernetes.client.V1Container(
+        name="ldap",
+        image="bitnami/openldap:2.5.16-debian-11-r46",
+        image_pull_policy="IfNotPresent",
+        ports=[kubernetes.client.V1ContainerPort(container_port=ldap_settings.container_port)],
+        env=[
+            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_USERNAME", value="admin"),
+            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_PASSWORD", value=secrets.token_hex(16)),
+            kubernetes.client.V1EnvVar(name="LDAP_USERS", value=ldap_settings.username),
+            kubernetes.client.V1EnvVar(name="LDAP_PASSWORDS", value=ldap_settings.password),
+        ],
+    )
+    template = kubernetes.client.V1PodTemplateSpec(
+        metadata=kubernetes.client.V1ObjectMeta(labels={"app": "ldap"}),
+        spec=kubernetes.client.V1PodSpec(containers=[container]),
+    )
+    spec = kubernetes.client.V1DeploymentSpec(
+        selector=kubernetes.client.V1LabelSelector(match_labels={"app": "ldap"}),
+        template=template,
+    )
+    daemonset = kubernetes.client.V1Deployment(
+        api_version="apps/v1",
+        kind="Deployment",
+        metadata=kubernetes.client.V1ObjectMeta(name="ldap"),
+        spec=spec,
+    )
+    return kube_apps_client.create_namespaced_deployment(namespace=model.name, body=daemonset)
+
+
+@pytest_asyncio.fixture(scope="module", name="ldap_server_ip")
+async def ldap_server_ip_fixture(
+    model: Model,
+    kube_core_client: kubernetes.client.CoreV1Api,
+    ldap_server: kubernetes.client.V1Deployment,
+) -> str:
+    """The LDAP deployment pod ip.
+
+    Localhost is, by default, added to NO_PROXY by juju, hence the pod ip has to be used.
+    """
+    spec: kubernetes.client.V1DeploymentSpec = ldap_server.spec
+    template: kubernetes.client.V1PodTemplateSpec = spec.template
+    metadata: kubernetes.client.V1ObjectMeta = template.metadata
+
+    return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
 
 
 @pytest_asyncio.fixture(scope="module", name="prometheus_related")
