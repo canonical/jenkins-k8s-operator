@@ -173,9 +173,12 @@ async def test_matrix_combinations_parameter_plugin(
     test_name = "matrix-combinations-parameter-test"
     unit_web_client.client.create_job(test_name, job_xml)
 
-    test_page = unit_web_client.client.requester.get_url(
-        f"{unit_web_client.client.baseurl}/job/{test_name}/"
+    test_page = str(
+        unit_web_client.client.requester.get_url(
+            f"{unit_web_client.client.baseurl}/job/{test_name}/"
+        ).content,
+        encoding="utf-8",
     )
-    assert "Configuration Matrix" in str(
-        test_page.content, encoding="utf-8"
-    ), f"Configuration matrix table not found, test_page"
+    assert (
+        "Configuration Matrix" in test_page
+    ), f"Configuration matrix table not found, {test_page}"
