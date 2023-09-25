@@ -5,7 +5,9 @@
 
 import typing
 
+import jenkinsapi.plugin
 import pytest
+from jinja2 import Environment, FileSystemLoader
 from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
@@ -142,3 +144,38 @@ async def test_ldap_plugin(
     assert "User lookup: successful" in str(
         res.content, encoding="utf-8"
     ), f"User lookup unsuccessful, {res.content}"
+
+
+@pytest.mark.usefixtures("app_with_allowed_plugins")
+async def test_matrix_combinations_parameter_plugin(
+    ops_test: OpsTest, unit_web_client: UnitWebClient
+):
+    """
+    arrange: given a jenkins server with matrix-combinations-parameter plugin installed.
+    act: when a multi-configuration job is created.
+    assert: a matrix based test is created.
+    """
+    await install_plugins(
+        ops_test, unit_web_client.unit, unit_web_client.client, ("matrix-combinations-parameter",)
+    )
+    matrix_project_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
+        "matrix-project"
+    ]
+    matrix_combinations_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
+        "matrix-combinations-parameter"
+    ]
+    environment = Environment(loader=FileSystemLoader("tests/integration/files/"))
+    template = environment.get_template("matrix_combinations_plugin_job_xml.j2")
+    job_xml = template.render(
+        matrix_project_plugin_version=matrix_project_plugin.version,
+        matrix_combinations_plugin_version=matrix_combinations_plugin.version,
+    )
+    test_name = "matrix-combinations-parameter-test"
+    unit_web_client.client.create_job(test_name, job_xml)
+
+    test_page = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.client.baseurl}/job/{test_name}/"
+    )
+    assert "Configuration Matrix" in str(
+        test_page.content, encoding="utf-8"
+    ), f"Configuration matrix table not found, test_page"
