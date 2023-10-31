@@ -4,7 +4,6 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import typing
-from tempfile import NamedTemporaryFile
 
 import jenkinsapi.plugin
 import pytest
@@ -204,16 +203,14 @@ async def test_postbuildscript_plugin(
     ]
     environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
     template = environment.get_template("postbuildscript_plugin_job_xml.j2")
-    test_output_path = "/tmp/postbuildscript_test.txt"
+    test_output_path = "/home/postbuildscript_test.txt"
     test_output = "postbuildscript test"
     job_xml = template.render(
         postbuildscript_plugin_version=postbuildscript_plugin.version,
         postbuildscript_command=f'echo -n "{test_output}" > {test_output_path}',
     )
-    job_name = "postbuildscript-test-k8s"
-    job = unit_web_client.client.create_job(job_name, job_xml)
-    queue = job.invoke()
-    queue.block_until_complete()
+    job = unit_web_client.client.create_job("postbuildscript-test-k8s", job_xml)
+    job.invoke().block_until_complete()
 
     unit: Unit = next(iter(jenkins_k8s_agents.units))
     ret, stdout, stderr = await ops_test.juju(
