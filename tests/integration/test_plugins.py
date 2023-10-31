@@ -4,10 +4,13 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import typing
+from tempfile import NamedTemporaryFile
 
 import jenkinsapi.plugin
 import pytest
 from jinja2 import Environment, FileSystemLoader
+from juju.application import Application
+from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
@@ -182,3 +185,39 @@ async def test_matrix_combinations_parameter_plugin(
     assert (
         "Configuration Matrix" in test_page
     ), f"Configuration matrix table not found, {test_page}"
+
+
+@pytest.mark.usefixtures("app_k8s_agent_related")
+async def test_postbuildscript_plugin(
+    ops_test: OpsTest, unit_web_client: UnitWebClient, jenkins_k8s_agents: Application
+):
+    """
+    arrange: given a jenkins charm with postbuildscript plugin installed and related to an agent.
+    act: when a postbuildscript job that writes a file to a /tmp folder is dispatched.
+    assert: the file is written on the /tmp folder of the job host.
+    """
+    await install_plugins(
+        ops_test, unit_web_client.unit, unit_web_client.client, ("postbuildscript",)
+    )
+    postbuildscript_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
+        "postbuildscript"
+    ]
+    environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
+    template = environment.get_template("postbuildscript_plugin_job_xml.j2")
+    test_output_path = "/tmp/postbuildscript_test.txt"
+    test_output = "postbuildscript test"
+    job_xml = template.render(
+        postbuildscript_plugin_version=postbuildscript_plugin.version,
+        postbuildscript_command=f'echo -n "{test_output}" > {test_output_path}',
+    )
+    job_name = "postbuildscript-test-k8s"
+    job = unit_web_client.client.create_job(job_name, job_xml)
+    queue = job.invoke()
+    queue.block_until_complete()
+
+    unit: Unit = next(iter(jenkins_k8s_agents.units))
+    ret, stdout, stderr = await ops_test.juju(
+        "ssh", "--container", "jenkins-k8s-agent", unit.name, "cat", test_output_path
+    )
+    assert ret == 0, f"Failed to scp test output file, {stderr}"
+    assert stdout == test_output
