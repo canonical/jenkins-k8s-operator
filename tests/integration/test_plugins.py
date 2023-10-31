@@ -203,7 +203,8 @@ async def test_postbuildscript_plugin(
     ]
     environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
     template = environment.get_template("postbuildscript_plugin_job_xml.j2")
-    test_output_path = "/home/postbuildscript_test.txt"
+    # tmp directory is fine to use for testing purposes since TemporaryFile cannot be used here.
+    test_output_path = "/tmp/postbuildscript_test.txt"  # nosec
     test_output = "postbuildscript test"
     job_xml = template.render(
         postbuildscript_plugin_version=postbuildscript_plugin.version,
