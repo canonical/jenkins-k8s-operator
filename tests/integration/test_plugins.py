@@ -9,11 +9,10 @@ import jenkinsapi.plugin
 import pytest
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
-from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
-from .helpers import gen_git_test_job_xml, install_plugins
+from .helpers import gen_git_test_job_xml, get_job_invoked_unit, install_plugins
 from .types_ import TestLDAPSettings, UnitWebClient
 
 
@@ -212,19 +211,9 @@ async def test_postbuildscript_plugin(
     )
     job = unit_web_client.client.create_job("postbuildscript-test-k8s", job_xml)
     job.invoke().block_until_complete()
-    invoked_agent = job.get_last_build().get_slave()
 
-    get_matching_agent: typing.Callable[[Unit], bool] = (
-        lambda unit: unit.name.replace("/", "-") == invoked_agent
-    )
-    unit: Unit | None = next(
-        filter(
-            get_matching_agent,
-            iter(jenkins_k8s_agents.units),
-        ),
-        None,
-    )
-    assert unit, f"Agent unit running the job not found, {invoked_agent}"
+    unit = get_job_invoked_unit(job, jenkins_k8s_agents.units)
+    assert unit, f"Agent unit running the job not found, {job.get_last_build().get_slave()}"
     ret, stdout, stderr = await ops_test.juju(
         "ssh", "--container", "jenkins-k8s-agent", unit.name, "cat", test_output_path
     )

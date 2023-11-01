@@ -255,3 +255,21 @@ async def wait_for(
         if result := func():
             return result
     raise TimeoutError()
+
+
+def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Unit]) -> Unit | None:
+    """Get the jenkins unit that has run the latest job.
+
+    Args:
+        job: The jenkins job that has been run.
+        units: Jenkins agent units.
+
+    Returns:
+        The agent unit that run the job if found.
+    """
+    invoked_agent = job.get_last_build().get_slave()
+    unit: Unit
+    for unit in units:
+        if unit.name.replace("/", "-") == invoked_agent:
+            return unit
+    return None
