@@ -212,16 +212,19 @@ async def test_postbuildscript_plugin(
     )
     job = unit_web_client.client.create_job("postbuildscript-test-k8s", job_xml)
     job.invoke().block_until_complete()
+    invoked_agent = job.get_last_build().get_slave()
 
     get_matching_agent: typing.Callable[[Unit], bool] = (
-        lambda unit: unit.name.replace("/", "-") == job.get_last_build().get_slave()
+        lambda unit: unit.name.replace("/", "-") == invoked_agent
     )
-    unit: Unit = next(
+    unit: Unit | None = next(
         filter(
             get_matching_agent,
             iter(jenkins_k8s_agents.units),
-        )
+        ),
+        None,
     )
+    assert unit, f"Agent unit running the job not found, {invoked_agent}"
     ret, stdout, stderr = await ops_test.juju(
         "ssh", "--container", "jenkins-k8s-agent", unit.name, "cat", test_output_path
     )
