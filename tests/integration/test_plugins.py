@@ -236,3 +236,20 @@ async def test_ssh_agent_plugin(ops_test: OpsTest, unit_web_client: UnitWebClien
 
     config_page = str(res.content, "utf-8")
     assert "SSH Agent" in config_page, f"SSH agent configuration not found. {config_page}"
+
+
+async def test_blueocean_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+    """
+    arrange: given a jenkins charm with blueocean plugin installed.
+    act: when blueocean frontend url is accessed.
+    assert: 200 response is returned.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("blueocean",))
+
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/blue/organizations/jenkins/"
+    )
+
+    assert (
+        res.status_code == 200
+    ), f"Failed to access Blueocean frontend, {str(res.content, encoding='utf-8')}"
