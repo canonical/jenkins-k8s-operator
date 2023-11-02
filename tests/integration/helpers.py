@@ -42,7 +42,7 @@ async def install_plugins(
         unit.name,
         "java",
         "-jar",
-        f"{jenkins.EXECUTABLES_PATH / 'jenkins-plugin-manager-2.12.11.jar'}",
+        f"{jenkins.EXECUTABLES_PATH / 'jenkins-plugin-manager-2.12.13.jar'}",
         "-w",
         f"{jenkins.EXECUTABLES_PATH / 'jenkins.war'}",
         "-d",

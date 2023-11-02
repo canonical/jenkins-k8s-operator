@@ -352,7 +352,7 @@ def _install_plugins(
         "java",
         *proxy_args,
         "-jar",
-        "jenkins-plugin-manager-2.12.11.jar",
+        "jenkins-plugin-manager-2.12.13.jar",
         "-w",
         "jenkins.war",
         "-d",
