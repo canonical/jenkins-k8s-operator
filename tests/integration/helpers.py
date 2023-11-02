@@ -69,7 +69,7 @@ async def install_plugins(
     )
 
 
-def _get_test_job_xml(node_label: str):
+def gen_test_job_xml(node_label: str):
     """Generate a job xml with target node label.
 
     Args:
@@ -121,7 +121,7 @@ def assert_job_success(
         (agent_name in key for key in nodes.keys())
     ), f"Jenkins {agent_name} node not registered."
 
-    job = client.create_job(agent_name, _get_test_job_xml(test_target_label))
+    job = client.create_job(agent_name, gen_test_job_xml(test_target_label))
     queue_item = job.invoke()
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
