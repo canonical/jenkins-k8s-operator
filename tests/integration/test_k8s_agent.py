@@ -33,7 +33,7 @@ async def test_jenkins_wizard_bypass(web_address: str):
     # This should not appear since when Jenkins setup is complete, the wizard should have been
     # bypassed.
     assert "Unlock Jenkins" not in str(response.content), "Jenkins setup wizard not bypassed."
-    assert "Welcome to Jenkins!" in str(response.content)
+    assert "Sign in to Jenkins" in str(response.content)
 
 
 async def test_jenkins_k8s_agent_relation(
