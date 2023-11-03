@@ -12,7 +12,7 @@ from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
-from .helpers import gen_git_test_job_xml, get_job_invoked_unit, install_plugins
+from .helpers import gen_git_test_job_xml, gen_test_job_xml, get_job_invoked_unit, install_plugins
 from .types_ import TestLDAPSettings, UnitWebClient
 
 
@@ -219,6 +219,23 @@ async def test_postbuildscript_plugin(
     )
     assert ret == 0, f"Failed to scp test output file, {stderr}"
     assert stdout == test_output
+
+
+async def test_ssh_agent_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+    """
+    arrange: given jenkins charm with ssh_agent plugin installed.
+    act: when a job is being configured.
+    assert: ssh-agent configuration is visible.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("ssh-agent",))
+    unit_web_client.client.create_job("ssh_agent_test", gen_test_job_xml("k8s"))
+
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/job/ssh_agent_test/configure"
+    )
+
+    config_page = str(res.content, "utf-8")
+    assert "SSH Agent" in config_page, f"SSH agent configuration not found. {config_page}"
 
 
 async def test_blueocean_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
