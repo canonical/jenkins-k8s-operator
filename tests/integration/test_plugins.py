@@ -280,11 +280,11 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/manage/thinBackup/backupManual"
     )
-    unit_web_client.client.requester._get_crumb_data()
     res.raise_for_status()
 
     ret, stdout, stderr = await ops_test.juju(
         "ssh", "--container", "jenkins", unit_web_client.unit.name, "ls", backup_path
     )
     assert ret == 0, f"Failed to ls backup path, {stderr}"
-    assert "FULL" in stdout  # The backup folder is of format FULL-<backup-date>
+    # assert "FULL" in stdout, the backup folder is of format FULL-<backup-date>
+    assert "FULL" in stdout
