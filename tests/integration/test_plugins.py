@@ -286,5 +286,4 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
         "ssh", "--container", "jenkins", unit_web_client.unit.name, "ls", backup_path
     )
     assert ret == 0, f"Failed to ls backup path, {stderr}"
-    # assert "FULL" in stdout, the backup folder is of format FULL-<backup-date>
-    assert "FULL" in stdout
+    assert "FULL" in stdout, "The backup folder of format FULL-<backup-date> not found."
