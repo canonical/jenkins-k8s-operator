@@ -253,3 +253,37 @@ async def test_blueocean_plugin(ops_test: OpsTest, unit_web_client: UnitWebClien
     assert (
         res.status_code == 200
     ), f"Failed to access Blueocean frontend, {str(res.content, encoding='utf-8')}"
+
+
+async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with thinbackup plugin installed and backup configured.
+    act: when a backup action is run.
+    assert: the backup is made on a configured directory.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("thinBackup",))
+    backup_path = "/srv/jenkins/backup/"
+    res = unit_web_client.client.requester.post_url(
+        f"{unit_web_client.web}/manage/thinBackup/saveSettings",
+        data={
+            "backupPath": backup_path,
+            "fullBackupSchedule": "",
+            "diffBackupSchedule": "",
+            "nrMaxStoredFull": -1,
+            "excludedFilesRegex": "",
+            "forceQuietModeTimeout": 120,
+            "failFast": "on",
+            "Submit": "",
+        },
+    )
+    res.raise_for_status()
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/manage/thinBackup/backupManual"
+    )
+    res.raise_for_status()
+
+    ret, stdout, stderr = await ops_test.juju(
+        "ssh", "--container", "jenkins", unit_web_client.unit.name, "ls", backup_path
+    )
+    assert ret == 0, f"Failed to ls backup path, {stderr}"
+    assert "FULL" in stdout, "The backup folder of format FULL-<backup-date> not found."
