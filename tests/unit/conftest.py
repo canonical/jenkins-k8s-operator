@@ -13,6 +13,7 @@ import jenkinsapi.jenkins
 import pytest
 import requests
 import yaml
+from ops.charm import CharmBase
 from ops.model import Container
 from ops.pebble import ExecError
 from ops.testing import Harness
@@ -440,3 +441,11 @@ def plugin_groovy_script_result_fixture():
         dep-b-b (v0.0.4) => []
         """
     )
+
+
+@pytest.fixture(scope="module", name="mock_charm")
+def mock_charm_fixture():
+    """A valid mock charm."""
+    mock_charm = unittest.mock.MagicMock(spec=CharmBase)
+    mock_charm.app.planned_units.return_value = 1
+    return mock_charm
