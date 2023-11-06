@@ -273,3 +273,20 @@ def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Uni
         if unit.name.replace("/", "-") == invoked_agent:
             return unit
     return None
+
+
+async def install_packages(
+    ops_test: OpsTest, unit: Unit, container: str, packages: typing.Iterable[str]
+) -> None:
+    """Install apt packages on a given unit.
+
+    Args:
+        ops_test: Utility ops_test to run juju command.
+        unit: Target unit to install packages onto.
+        container: The name of the container to run the command on.
+        packages: The packages to install.
+    """
+    ret, _, stderr = await ops_test.juju(
+        "ssh", "--container", container, unit.name, "apt", "install", "-y", " ".join(packages)
+    )
+    assert ret == 0, f"Failed to install packages, {stderr}"

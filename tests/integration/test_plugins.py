@@ -12,7 +12,13 @@ from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
-from .helpers import gen_git_test_job_xml, gen_test_job_xml, get_job_invoked_unit, install_plugins
+from .helpers import (
+    gen_git_test_job_xml,
+    gen_test_job_xml,
+    get_job_invoked_unit,
+    install_packages,
+    install_plugins,
+)
 from .types_ import TestLDAPSettings, UnitWebClient
 
 
@@ -287,3 +293,29 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     )
     assert ret == 0, f"Failed to ls backup path, {stderr}"
     assert "FULL" in stdout, "The backup folder of format FULL-<backup-date> not found."
+
+
+@pytest.mark.usefixtures("app_k8s_agent_related")
+async def test_bzr_plugin(
+    ops_test: OpsTest, unit_web_client: UnitWebClient, jenkins_k8s_agents: Application
+):
+    """
+    arrange: given a Jenkins charm with bazaar plugin installed and bzr package installed on agent.
+    act: when a job with bzr command is triggered.
+    assert: the job builds successfully.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("bazaar",))
+    bazaar_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins["bazaar"]
+    environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
+    template = environment.get_template("bzr_plugin_job_xml.j2")
+    job_xml = template.render(
+        bzr_plugin_version=bazaar_plugin.version,
+    )
+    job = unit_web_client.client.create_job("bzr-test-k8s", job_xml)
+    await install_packages(
+        ops_test, next(iter(jenkins_k8s_agents.units)), "jenkins-k8s-agent", ("bzr",)
+    )
+
+    job.invoke().block_until_complete()
+
+    assert job.get_last_build().is_good(), "Bzr job failed."
