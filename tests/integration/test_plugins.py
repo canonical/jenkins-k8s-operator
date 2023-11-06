@@ -287,3 +287,20 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     )
     assert ret == 0, f"Failed to ls backup path, {stderr}"
     assert "FULL" in stdout, "The backup folder of format FULL-<backup-date> not found."
+
+
+async def test_bzr_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with bazaar plugin installed.
+    act: when a job configuration page is accessed.
+    assert: bazaar plugin option exists.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("bazaar",))
+    unit_web_client.client.create_job("bzr_plugin_test", gen_test_job_xml("k8s"))
+
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/job/bzr_plugin_test/configure"
+    )
+
+    config_page = str(res.content, "utf-8")
+    assert "Bazaar" in config_page, f"Bzr configuration option not found. {config_page}"
