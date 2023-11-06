@@ -1506,3 +1506,65 @@ def test_remove_unlisted_plugins(  # pylint: disable=too-many-arguments
         )
     else:
         mock_client.delete_plugins.assert_not_called()
+
+
+def test__invalidate_sessions(
+    mock_client: unittest.mock.MagicMock, container: ops.Container, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given a monkeypatched client that runs a groovy script without errors.
+    act: when _invalidate_sessions is called.
+    assert: no errors are raised.
+    """
+    mock_client.run_groovy_script = lambda *_args, **_kwargs: None
+    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
+
+    jenkins._invalidate_sessions(container)
+
+
+def test__set_new_password(
+    mock_client: unittest.mock.MagicMock, container: ops.Container, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given a monkeypatched client that runs a groovy script without errors.
+    act: when _set_new_password is called.
+    assert: no errors are raised.
+    """
+    mock_client.run_groovy_script = lambda *_args, **_kwargs: None
+    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
+
+    jenkins._set_new_password(container, secrets.token_hex(16))
+
+
+def test_rotate_credentials_error(
+    monkeypatch: pytest.MonkeyPatch, container: ops.Container, raise_exception: typing.Callable
+):
+    """
+    arrange: given a monkeypatched _invalidate_sessions that raises JenkinsAPIException.
+    act: when rotate_credentials is called.
+    assert: JenkinsError is raised.
+    """
+    monkeypatch.setattr(
+        jenkins,
+        "_invalidate_sessions",
+        lambda *_args, **_kwargs: raise_exception(
+            jenkinsapi.custom_exceptions.JenkinsAPIException
+        ),
+    )
+
+    with pytest.raises(jenkins.JenkinsError):
+        jenkins.rotate_credentials(container)
+
+
+def test_rotate_credentials(monkeypatch: pytest.MonkeyPatch, container: ops.Container):
+    """
+    arrange: given a monkeypatched _invalidate_sessions that returns no errors.
+    act: when rotate_credentials is called.
+    assert: password file is updated and newly generated password is returned.
+    """
+    monkeypatch.setattr(jenkins, "_invalidate_sessions", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(jenkins, "_set_new_password", lambda *_args, **_kwargs: None)
+
+    old_password = container.pull(jenkins.PASSWORD_FILE_PATH, encoding="utf-8").read()
+    assert old_password != jenkins.rotate_credentials(container), "Password not newly generated"
+    assert old_password != container.pull(jenkins.PASSWORD_FILE_PATH, encoding="utf-8").read()

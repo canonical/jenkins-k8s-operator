@@ -3,11 +3,14 @@
 
 """Functions to operate Jenkins."""
 
+# pylint:disable=too-many-lines
+
 import dataclasses
 import functools
 import itertools
 import logging
 import re
+import secrets
 import textwrap
 import typing
 from datetime import datetime, timedelta
@@ -52,6 +55,7 @@ LOGGING_PATH = HOME_PATH / "jenkins.log"
 REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
     "prometheus",  # required for COS integration
+    "monitoring",  # required for session invalidation
 ]
 
 USER = "jenkins"
@@ -940,3 +944,62 @@ plugins.each {
         f"To allow the plugins, please include them in the plugins configuration of the charm.",
         client=client,
     )
+
+
+def _invalidate_sessions(container: ops.Container) -> None:
+    """Invalidate active Jenkins user sessions.
+
+    Args:
+        container: The workload container.
+    """
+    client = _get_client(get_admin_credentials(container))
+    client.run_groovy_script(
+        """
+import net.bull.javamelody.*;
+def sess = SessionListener.newInstance();
+sess.invalidateAllSessions();"""
+    )
+
+
+def _set_new_password(container: ops.Container, new_password: str) -> None:
+    """Set new password for admin user.
+
+    Args:
+        container: The workload container
+        new_password: New password to set for admin user.
+    """
+    client = _get_client(get_admin_credentials(container))
+    client.run_groovy_script(
+        'User.getById("admin",false).addProperty(hudson.security.'
+        "HudsonPrivateSecurityRealm.Details"
+        f'.fromPlainPassword("{new_password}"));'
+    )
+
+
+def rotate_credentials(container: ops.Container) -> str:
+    """Invalidate all Jenkins sessions and create new password for admin account.
+
+    Args:
+        container: The workload container.
+
+    Raises:
+        JenkinsError: if any error happened running the groovy script to invalidate sessions.
+
+    Returns:
+        The new generated password.
+    """
+    new_password = secrets.token_hex(16)
+    try:
+        _invalidate_sessions(container)
+        _set_new_password(container, new_password)
+    except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        logger.error("Failed to invalidate sessions, %s", exc)
+        raise JenkinsError("Failed to invalidate sessions") from exc
+    container.push(
+        PASSWORD_FILE_PATH,
+        new_password,
+        encoding="utf-8",
+        user=USER,
+        group=GROUP,
+    )
+    return new_password

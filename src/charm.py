@@ -10,6 +10,7 @@ import typing
 
 import ops
 
+import actions
 import agent
 import cos
 import jenkins
@@ -45,10 +46,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
 
+        self.actions_observer = actions.Observer(self, self.state)
         self.agent_observer = agent.Observer(self, self.state)
         self.cos_observer = cos.Observer(self)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
-        self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.update_status, self._on_update_status)
 
     def _get_pebble_layer(self, jenkins_env: jenkins.Environment) -> ops.pebble.Layer:
@@ -133,19 +134,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.unit.set_workload_version(version)
         self.unit.status = ops.ActiveStatus()
-
-    def _on_get_admin_password(self, event: ops.ActionEvent) -> None:
-        """Handle get-admin-password event.
-
-        Args:
-            event: The event fired from get-admin-password action.
-        """
-        container = self.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
-            return
-        credentials = jenkins.get_admin_credentials(container)
-        event.set_results({"password": credentials.password})
 
     def _remove_unlisted_plugins(self, container: ops.Container) -> ops.StatusBase:
         """Remove plugins that are installed but not allowed.

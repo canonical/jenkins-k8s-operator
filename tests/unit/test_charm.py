@@ -145,43 +145,6 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     ), f"unit should be in {expected_status}"
 
 
-def test__on_get_admin_password_action_container_not_ready(
-    harness_container: HarnessWithContainer,
-):
-    """
-    arrange: given a jenkins container that is not connectable.
-    act: when get-admin-password action is run.
-    assert: the event is deferred.
-    """
-    harness_container.harness.set_can_connect(
-        harness_container.harness.model.unit.containers["jenkins"], False
-    )
-    mock_event = MagicMock(spec=ops.ActionEvent)
-    harness_container.harness.begin()
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    jenkins_charm._on_get_admin_password(mock_event)
-
-    assert mock_event.defer.called_once()
-
-
-def test__on_get_admin_password_action(
-    harness_container: HarnessWithContainer, admin_credentials: jenkins.Credentials
-):
-    """
-    arrange: given a jenkins container.
-    act: when get-admin-password action is run.
-    assert: the correct admin password is returned.
-    """
-    mock_event = MagicMock(spec=ops.ActionEvent)
-    harness_container.harness.begin()
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    jenkins_charm._on_get_admin_password(mock_event)
-
-    mock_event.set_results.assert_called_once_with({"password": admin_credentials.password})
-
-
 def test__update_jenkins_version_already_latest(
     harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
 ):
