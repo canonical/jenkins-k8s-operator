@@ -946,7 +946,8 @@ plugins.each {
     )
 
 
-def _invalidate_sessions(container: ops.Container) -> None:
+# This groovy script is tested in integration test.
+def _invalidate_sessions(container: ops.Container) -> None:  # pragma: no cover
     """Invalidate active Jenkins user sessions.
 
     Args:
@@ -961,7 +962,8 @@ sess.invalidateAllSessions();"""
     )
 
 
-def _set_new_password(container: ops.Container, new_password: str) -> None:
+# This groovy script is tested in integration test.
+def _set_new_password(container: ops.Container, new_password: str) -> None:  # pragma: no cover
     """Set new password for admin user.
 
     Args:
