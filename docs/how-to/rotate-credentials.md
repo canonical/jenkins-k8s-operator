@@ -2,14 +2,14 @@
 
 ### Rotate credentials
 
-To rotate credentials for the admin account and invalidate all logged in user sessions, you can run
-the `rotate-credentials` action.
+To rotate credentials for the admin account and invalidate all logged in user sessions, run the
+`rotate-credentials` action.
 
 ```
 juju run-action jenkins-k8s/0 rotate-credentials --wait
 ```
 
-The output should look something similar to the contents below:
+The output should look similar to the contents below:
 
 ```
 unit-jenkins-k8s-0:
