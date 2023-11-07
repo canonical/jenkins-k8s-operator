@@ -23,13 +23,13 @@ class Observer(ops.Object):
         self.charm = charm
         self.state = state
 
-        charm.framework.observe(charm.on.get_admin_password_action, self._on_get_admin_password)
+        charm.framework.observe(charm.on.get_admin_password_action, self.on_get_admin_password)
         charm.framework.observe(
             charm.on.rotate_credentials_action,
-            self._on_rotate_credentials,
+            self.on_rotate_credentials,
         )
 
-    def _on_get_admin_password(self, event: ops.ActionEvent) -> None:
+    def on_get_admin_password(self, event: ops.ActionEvent) -> None:
         """Handle get-admin-password event.
 
         Args:
@@ -42,7 +42,7 @@ class Observer(ops.Object):
         credentials = jenkins.get_admin_credentials(container)
         event.set_results({"password": credentials.password})
 
-    def _on_rotate_credentials(self, event: ops.ActionEvent) -> None:
+    def on_rotate_credentials(self, event: ops.ActionEvent) -> None:
         """Invalidate all sessions and reset admin account password.
 
         Args:

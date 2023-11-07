@@ -6,7 +6,6 @@
 import secrets
 
 # Need access to protected functions for testing
-# pylint:disable=protected-access
 import typing
 from unittest.mock import MagicMock
 
@@ -35,7 +34,7 @@ def test__on_get_admin_password_action_container_not_ready(
     harness_container.harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    jenkins_charm.actions_observer._on_get_admin_password(mock_event)
+    jenkins_charm.actions_observer.on_get_admin_password(mock_event)
 
     mock_event.fail.assert_called_once()
 
@@ -52,7 +51,7 @@ def test__on_get_admin_password_action(
     harness_container.harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    jenkins_charm.actions_observer._on_get_admin_password(mock_event)
+    jenkins_charm.actions_observer.on_get_admin_password(mock_event)
 
     mock_event.set_results.assert_called_once_with({"password": admin_credentials.password})
 
@@ -72,7 +71,7 @@ def test__on_rotate_credentials_action_container_not_ready(
     harness_container.harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    jenkins_charm.actions_observer._on_rotate_credentials(mock_event)
+    jenkins_charm.actions_observer.on_rotate_credentials(mock_event)
 
     mock_event.fail.assert_called_once()
 
@@ -99,7 +98,7 @@ def test__on_rotate_credentials_action_api_error(
     harness_container.harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    jenkins_charm.actions_observer._on_rotate_credentials(mock_event)
+    jenkins_charm.actions_observer.on_rotate_credentials(mock_event)
 
     mock_event.fail.assert_called_once()
 
@@ -125,6 +124,6 @@ def test__on_rotate_credentials_action(
     harness_container.harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    jenkins_charm.actions_observer._on_rotate_credentials(mock_event)
+    jenkins_charm.actions_observer.on_rotate_credentials(mock_event)
 
     mock_event.set_results.assert_called_once_with({"password": password})

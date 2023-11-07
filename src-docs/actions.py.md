@@ -38,4 +38,40 @@ Shortcut for more simple access the model.
 
 
 
+---
+
+<a href="../src/actions.py#L32"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `on_get_admin_password`
+
+```python
+on_get_admin_password(event: ActionEvent) → None
+```
+
+Handle get-admin-password event. 
+
+
+
+**Args:**
+ 
+ - <b>`event`</b>:  The event fired from get-admin-password action. 
+
+---
+
+<a href="../src/actions.py#L45"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `on_rotate_credentials`
+
+```python
+on_rotate_credentials(event: ActionEvent) → None
+```
+
+Invalidate all sessions and reset admin account password. 
+
+
+
+**Args:**
+ 
+ - <b>`event`</b>:  The rotate credentials event. 
+
 
