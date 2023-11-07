@@ -19,7 +19,7 @@ from charm import JenkinsK8sOperatorCharm
 from .types_ import HarnessWithContainer
 
 
-def test__on_get_admin_password_action_container_not_ready(
+def test_on_get_admin_password_action_container_not_ready(
     harness_container: HarnessWithContainer,
 ):
     """
@@ -39,7 +39,7 @@ def test__on_get_admin_password_action_container_not_ready(
     mock_event.fail.assert_called_once()
 
 
-def test__on_get_admin_password_action(
+def test_on_get_admin_password_action(
     harness_container: HarnessWithContainer, admin_credentials: jenkins.Credentials
 ):
     """
@@ -56,7 +56,7 @@ def test__on_get_admin_password_action(
     mock_event.set_results.assert_called_once_with({"password": admin_credentials.password})
 
 
-def test__on_rotate_credentials_action_container_not_ready(
+def test_on_rotate_credentials_action_container_not_ready(
     harness_container: HarnessWithContainer,
 ):
     """
@@ -76,7 +76,7 @@ def test__on_rotate_credentials_action_container_not_ready(
     mock_event.fail.assert_called_once()
 
 
-def test__on_rotate_credentials_action_api_error(
+def test_on_rotate_credentials_action_api_error(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
     raise_exception: typing.Callable,
@@ -103,7 +103,7 @@ def test__on_rotate_credentials_action_api_error(
     mock_event.fail.assert_called_once()
 
 
-def test__on_rotate_credentials_action(
+def test_on_rotate_credentials_action(
     harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
 ):
     """
