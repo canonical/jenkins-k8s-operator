@@ -107,15 +107,15 @@ async def test_rotate_password_action(unit_web_client: UnitWebClient):
     act: when rotate password action is called.
     assert: the session is invalidated and new password is returned.
     """
-    sess = unit_web_client.client.requester.session
-    sess.get(f"{unit_web_client.web}/manage/")
+    session = unit_web_client.client.requester.session
+    session.get(f"{unit_web_client.web}/manage/")
     action: Action = await unit_web_client.unit.run_action("rotate-credentials")
     await action.wait()
     new_password: str = action.results["password"]
 
     assert unit_web_client.client.password != new_password, "Password not rotated"
-    res = sess.get(f"{unit_web_client.web}/manage/")
-    assert res.status_code == 403, "Session not cleared"
+    result = session.get(f"{unit_web_client.web}/manage/")
+    assert result.status_code == 403, "Session not cleared"
     new_client = jenkinsapi.jenkins.Jenkins(unit_web_client.web, "admin", new_password)
-    res = new_client.requester.get_url(f"{unit_web_client.web}/manage/")
-    assert res.status_code == 200, "Invalid password"
+    result = new_client.requester.get_url(f"{unit_web_client.web}/manage/")
+    assert result.status_code == 200, "Invalid password"
