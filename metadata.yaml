@@ -38,6 +38,9 @@ resources:
     type: oci-image
     description: OCI image for Jenkins
 requires:
+  ingress:
+    interface: ingress
+    limit: 1
   agent-deprecated:
     interface: jenkins-slave
     optional: true

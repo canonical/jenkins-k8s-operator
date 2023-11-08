@@ -16,6 +16,9 @@ import jenkins
 import status
 import timerange
 from state import CharmConfigInvalidError, CharmRelationDataInvalidError, State
+from charms.traefik_k8s.v1.ingress import IngressPerAppRequirer
+
+JENKINS_PORT = 8080
 
 if typing.TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
@@ -44,6 +47,13 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
+
+        self.ingress = IngressPerAppRequirer(
+            self,
+            port=8080,
+            host=f"{self.app.name}-endpoints.{self.model.name}.svc.cluster.local",
+            strip_prefix=True
+        )
 
         self.agent_observer = agent.Observer(self, self.state)
         self.cos_observer = cos.Observer(self)
