@@ -52,7 +52,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self,
             port=8080,
             host=f"{self.app.name}-endpoints.{self.model.name}.svc.cluster.local",
-            strip_prefix=True
+            strip_prefix=True,
         )
 
         self.agent_observer = agent.Observer(self, self.state)
