@@ -9,6 +9,7 @@ import logging
 import typing
 
 import ops
+from charms.traefik_k8s.v1.ingress import IngressPerAppRequirer
 
 import agent
 import cos
@@ -16,7 +17,6 @@ import jenkins
 import status
 import timerange
 from state import CharmConfigInvalidError, CharmRelationDataInvalidError, State
-from charms.traefik_k8s.v1.ingress import IngressPerAppRequirer
 
 JENKINS_PORT = 8080
 
