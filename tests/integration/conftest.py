@@ -22,6 +22,7 @@ from juju.application import Application
 from juju.client._definitions import FullStatus, UnitStatus
 from juju.model import Controller, Model
 from juju.unit import Unit
+from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
@@ -30,7 +31,7 @@ import state
 
 from .constants import ALLOWED_PLUGINS
 from .helpers import get_pod_ip
-from .types_ import ModelAppUnit, TestLDAPSettings, UnitWebClient
+from .types_ import KeycloakOIDCMetadata, ModelAppUnit, TestLDAPSettings, UnitWebClient
 
 
 @pytest.fixture(scope="module", name="model")
@@ -588,13 +589,13 @@ async def ldap_server_fixture(
         selector=kubernetes.client.V1LabelSelector(match_labels={"app": "ldap"}),
         template=template,
     )
-    daemonset = kubernetes.client.V1Deployment(
+    deployment = kubernetes.client.V1Deployment(
         api_version="apps/v1",
         kind="Deployment",
-        metadata=kubernetes.client.V1ObjectMeta(name="ldap"),
+        metadata=kubernetes.client.V1ObjectMeta(name="ldap", namespace=model.name),
         spec=spec,
     )
-    return kube_apps_client.create_namespaced_deployment(namespace=model.name, body=daemonset)
+    return kube_apps_client.create_namespaced_deployment(namespace=model.name, body=deployment)
 
 
 @pytest_asyncio.fixture(scope="module", name="ldap_server_ip")
@@ -666,3 +667,96 @@ async def grafana_related_fixture(application: Application):
         raise_on_error=False,
     )
     return grafana
+
+
+@pytest_asyncio.fixture(scope="module", name="keycloak_deployment")
+async def keycloak_deployment_fixture(model: Model, kube_apps_client: kubernetes.client.AppsV1Api):
+    """Testing Keycloak server deployment for oidc."""
+    container = kubernetes.client.V1Container(
+        name="ldap",
+        image="quay.io/keycloak/keycloak",
+        image_pull_policy="IfNotPresent",
+        ports=[kubernetes.client.V1ContainerPort(container_port=8080)],
+    )
+    template = kubernetes.client.V1PodTemplateSpec(
+        metadata=kubernetes.client.V1ObjectMeta(labels={"app": "keycloak"}),
+        spec=kubernetes.client.V1PodSpec(containers=[container]),
+    )
+    spec = kubernetes.client.V1DeploymentSpec(
+        selector=kubernetes.client.V1LabelSelector(match_labels={"app": "keycloak"}),
+        template=template,
+    )
+    deployment = kubernetes.client.V1Deployment(
+        api_version="apps/v1",
+        kind="Deployment",
+        metadata=kubernetes.client.V1ObjectMeta(name="keycloak", namespace=model.name),
+        spec=spec,
+    )
+    return kube_apps_client.create_namespaced_deployment(namespace=model.name, body=deployment)
+
+
+@pytest_asyncio.fixture(scope="module", name="keycloak_oidc_meta")
+async def keycloak_oidc_meta_fixture(
+    keycloak_deployment: kubernetes.client.V1Deployment,
+) -> KeycloakOIDCMetadata:
+    """The keycloak user."""
+    server_url = ""
+    keycloak_connection = KeycloakOpenIDConnection(
+        server_url=server_url,
+        username="admin",
+        password="admin",
+        realm_name="master",
+        verify=True,
+    )
+    keycloak_admin = KeycloakAdmin(connection=keycloak_connection)
+    keycloak_admin.create_realm(payload={"realm": (realm := "oidc_test")}, skip_exists=True)
+    keycloak_admin.realm_name = "oidc_test"
+    keycloak_admin.create_client(
+        payload={
+            "protocol": "openid-connect",
+            "clientId": (client_id := "oidc_test"),
+            "name": "oidc_test",
+            "description": "oidc_test",
+            "publicClient": False,
+            "authorizationServicesEnabled": False,
+            "serviceAccountsEnabled": False,
+            "implicitFlowEnabled": False,
+            "directAccessGrantsEnabled": True,
+            "standardFlowEnabled": True,
+            "frontchannelLogout": True,
+            "attributes": {
+                "saml_idp_initiated_sso_url_name": "",
+                "oauth2.device.authorization.grant.enabled": False,
+                "oidc.ciba.grant.enabled": False,
+            },
+            "alwaysDisplayInConsole": False,
+            "rootUrl": "",
+            "baseUrl": "",
+            "redirectUris": ["*"],
+        },
+        skip_exists=True,
+    )
+    client_secret = keycloak_admin.get_client_secrets(client_id=client_id)["value"]
+    keycloak_admin.create_user(
+        {
+            "email": "example@example.com",
+            "username": (username := "example@example.com"),
+            "enabled": True,
+            "firstName": "Example",
+            "lastName": "Example",
+            "credentials": [
+                {
+                    "value": (password := secrets.token_hex(16)),
+                    "type": "password",
+                }
+            ],
+        }
+    )
+    return KeycloakOIDCMetadata(
+        username=username,
+        password=password,
+        realm=realm,
+        client_id=client_id,
+        client_secret=client_secret,
+        well_known_endpoint=f"{server_url}/realms/{realm}/.well-known/openid-configuration",
+    )

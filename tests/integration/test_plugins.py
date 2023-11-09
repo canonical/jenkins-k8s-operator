@@ -287,3 +287,104 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     )
     assert ret == 0, f"Failed to ls backup path, {stderr}"
     assert "FULL" in stdout, "The backup folder of format FULL-<backup-date> not found."
+
+
+async def test_openid_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with openid plugin installed.
+    act: when an openid endpoint is validated using the plugin.
+    assert: the response returns a 200 status code.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("openid",))
+
+    res = unit_web_client.client.requester.post_url(
+        f"{unit_web_client.web}/manage/descriptorByName/hudson.plugins.openid.OpenIdSsoSecurityRealm/validate",
+        data={"endpoint": "https://login.ubuntu.com/+openid"},
+    )
+
+    assert res.status_code == 200, "Failed to validate openid endpoint using the plugin."
+
+
+async def test_openid_connect_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with oic-auth plugin installed and a Keycloak oidc server.
+    act: when jenkins login is configured with oidc server.
+    assert: a Keycloak SSO login is enabled.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("oic-auth",))
+
+    res = unit_web_client.client.requester.post_url(
+        f"{unit_web_client.web}/manage/configureSecurity/configure",
+        data=[
+            ("stapler-class", "hudson.security.LegacySecurityRealm"),
+            ("%24class", "hudson.security.LegacySecurityRealm"),
+            ("stapler-class", "hudson.security.HudsonPrivateSecurityRealm"),
+            ("%24class", "hudson.security.HudsonPrivateSecurityRealm"),
+            ("_.clientId", "testing"),
+            ("_.clientSecret", "ALCbDKmELkKKnNKp5fTRfdpbCojhViZd"),
+            ("automanualconfigure", "auto"),
+            (
+                "_.wellKnownOpenIDConfigurationUrl",
+                "http%3A%2F%2F10.1.190.180%3A8080%2Frealms%2Ftesting%2F.well-known%2Fopenid-configuration",
+            ),
+            ("_.overrideScopes", ""),
+            ("_.tokenServerUrl", ""),
+            ("_.authorizationServerUrl", ""),
+            ("_.userInfoServerUrl", ""),
+            ("_.scopes", ""),
+            ("_.endSessionEndpoint", ""),
+            # user name field name should be set to sub
+            # https://github.com/jenkinsci/oic-auth-plugin/issues/213
+            ("_.userNameField", "sub"),
+            ("_.fullNameFieldName", ""),
+            ("_.emailFieldName", ""),
+            ("_.groupsFieldName", ""),
+            ("_.tokenFieldToCheckKey", ""),
+            ("_.tokenFieldToCheckValue", ""),
+            ("_.postLogoutRedirectUrl", ""),
+            ("_.escapeHatchUsername", ""),
+            ("_.escapeHatchSecret", ""),
+            ("_.escapeHatchGroup", ""),
+            ("stapler-class", "org.jenkinsci.plugins.oic.OicSecurityRealm"),
+            ("%24class", "org.jenkinsci.plugins.oic.OicSecurityRealm"),
+            ("_.endpoint", "https%3A%2F%2Flogin.ubuntu.com%2F%2Bopenid"),
+            ("stapler-class", "hudson.plugins.openid.OpenIdSsoSecurityRealm"),
+            ("%24class", "hudson.plugins.openid.OpenIdSsoSecurityRealm"),
+            ("stapler-class", "hudson.security.SecurityRealm%24None"),
+            ("%24class", "hudson.security.SecurityRealm%24None"),
+            ("stapler-class", "hudson.security.AuthorizationStrategy%24Unsecured"),
+            ("%24class", "hudson.security.AuthorizationStrategy%24Unsecured"),
+            ("stapler-class", "hudson.security.LegacyAuthorizationStrategy"),
+            ("%24class", "hudson.security.LegacyAuthorizationStrategy"),
+            ("stapler-class", "hudson.security.FullControlOnceLoggedInAuthorizationStrategy"),
+            ("%24class", "hudson.security.FullControlOnceLoggedInAuthorizationStrategy"),
+            ("stapler-class", "hudson.security.GlobalMatrixAuthorizationStrategy"),
+            ("%24class", "hudson.security.GlobalMatrixAuthorizationStrategy"),
+            ("stapler-class", "hudson.security.ProjectMatrixAuthorizationStrategy"),
+            ("%24class", "hudson.security.ProjectMatrixAuthorizationStrategy"),
+            ("stapler-class", "hudson.markup.EscapedMarkupFormatter"),
+            ("%24class", "hudson.markup.EscapedMarkupFormatter"),
+            ("stapler-class", "hudson.markup.RawHtmlMarkupFormatter"),
+            ("%24class", "hudson.markup.RawHtmlMarkupFormatter"),
+            ("slaveAgentPort.type", "fixed"),
+            ("value", "50000"),
+            ("agentProtocol", "on"),
+            ("stapler-class", "hudson.security.csrf.DefaultCrumbIssuer"),
+            ("%24class", "hudson.security.csrf.DefaultCrumbIssuer"),
+            ("SECURITY-2997", "on"),
+            ("SECURITY-2996", "on"),
+            ("SECURITY-2995", "on"),
+            ("_.usageStatisticsEnabled", "on"),
+            ("value", ""),
+            ("port.type,disable", ""),
+            ("Submit", ""),
+            ("core%3Aapply", ""),
+            (
+                "json",
+                '{"disableRememberMe":false,"":["2","0","0"],"securityRealm":{"clientId":"testing","clientSecret":"ALCbDKmELkKKnNKp5fTRfdpbCojhViZd","$redact":["clientSecret","escapeHatchSecret"],"automanualconfigure":"auto","wellKnownOpenIDConfigurationUrl":"http://10.1.190.180:8080/realms/testing/.well-known/openid-configuration","overrideScopesDefined":false,"overrideScopes":"","tokenServerUrl":"","authorizationServerUrl":"","userInfoServerUrl":"","scopes":"","logoutFromOpenidProvider":false,"endSessionEndpoint":"","userNameField":"sub","fullNameFieldName":"","emailFieldName":"","groupsFieldName":"","tokenFieldToCheckKey":"","tokenFieldToCheckValue":"","disableSslVerification":false,"rootURLFromRequest":false,"sendScopesInTokenRequest":false,"postLogoutRedirectUrl":"","pkceEnabled":false,"nonceDisabled":false,"escapeHatchEnabled":false,"escapeHatchUsername":"","escapeHatchSecret":"","escapeHatchGroup":"","stapler-class":"org.jenkinsci.plugins.oic.OicSecurityRealm","$class":"org.jenkinsci.plugins.oic.OicSecurityRealm"},"authorizationStrategy":{"stapler-class":"hudson.security.AuthorizationStrategy$Unsecured","$class":"hudson.security.AuthorizationStrategy$Unsecured"},"markupFormatter":{"stapler-class":"hudson.markup.EscapedMarkupFormatter","$class":"hudson.markup.EscapedMarkupFormatter"},"slaveAgentPort":{"type":"fixed","value":"50000"},"agentProtocol":"JNLP4-connect","hudson-security-csrf-GlobalCrumbIssuerConfiguration":{"":"0","crumbIssuer":{"excludeClientIPFromCrumb":false,"stapler-class":"hudson.security.csrf.DefaultCrumbIssuer","$class":"hudson.security.csrf.DefaultCrumbIssuer"}},"hudson-plugins-openid-OpenIdLoginService$GlobalConfigurationImpl":{"enabled":false},"jenkins-security-UpdateSiteWarningsConfiguration":{"SECURITY-2997":true,"SECURITY-2996":true,"SECURITY-2995":true},"jenkins-security-apitoken-ApiTokenPropertyConfiguration":{"tokenGenerationOnCreationEnabled":false,"creationOfLegacyTokenEnabled":false,"usageStatisticsEnabled":true},"org-jenkinsci-main-modules-sshd-SSHD":{"port":{"value":"","type":"disable"}},"Submit":"","core:apply":"","Jenkins-Crumb":"faeb05b7165fd5100399f9d618b63f32c9d4839622e9f04868ae65cbdacc697d"}',
+            ),
+        ],
+    )
+
+    # The request is made and applied right away, resulting in 401 Unauthorized.
+    assert res.status_code == 401, "Security realm not changed."

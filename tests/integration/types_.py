@@ -54,3 +54,25 @@ class TestLDAPSettings:
     container_port: int
     username: str
     password: str
+
+
+@dataclasses.dataclass
+class KeycloakOIDCMetadata:
+    """The testing Keycloak user for OIDC testing.
+
+    Attributes:
+        username: The login username.
+        password: The login password.
+        realm: The Keycloak realm name.
+        client_id: The Keycloak oidc client identifier.
+        client_secret: The Keycloak oidc client secret.
+        well_known_endpoint: Well-known registry URI that can be used to automatically configure
+            the endpoints.
+    """
+
+    username: str
+    password: str
+    realm: str
+    client_id: str
+    client_secret: str
+    well_known_endpoint: str
