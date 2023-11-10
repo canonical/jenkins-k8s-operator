@@ -13,7 +13,7 @@ from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
 from .helpers import gen_git_test_job_xml, gen_test_job_xml, get_job_invoked_unit, install_plugins
-from .types_ import KeycloakOIDCMetadata, TestLDAPSettings, UnitWebClient
+from .types_ import KeycloakOIDCMetadata, LDAPSettings, UnitWebClient
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -83,7 +83,7 @@ async def test_ldap_plugin(
     ops_test: OpsTest,
     unit_web_client: UnitWebClient,
     ldap_server_ip: str,
-    ldap_settings: TestLDAPSettings,
+    ldap_settings: LDAPSettings,
 ):
     """
     arrange: given an ldap server with user setup and ldap plugin installed on Jenkins server.

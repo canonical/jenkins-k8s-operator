@@ -42,7 +42,7 @@ class UnitWebClient:
 
 
 @dataclasses.dataclass
-class TestLDAPSettings:
+class LDAPSettings:
     """The testing LDAP settings.
 
     Attributes:

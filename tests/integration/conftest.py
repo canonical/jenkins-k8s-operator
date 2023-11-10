@@ -31,7 +31,7 @@ import state
 
 from .constants import ALLOWED_PLUGINS
 from .helpers import get_pod_ip
-from .types_ import KeycloakOIDCMetadata, ModelAppUnit, TestLDAPSettings, UnitWebClient
+from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
 
 @pytest.fixture(scope="module", name="model")
@@ -555,9 +555,9 @@ async def app_with_allowed_plugins_fixture(
 
 
 @pytest.fixture(scope="module", name="ldap_settings")
-def ldap_settings_fixture() -> TestLDAPSettings:
+def ldap_settings_fixture() -> LDAPSettings:
     """LDAP user for testing."""
-    return TestLDAPSettings(
+    return LDAPSettings(
         container_port=1389,
         username="customuser",
         password=secrets.token_hex(16),
@@ -566,7 +566,7 @@ def ldap_settings_fixture() -> TestLDAPSettings:
 
 @pytest_asyncio.fixture(scope="module", name="ldap_server")
 async def ldap_server_fixture(
-    model: Model, kube_apps_client: kubernetes.client.AppsV1Api, ldap_settings: TestLDAPSettings
+    model: Model, kube_apps_client: kubernetes.client.AppsV1Api, ldap_settings: LDAPSettings
 ):
     """Testing LDAP server pod."""
     container = kubernetes.client.V1Container(
@@ -734,7 +734,7 @@ async def keycloak_oidc_meta_fixture(
     )
     keycloak_admin = KeycloakAdmin(connection=keycloak_connection)
     keycloak_admin.create_realm(payload={"realm": (realm := "oidc_test")}, skip_exists=True)
-    keycloak_admin.realm_name = "oidc_test"
+    keycloak_admin.connection.realm_name = "oidc_test"
     keycloak_id = keycloak_admin.create_client(
         payload={
             "protocol": "openid-connect",
