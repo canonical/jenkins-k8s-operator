@@ -669,14 +669,31 @@ async def grafana_related_fixture(application: Application):
     return grafana
 
 
+@pytest.fixture(scope="module", name="keycloak_password")
+def keycloak_password_fixture() -> str:
+    """The keycloak admin user password."""
+    return secrets.token_hex(16)
+
+
 @pytest_asyncio.fixture(scope="module", name="keycloak_deployment")
-async def keycloak_deployment_fixture(model: Model, kube_apps_client: kubernetes.client.AppsV1Api):
+async def keycloak_deployment_fixture(
+    model: Model, kube_apps_client: kubernetes.client.AppsV1Api, keycloak_password: str
+) -> kubernetes.client.V1Deployment:
     """Testing Keycloak server deployment for oidc."""
     container = kubernetes.client.V1Container(
-        name="ldap",
+        name="keycloak",
         image="quay.io/keycloak/keycloak",
         image_pull_policy="IfNotPresent",
         ports=[kubernetes.client.V1ContainerPort(container_port=8080)],
+        args=["start-dev"],
+        env=[
+            kubernetes.client.V1EnvVar(name="KEYCLOAK_ADMIN", value="admin"),
+            kubernetes.client.V1EnvVar(name="KEYCLOAK_ADMIN_PASSWORD", value=keycloak_password),
+            kubernetes.client.V1EnvVar(name="KC_PROXY", value="edge"),
+        ],
+        readiness_probe=kubernetes.client.V1Probe(
+            http_get=kubernetes.client.V1HTTPGetAction(path="/realms/master", port=8080)
+        ),
     )
     template = kubernetes.client.V1PodTemplateSpec(
         metadata=kubernetes.client.V1ObjectMeta(labels={"app": "keycloak"}),
@@ -692,26 +709,33 @@ async def keycloak_deployment_fixture(model: Model, kube_apps_client: kubernetes
         metadata=kubernetes.client.V1ObjectMeta(name="keycloak", namespace=model.name),
         spec=spec,
     )
-    return kube_apps_client.create_namespaced_deployment(namespace=model.name, body=deployment)
+    kube_apps_client.create_namespaced_deployment(namespace=model.name, body=deployment)
+    return deployment
 
 
 @pytest_asyncio.fixture(scope="module", name="keycloak_oidc_meta")
 async def keycloak_oidc_meta_fixture(
+    model: Model,
+    kube_core_client: kubernetes.client.CoreV1Api,
     keycloak_deployment: kubernetes.client.V1Deployment,
+    keycloak_password: str,
 ) -> KeycloakOIDCMetadata:
     """The keycloak user."""
-    server_url = ""
+    pod_ip = await get_pod_ip(
+        model, kube_core_client, keycloak_deployment.spec.template.metadata.labels["app"]
+    )
+    server_url = f"http://{pod_ip}:8080"
     keycloak_connection = KeycloakOpenIDConnection(
         server_url=server_url,
         username="admin",
-        password="admin",
+        password=keycloak_password,
         realm_name="master",
         verify=True,
     )
     keycloak_admin = KeycloakAdmin(connection=keycloak_connection)
     keycloak_admin.create_realm(payload={"realm": (realm := "oidc_test")}, skip_exists=True)
     keycloak_admin.realm_name = "oidc_test"
-    keycloak_admin.create_client(
+    keycloak_id = keycloak_admin.create_client(
         payload={
             "protocol": "openid-connect",
             "clientId": (client_id := "oidc_test"),
@@ -736,7 +760,7 @@ async def keycloak_oidc_meta_fixture(
         },
         skip_exists=True,
     )
-    client_secret = keycloak_admin.get_client_secrets(client_id=client_id)["value"]
+    client_secret = keycloak_admin.get_client_secrets(client_id=keycloak_id)["value"]
     keycloak_admin.create_user(
         {
             "email": "example@example.com",
@@ -746,7 +770,7 @@ async def keycloak_oidc_meta_fixture(
             "lastName": "Example",
             "credentials": [
                 {
-                    "value": (password := secrets.token_hex(16)),
+                    "value": keycloak_password,
                     "type": "password",
                 }
             ],
@@ -754,7 +778,7 @@ async def keycloak_oidc_meta_fixture(
     )
     return KeycloakOIDCMetadata(
         username=username,
-        password=password,
+        password=keycloak_password,
         realm=realm,
         client_id=client_id,
         client_secret=client_secret,

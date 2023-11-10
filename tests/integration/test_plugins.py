@@ -13,7 +13,7 @@ from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
 from .helpers import gen_git_test_job_xml, gen_test_job_xml, get_job_invoked_unit, install_plugins
-from .types_ import TestLDAPSettings, UnitWebClient
+from .types_ import KeycloakOIDCMetadata, TestLDAPSettings, UnitWebClient
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -298,14 +298,17 @@ async def test_openid_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
     await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("openid",))
 
     res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/manage/descriptorByName/hudson.plugins.openid.OpenIdSsoSecurityRealm/validate",
+        f"{unit_web_client.web}/manage/descriptorByName/hudson.plugins.openid."
+        "OpenIdSsoSecurityRealm/validate",
         data={"endpoint": "https://login.ubuntu.com/+openid"},
     )
 
     assert res.status_code == 200, "Failed to validate openid endpoint using the plugin."
 
 
-async def test_openid_connect_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+async def test_openid_connect_plugin(
+    ops_test: OpsTest, unit_web_client: UnitWebClient, keycloak_oidc_meta: KeycloakOIDCMetadata
+):
     """
     arrange: given a Jenkins charm with oic-auth plugin installed and a Keycloak oidc server.
     act: when jenkins login is configured with oidc server.
@@ -320,12 +323,13 @@ async def test_openid_connect_plugin(ops_test: OpsTest, unit_web_client: UnitWeb
             ("%24class", "hudson.security.LegacySecurityRealm"),
             ("stapler-class", "hudson.security.HudsonPrivateSecurityRealm"),
             ("%24class", "hudson.security.HudsonPrivateSecurityRealm"),
-            ("_.clientId", "testing"),
-            ("_.clientSecret", "ALCbDKmELkKKnNKp5fTRfdpbCojhViZd"),
+            ("_.clientId", keycloak_oidc_meta.client_id),
+            ("_.clientSecret", keycloak_oidc_meta.client_secret),
             ("automanualconfigure", "auto"),
             (
                 "_.wellKnownOpenIDConfigurationUrl",
-                "http%3A%2F%2F10.1.190.180%3A8080%2Frealms%2Ftesting%2F.well-known%2Fopenid-configuration",
+                f"http%3A%2F%2F10.1.190.180%3A8080%2Frealms%2F{keycloak_oidc_meta.realm}"
+                "%2F.well-known%2Fopenid-configuration",
             ),
             ("_.overrideScopes", ""),
             ("_.tokenServerUrl", ""),
@@ -381,7 +385,34 @@ async def test_openid_connect_plugin(ops_test: OpsTest, unit_web_client: UnitWeb
             ("core%3Aapply", ""),
             (
                 "json",
-                '{"disableRememberMe":false,"":["2","0","0"],"securityRealm":{"clientId":"testing","clientSecret":"ALCbDKmELkKKnNKp5fTRfdpbCojhViZd","$redact":["clientSecret","escapeHatchSecret"],"automanualconfigure":"auto","wellKnownOpenIDConfigurationUrl":"http://10.1.190.180:8080/realms/testing/.well-known/openid-configuration","overrideScopesDefined":false,"overrideScopes":"","tokenServerUrl":"","authorizationServerUrl":"","userInfoServerUrl":"","scopes":"","logoutFromOpenidProvider":false,"endSessionEndpoint":"","userNameField":"sub","fullNameFieldName":"","emailFieldName":"","groupsFieldName":"","tokenFieldToCheckKey":"","tokenFieldToCheckValue":"","disableSslVerification":false,"rootURLFromRequest":false,"sendScopesInTokenRequest":false,"postLogoutRedirectUrl":"","pkceEnabled":false,"nonceDisabled":false,"escapeHatchEnabled":false,"escapeHatchUsername":"","escapeHatchSecret":"","escapeHatchGroup":"","stapler-class":"org.jenkinsci.plugins.oic.OicSecurityRealm","$class":"org.jenkinsci.plugins.oic.OicSecurityRealm"},"authorizationStrategy":{"stapler-class":"hudson.security.AuthorizationStrategy$Unsecured","$class":"hudson.security.AuthorizationStrategy$Unsecured"},"markupFormatter":{"stapler-class":"hudson.markup.EscapedMarkupFormatter","$class":"hudson.markup.EscapedMarkupFormatter"},"slaveAgentPort":{"type":"fixed","value":"50000"},"agentProtocol":"JNLP4-connect","hudson-security-csrf-GlobalCrumbIssuerConfiguration":{"":"0","crumbIssuer":{"excludeClientIPFromCrumb":false,"stapler-class":"hudson.security.csrf.DefaultCrumbIssuer","$class":"hudson.security.csrf.DefaultCrumbIssuer"}},"hudson-plugins-openid-OpenIdLoginService$GlobalConfigurationImpl":{"enabled":false},"jenkins-security-UpdateSiteWarningsConfiguration":{"SECURITY-2997":true,"SECURITY-2996":true,"SECURITY-2995":true},"jenkins-security-apitoken-ApiTokenPropertyConfiguration":{"tokenGenerationOnCreationEnabled":false,"creationOfLegacyTokenEnabled":false,"usageStatisticsEnabled":true},"org-jenkinsci-main-modules-sshd-SSHD":{"port":{"value":"","type":"disable"}},"Submit":"","core:apply":"","Jenkins-Crumb":"faeb05b7165fd5100399f9d618b63f32c9d4839622e9f04868ae65cbdacc697d"}',
+                '{"disableRememberMe":false,"":["2","0","0"],"securityRealm":{"clientId":"testing",'
+                '"clientSecret":"ALCbDKmELkKKnNKp5fTRfdpbCojhViZd","$redact":["clientSecret",'
+                '"escapeHatchSecret"],"automanualconfigure":"auto",'
+                '"wellKnownOpenIDConfigurationUrl":"http://10.1.190.180:8080/realms/testing/.well'
+                '-known/openid-configuration","overrideScopesDefined":false,"overrideScopes":"",'
+                '"tokenServerUrl":"","authorizationServerUrl":"","userInfoServerUrl":"","scopes":'
+                '"","logoutFromOpenidProvider":false,"endSessionEndpoint":"","userNameField":"sub"'
+                ',"fullNameFieldName":"","emailFieldName":"","groupsFieldName":"",'
+                '"tokenFieldToCheckKey":"","tokenFieldToCheckValue":"","disableSslVerification"'
+                ':false,"rootURLFromRequest":false,"sendScopesInTokenRequest":false,'
+                '"postLogoutRedirectUrl":"","pkceEnabled":false,"nonceDisabled":false,'
+                '"escapeHatchEnabled":false,"escapeHatchUsername":"","escapeHatchSecret":"",'
+                '"escapeHatchGroup":"","stapler-class":"org.jenkinsci.plugins.oic.OicSecurityRea'
+                'lm","$class":"org.jenkinsci.plugins.oic.OicSecurityRealm"},"authorizationStrategy'
+                '":{"stapler-class":"hudson.security.AuthorizationStrategy$Unsecured","$class":'
+                '"hudson.security.AuthorizationStrategy$Unsecured"},"markupFormatter":{"stapler-'
+                'class":"hudson.markup.EscapedMarkupFormatter","$class":"hudson.markup.EscapedMark'
+                'upFormatter"},"slaveAgentPort":{"type":"fixed","value":"50000"},"agentProtocol":"'
+                'JNLP4-connect","hudson-security-csrf-GlobalCrumbIssuerConfiguration":{"":"0","cru'
+                'mbIssuer":{"excludeClientIPFromCrumb":false,"stapler-class":"hudson.security.csrf'
+                '.DefaultCrumbIssuer","$class":"hudson.security.csrf.DefaultCrumbIssuer"}},"hudson'
+                '-plugins-openid-OpenIdLoginService$GlobalConfigurationImpl":{"enabled":false},"je'
+                'nkins-security-UpdateSiteWarningsConfiguration":{"SECURITY-2997":true,"SECURITY-2'
+                '996":true,"SECURITY-2995":true},"jenkins-security-apitoken-ApiTokenPropertyConfig'
+                'uration":{"tokenGenerationOnCreationEnabled":false,"creationOfLegacyTokenEnabled"'
+                ':false,"usageStatisticsEnabled":true},"org-jenkinsci-main-modules-sshd-SSHD":{"po'
+                'rt":{"value":"","type":"disable"}},"Submit":"","core:apply":"","Jenkins-Crumb":"f'
+                'aeb05b7165fd5100399f9d618b63f32c9d4839622e9f04868ae65cbdacc697d"}',
             ),
         ],
     )
