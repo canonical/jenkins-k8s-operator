@@ -40,6 +40,12 @@ resources:
     mounts:
       - storage: jenkins_home_directory
         location: /var/lib/jenkins
+
+storage:
+  uploads:
+    type: filesystem
+    location: /var/lib/jenkins
+
 requires:
   agent-deprecated:
     interface: jenkins-slave
