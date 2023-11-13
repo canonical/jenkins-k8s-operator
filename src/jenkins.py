@@ -35,6 +35,8 @@ HOME_PATH = Path("/var/lib/jenkins")
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = HOME_PATH / "secrets/initialAdminPassword"
+# Path to Jenkins admin API token
+API_TOKEN_PATH = HOME_PATH / "secrets/apiToken"
 # Path to last executed Jenkins version file, required to override wizard installation
 LAST_EXEC_VERSION_PATH = HOME_PATH / Path("jenkins.install.InstallUtil.lastExecVersion")
 # Path to Jenkins version file, required to override wizard installation
@@ -161,11 +163,11 @@ class Credentials:
 
     Attributes:
         username: The Jenkins account username used to log into Jenkins.
-        password: The Jenkins account password used to log into Jenkins.
+        password_or_token: The Jenkins API token or account password used to log into Jenkins.
     """
 
     username: str
-    password: str
+    password_or_token: str
 
 
 def get_admin_credentials(container: ops.Container) -> Credentials:
@@ -179,7 +181,27 @@ def get_admin_credentials(container: ops.Container) -> Credentials:
     """
     user = "admin"
     password_file_contents = str(container.pull(PASSWORD_FILE_PATH, encoding="utf-8").read())
-    return Credentials(username=user, password=password_file_contents.strip())
+    return Credentials(username=user, password_or_token=password_file_contents.strip())
+
+
+def _get_api_credentials(container: ops.Container) -> Credentials:
+    """Retrieve admin API credentials.
+
+    Args:
+        container: The Jenkins workload container.
+
+    Returns:
+        Credentials: The Jenkins API Credentials.
+
+    Raises:
+        JenkinsBootstrapError: if no API credential has been setup yet.
+    """
+    try:
+        token = str(container.pull(API_TOKEN_PATH, encoding="utf-8").read())
+        return Credentials(username="admin", password_or_token=token.strip())
+    except ops.pebble.PathError as exc:
+        logger.debug("Admin API token not yet setup.")
+        raise JenkinsBootstrapError("Admin API credentials not yet setup.") from exc
 
 
 class Environment(typing.TypedDict):
@@ -257,6 +279,17 @@ def _install_configs(container: ops.Container) -> None:
         container.push(LOGGING_CONFIG_PATH, jenkins_logging_config_file, user=USER, group=GROUP)
 
 
+def _setup_user_token(container: ops.Container) -> None:
+    """Configure admin user API token.
+
+    Args:
+        container: The Jenkins workload container.
+    """
+    client = _get_client(get_admin_credentials(container))
+    token: str = client.generate_new_api_token("juju_api_token")
+    container.push(API_TOKEN_PATH, token, user=USER, group=GROUP)
+
+
 def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
     """Get proxy arguments for proxy configuration Groovy script.
 
@@ -298,7 +331,7 @@ def _configure_proxy(
     if not proxy_config:
         return
 
-    client = _get_client(get_admin_credentials(container))
+    client = _get_client(_get_api_credentials(container))
     parsed_args = ", ".join(_get_groovy_proxy_args(proxy_config))
     try:
         client.run_groovy_script(f"proxy = new ProxyConfiguration({parsed_args})\nproxy.save()")
@@ -386,6 +419,7 @@ def bootstrap(container: ops.Container, proxy_config: state.ProxyConfig | None =
     """
     _unlock_wizard(container)
     _install_configs(container)
+    _setup_user_token(container)
     try:
         _configure_proxy(container, proxy_config)
         _install_plugins(container, proxy_config)
@@ -406,7 +440,7 @@ def _get_client(client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
     return jenkinsapi.jenkins.Jenkins(
         baseurl=WEB_URL,
         username=client_credentials.username,
-        password=client_credentials.password,
+        password=client_credentials.password_or_token,
         timeout=60,
     )
 
@@ -424,7 +458,7 @@ def get_node_secret(node_name: str, container: ops.Container) -> str:
     Raises:
         JenkinsError: if an error occurred running groovy script getting the node secret.
     """
-    client = _get_client(get_admin_credentials(container))
+    client = _get_client(_get_api_credentials(container))
     try:
         return client.run_groovy_script(
             f'println(jenkins.model.Jenkins.getInstance().getComputer("{node_name}").getJnlpMac())'
@@ -444,7 +478,7 @@ def add_agent_node(agent_meta: state.AgentMeta, container: ops.Container) -> Non
     Raises:
         JenkinsError: if an error occurred running groovy script creating the node.
     """
-    client = _get_client(get_admin_credentials(container))
+    client = _get_client(_get_api_credentials(container))
     try:
         client.create_node(
             name=agent_meta.name,
@@ -469,7 +503,7 @@ def remove_agent_node(agent_name: str, container: ops.Container) -> None:
     Raises:
         JenkinsError: if an error occurred running groovy script removing the node.
     """
-    client = _get_client(get_admin_credentials(container))
+    client = _get_client(_get_api_credentials(container))
     try:
         client.delete_node(nodename=agent_name)
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
@@ -720,7 +754,7 @@ def safe_restart(container: ops.Container) -> None:
     Raises:
         JenkinsError: if there was an API error calling safe restart.
     """
-    client = _get_client(get_admin_credentials(container))
+    client = _get_client(_get_api_credentials(container))
     try:
         # There is a bug with wait_for_reboot in the jenkinsapi
         # https://github.com/pycontribs/jenkinsapi/issues/844
@@ -901,7 +935,7 @@ def remove_unlisted_plugins(
     if not plugins:
         return
 
-    client = _get_client(get_admin_credentials(container))
+    client = _get_client(_get_api_credentials(container))
     res = client.run_groovy_script(
         """
 def plugins = jenkins.model.Jenkins.instance.getPluginManager().getPlugins()
