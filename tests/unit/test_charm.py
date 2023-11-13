@@ -133,6 +133,7 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     monkeypatch.setattr(state.os, "environ", {})
     # speed up waiting by changing default argument values
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
+    monkeypatch.setattr(jenkins, "_setup_user_token", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         requests, "get", functools.partial(mocked_get_request, status_code=status_code)
     )
@@ -179,7 +180,9 @@ def test__on_get_admin_password_action(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._on_get_admin_password(mock_event)
 
-    mock_event.set_results.assert_called_once_with({"password": admin_credentials.password})
+    mock_event.set_results.assert_called_once_with(
+        {"password": admin_credentials.password_or_token}
+    )
 
 
 def test__update_jenkins_version_already_latest(

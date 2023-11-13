@@ -65,7 +65,7 @@ def mocked_get_request_fixture(jenkins_version: str):
 @pytest.fixture(scope="function", name="admin_credentials")
 def admin_credentials_fixture() -> jenkins.Credentials:
     """Admin credentials for Jenkins."""
-    return jenkins.Credentials(username="admin", password=token_hex(16))
+    return jenkins.Credentials(username="admin", password_or_token=token_hex(16))
 
 
 @pytest.fixture(scope="function", name="mock_client")
@@ -171,7 +171,9 @@ def container_fixture(
     jenkins_root = harness.get_filesystem_root("jenkins")
     password_file_path = combine_root_paths(jenkins_root, jenkins.PASSWORD_FILE_PATH)
     password_file_path.parent.mkdir(parents=True, exist_ok=True)
-    password_file_path.write_text(admin_credentials.password, encoding="utf-8")
+    password_file_path.write_text(admin_credentials.password_or_token, encoding="utf-8")
+    api_token_file_path = combine_root_paths(jenkins_root, jenkins.API_TOKEN_PATH)
+    api_token_file_path.write_text(admin_credentials.password_or_token, encoding="utf-8")
 
     def cmd_handler(argv: list[str]) -> tuple[int, str, str]:
         """Handle the python command execution inside the Flask container.

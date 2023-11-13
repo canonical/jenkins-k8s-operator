@@ -145,7 +145,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event.defer()
             return
         credentials = jenkins.get_admin_credentials(container)
-        event.set_results({"password": credentials.password})
+        event.set_results({"password": credentials.password_or_token})
 
     def _remove_unlisted_plugins(self, container: ops.Container) -> ops.StatusBase:
         """Remove plugins that are installed but not allowed.
