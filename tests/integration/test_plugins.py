@@ -419,3 +419,21 @@ async def test_openid_connect_plugin(
 
     # The request is made and applied right away, resulting in 401 Unauthorized.
     assert res.status_code == 401, "Security realm not changed."
+
+
+@pytest.mark.usefixtures("app_k8s_agent_related")
+async def test_rebuilder_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with rebuilder plugin installed.
+    act: when a job is built and a rebuild is triggered.
+    assert: last job is rebuilt.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("rebuild",))
+    job = unit_web_client.client.create_job("rebuild_test", gen_test_job_xml("k8s"))
+    job.invoke().block_until_complete()
+
+    unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/job/rebuild_test/lastCompletedBuild/rebuild/"
+    )
+
+    assert job.get_last_buildnumber() == 2, "Rebuild not triggered."
