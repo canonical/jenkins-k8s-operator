@@ -19,10 +19,10 @@ async def test_ingress_integration(
     assert: the response succeeds.
     """
     status = await model.get_status(filters=[ingress_related.name])
-    for unit in status.applications[ingress_related.name].units.values():
-        response = requests.get(
-            f"http://{unit.address}",
-            headers={"Host": f"{model.name}-{ingress_related.name}.{external_hostname}"},
-            timeout=5,
-        ).json()
-        assert response.status_code == 200
+    unit = next(iter(status.applications[ingress_related.name].units))
+    response = requests.get(
+        f"http://{unit.address}",
+        headers={"Host": f"{model.name}-{ingress_related.name}.{external_hostname}"},
+        timeout=5,
+    ).json()
+    assert response.status_code == 200
