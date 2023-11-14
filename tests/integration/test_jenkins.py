@@ -11,6 +11,8 @@ from juju.application import Application
 from juju.client import client
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
+from secrets import token_hex
+from juju.client._definitions import FullStatus, UnitStatus
 
 from .substrings import assert_substrings_not_in_string
 from .types_ import ModelAppUnit
@@ -98,3 +100,46 @@ async def test_jenkins_automatic_update(
 
     updated_workload_version = updated_app_status.workload_version
     assert updated_workload_version == latest_jenkins_lts_version, "The Jenkins should be updated."
+
+
+async def test_jenkins_persist_jobs_on_restart(
+    model_app_unit: ModelAppUnit,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    jenkins_new_job_configuration: str,
+):
+    """
+    arrange: a bare Jenkins charm.
+    act: Add a job, scale the charm to 0 unit and scale back to 1.
+    assert: The job configuration persists.
+    """
+
+    test_job_name = token_hex(8)
+    jenkins_client.create_job(test_job_name, jenkins_new_job_configuration)
+
+    await model_app_unit.app.scale(scale=0)
+    await model_app_unit.model.wait_for_idle(
+        apps=[model_app_unit.app.name],
+        timeout=20 * 60,
+        idle_period=30,
+        wait_for_exact_units=0,
+    )
+
+    await model_app_unit.app.scale(scale=1)
+    await model_app_unit.model.wait_for_idle(
+        apps=[model_app_unit.app.name],
+        timeout=20 * 60,
+        idle_period=30,
+        wait_for_exact_units=1,
+    )
+
+    # Get the new unit's IP address, this is a hack until support for ingress is implemented
+    status: FullStatus = await model_app_unit.model.get_status([model_app_unit.app.name])
+    unit_status: UnitStatus = next(
+        iter(status.applications[model_app_unit.app.name].units.values())
+    )
+    # Check if the new unit has a valid IP address
+    assert unit_status.address, "Invalid unit address"
+    jenkins_client.baseurl = f"http://{unit_status.address}:8080"
+
+    job = jenkins_client.requester.get_url(test_job_name)
+    assert job.name == test_job_name

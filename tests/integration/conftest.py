@@ -666,3 +666,21 @@ async def grafana_related_fixture(application: Application):
         raise_on_error=False,
     )
     return grafana
+
+
+@pytest.fixture(scope="module", name="jenkins_new_job_configuration")
+def jenkins_new_job_configuration() -> str:
+    return """<project>
+        <description></description>
+        <properties/>
+        <scm class="hudson.scm.NullSCM"/>
+        <canRoam>true</canRoam>
+        <disabled>false</disabled>
+        <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+        <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+        <triggers class="vector"/>
+        <concurrentBuild>false</concurrentBuild>
+        <builders/>
+        <publishers/>
+        <buildWrappers/>
+    </project>"""

@@ -33,16 +33,17 @@ tags:
 containers:
   jenkins:
     resource: jenkins-image
+    mounts:
+      - storage: jenkins-home
+        location: /var/lib/jenkins
+
 resources:
   jenkins-image:
     type: oci-image
     description: OCI image for Jenkins
-    mounts:
-      - storage: jenkins_home_directory
-        location: /var/lib/jenkins
 
 storage:
-  uploads:
+  jenkins-home:
     type: filesystem
     location: /var/lib/jenkins
 
