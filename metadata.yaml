@@ -55,6 +55,10 @@ requires:
     interface: jenkins_agent_v0
     optional: true
     limit: 2
+  ingress:
+    interface: ingress
+    optional: true
+    limit: 1
   logging:
     interface: loki_push_api
 provides:
