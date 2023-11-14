@@ -733,7 +733,9 @@ async def keycloak_oidc_meta_fixture(
         verify=True,
     )
     keycloak_admin = KeycloakAdmin(connection=keycloak_connection)
-    keycloak_admin.create_realm(payload={"realm": (realm := "oidc_test")}, skip_exists=True)
+    keycloak_admin.create_realm(
+        payload={"realm": (realm := "oidc_test"), "enabled": True}, skip_exists=True
+    )
     keycloak_admin.connection.realm_name = "oidc_test"
     keycloak_id = keycloak_admin.create_client(
         payload={

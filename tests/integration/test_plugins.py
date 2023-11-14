@@ -3,6 +3,7 @@
 
 """Integration tests for jenkins-k8s-operator charm."""
 
+import json
 import typing
 
 import jenkinsapi.plugin
@@ -10,6 +11,8 @@ import pytest
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
+
+import jenkins
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
 from .helpers import gen_git_test_job_xml, gen_test_job_xml, get_job_invoked_unit, install_plugins
@@ -310,115 +313,92 @@ async def test_openid_connect_plugin(
     ops_test: OpsTest, unit_web_client: UnitWebClient, keycloak_oidc_meta: KeycloakOIDCMetadata
 ):
     """
-    arrange: given a Jenkins charm with oic-auth plugin installed and a Keycloak oidc server.
-    act: when jenkins login is configured with oidc server.
-    assert: a Keycloak SSO login is enabled.
+    arrange:
+        1. given a Jenkins charm with oic-auth plugin installed and a Keycloak oidc server.
+        2. .
+        3. .
+    act:
+        1. when jenkins security realm is configured with oidc server.
+        2. when jenkins access is made with API key.
+        3. when jenkins security realm is reset.
+    assert:
+        1. the credentials don't work since Keycloak SSO login is enabled.
+        2. the admin user is granted access.
+        3. the login works with admin user credentials.
     """
     await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("oic-auth",))
 
+    # 1. when jenkins security realm is configured with oidc server.
     res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/configureSecurity/configure",
         data=[
-            ("stapler-class", "hudson.security.LegacySecurityRealm"),
-            ("%24class", "hudson.security.LegacySecurityRealm"),
-            ("stapler-class", "hudson.security.HudsonPrivateSecurityRealm"),
-            ("%24class", "hudson.security.HudsonPrivateSecurityRealm"),
-            ("_.clientId", keycloak_oidc_meta.client_id),
-            ("_.clientSecret", keycloak_oidc_meta.client_secret),
-            ("automanualconfigure", "auto"),
-            (
-                "_.wellKnownOpenIDConfigurationUrl",
-                f"http%3A%2F%2F10.1.190.180%3A8080%2Frealms%2F{keycloak_oidc_meta.realm}"
-                "%2F.well-known%2Fopenid-configuration",
-            ),
-            ("_.overrideScopes", ""),
-            ("_.tokenServerUrl", ""),
-            ("_.authorizationServerUrl", ""),
-            ("_.userInfoServerUrl", ""),
-            ("_.scopes", ""),
-            ("_.endSessionEndpoint", ""),
-            # user name field name should be set to sub
-            # https://github.com/jenkinsci/oic-auth-plugin/issues/213
-            ("_.userNameField", "sub"),
-            ("_.fullNameFieldName", ""),
-            ("_.emailFieldName", ""),
-            ("_.groupsFieldName", ""),
-            ("_.tokenFieldToCheckKey", ""),
-            ("_.tokenFieldToCheckValue", ""),
-            ("_.postLogoutRedirectUrl", ""),
-            ("_.escapeHatchUsername", ""),
-            ("_.escapeHatchSecret", ""),
-            ("_.escapeHatchGroup", ""),
-            ("stapler-class", "org.jenkinsci.plugins.oic.OicSecurityRealm"),
-            ("%24class", "org.jenkinsci.plugins.oic.OicSecurityRealm"),
-            ("_.endpoint", "https%3A%2F%2Flogin.ubuntu.com%2F%2Bopenid"),
-            ("stapler-class", "hudson.plugins.openid.OpenIdSsoSecurityRealm"),
-            ("%24class", "hudson.plugins.openid.OpenIdSsoSecurityRealm"),
-            ("stapler-class", "hudson.security.SecurityRealm%24None"),
-            ("%24class", "hudson.security.SecurityRealm%24None"),
-            ("stapler-class", "hudson.security.AuthorizationStrategy%24Unsecured"),
-            ("%24class", "hudson.security.AuthorizationStrategy%24Unsecured"),
-            ("stapler-class", "hudson.security.LegacyAuthorizationStrategy"),
-            ("%24class", "hudson.security.LegacyAuthorizationStrategy"),
-            ("stapler-class", "hudson.security.FullControlOnceLoggedInAuthorizationStrategy"),
-            ("%24class", "hudson.security.FullControlOnceLoggedInAuthorizationStrategy"),
-            ("stapler-class", "hudson.security.GlobalMatrixAuthorizationStrategy"),
-            ("%24class", "hudson.security.GlobalMatrixAuthorizationStrategy"),
-            ("stapler-class", "hudson.security.ProjectMatrixAuthorizationStrategy"),
-            ("%24class", "hudson.security.ProjectMatrixAuthorizationStrategy"),
-            ("stapler-class", "hudson.markup.EscapedMarkupFormatter"),
-            ("%24class", "hudson.markup.EscapedMarkupFormatter"),
-            ("stapler-class", "hudson.markup.RawHtmlMarkupFormatter"),
-            ("%24class", "hudson.markup.RawHtmlMarkupFormatter"),
-            ("slaveAgentPort.type", "fixed"),
-            ("value", "50000"),
-            ("agentProtocol", "on"),
-            ("stapler-class", "hudson.security.csrf.DefaultCrumbIssuer"),
-            ("%24class", "hudson.security.csrf.DefaultCrumbIssuer"),
-            ("SECURITY-2997", "on"),
-            ("SECURITY-2996", "on"),
-            ("SECURITY-2995", "on"),
-            ("_.usageStatisticsEnabled", "on"),
-            ("value", ""),
-            ("port.type,disable", ""),
-            ("Submit", ""),
-            ("core%3Aapply", ""),
             (
                 "json",
-                '{"disableRememberMe":false,"":["2","0","0"],"securityRealm":{"clientId":"testing",'
-                '"clientSecret":"ALCbDKmELkKKnNKp5fTRfdpbCojhViZd","$redact":["clientSecret",'
-                '"escapeHatchSecret"],"automanualconfigure":"auto",'
-                '"wellKnownOpenIDConfigurationUrl":"http://10.1.190.180:8080/realms/testing/.well'
-                '-known/openid-configuration","overrideScopesDefined":false,"overrideScopes":"",'
-                '"tokenServerUrl":"","authorizationServerUrl":"","userInfoServerUrl":"","scopes":'
-                '"","logoutFromOpenidProvider":false,"endSessionEndpoint":"","userNameField":"sub"'
-                ',"fullNameFieldName":"","emailFieldName":"","groupsFieldName":"",'
-                '"tokenFieldToCheckKey":"","tokenFieldToCheckValue":"","disableSslVerification"'
-                ':false,"rootURLFromRequest":false,"sendScopesInTokenRequest":false,'
-                '"postLogoutRedirectUrl":"","pkceEnabled":false,"nonceDisabled":false,'
-                '"escapeHatchEnabled":false,"escapeHatchUsername":"","escapeHatchSecret":"",'
-                '"escapeHatchGroup":"","stapler-class":"org.jenkinsci.plugins.oic.OicSecurityRea'
-                'lm","$class":"org.jenkinsci.plugins.oic.OicSecurityRealm"},"authorizationStrategy'
-                '":{"stapler-class":"hudson.security.AuthorizationStrategy$Unsecured","$class":'
-                '"hudson.security.AuthorizationStrategy$Unsecured"},"markupFormatter":{"stapler-'
-                'class":"hudson.markup.EscapedMarkupFormatter","$class":"hudson.markup.EscapedMark'
-                'upFormatter"},"slaveAgentPort":{"type":"fixed","value":"50000"},"agentProtocol":"'
-                'JNLP4-connect","hudson-security-csrf-GlobalCrumbIssuerConfiguration":{"":"0","cru'
-                'mbIssuer":{"excludeClientIPFromCrumb":false,"stapler-class":"hudson.security.csrf'
-                '.DefaultCrumbIssuer","$class":"hudson.security.csrf.DefaultCrumbIssuer"}},"hudson'
-                '-plugins-openid-OpenIdLoginService$GlobalConfigurationImpl":{"enabled":false},"je'
-                'nkins-security-UpdateSiteWarningsConfiguration":{"SECURITY-2997":true,"SECURITY-2'
-                '996":true,"SECURITY-2995":true},"jenkins-security-apitoken-ApiTokenPropertyConfig'
-                'uration":{"tokenGenerationOnCreationEnabled":false,"creationOfLegacyTokenEnabled"'
-                ':false,"usageStatisticsEnabled":true},"org-jenkinsci-main-modules-sshd-SSHD":{"po'
-                'rt":{"value":"","type":"disable"}},"Submit":"","core:apply":"","Jenkins-Crumb":"f'
-                'aeb05b7165fd5100399f9d618b63f32c9d4839622e9f04868ae65cbdacc697d"}',
+                json.dumps(
+                    {
+                        "securityRealm": {
+                            "clientId": keycloak_oidc_meta.client_id,
+                            "clientSecret": keycloak_oidc_meta.client_secret,
+                            "automanualconfigure": "auto",
+                            "wellKnownOpenIDConfigurationUrl": keycloak_oidc_meta.well_known_endpoint,
+                            "userNameField": "sub",
+                        },
+                        "slaveAgentPort": {"type": "fixed", "value": "50000"},
+                    }
+                ),
             ),
         ],
     )
-
     # The request is made and applied right away, resulting in 401 Unauthorized.
     assert res.status_code == 401, "Security realm not changed."
+
+    # 2. when jenkins access is made with API key.
+    ret, api_token, stderr = await ops_test.juju(
+        "ssh",
+        "--container",
+        "jenkins",
+        unit_web_client.unit.name,
+        "cat",
+        str(jenkins.API_TOKEN_PATH),
+    )
+    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
+    api_client = jenkinsapi.jenkins.Jenkins(unit_web_client.web, "admin", api_token)
+    res = api_client.requester.get_url(f"{unit_web_client.web}/manage/configureSecurity/")
+    assert (
+        res.status_code == 200
+    ), f"Unable to access Jenkins as admin, {str(res.content, encoding='utf-8')}"
+
+    # 3. when jenkins security realm is reset
+    res = api_client.requester.post_url(
+        f"{unit_web_client.web}/manage/configureSecurity/configure",
+        data=[
+            (
+                "json",
+                json.dumps(
+                    {
+                        "securityRealm": {
+                            "allowsSignup": False,
+                            "stapler-class": "hudson.security.HudsonPrivateSecurityRealm",
+                            "$class": "hudson.security.HudsonPrivateSecurityRealm",
+                        },
+                        "authorizationStrategy": {
+                            "allowAnonymousRead": False,
+                            "stapler-class": "hudson.security.FullControlOnceLoggedInAuthorizationStrategy",
+                            "$class": "hudson.security.FullControlOnceLoggedInAuthorizationStrategy",
+                        },
+                        "slaveAgentPort": {"type": "fixed", "value": "50000"},
+                    }
+                ),
+            )
+        ],
+    )
+    assert res.status_code == 200, f"No redirect after security realm change, {res.status_code}"
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/manage/configureSecurity/"
+    )
+    assert (
+        res.status_code == 200
+    ), f"Unable to access security page with original credentials, {str(res.content, encoding='utf-8')}"
 
 
 @pytest.mark.usefixtures("app_k8s_agent_related")
