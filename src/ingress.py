@@ -8,7 +8,6 @@ from charms.traefik_k8s.v1.ingress import IngressPerAppRequirer
 
 import jenkins
 
-
 class Observer(ops.Object):
     """The Jenkins Ingress integration observer."""
 
