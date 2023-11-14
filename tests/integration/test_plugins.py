@@ -313,10 +313,7 @@ async def test_openid_connect_plugin(
     ops_test: OpsTest, unit_web_client: UnitWebClient, keycloak_oidc_meta: KeycloakOIDCMetadata
 ):
     """
-    arrange:
-        1. given a Jenkins charm with oic-auth plugin installed and a Keycloak oidc server.
-        2. .
-        3. .
+    arrange: given a Jenkins charm with oic-auth plugin installed and a Keycloak oidc server.
     act:
         1. when jenkins security realm is configured with oidc server.
         2. when jenkins access is made with API key.
@@ -329,23 +326,24 @@ async def test_openid_connect_plugin(
     await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("oic-auth",))
 
     # 1. when jenkins security realm is configured with oidc server.
+    payload: dict = {
+        "securityRealm": {
+            "clientId": keycloak_oidc_meta.client_id,
+            "clientSecret": keycloak_oidc_meta.client_secret,
+            "automanualconfigure": "auto",
+            "wellKnownOpenIDConfigurationUrl": keycloak_oidc_meta.well_known_endpoint,
+            "userNameField": "sub",
+            "stapler-class": "org.jenkinsci.plugins.oic.OicSecurityRealm",
+            "$class": "org.jenkinsci.plugins.oic.OicSecurityRealm",
+        },
+        "slaveAgentPort": {"type": "fixed", "value": "50000"},
+    }
     res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/configureSecurity/configure",
         data=[
             (
                 "json",
-                json.dumps(
-                    {
-                        "securityRealm": {
-                            "clientId": keycloak_oidc_meta.client_id,
-                            "clientSecret": keycloak_oidc_meta.client_secret,
-                            "automanualconfigure": "auto",
-                            "wellKnownOpenIDConfigurationUrl": keycloak_oidc_meta.well_known_endpoint,
-                            "userNameField": "sub",
-                        },
-                        "slaveAgentPort": {"type": "fixed", "value": "50000"},
-                    }
-                ),
+                json.dumps(payload),
             ),
         ],
     )
@@ -369,26 +367,25 @@ async def test_openid_connect_plugin(
     ), f"Unable to access Jenkins as admin, {str(res.content, encoding='utf-8')}"
 
     # 3. when jenkins security realm is reset
+    payload = {
+        "securityRealm": {
+            "allowsSignup": False,
+            "stapler-class": "hudson.security.HudsonPrivateSecurityRealm",
+            "$class": "hudson.security.HudsonPrivateSecurityRealm",
+        },
+        "authorizationStrategy": {
+            "allowAnonymousRead": False,
+            "stapler-class": "hudson.security.FullControlOnceLoggedInAuthorizationStrategy",
+            "$class": "hudson.security.FullControlOnceLoggedInAuthorizationStrategy",
+        },
+        "slaveAgentPort": {"type": "fixed", "value": "50000"},
+    }
     res = api_client.requester.post_url(
         f"{unit_web_client.web}/manage/configureSecurity/configure",
         data=[
             (
                 "json",
-                json.dumps(
-                    {
-                        "securityRealm": {
-                            "allowsSignup": False,
-                            "stapler-class": "hudson.security.HudsonPrivateSecurityRealm",
-                            "$class": "hudson.security.HudsonPrivateSecurityRealm",
-                        },
-                        "authorizationStrategy": {
-                            "allowAnonymousRead": False,
-                            "stapler-class": "hudson.security.FullControlOnceLoggedInAuthorizationStrategy",
-                            "$class": "hudson.security.FullControlOnceLoggedInAuthorizationStrategy",
-                        },
-                        "slaveAgentPort": {"type": "fixed", "value": "50000"},
-                    }
-                ),
+                json.dumps(payload),
             )
         ],
     )
@@ -396,9 +393,7 @@ async def test_openid_connect_plugin(
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/manage/configureSecurity/"
     )
-    assert (
-        res.status_code == 200
-    ), f"Unable to access security page with original credentials, {str(res.content, encoding='utf-8')}"
+    assert res.status_code == 200, "Unable to access security page with original credentials"
 
 
 @pytest.mark.usefixtures("app_k8s_agent_related")
