@@ -141,5 +141,5 @@ async def test_jenkins_persist_jobs_on_restart(
     assert unit_status.address, "Invalid unit address"
     jenkins_client.baseurl = f"http://{unit_status.address}:8080"
 
-    job = jenkins_client.requester.get_url(test_job_name)
+    job = jenkins_client.get_job(test_job_name)
     assert job.name == test_job_name
