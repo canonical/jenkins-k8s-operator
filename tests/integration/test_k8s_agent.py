@@ -82,7 +82,7 @@ async def test_jenkins_k8s_agent_relation(
     )
 
 
-@pytest.mark.usefixtures("app_k8s_deprecated_agent_related")
+@pytest.mark.usefixtures("k8s_deprecated_agent_related_app")
 async def test_jenkins_k8s_deprecated_agent_relation(
     jenkins_k8s_agents: Application, jenkins_client: jenkinsapi.jenkins.Jenkins
 ):
