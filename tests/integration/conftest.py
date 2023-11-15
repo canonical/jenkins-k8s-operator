@@ -7,6 +7,7 @@ import random
 import re
 import secrets
 import string
+import textwrap
 import typing
 
 import jenkinsapi.jenkins
@@ -27,7 +28,6 @@ from pytest_operator.plugin import OpsTest
 
 import jenkins
 import state
-import textwrap
 
 from .constants import ALLOWED_PLUGINS
 from .helpers import get_pod_ip
