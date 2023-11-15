@@ -4,15 +4,15 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import typing
+from secrets import token_hex
 
 import jenkinsapi
 import pytest
 from juju.application import Application
 from juju.client import client
+from juju.client._definitions import FullStatus, UnitStatus
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
-from secrets import token_hex
-from juju.client._definitions import FullStatus, UnitStatus
 
 from .substrings import assert_substrings_not_in_string
 from .types_ import ModelAppUnit
@@ -112,7 +112,6 @@ async def test_jenkins_persist_jobs_on_restart(
     act: Add a job, scale the charm to 0 unit and scale back to 1.
     assert: The job configuration persists.
     """
-
     test_job_name = token_hex(8)
     jenkins_client.create_job(test_job_name, jenkins_new_job_configuration)
 
