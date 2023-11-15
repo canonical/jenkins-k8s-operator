@@ -125,20 +125,22 @@ def web_address_fixture(unit_ip: str):
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_client")
 async def jenkins_client_fixture(
+    ops_test: OpsTest,
     application: Application,
     web_address: str,
 ) -> jenkinsapi.jenkins.Jenkins:
     """The Jenkins API client."""
     jenkins_unit: Unit = application.units[0]
-    action: Action = await jenkins_unit.run_action("get-admin-password")
-    await action.wait()
-    password = action.results["password"]
-
-    # Initialization of the jenkins client will raise an exception if unable to connect to the
-    # server.
-    return jenkinsapi.jenkins.Jenkins(
-        baseurl=web_address, username="admin", password=password, timeout=60
+    ret, api_token, stderr = await ops_test.juju(
+        "ssh",
+        "--container",
+        "jenkins",
+        jenkins_unit.name,
+        "cat",
+        str(jenkins.API_TOKEN_PATH),
     )
+    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
+    return jenkinsapi.jenkins.Jenkins(web_address, "admin", api_token, timeout=60)
 
 
 @pytest.fixture(scope="function", name="unit_web_client")
@@ -713,18 +715,25 @@ async def keycloak_deployment_fixture(
     return deployment
 
 
-@pytest_asyncio.fixture(scope="module", name="keycloak_oidc_meta")
-async def keycloak_oidc_meta_fixture(
+@pytest_asyncio.fixture(scope="module", name="keycloak_ip")
+async def keycloak_ip_fixture(
     model: Model,
     kube_core_client: kubernetes.client.CoreV1Api,
     keycloak_deployment: kubernetes.client.V1Deployment,
+) -> str:
+    """The keycloak deployment pod IP."""
+    return await get_pod_ip(
+        model, kube_core_client, keycloak_deployment.spec.template.metadata.labels["app"]
+    )
+
+
+@pytest_asyncio.fixture(scope="module", name="keycloak_oidc_meta")
+async def keycloak_oidc_meta_fixture(
+    keycloak_ip: str,
     keycloak_password: str,
 ) -> KeycloakOIDCMetadata:
     """The keycloak user."""
-    pod_ip = await get_pod_ip(
-        model, kube_core_client, keycloak_deployment.spec.template.metadata.labels["app"]
-    )
-    server_url = f"http://{pod_ip}:8080"
+    server_url = f"http://{keycloak_ip}:8080"
     keycloak_connection = KeycloakOpenIDConnection(
         server_url=server_url,
         username="admin",

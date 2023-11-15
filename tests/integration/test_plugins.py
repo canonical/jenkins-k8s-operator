@@ -8,11 +8,10 @@ import typing
 
 import jenkinsapi.plugin
 import pytest
+import requests
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
-
-import jenkins
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
 from .helpers import gen_git_test_job_xml, gen_test_job_xml, get_job_invoked_unit, install_plugins
@@ -317,33 +316,37 @@ async def test_rebuilder_plugin(ops_test: OpsTest, unit_web_client: UnitWebClien
     assert: last job is rebuilt.
     """
     await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("rebuild",))
-    job = unit_web_client.client.create_job("rebuild_test", gen_test_job_xml("k8s"))
+
+    job_name = "rebuild_test"
+    job = unit_web_client.client.create_job(job_name, gen_test_job_xml("k8s"))
     job.invoke().block_until_complete()
 
     unit_web_client.client.requester.get_url(
-        f"{unit_web_client.web}/job/rebuild_test/lastCompletedBuild/rebuild/"
+        f"{unit_web_client.web}/job/{job_name}/lastCompletedBuild/rebuild/"
     )
+    job.get_last_build().block_until_complete()
 
     assert job.get_last_buildnumber() == 2, "Rebuild not triggered."
 
 
 async def test_openid_connect_plugin(
-    ops_test: OpsTest, unit_web_client: UnitWebClient, keycloak_oidc_meta: KeycloakOIDCMetadata
+    ops_test: OpsTest,
+    unit_web_client: UnitWebClient,
+    keycloak_oidc_meta: KeycloakOIDCMetadata,
+    keycloak_ip: str,
 ):
     """
     arrange: given a Jenkins charm with oic-auth plugin installed and a Keycloak oidc server.
     act:
-        1. when jenkins security realm is configured with oidc server.
-        2. when jenkins access is made with API key.
-        3. when jenkins security realm is reset.
+        1. when jenkins security realm is configured with oidc server and login page is requested.
+        2. when jenkins security realm is reset and login page is requested.
     assert:
-        1. the credentials don't work since Keycloak SSO login is enabled.
-        2. the admin user is granted access.
-        3. the login works with admin user credentials.
+        1. a redirection to Keycloak SSO is made.
+        2. native Jenkins login ui is loaded.
     """
     await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("oic-auth",))
 
-    # 1. when jenkins security realm is configured with oidc server.
+    # 1. when jenkins security realm is configured with oidc server and login page is requested.
     payload: dict = {
         "securityRealm": {
             "clientId": keycloak_oidc_meta.client_id,
@@ -365,26 +368,11 @@ async def test_openid_connect_plugin(
             ),
         ],
     )
-    # The request is made and applied right away, resulting in 401 Unauthorized.
-    assert res.status_code == 401, "Security realm not changed."
+    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F")
+    assert res.history[0].status_code == 302, "Jenkins login not redirected."
+    assert keycloak_ip in res.history[0].headers["location"], "Login not redirected to keycloak."
 
-    # 2. when jenkins access is made with API key.
-    ret, api_token, stderr = await ops_test.juju(
-        "ssh",
-        "--container",
-        "jenkins",
-        unit_web_client.unit.name,
-        "cat",
-        str(jenkins.API_TOKEN_PATH),
-    )
-    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
-    api_client = jenkinsapi.jenkins.Jenkins(unit_web_client.web, "admin", api_token)
-    res = api_client.requester.get_url(f"{unit_web_client.web}/manage/configureSecurity/")
-    assert (
-        res.status_code == 200
-    ), f"Unable to access Jenkins as admin, {str(res.content, encoding='utf-8')}"
-
-    # 3. when jenkins security realm is reset
+    # 2. when jenkins security realm is reset and login page is requested.
     payload = {
         "securityRealm": {
             "allowsSignup": False,
@@ -398,7 +386,7 @@ async def test_openid_connect_plugin(
         },
         "slaveAgentPort": {"type": "fixed", "value": "50000"},
     }
-    res = api_client.requester.post_url(
+    res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/configureSecurity/configure",
         data=[
             (
@@ -407,8 +395,8 @@ async def test_openid_connect_plugin(
             )
         ],
     )
-    assert res.status_code == 200, f"No redirect after security realm change, {res.status_code}"
-    res = unit_web_client.client.requester.get_url(
-        f"{unit_web_client.web}/manage/configureSecurity/"
-    )
-    assert res.status_code == 200, "Unable to access security page with original credentials"
+    assert res.status_code == 200, f"Failed to reset security realm, {res.content}"
+    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F")
+    assert res.status_code == 404, "Security realm login not reset."
+    res = requests.get(f"{unit_web_client.web}/login?from=%2F")
+    assert res.status_code == 200, "Failed to load Jenkins native login UI."
