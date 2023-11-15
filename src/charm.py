@@ -12,6 +12,7 @@ import ops
 
 import agent
 import cos
+import ingress
 import jenkins
 import status
 import timerange
@@ -52,6 +53,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.agent_observer = agent.Observer(self, self.state)
         self.cos_observer = cos.Observer(self)
+        self.ingress_observer = ingress.Observer(self)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.update_status, self._on_update_status)
