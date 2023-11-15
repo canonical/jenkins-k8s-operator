@@ -53,7 +53,7 @@ async def test_jenkins_plugins_config(
     assert all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
 
 
-@pytest.mark.usefixtures("k8s_agent_related_app")
+@pytest.mark.usefixtures("app_k8s_agent_related")
 async def test_git_plugin_k8s_agent(ops_test: OpsTest, unit_web_client: UnitWebClient):
     """
     arrange: given a jenkins charm with git plugin installed.
@@ -187,7 +187,7 @@ async def test_matrix_combinations_parameter_plugin(
     ), f"Configuration matrix table not found, {test_page}"
 
 
-@pytest.mark.usefixtures("k8s_agent_related_app")
+@pytest.mark.usefixtures("app_k8s_agent_related")
 async def test_postbuildscript_plugin(
     ops_test: OpsTest, unit_web_client: UnitWebClient, jenkins_k8s_agents: Application
 ):
@@ -308,7 +308,7 @@ async def test_openid_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
     assert res.status_code == 200, "Failed to validate openid endpoint using the plugin."
 
 
-@pytest.mark.usefixtures("k8s_agent_related_app")
+@pytest.mark.usefixtures("app_k8s_agent_related")
 async def test_rebuilder_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with rebuilder plugin installed.
@@ -368,7 +368,7 @@ async def test_openid_connect_plugin(
             ),
         ],
     )
-    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F")
+    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
     assert res.history[0].status_code == 302, "Jenkins login not redirected."
     assert keycloak_ip in res.history[0].headers["location"], "Login not redirected to keycloak."
 
@@ -396,7 +396,7 @@ async def test_openid_connect_plugin(
         ],
     )
     assert res.status_code == 200, f"Failed to reset security realm, {res.content}"
-    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F")
+    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
     assert res.status_code == 404, "Security realm login not reset."
-    res = requests.get(f"{unit_web_client.web}/login?from=%2F")
+    res = requests.get(f"{unit_web_client.web}/login?from=%2F", timeout=30)
     assert res.status_code == 200, "Failed to load Jenkins native login UI."
