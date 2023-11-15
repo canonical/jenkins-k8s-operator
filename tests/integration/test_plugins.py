@@ -51,7 +51,7 @@ async def test_jenkins_plugins_config(
     assert all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
 
 
-@pytest.mark.usefixtures("app_k8s_agent_related")
+@pytest.mark.usefixtures("k8s_agent_related_app")
 async def test_git_plugin_k8s_agent(ops_test: OpsTest, unit_web_client: UnitWebClient):
     """
     arrange: given a jenkins charm with git plugin installed.
@@ -185,7 +185,7 @@ async def test_matrix_combinations_parameter_plugin(
     ), f"Configuration matrix table not found, {test_page}"
 
 
-@pytest.mark.usefixtures("app_k8s_agent_related")
+@pytest.mark.usefixtures("k8s_agent_related_app")
 async def test_postbuildscript_plugin(
     ops_test: OpsTest, unit_web_client: UnitWebClient, jenkins_k8s_agents: Application
 ):
@@ -306,7 +306,7 @@ async def test_bzr_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
     assert "Bazaar" in config_page, f"Bzr configuration option not found. {config_page}"
 
 
-@pytest.mark.usefixtures("app_k8s_agent_related")
+@pytest.mark.usefixtures("k8s_agent_related_app")
 async def test_rebuilder_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with rebuilder plugin installed.
