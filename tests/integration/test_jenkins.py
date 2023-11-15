@@ -137,6 +137,4 @@ async def test_jenkins_persist_jobs_on_restart(
     action: Action = await jenkins_unit.run(command=command, timeout=60)
     await action.wait()
     assert action.results.get("return-code") == 0
-    assert jenkins_new_job_configuration.strip("\n") in str(action.results.get("stdout")).strip(
-        "\n"
-    )
+    assert jenkins_new_job_configuration in str(action.results.get("stdout"))
