@@ -22,7 +22,7 @@ import state
 from charm import JenkinsK8sOperatorCharm
 
 from .helpers import combine_root_paths
-from .types_ import HarnessWithContainer, Versions
+from .types_ import HarnessWithContainer
 
 ROCKCRAFT_YAML = yaml.safe_load(Path("jenkins_rock/rockcraft.yaml").read_text(encoding="utf-8"))
 
@@ -312,14 +312,6 @@ def patched_version_fixture():
 def minor_update_version_fixture():
     """The Jenkins version with incremented minor version."""
     return "2.503.1"
-
-
-@pytest.fixture(scope="function", name="versions")
-def versions_fixture(current_version: str, patched_version: str, minor_updated_version: str):
-    """Wrapper for current and patched version to reduce number of fixture arguments."""
-    return Versions(
-        current=current_version, patched=patched_version, minor_update=minor_updated_version
-    )
 
 
 @pytest.fixture(scope="function", name="rss_feed")

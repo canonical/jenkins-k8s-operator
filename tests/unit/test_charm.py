@@ -17,7 +17,6 @@ import requests
 
 import jenkins
 import state
-import status
 import timerange
 from charm import JenkinsK8sOperatorCharm
 
@@ -182,134 +181,6 @@ def test__on_get_admin_password_action(
     mock_event.set_results.assert_called_once_with({"password": admin_credentials.password})
 
 
-def test__update_jenkins_version_already_latest(
-    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
-):
-    """
-    arrange: given latest jenkins, monkeypatched has_updates_for_lts that returns the None.
-    act: when _update_jenkins_version is called.
-    assert: original status is returned with no status message.
-    """
-    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda *_args, **_kwargs: None)
-    mock_download_func = MagicMock(spec=jenkins._download_stable_war)
-    monkeypatch.setattr(jenkins, "_download_stable_war", mock_download_func)
-    harness, container = harness_container.harness, harness_container.container
-    harness.begin()
-    original_status = harness.charm.unit.status.name
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    returned_status = jenkins_charm._update_jenkins_version(container)
-
-    mock_download_func.assert_not_called()
-    assert returned_status.name == original_status
-    assert not returned_status.message, "The status message should not exist."
-
-
-def test__update_jenkins_version_has_updates_for_lts_error(
-    harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
-    raise_exception: typing.Callable,
-):
-    """
-    arrange: given latest jenkins, monkeypatched has_updates_for_lts that raises exceptions.
-    act: when _update_jenkins_version is called.
-    assert: original status is returned with failed status message.
-    """
-    monkeypatch.setattr(
-        jenkins,
-        "has_updates_for_lts",
-        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsUpdateError),
-    )
-    harness, container = harness_container.harness, harness_container.container
-    harness.begin()
-    original_status = harness.charm.unit.status.name
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    returned_status = jenkins_charm._update_jenkins_version(container)
-
-    assert returned_status.name == original_status
-    assert returned_status.message == "Failed to get Jenkins patch version."
-
-
-def test__update_jenkins_version_jenkins_update_error(
-    harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
-    raise_exception: typing.Callable,
-):
-    """
-    arrange: given monkeypatched update_jenkins that raises a JenkinsUpdateError.
-    act: when _update_jenkins_version is called.
-    assert: original status is returned with failed status message.
-    """
-    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda: True)
-    monkeypatch.setattr(
-        jenkins,
-        "update_jenkins",
-        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsUpdateError),
-    )
-    harness, container = harness_container.harness, harness_container.container
-    harness.begin()
-    original_status = harness.charm.unit.status.name
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    returned_status = jenkins_charm._update_jenkins_version(container)
-
-    assert returned_status.name == original_status
-    assert returned_status.message == "Failed to get update data."
-
-
-def test__update_jenkins_version_jenkins_restart_error(
-    harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
-    raise_exception: typing.Callable,
-):
-    """
-    arrange: given monkeypatched update_jenkins that raises a JenkinsRestartError exception.
-    act: when _update_jenkins_version is called.
-    assert: blocked status is returned with failed status message.
-    """
-    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda: True)
-    monkeypatch.setattr(
-        jenkins,
-        "update_jenkins",
-        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsRestartError),
-    )
-    harness, container = harness_container.harness, harness_container.container
-    harness.begin()
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    returned_status = jenkins_charm._update_jenkins_version(container)
-
-    assert returned_status.name == BLOCKED_STATUS_NAME
-    assert returned_status.message == "Update restart failed."
-
-
-def test__update_jenkins_version_update(
-    harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
-    patched_version: str,
-):
-    """
-    arrange: given monkeypatched jenkins that returns the unpatched version.
-    act: when _update_jenkins_version is called.
-    assert: active status is returned with no message.
-    """
-    monkeypatch.setattr(jenkins, "has_updates_for_lts", lambda: True)
-    monkeypatch.setattr(
-        jenkins,
-        "update_jenkins",
-        lambda *_args, **_kwargs: patched_version,
-    )
-    harness, container = harness_container.harness, harness_container.container
-    harness.begin()
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    returned_status = jenkins_charm._update_jenkins_version(container)
-
-    assert returned_status.name == ACTIVE_STATUS_NAME
-    assert returned_status.message == ""
-
-
 @pytest.mark.parametrize(
     "exception, expected_status",
     [
@@ -380,16 +251,20 @@ def test__on_update_status_no_container(
     act: when _on_update_status is called.
     assert: no further functions are called.
     """
-    mock_get_priority_status = MagicMock(spec=status.get_priority_status)
-    monkeypatch.setattr(status, "get_priority_status", mock_get_priority_status)
+    mock_remove_unlisted_plugins_func = MagicMock(
+        spec=JenkinsK8sOperatorCharm._remove_unlisted_plugins
+    )
     harness, container = harness_container.harness, harness_container.container
     harness.set_can_connect(container, False)
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    monkeypatch.setattr(
+        jenkins_charm, "_remove_unlisted_plugins", mock_remove_unlisted_plugins_func
+    )
     jenkins_charm._on_update_status(MagicMock(spec=ops.UpdateStatusEvent))
 
-    mock_get_priority_status.assert_not_called()
+    mock_remove_unlisted_plugins_func.assert_not_called()
 
 
 def test__on_update_status_not_in_time_range(
@@ -402,58 +277,56 @@ def test__on_update_status_not_in_time_range(
     """
     mock_datetime = MagicMock(spec=datetime.datetime)
     mock_datetime.utcnow.return_value = datetime.datetime(2023, 1, 1, 23)
-    monkeypatch.setattr(timerange, "datetime", mock_datetime)
-    monkeypatch.setattr(
-        status,
-        "get_priority_status",
-        mock_status_func := MagicMock(spec=status.get_priority_status),
+    mock_remove_unlisted_plugins_func = MagicMock(
+        spec=JenkinsK8sOperatorCharm._remove_unlisted_plugins
     )
+    monkeypatch.setattr(timerange, "datetime", mock_datetime)
     harness_container.harness.update_config({"restart-time-range": "00-23"})
     harness_container.harness.begin()
     harness = harness_container.harness
     original_status = harness.charm.unit.status.name
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    monkeypatch.setattr(
+        jenkins_charm, "_remove_unlisted_plugins", mock_remove_unlisted_plugins_func
+    )
     jenkins_charm._on_update_status(MagicMock(spec=ops.UpdateStatusEvent))
 
     assert jenkins_charm.unit.status.name == original_status
-    mock_status_func.assert_not_called()
+    mock_remove_unlisted_plugins_func.assert_not_called()
 
 
 # pylint doesn't quite understand walrus operators
 # pylint: disable=unused-variable,undefined-variable,too-many-locals
 @pytest.mark.parametrize(
-    "remove_plugin_status, update_jenkins_status, expected_status",
+    "remove_plugin_status, expected_status",
     [
         pytest.param(
             expected_status := ops.ActiveStatus("Failed to remove unlisted plugin."),
-            ops.ActiveStatus(),
             expected_status,
             id="Failed plugin remove status.",
         ),
         pytest.param(
             ops.ActiveStatus("Failed to remove unlisted plugin."),
-            # walrus operator is initialized with another status, mypy complains about
-            # incompatible types in assignment
-            expected_status := ops.BlockedStatus(),  # type: ignore
             expected_status,
             id="Failed plugin remove status (blocked status).",
         ),
         pytest.param(
             ops.ActiveStatus("Failed to remove unlisted plugin."),
-            expected_status := ops.MaintenanceStatus(),  # type: ignore
             expected_status,
             id="Failed plugin remove status (maintenance status).",
         ),
+        # walrus operator is initialized with another status, mypy complains about
+        # incompatible types in assignment
         pytest.param(
-            ops.ActiveStatus(),
-            expected_status := ops.WaitingStatus(),  # type: ignore
+            expected_status := ops.ActiveStatus(
+                "Failed to remove unlisted plugin."
+            ),  # type: ignore
             expected_status,
             id="Failed update jenkins status (waiting status).",
         ),
         pytest.param(
             ops.ActiveStatus("Failed to remove unlisted plugin."),
-            expected_status := ops.ActiveStatus("Failed to get Jenkins patch version."),
             expected_status,
             id="Both failed (active status)",
         ),
@@ -464,11 +337,10 @@ def test__on_update_status(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
     remove_plugin_status: ops.StatusBase,
-    update_jenkins_status: ops.StatusBase,
     expected_status: ops.StatusBase,
 ):
     """
-    arrange: given patched statuses from _remove_unlisted_plugins and _update_jenkins_version.
+    arrange: given patched statuses from _remove_unlisted_plugins.
     act: when _on_update_status is called.
     assert: expected status is applied to the unit status.
     """
@@ -476,11 +348,6 @@ def test__on_update_status(
         JenkinsK8sOperatorCharm,
         "_remove_unlisted_plugins",
         lambda *_args, **_kwargs: remove_plugin_status,
-    )
-    monkeypatch.setattr(
-        JenkinsK8sOperatorCharm,
-        "_update_jenkins_version",
-        lambda *_args, **_kwargs: update_jenkins_status,
     )
     harness_container.harness.begin()
 
