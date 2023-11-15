@@ -176,8 +176,8 @@ async def jenkins_k8s_agents_fixture(
     await model.remove_application(agent_app.name, block_until_done=True, force=True)
 
 
-@pytest_asyncio.fixture(scope="function", name="app_k8s_agent_related")
-async def app_k8s_agent_related_fixture(
+@pytest_asyncio.fixture(scope="function", name="k8s_agent_related_app")
+async def k8s_agent_related_app_fixture(
     jenkins_k8s_agents: Application,
     application: Application,
 ):
@@ -208,8 +208,8 @@ async def extra_jenkins_k8s_agents_fixture(
     yield agent_app
 
 
-@pytest_asyncio.fixture(scope="function", name="app_k8s_deprecated_agent_related")
-async def app_k8s_deprecated_agent_related_fixture(
+@pytest_asyncio.fixture(scope="function", name="k8s_deprecated_agent_related_app")
+async def k8s_deprecated_agent_related_app_fixture(
     jenkins_k8s_agents: Application,
     application: Application,
 ):
@@ -270,8 +270,8 @@ async def jenkins_machine_agents_fixture(
     yield app
 
 
-@pytest_asyncio.fixture(scope="function", name="app_machine_agent_related")
-async def app_machine_agent_related_fixture(
+@pytest_asyncio.fixture(scope="function", name="machine_agent_related_app")
+async def machine_agent_related_app_fixture(
     jenkins_machine_agents: Application,
     application: Application,
 ):
@@ -293,8 +293,8 @@ async def app_machine_agent_related_fixture(
     yield application
 
 
-@pytest_asyncio.fixture(scope="function", name="app_machine_deprecated_agent_related")
-async def app_machine_deprecated_agent_related_fixture(
+@pytest_asyncio.fixture(scope="function", name="machine_deprecated_agent_related_app")
+async def machine_deprecated_agent_related_app_fixture(
     jenkins_machine_agents: Application,
     application: Application,
 ):
