@@ -699,6 +699,7 @@ async def ingress_application_related_fixture(application: Application, external
 
 @pytest.fixture(scope="module", name="jenkins_new_job_configuration")
 def jenkins_new_job_configuration() -> str:
+    """XML configuration for blank jenkins job for testing purposes."""
     return """<project>
         <description></description>
         <properties/>

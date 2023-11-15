@@ -138,11 +138,11 @@ async def test_jenkins_persist_jobs_on_restart(
     )
     # Check if the new unit has a valid IP address
     assert unit_status.address, "Invalid unit address"
-    client = jenkinsapi.jenkins.Jenkins(
-        baseurl=f"http://{unit_status.address}:8080",
+    jenkins_client_new = jenkinsapi.jenkins.Jenkins(
+        baseurl=f"http://{unit_status.address!r}:8080",
         username=jenkins_client.username,
         password=jenkins_client.password,
     )
 
-    job = client.get_job(test_job_name)
+    job = jenkins_client_new.get_job(test_job_name)
     assert job.name == test_job_name
