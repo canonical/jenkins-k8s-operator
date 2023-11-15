@@ -8,9 +8,9 @@ from secrets import token_hex
 
 import jenkinsapi
 import pytest
+from juju.action import Action
 from juju.application import Application
 from juju.client import client
-from juju.client._definitions import FullStatus, UnitStatus
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
@@ -103,46 +103,40 @@ async def test_jenkins_automatic_update(
 
 
 async def test_jenkins_persist_jobs_on_restart(
-    model_app_unit: ModelAppUnit,
+    application: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
     jenkins_new_job_configuration: str,
 ):
     """
     arrange: a bare Jenkins charm.
     act: Add a job, scale the charm to 0 unit and scale back to 1.
-    assert: The job configuration persists.
+    assert: The job configuration persists and is the same as the one used.
     """
     test_job_name = token_hex(8)
     jenkins_client.create_job(test_job_name, jenkins_new_job_configuration)
 
-    await model_app_unit.app.scale(scale=0)
-    await model_app_unit.model.wait_for_idle(
-        apps=[model_app_unit.app.name],
+    await application.scale(scale=0)
+    await application.model.wait_for_idle(
+        apps=[application.name],
         timeout=20 * 60,
         idle_period=30,
         wait_for_exact_units=0,
     )
 
-    await model_app_unit.app.scale(scale=1)
-    await model_app_unit.model.wait_for_idle(
-        apps=[model_app_unit.app.name],
+    await application.scale(scale=1)
+    await application.model.wait_for_idle(
+        apps=[application.name],
         timeout=20 * 60,
         idle_period=30,
         wait_for_exact_units=1,
     )
 
-    # Get the new unit's IP address, this is a hack until support for ingress is implemented
-    status: FullStatus = await model_app_unit.model.get_status([model_app_unit.app.name])
-    unit_status: UnitStatus = next(
-        iter(status.applications[model_app_unit.app.name].units.values())
+    jenkins_unit: Unit = application.units[0]
+    assert jenkins_unit
+    command = f"cat /var/lib/jenkins/jobs/{test_job_name}/config.xml"
+    action: Action = await jenkins_unit.run(command=command, timeout=60)
+    await action.wait()
+    assert action.results.get("return-code") == 0
+    assert jenkins_new_job_configuration.strip("\n") in str(action.results.get("stdout")).strip(
+        "\n"
     )
-    # Check if the new unit has a valid IP address
-    assert unit_status.address, "Invalid unit address"
-    jenkins_client_new = jenkinsapi.jenkins.Jenkins(
-        baseurl=f"http://{unit_status.address!r}:8080",
-        username=jenkins_client.username,
-        password=jenkins_client.password,
-    )
-
-    job = jenkins_client_new.get_job(test_job_name)
-    assert job.name == test_job_name
