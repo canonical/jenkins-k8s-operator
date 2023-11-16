@@ -29,7 +29,7 @@ async def test_jenkins_machine_agent_relation(
     # 1. Relate jenkins-k8s charm to the jenkins-agent charm.
     model = application.model
     machine_model = jenkins_machine_agents.model
-    # this code is similar to the app_machine_agent_related fixture but shouldn't be using the
+    # this code is similar to the machine_agent_related_app fixture but shouldn't be using the
     # fixture since this test tests for teardown of relation as well.
     # pylint: disable=duplicate-code
     await model.relate(
@@ -52,7 +52,7 @@ async def test_jenkins_machine_agent_relation(
     assert not any((application.name in key for key in jenkins_client.get_nodes().keys()))
 
 
-@pytest.mark.usefixtures("app_machine_deprecated_agent_related")
+@pytest.mark.usefixtures("machine_deprecated_agent_related_app")
 async def test_jenkins_machine_deprecated_agent_relation(
     jenkins_machine_agents: Application, jenkins_client: jenkinsapi.jenkins.Jenkins
 ):
