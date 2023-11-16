@@ -16,7 +16,12 @@ import cos
 import ingress
 import jenkins
 import timerange
-from state import CharmConfigInvalidError, CharmRelationDataInvalidError, State
+from state import (
+    CharmConfigInvalidError,
+    CharmIllegalNumUnitsError,
+    CharmRelationDataInvalidError,
+    State,
+)
 
 if typing.TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
@@ -40,7 +45,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         super().__init__(*args)
         try:
             self.state = State.from_charm(self)
-        except CharmConfigInvalidError as exc:
+        except (CharmConfigInvalidError, CharmIllegalNumUnitsError) as exc:
             self.unit.status = ops.BlockedStatus(exc.msg)
             return
         except CharmRelationDataInvalidError as exc:
