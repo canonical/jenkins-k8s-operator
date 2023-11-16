@@ -7,8 +7,6 @@ import typing
 
 import jenkinsapi
 import pytest
-from juju.application import Application
-from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
 from .helpers import install_plugins
