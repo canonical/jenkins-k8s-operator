@@ -7,8 +7,7 @@ options:
     description: >
       Preferred UTC time range in 24 hour format for restarting Jenkins. If empty, restart will
       take place whenever Jenkins needs to restart. Jenkins will need to restart on the following
-      occasions. 1. Patched Jenkins version within the same LTS is available. 2. Plugins that are
-      not part of `plugins` configuration option are detected.
+      occasion. Plugins that are not part of `allowed-plugins` configuration option are detected.
       For example, 03-05 will allow Jenkins restart to take place from 3AM UTC to 5AM UTC. 
       Awaits for running job completion for 5 minutes.
     default: ""
