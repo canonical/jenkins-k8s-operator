@@ -13,8 +13,8 @@ from juju.application import Application
 from juju.client import client
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
-from .helpers import gen_test_job_xml
 
+from .helpers import gen_test_job_xml
 from .substrings import assert_substrings_not_in_string
 from .types_ import ModelAppUnit
 
@@ -113,7 +113,7 @@ async def test_storage_mount(
     assert: The job configuration persists and is the same as the one used.
     """
     test_job_name = token_hex(8)
-    job_configuration = gen_test_job_xml("build-in")
+    job_configuration = gen_test_job_xml("built-in")
     jenkins_client.create_job(test_job_name, job_configuration)
 
     await application.scale(scale=0)
