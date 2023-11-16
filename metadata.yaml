@@ -33,10 +33,20 @@ tags:
 containers:
   jenkins:
     resource: jenkins-image
+    mounts:
+      - storage: jenkins-home
+        location: /var/lib/jenkins
+
 resources:
   jenkins-image:
     type: oci-image
     description: OCI image for Jenkins
+
+storage:
+  jenkins-home:
+    type: filesystem
+    location: /var/lib/jenkins
+
 requires:
   agent-deprecated:
     interface: jenkins-slave
