@@ -15,7 +15,6 @@ import agent
 import cos
 import ingress
 import jenkins
-import status
 import timerange
 from state import CharmConfigInvalidError, CharmRelationDataInvalidError, State
 
@@ -157,44 +156,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ops.BlockedStatus("Failed to restart Jenkins after removing plugins")
         return ops.ActiveStatus()
 
-    def _update_jenkins_version(self, container: ops.Container) -> ops.StatusBase:
-        """Update Jenkins patch version if available.
-
-        The update will only take place if the current time is within the restart-time-range config
-        value.
-
-        Args:
-            container: The Jenkins workload container.
-
-        Returns:
-            The unit status of the charm after the operation.
-        """
-        original_status = self.unit.status.name
-        self.unit.status = ops.StatusBase.from_name(original_status, "Checking for updates.")
-        try:
-            if not jenkins.has_updates_for_lts():
-                return ops.StatusBase.from_name(original_status, "")
-        except jenkins.JenkinsUpdateError as exc:
-            logger.error("Failed to get Jenkins updates, %s", exc)
-            return ops.StatusBase.from_name(
-                original_status, "Failed to get Jenkins patch version."
-            )
-
-        self.unit.status = ops.MaintenanceStatus("Updating Jenkins.")
-        try:
-            updated_version = jenkins.update_jenkins(
-                container=container, proxy=self.state.proxy_config
-            )
-        except jenkins.JenkinsUpdateError as exc:
-            logger.error("Failed to fetch required Jenkins update data, %s", exc)
-            return ops.StatusBase.from_name(original_status, "Failed to get update data.")
-        except jenkins.JenkinsRestartError as exc:
-            logger.error("Failed to safely restart Jenkins. %s", exc)
-            return ops.BlockedStatus("Update restart failed.")
-
-        self.unit.set_workload_version(updated_version)
-        return ops.ActiveStatus()
-
     def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
         """Handle update status event.
 
@@ -211,12 +172,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         ):
             return
 
-        self.unit.status = status.get_priority_status(
-            (
-                self._update_jenkins_version(container=container),
-                self._remove_unlisted_plugins(container=container),
-            )
-        )
+        self.unit.status = self._remove_unlisted_plugins(container=container)
 
 
 if __name__ == "__main__":  # pragma: nocover
