@@ -4,13 +4,16 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import typing
+from secrets import token_hex
 
 import jenkinsapi
 import pytest
 from juju.action import Action
+from juju.application import Application
+from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
-from .helpers import install_plugins
+from .helpers import gen_test_job_xml, install_plugins
 from .substrings import assert_substrings_not_in_string
 from .types_ import UnitWebClient
 
@@ -76,3 +79,41 @@ async def test_rotate_password_action(unit_web_client: UnitWebClient):
     new_client = jenkinsapi.jenkins.Jenkins(unit_web_client.web, "admin", new_password)
     result = new_client.requester.get_url(f"{unit_web_client.web}/manage/")
     assert result.status_code == 200, "Invalid password"
+
+
+async def test_storage_mount(
+    application: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+):
+    """
+    arrange: a bare Jenkins charm.
+    act: Add a job, scale the charm to 0 unit and scale back to 1.
+    assert: The job configuration persists and is the same as the one used.
+    """
+    test_job_name = token_hex(8)
+    job_configuration = gen_test_job_xml("built-in")
+    jenkins_client.create_job(test_job_name, job_configuration)
+
+    await application.scale(scale=0)
+    await application.model.wait_for_idle(
+        apps=[application.name],
+        timeout=20 * 60,
+        idle_period=30,
+        wait_for_exact_units=0,
+    )
+    await application.scale(scale=1)
+    await application.model.wait_for_idle(
+        apps=[application.name],
+        timeout=20 * 60,
+        idle_period=30,
+        wait_for_exact_units=1,
+    )
+
+    jenkins_unit: Unit = application.units[0]
+    assert jenkins_unit
+    command = f"cat /var/lib/jenkins/jobs/{test_job_name}/config.xml"
+    action: Action = await jenkins_unit.run(command=command, timeout=60)
+    await action.wait()
+    assert action.results.get("return-code") == 0
+    # Remove leading and trailing newline since jenkins client autoformat config
+    assert job_configuration.strip("\n") in str(action.results.get("stdout"))
