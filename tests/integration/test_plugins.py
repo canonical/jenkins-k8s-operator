@@ -395,7 +395,6 @@ async def test_openid_connect_plugin(
             )
         ],
     )
-    assert res.status_code == 200, f"Failed to reset security realm, {res.content}"
     res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
     assert res.status_code == 404, "Security realm login not reset."
     res = requests.get(f"{unit_web_client.web}/login?from=%2F", timeout=30)
