@@ -102,7 +102,7 @@ async def test_jenkins_automatic_update(
     assert updated_workload_version == latest_jenkins_lts_version, "The Jenkins should be updated."
 
 
-async def test_jenkins_persist_jobs_on_restart(
+async def test_storage_mount(
     application: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
     jenkins_new_job_configuration: str,
