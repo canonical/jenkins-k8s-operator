@@ -35,7 +35,6 @@ async def test_jenkins_update_ui_disabled(
 @pytest.mark.usefixtures("app_with_restart_time_range", "libfaketime_unit")
 async def test_jenkins_automatic_update_out_of_range(
     ops_test: OpsTest,
-    application: Application,
     libfaketime_env: typing.Iterable[str],
     update_status_env: typing.Iterable[str],
     unit_web_client: UnitWebClient,
@@ -46,17 +45,15 @@ async def test_jenkins_automatic_update_out_of_range(
     assert: the maintenance (plugins removal) does not take place.
     """
     extra_plugin = "oic-auth"
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, extra_plugin)
-    unit: Unit = application.units[0]
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, (extra_plugin,))
     ret_code, _, stderr = await ops_test.juju(
         "run",
         "--unit",
-        unit.name,
+        unit_web_client.unit.name,
         "--",
         f"{' '.join(libfaketime_env)} {' '.join(update_status_env)} ./dispatch",
     )
     assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
-
     assert unit_web_client.client.has_plugin(
         extra_plugin
     ), "additionally installed plugin cleanedup."
