@@ -29,7 +29,7 @@ Metadata for registering Jenkins Agent.
 
 ---
 
-<a href="../src/state.py#L103"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L119"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_agent_relation`
 
@@ -54,7 +54,7 @@ Instantiate AgentMeta from charm relation databag.
 
 ---
 
-<a href="../src/state.py#L84"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L100"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_deprecated_agent_relation`
 
@@ -79,7 +79,7 @@ Instantiate AgentMeta from charm relation databag.
 
 ---
 
-<a href="../src/state.py#L71"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L87"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `numeric_executors`
 
@@ -121,6 +121,37 @@ __init__(msg: str)
 ```
 
 Initialize a new instance of the CharmConfigInvalidError exception. 
+
+
+
+**Args:**
+ 
+ - <b>`msg`</b>:  Explanation of the error. 
+
+
+
+
+
+---
+
+## <kbd>class</kbd> `CharmIllegalNumUnitsError`
+Represents an error with invalid number of units deployed. 
+
+
+
+**Attributes:**
+ 
+ - <b>`msg`</b>:  Explanation of the error. 
+
+<a href="../src/state.py#L65"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `__init__`
+
+```python
+__init__(msg: str)
+```
+
+Initialize a new instance of the CharmIllegalNumUnitsError exception. 
 
 
 
@@ -190,7 +221,7 @@ Configuration for accessing Jenkins through proxy.
 
 ---
 
-<a href="../src/state.py#L183"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L199"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_env`
 
@@ -227,7 +258,7 @@ The Jenkins k8s operator charm state.
 
 ---
 
-<a href="../src/state.py#L224"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L240"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_charm`
 
@@ -254,5 +285,6 @@ Initialize the state from charm.
  
  - <b>`CharmConfigInvalidError`</b>:  if invalid state values were encountered. 
  - <b>`CharmRelationDataInvalidError`</b>:  if invalid relation data was received. 
+ - <b>`CharmIllegalNumUnitsError`</b>:  if more than 1 unit of Jenkins charm is deployed. 
 
 

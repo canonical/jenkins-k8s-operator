@@ -30,13 +30,12 @@ def test_state_invalid_time_config():
         pytest.param("", id="empty string"),
     ],
 )
-def test_no_time_range_config(time_range: str):
+def test_no_time_range_config(time_range: str, mock_charm: unittest.mock.MagicMock):
     """
     arrange: given an empty time range config value.
     act: when state is instantiated.
     assert: state without time range is returned.
     """
-    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
     mock_charm.config = {"restart-time-range": time_range}
 
     returned_state = state.State.from_charm(mock_charm)
@@ -108,7 +107,9 @@ def test_proxyconfig_none(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_proxyconfig_from_charm_env(
-    monkeypatch: pytest.MonkeyPatch, proxy_config: state.ProxyConfig
+    monkeypatch: pytest.MonkeyPatch,
+    proxy_config: state.ProxyConfig,
+    mock_charm: unittest.mock.MagicMock,
 ):
     """
     arrange: given a monkeypatched os.environ with proxy configurations.
@@ -124,7 +125,6 @@ def test_proxyconfig_from_charm_env(
             "JUJU_CHARM_NO_PROXY": str(proxy_config.no_proxy),
         },
     )
-    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
     mock_charm.config = {}
 
     config = state.State.from_charm(mock_charm).proxy_config
@@ -134,28 +134,38 @@ def test_proxyconfig_from_charm_env(
     assert config.no_proxy == proxy_config.no_proxy
 
 
-def test_plugins_config_none():
+def test_plugins_config_none(mock_charm: unittest.mock.MagicMock):
     """
     arrange: given a charm with no plugins config.
     act: when state is initialized from charm.
     assert: plugin state is None.
     """
-    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
     mock_charm.config = {}
 
     config = state.State.from_charm(mock_charm)
     assert config.plugins is None
 
 
-def test_plugins_config():
+def test_plugins_config(mock_charm: unittest.mock.MagicMock):
     """
     arrange: given a charm with comma separated plugins.
     act: when state is initialized from charm.
     assert: plugin state contains an iterable of plugins.
     """
-    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
     mock_charm.config = {"allowed-plugins": "hello, world"}
 
     config = state.State.from_charm(mock_charm)
     assert config.plugins is not None
     assert tuple(config.plugins) == ("hello", "world")
+
+
+def test_invalid_num_units(mock_charm: unittest.mock.MagicMock):
+    """
+    arrange: given a mock charm with more than 1 unit of deployment.
+    act: when state is initialized from charm.
+    assert: CharmIllegalNumUnitsError is raised.
+    """
+    mock_charm.app.planned_units.return_value = 2
+
+    with pytest.raises(state.CharmIllegalNumUnitsError):
+        state.State.from_charm(mock_charm)
