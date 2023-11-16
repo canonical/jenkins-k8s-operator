@@ -81,7 +81,6 @@ async def test_storage_mount(
         idle_period=30,
         wait_for_exact_units=0,
     )
-
     await application.scale(scale=1)
     await application.model.wait_for_idle(
         apps=[application.name],
