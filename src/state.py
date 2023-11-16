@@ -55,6 +55,22 @@ class CharmRelationDataInvalidError(CharmStateBaseError):
         self.msg = msg
 
 
+class CharmIllegalNumUnitsError(CharmStateBaseError):
+    """Represents an error with invalid number of units deployed.
+
+    Attributes:
+        msg: Explanation of the error.
+    """
+
+    def __init__(self, msg: str):
+        """Initialize a new instance of the CharmIllegalNumUnitsError exception.
+
+        Args:
+            msg: Explanation of the error.
+        """
+        self.msg = msg
+
+
 class AgentMeta(BaseModel):
     """Metadata for registering Jenkins Agent.
 
@@ -234,6 +250,7 @@ class State:
         Raises:
             CharmConfigInvalidError: if invalid state values were encountered.
             CharmRelationDataInvalidError: if invalid relation data was received.
+            CharmIllegalNumUnitsError: if more than 1 unit of Jenkins charm is deployed.
         """
         time_range_str = charm.config.get("restart-time-range")
         if time_range_str:
@@ -251,24 +268,11 @@ class State:
             agent_relation_meta_map = _get_agent_meta_map_from_relation(
                 charm.model.relations[AGENT_RELATION], charm.app.name
             )
-        except ValidationError as exc:
-            logger.error(
-                "Invalid agent relation data received from %s relation, %s", AGENT_RELATION, exc
-            )
-            raise CharmRelationDataInvalidError(
-                f"Invalid {AGENT_RELATION} relation data."
-            ) from exc
-
-        try:
             deprecated_agent_meta_map = _get_agent_meta_map_from_relation(
                 charm.model.relations[DEPRECATED_AGENT_RELATION], charm.app.name
             )
         except ValidationError as exc:
-            logger.error(
-                "Invalid agent relation data received from %s relation, %s",
-                DEPRECATED_AGENT_RELATION,
-                exc,
-            )
+            logger.error("Invalid agent relation data received, %s", exc)
             raise CharmRelationDataInvalidError(
                 f"Invalid {DEPRECATED_AGENT_RELATION} relation data."
             ) from exc
@@ -281,6 +285,11 @@ class State:
 
         plugins_str = charm.config.get("allowed-plugins")
         plugins = (plugin.strip() for plugin in plugins_str.split(",")) if plugins_str else None
+
+        if charm.app.planned_units() > 1:
+            raise CharmIllegalNumUnitsError(
+                "The Jenkins charm supports only 1 unit of deployment."
+            )
 
         return cls(
             restart_time_range=restart_time_range,
