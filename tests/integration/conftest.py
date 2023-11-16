@@ -4,7 +4,6 @@
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
 import random
-import re
 import secrets
 import string
 import typing
@@ -15,8 +14,6 @@ import kubernetes.config
 import kubernetes.stream
 import pytest
 import pytest_asyncio
-import requests
-import yaml
 from juju.action import Action
 from juju.application import Application
 from juju.client._definitions import FullStatus, UnitStatus
@@ -311,32 +308,6 @@ async def machine_deprecated_agent_related_app_fixture(
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
     yield application
-
-
-@pytest.fixture(scope="module", name="jenkins_version")
-def jenkins_version_fixture() -> str:
-    """The currently installed Jenkins version from rock image."""
-    with open("jenkins_rock/rockcraft.yaml", encoding="utf-8") as rockcraft_yaml_file:
-        rockcraft_yaml = yaml.safe_load(rockcraft_yaml_file)
-        return str(rockcraft_yaml["parts"]["jenkins"]["build-environment"][0]["JENKINS_VERSION"])
-
-
-@pytest_asyncio.fixture(scope="module", name="latest_jenkins_lts_version")
-async def latest_jenkins_lts_version_fixture(jenkins_version: str) -> str:
-    """The latest LTS version of the current Jenkins version."""
-    # get RSS feed
-    rss_feed_response = requests.get(jenkins.RSS_FEED_URL, timeout=10)
-    assert rss_feed_response.status_code == 200, "Failed to fetch RSS feed."
-    rss_xml = str(rss_feed_response.content, encoding="utf-8")
-    # extract all version strings from feed
-    pattern = r"\d+\.\d+\.\d+"
-    matches = re.findall(pattern, rss_xml)
-    # find first matching version starting with same <major>.<minor> version, the rss feed is
-    # sorted by latest first.
-    current_major_minor = ".".join(jenkins_version.split(".")[:2])
-    matched_latest_version = next((v for v in matches if v.startswith(current_major_minor)), None)
-    assert matched_latest_version is not None, "Failed to find a matching LTS version."
-    return matched_latest_version
 
 
 @pytest.fixture(scope="module", name="freeze_time")

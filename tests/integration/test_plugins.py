@@ -291,21 +291,21 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     assert "FULL" in stdout, "The backup folder of format FULL-<backup-date> not found."
 
 
-async def test_openid_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+async def test_bzr_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
     """
-    arrange: given a Jenkins charm with openid plugin installed.
-    act: when an openid endpoint is validated using the plugin.
-    assert: the response returns a 200 status code.
+    arrange: given a Jenkins charm with bazaar plugin installed.
+    act: when a job configuration page is accessed.
+    assert: bazaar plugin option exists.
     """
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("openid",))
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("bazaar",))
+    unit_web_client.client.create_job("bzr_plugin_test", gen_test_job_xml("k8s"))
 
-    res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/manage/descriptorByName/hudson.plugins.openid."
-        "OpenIdSsoSecurityRealm/validate",
-        data={"endpoint": "https://login.ubuntu.com/+openid"},
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/job/bzr_plugin_test/configure"
     )
 
-    assert res.status_code == 200, "Failed to validate openid endpoint using the plugin."
+    config_page = str(res.content, "utf-8")
+    assert "Bazaar" in config_page, f"Bzr configuration option not found. {config_page}"
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
@@ -327,6 +327,23 @@ async def test_rebuilder_plugin(ops_test: OpsTest, unit_web_client: UnitWebClien
     job.get_last_build().block_until_complete()
 
     assert job.get_last_buildnumber() == 2, "Rebuild not triggered."
+
+
+async def test_openid_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with openid plugin installed.
+    act: when an openid endpoint is validated using the plugin.
+    assert: the response returns a 200 status code.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("openid",))
+
+    res = unit_web_client.client.requester.post_url(
+        f"{unit_web_client.web}/manage/descriptorByName/hudson.plugins.openid."
+        "OpenIdSsoSecurityRealm/validate",
+        data={"endpoint": "https://login.ubuntu.com/+openid"},
+    )
+
+    assert res.status_code == 200, "Failed to validate openid endpoint using the plugin."
 
 
 async def test_openid_connect_plugin(
