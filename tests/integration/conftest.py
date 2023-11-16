@@ -696,24 +696,3 @@ async def ingress_application_related_fixture(application: Application, external
         raise_on_error=False,
     )
     return traefik
-
-
-@pytest.fixture(scope="module", name="jenkins_new_job_configuration")
-def jenkins_new_job_configuration() -> str:
-    """XML configuration for blank jenkins job for testing purposes."""
-    return textwrap.dedent(
-        """<project>
-            <description/>
-            <properties/>
-            <scm class="hudson.scm.NullSCM"/>
-            <canRoam>true</canRoam>
-            <disabled>false</disabled>
-            <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
-            <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
-            <triggers class="vector"/>
-            <concurrentBuild>false</concurrentBuild>
-            <builders/>
-            <publishers/>
-            <buildWrappers/>
-        </project>"""
-    )

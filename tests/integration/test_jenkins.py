@@ -13,6 +13,7 @@ from juju.application import Application
 from juju.client import client
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
+from .helpers import gen_test_job_xml
 
 from .substrings import assert_substrings_not_in_string
 from .types_ import ModelAppUnit
@@ -105,7 +106,6 @@ async def test_jenkins_automatic_update(
 async def test_storage_mount(
     application: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
-    jenkins_new_job_configuration: str,
 ):
     """
     arrange: a bare Jenkins charm.
@@ -113,7 +113,8 @@ async def test_storage_mount(
     assert: The job configuration persists and is the same as the one used.
     """
     test_job_name = token_hex(8)
-    jenkins_client.create_job(test_job_name, jenkins_new_job_configuration)
+    job_configuration = gen_test_job_xml("build-in")
+    jenkins_client.create_job(test_job_name, job_configuration)
 
     await application.scale(scale=0)
     await application.model.wait_for_idle(
@@ -137,4 +138,5 @@ async def test_storage_mount(
     action: Action = await jenkins_unit.run(command=command, timeout=60)
     await action.wait()
     assert action.results.get("return-code") == 0
-    assert jenkins_new_job_configuration in str(action.results.get("stdout"))
+    # Remove leading and trailing newline since jenkins client autoformat config
+    assert job_configuration.strip("\n") in str(action.results.get("stdout"))
