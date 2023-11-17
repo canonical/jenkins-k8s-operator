@@ -55,6 +55,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.ingress_observer = ingress.Observer(self)
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
+        self.framework.observe(
+            self.on.jenkins_home_storage_attached, self._on_jenkins_home_storage_attached
+        )
         self.framework.observe(self.on.update_status, self._on_update_status)
 
     def _get_pebble_layer(self, jenkins_env: jenkins.Environment) -> ops.pebble.Layer:
@@ -190,6 +193,25 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         self.unit.status = self._remove_unlisted_plugins(container=container)
+
+    def _on_jenkins_home_storage_attached(self, event: ops.StorageAttachedEvent) -> None:
+        """Handle update status event.
+
+        On Update status:
+        1. Remove plugins that are installed but are not allowed by plugins config value.
+        2. Update Jenkins patch version if available and is within restart-time-range config value.
+        """
+        command = [
+            "chown",
+            "-R",
+            f"{jenkins.USER}:{jenkins.GROUP}",
+            event.storage.location.resolve().__str__(),
+        ]
+
+        self.unit.get_container("jenkins").exec(
+            command,
+            timeout=120,
+        )
 
 
 if __name__ == "__main__":  # pragma: nocover
