@@ -3,17 +3,19 @@
 
 """Integration tests for jenkins-k8s-operator charm."""
 
+import json
 import typing
 
 import jenkinsapi.plugin
 import pytest
+import requests
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
 from .helpers import gen_git_test_job_xml, gen_test_job_xml, get_job_invoked_unit, install_plugins
-from .types_ import TestLDAPSettings, UnitWebClient
+from .types_ import KeycloakOIDCMetadata, LDAPSettings, UnitWebClient
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -83,7 +85,7 @@ async def test_ldap_plugin(
     ops_test: OpsTest,
     unit_web_client: UnitWebClient,
     ldap_server_ip: str,
-    ldap_settings: TestLDAPSettings,
+    ldap_settings: LDAPSettings,
 ):
     """
     arrange: given an ldap server with user setup and ldap plugin installed on Jenkins server.
@@ -314,11 +316,103 @@ async def test_rebuilder_plugin(ops_test: OpsTest, unit_web_client: UnitWebClien
     assert: last job is rebuilt.
     """
     await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("rebuild",))
-    job = unit_web_client.client.create_job("rebuild_test", gen_test_job_xml("k8s"))
+
+    job_name = "rebuild_test"
+    job = unit_web_client.client.create_job(job_name, gen_test_job_xml("k8s"))
     job.invoke().block_until_complete()
 
     unit_web_client.client.requester.get_url(
-        f"{unit_web_client.web}/job/rebuild_test/lastCompletedBuild/rebuild/"
+        f"{unit_web_client.web}/job/{job_name}/lastCompletedBuild/rebuild/"
     )
+    job.get_last_build().block_until_complete()
 
     assert job.get_last_buildnumber() == 2, "Rebuild not triggered."
+
+
+async def test_openid_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with openid plugin installed.
+    act: when an openid endpoint is validated using the plugin.
+    assert: the response returns a 200 status code.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("openid",))
+
+    res = unit_web_client.client.requester.post_url(
+        f"{unit_web_client.web}/manage/descriptorByName/hudson.plugins.openid."
+        "OpenIdSsoSecurityRealm/validate",
+        data={"endpoint": "https://login.ubuntu.com/+openid"},
+    )
+
+    assert res.status_code == 200, "Failed to validate openid endpoint using the plugin."
+
+
+async def test_openid_connect_plugin(
+    ops_test: OpsTest,
+    unit_web_client: UnitWebClient,
+    keycloak_oidc_meta: KeycloakOIDCMetadata,
+    keycloak_ip: str,
+):
+    """
+    arrange: given a Jenkins charm with oic-auth plugin installed and a Keycloak oidc server.
+    act:
+        1. when jenkins security realm is configured with oidc server and login page is requested.
+        2. when jenkins security realm is reset and login page is requested.
+    assert:
+        1. a redirection to Keycloak SSO is made.
+        2. native Jenkins login ui is loaded.
+    """
+    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("oic-auth",))
+
+    # 1. when jenkins security realm is configured with oidc server and login page is requested.
+    payload: dict = {
+        "securityRealm": {
+            "clientId": keycloak_oidc_meta.client_id,
+            "clientSecret": keycloak_oidc_meta.client_secret,
+            "automanualconfigure": "auto",
+            "wellKnownOpenIDConfigurationUrl": keycloak_oidc_meta.well_known_endpoint,
+            "userNameField": "sub",
+            "stapler-class": "org.jenkinsci.plugins.oic.OicSecurityRealm",
+            "$class": "org.jenkinsci.plugins.oic.OicSecurityRealm",
+        },
+        "slaveAgentPort": {"type": "fixed", "value": "50000"},
+    }
+    res = unit_web_client.client.requester.post_url(
+        f"{unit_web_client.web}/manage/configureSecurity/configure",
+        data=[
+            (
+                "json",
+                json.dumps(payload),
+            ),
+        ],
+    )
+    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
+    assert res.history[0].status_code == 302, "Jenkins login not redirected."
+    assert keycloak_ip in res.history[0].headers["location"], "Login not redirected to keycloak."
+
+    # 2. when jenkins security realm is reset and login page is requested.
+    payload = {
+        "securityRealm": {
+            "allowsSignup": False,
+            "stapler-class": "hudson.security.HudsonPrivateSecurityRealm",
+            "$class": "hudson.security.HudsonPrivateSecurityRealm",
+        },
+        "authorizationStrategy": {
+            "allowAnonymousRead": False,
+            "stapler-class": "hudson.security.FullControlOnceLoggedInAuthorizationStrategy",
+            "$class": "hudson.security.FullControlOnceLoggedInAuthorizationStrategy",
+        },
+        "slaveAgentPort": {"type": "fixed", "value": "50000"},
+    }
+    res = unit_web_client.client.requester.post_url(
+        f"{unit_web_client.web}/manage/configureSecurity/configure",
+        data=[
+            (
+                "json",
+                json.dumps(payload),
+            )
+        ],
+    )
+    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
+    assert res.status_code == 404, "Security realm login not reset."
+    res = requests.get(f"{unit_web_client.web}/login?from=%2F", timeout=30)
+    assert res.status_code == 200, "Failed to load Jenkins native login UI."

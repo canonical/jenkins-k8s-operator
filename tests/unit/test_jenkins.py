@@ -132,6 +132,52 @@ def test_get_admin_credentials(
     assert jenkins.get_admin_credentials(harness_container.container) == admin_credentials
 
 
+def test__get_api_credentials_error(raise_exception: typing.Callable):
+    """
+    arrange: given a mocked container that returns the admin api token file content.
+    act: admin credentials are fetched over pebble.
+    assert: correct admin credentials from the filesystem are returned.
+    """
+    mock_container = unittest.mock.MagicMock(ops.Container)
+    mock_container.pull = lambda *_args, **_kwargs: raise_exception(
+        ops.pebble.PathError(kind="not-found", message="Path not found.")
+    )
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins._get_api_credentials(mock_container)
+
+
+def test__get_api_credentials(
+    harness_container: HarnessWithContainer, admin_credentials: jenkins.Credentials
+):
+    """
+    arrange: given a mocked container that returns the admin api token file content.
+    act: admin credentials are fetched over pebble.
+    assert: correct admin credentials from the filesystem are returned.
+    """
+    assert jenkins._get_api_credentials(harness_container.container) == admin_credentials
+
+
+def test__setup_user_token(
+    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given a mocked container and a monkeypatched mocked jenkinsapi client.
+    act: when _setup_user_token is called.
+    assert: generate_new_api_token is called and the contents are written to local path.
+    """
+    test_api_token = secrets.token_hex(16)
+    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.generate_new_api_token.return_value = test_api_token
+    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
+
+    jenkins._setup_user_token(harness_container.container)
+
+    assert (
+        harness_container.container.pull(jenkins.API_TOKEN_PATH, encoding="utf-8").read()
+        == test_api_token
+    )
+
+
 def test_calculate_env():
     """
     arrange: given bootstrapped boolean state variable.
@@ -425,6 +471,11 @@ def test_bootstrap_fail(
     monkeypatch.setattr(jenkins, "get_version", lambda: jenkins_version)
     monkeypatch.setattr(
         jenkins,
+        "_setup_user_token",
+        lambda *_args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        jenkins,
         "_install_plugins",
         lambda *_args, **kwargs: raise_exception(exception=jenkins.JenkinsPluginError),
     )
@@ -444,6 +495,11 @@ def test_bootstrap(
     assert: files to unlock wizard are installed and necessary configs and plugins are installed.
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: jenkins_version)
+    monkeypatch.setattr(
+        jenkins,
+        "_setup_user_token",
+        lambda *_args, **kwargs: None,
+    )
 
     jenkins.bootstrap(container=harness_container.container)
 
@@ -472,7 +528,7 @@ def test_get_client(admin_credentials: jenkins.Credentials):
         jenkinsapi.jenkins.Jenkins.assert_called_with(  # pylint: disable=no-member
             baseurl=jenkins.WEB_URL,
             username=admin_credentials.username,
-            password=admin_credentials.password,
+            password=admin_credentials.password_or_token,
             timeout=60,
         )
 

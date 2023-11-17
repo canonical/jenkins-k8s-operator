@@ -19,14 +19,16 @@ from juju.application import Application
 from juju.client._definitions import FullStatus, UnitStatus
 from juju.model import Controller, Model
 from juju.unit import Unit
+from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
+import jenkins
 import state
 
 from .constants import ALLOWED_PLUGINS
 from .helpers import get_pod_ip
-from .types_ import ModelAppUnit, TestLDAPSettings, UnitWebClient
+from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
 
 @pytest.fixture(scope="module", name="model")
@@ -120,20 +122,22 @@ def web_address_fixture(unit_ip: str):
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_client")
 async def jenkins_client_fixture(
+    ops_test: OpsTest,
     application: Application,
     web_address: str,
 ) -> jenkinsapi.jenkins.Jenkins:
     """The Jenkins API client."""
     jenkins_unit: Unit = application.units[0]
-    action: Action = await jenkins_unit.run_action("get-admin-password")
-    await action.wait()
-    password = action.results["password"]
-
-    # Initialization of the jenkins client will raise an exception if unable to connect to the
-    # server.
-    return jenkinsapi.jenkins.Jenkins(
-        baseurl=web_address, username="admin", password=password, timeout=60
+    ret, api_token, stderr = await ops_test.juju(
+        "ssh",
+        "--container",
+        "jenkins",
+        jenkins_unit.name,
+        "cat",
+        str(jenkins.API_TOKEN_PATH),
     )
+    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
+    return jenkinsapi.jenkins.Jenkins(web_address, "admin", api_token, timeout=60)
 
 
 @pytest.fixture(scope="function", name="unit_web_client")
@@ -524,9 +528,9 @@ async def app_with_allowed_plugins_fixture(
 
 
 @pytest.fixture(scope="module", name="ldap_settings")
-def ldap_settings_fixture() -> TestLDAPSettings:
+def ldap_settings_fixture() -> LDAPSettings:
     """LDAP user for testing."""
-    return TestLDAPSettings(
+    return LDAPSettings(
         container_port=1389,
         username="customuser",
         password=secrets.token_hex(16),
@@ -535,7 +539,7 @@ def ldap_settings_fixture() -> TestLDAPSettings:
 
 @pytest_asyncio.fixture(scope="module", name="ldap_server")
 async def ldap_server_fixture(
-    model: Model, kube_apps_client: kubernetes.client.AppsV1Api, ldap_settings: TestLDAPSettings
+    model: Model, kube_apps_client: kubernetes.client.AppsV1Api, ldap_settings: LDAPSettings
 ):
     """Testing LDAP server pod."""
     container = kubernetes.client.V1Container(
@@ -558,13 +562,13 @@ async def ldap_server_fixture(
         selector=kubernetes.client.V1LabelSelector(match_labels={"app": "ldap"}),
         template=template,
     )
-    daemonset = kubernetes.client.V1Deployment(
+    deployment = kubernetes.client.V1Deployment(
         api_version="apps/v1",
         kind="Deployment",
-        metadata=kubernetes.client.V1ObjectMeta(name="ldap"),
+        metadata=kubernetes.client.V1ObjectMeta(name="ldap", namespace=model.name),
         spec=spec,
     )
-    return kube_apps_client.create_namespaced_deployment(namespace=model.name, body=daemonset)
+    return kube_apps_client.create_namespaced_deployment(namespace=model.name, body=deployment)
 
 
 @pytest_asyncio.fixture(scope="module", name="ldap_server_ip")
@@ -636,6 +640,132 @@ async def grafana_related_fixture(application: Application):
         raise_on_error=False,
     )
     return grafana
+
+
+@pytest.fixture(scope="module", name="keycloak_password")
+def keycloak_password_fixture() -> str:
+    """The keycloak admin user password."""
+    return secrets.token_hex(16)
+
+
+@pytest_asyncio.fixture(scope="module", name="keycloak_deployment")
+async def keycloak_deployment_fixture(
+    model: Model, kube_apps_client: kubernetes.client.AppsV1Api, keycloak_password: str
+) -> kubernetes.client.V1Deployment:
+    """Testing Keycloak server deployment for oidc."""
+    container = kubernetes.client.V1Container(
+        name="keycloak",
+        image="quay.io/keycloak/keycloak",
+        image_pull_policy="IfNotPresent",
+        ports=[kubernetes.client.V1ContainerPort(container_port=8080)],
+        args=["start-dev"],
+        env=[
+            kubernetes.client.V1EnvVar(name="KEYCLOAK_ADMIN", value="admin"),
+            kubernetes.client.V1EnvVar(name="KEYCLOAK_ADMIN_PASSWORD", value=keycloak_password),
+            kubernetes.client.V1EnvVar(name="KC_PROXY", value="edge"),
+        ],
+        readiness_probe=kubernetes.client.V1Probe(
+            http_get=kubernetes.client.V1HTTPGetAction(path="/realms/master", port=8080)
+        ),
+    )
+    template = kubernetes.client.V1PodTemplateSpec(
+        metadata=kubernetes.client.V1ObjectMeta(labels={"app": "keycloak"}),
+        spec=kubernetes.client.V1PodSpec(containers=[container]),
+    )
+    spec = kubernetes.client.V1DeploymentSpec(
+        selector=kubernetes.client.V1LabelSelector(match_labels={"app": "keycloak"}),
+        template=template,
+    )
+    deployment = kubernetes.client.V1Deployment(
+        api_version="apps/v1",
+        kind="Deployment",
+        metadata=kubernetes.client.V1ObjectMeta(name="keycloak", namespace=model.name),
+        spec=spec,
+    )
+    kube_apps_client.create_namespaced_deployment(namespace=model.name, body=deployment)
+    return deployment
+
+
+@pytest_asyncio.fixture(scope="module", name="keycloak_ip")
+async def keycloak_ip_fixture(
+    model: Model,
+    kube_core_client: kubernetes.client.CoreV1Api,
+    keycloak_deployment: kubernetes.client.V1Deployment,
+) -> str:
+    """The keycloak deployment pod IP."""
+    return await get_pod_ip(
+        model, kube_core_client, keycloak_deployment.spec.template.metadata.labels["app"]
+    )
+
+
+@pytest_asyncio.fixture(scope="module", name="keycloak_oidc_meta")
+async def keycloak_oidc_meta_fixture(
+    keycloak_ip: str,
+    keycloak_password: str,
+) -> KeycloakOIDCMetadata:
+    """The keycloak user."""
+    server_url = f"http://{keycloak_ip}:8080"
+    keycloak_connection = KeycloakOpenIDConnection(
+        server_url=server_url,
+        username="admin",
+        password=keycloak_password,
+        realm_name="master",
+        verify=True,
+    )
+    keycloak_admin = KeycloakAdmin(connection=keycloak_connection)
+    keycloak_admin.create_realm(
+        payload={"realm": (realm := "oidc_test"), "enabled": True}, skip_exists=True
+    )
+    keycloak_admin.connection.realm_name = "oidc_test"
+    keycloak_id = keycloak_admin.create_client(
+        payload={
+            "protocol": "openid-connect",
+            "clientId": (client_id := "oidc_test"),
+            "name": "oidc_test",
+            "description": "oidc_test",
+            "publicClient": False,
+            "authorizationServicesEnabled": False,
+            "serviceAccountsEnabled": False,
+            "implicitFlowEnabled": False,
+            "directAccessGrantsEnabled": True,
+            "standardFlowEnabled": True,
+            "frontchannelLogout": True,
+            "attributes": {
+                "saml_idp_initiated_sso_url_name": "",
+                "oauth2.device.authorization.grant.enabled": False,
+                "oidc.ciba.grant.enabled": False,
+            },
+            "alwaysDisplayInConsole": False,
+            "rootUrl": "",
+            "baseUrl": "",
+            "redirectUris": ["*"],
+        },
+        skip_exists=True,
+    )
+    client_secret = keycloak_admin.get_client_secrets(client_id=keycloak_id)["value"]
+    keycloak_admin.create_user(
+        {
+            "email": "example@example.com",
+            "username": (username := "example@example.com"),
+            "enabled": True,
+            "firstName": "Example",
+            "lastName": "Example",
+            "credentials": [
+                {
+                    "value": keycloak_password,
+                    "type": "password",
+                }
+            ],
+        }
+    )
+    return KeycloakOIDCMetadata(
+        username=username,
+        password=keycloak_password,
+        realm=realm,
+        client_id=client_id,
+        client_secret=client_secret,
+        well_known_endpoint=f"{server_url}/realms/{realm}/.well-known/openid-configuration",
+    )
 
 
 @pytest_asyncio.fixture(scope="module", name="external_hostname")
