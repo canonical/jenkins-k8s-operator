@@ -261,8 +261,8 @@ def raise_exception_mock_fixture():
         Args:
             exception: The exception to raise.
 
-        Raises:
-            exception: .
+        Returns:
+            A magic mock that raises an exception when called.
         """
         mock = unittest.mock.MagicMock()
         mock.side_effect = exception

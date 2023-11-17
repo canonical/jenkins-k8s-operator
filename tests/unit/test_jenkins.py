@@ -292,7 +292,7 @@ def test__install_plugins_fail(raise_exception_mock):
     assert: JenkinsPluginError is raised.
     """
     mock_proc = unittest.mock.MagicMock(spec=ExecProcess)
-    mock_proc.wait_output.side_effect = lambda: raise_exception_mock(
+    mock_proc.wait_output.side_effect = raise_exception_mock(
         exception=ExecError(["mock", "command"], 1, "", "Failed to install plugins.")
     )
     mock_container = unittest.mock.MagicMock(spec=ops.Container)
@@ -326,7 +326,7 @@ def test__configure_proxy_fail(
     """
     mock_client.run_groovy_script = raise_exception_mock(
         exception=jenkinsapi.custom_exceptions.JenkinsAPIException
-    )raise_exception_mock
+    )
 
     with pytest.raises(jenkins.JenkinsProxyError) as exc:
         jenkins._configure_proxy(harness_container.container, proxy_config)
@@ -424,7 +424,7 @@ def test_bootstrap_fail(
     monkeypatch.setattr(
         jenkins,
         "_install_plugins",
-        lambda *_args, **kwargs: raise_exception_mock(exception=jenkins.JenkinsPluginError),
+        raise_exception_mock(exception=jenkins.JenkinsPluginError),
     )
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
@@ -628,9 +628,7 @@ def test__wait_jenkins_job_shutdown_timeout(monkeypatch: pytest.MonkeyPatch, rai
     act: when _wait_jenkins_job_shutdown is called.
     assert: TimeoutError is raised.
     """
-    monkeypatch.setattr(
-        jenkins, "_is_shutdown", lambda *_args, **kwargs: raise_exception_mock(TimeoutError)
-    )
+    monkeypatch.setattr(jenkins, "_is_shutdown", raise_exception_mock(TimeoutError))
     mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
     with pytest.raises(TimeoutError):
@@ -1013,10 +1011,8 @@ def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-argu
         )
     )
     mock_groovy_script.return_value = plugin_groovy_script_result
-    monkeypatch.setattr(
-        jenkins, "safe_restart", raise_exception_mock(expected_exception)
-    )
-raise_exception_mock
+    monkeypatch.setattr(jenkins, "safe_restart", raise_exception_mock(expected_exception))
+
     # mypy doesn't understand that Exception type can match TypeVar("E", bound=BaseException)
     with pytest.raises(expected_exception):  # type: ignore
         jenkins.remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
@@ -1121,9 +1117,7 @@ def test_rotate_credentials_error(
     monkeypatch.setattr(
         jenkins,
         "_invalidate_sessions",
-        raise_exception_mock(
-            jenkinsapi.custom_exceptions.JenkinsAPIException
-        raise_exception_mock
+        raise_exception_mock(jenkinsapi.custom_exceptions.JenkinsAPIException),
     )
 
     with pytest.raises(jenkins.JenkinsError):
