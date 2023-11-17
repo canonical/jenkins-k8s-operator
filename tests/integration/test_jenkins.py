@@ -97,3 +97,19 @@ async def test_storage_mount(
     assert action.results.get("return-code") == 0
     # Remove leading and trailing newline since jenkins client autoformat config
     assert job_configuration.strip("\n") in str(action.results.get("stdout"))
+
+
+async def test_storage_mount_owner(application: Application):
+    """
+    arrange: after Jenkins charm has been deployed and storage mounted.
+    act: get jenkins_home directory owner
+    assert: jenkins_home belongs to jenkins user.
+    """
+    jenkins_unit: Unit = application.units[0]
+    command = f'stat --printf="%u" /var/lib/jenkins'
+
+    action: Action = await jenkins_unit.run(command=command, timeout=60)
+    await action.wait()
+
+    assert action.results.get("return-code") == 0
+    assert "2000" in str(action.results.get("stdout"))
