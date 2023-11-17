@@ -68,7 +68,8 @@ async def test_rotate_password_action(unit_web_client: UnitWebClient):
     assert: the session is invalidated and new password is returned.
     """
     session = unit_web_client.client.requester.session
-    session.get(f"{unit_web_client.web}/manage/")
+    result = session.get(f"{unit_web_client.web}/manage/")
+    assert result.status_code == 200, "Unable to access Jenkins with initial credentials."
     action: Action = await unit_web_client.unit.run_action("rotate-credentials")
     await action.wait()
     new_password: str = action.results["password"]
