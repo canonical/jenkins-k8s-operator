@@ -79,7 +79,7 @@ def test_on_rotate_credentials_action_container_not_ready(
 def test_on_rotate_credentials_action_api_error(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
-    raise_exception: typing.Callable,
+    raise_exception_mock: typing.Callable,
 ):
     """
     arrange: given a monkeypatched rotate_credentials that raises a JenkinsError.
@@ -89,7 +89,7 @@ def test_on_rotate_credentials_action_api_error(
     monkeypatch.setattr(
         charm.actions.jenkins,
         "rotate_credentials",
-        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsError),
+        raise_exception_mock(jenkins.JenkinsError),
     )
     harness_container.harness.set_can_connect(
         harness_container.harness.model.unit.containers["jenkins"], True

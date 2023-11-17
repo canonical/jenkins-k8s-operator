@@ -62,7 +62,7 @@ def test__on_jenkins_pebble_ready_error(
     harness_container: HarnessWithContainer,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
-    raise_exception: typing.Callable,
+    raise_exception_mock: typing.Callable,
 ):
     """
     arrange: given a patched jenkins bootstrap method that raises an exception.
@@ -74,7 +74,7 @@ def test__on_jenkins_pebble_ready_error(
     monkeypatch.setattr(
         jenkins,
         "bootstrap",
-        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsBootstrapError()),
+        raise_exception_mock(jenkins.JenkinsBootstrapError()),
     )
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
 
@@ -88,7 +88,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     harness_container: HarnessWithContainer,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
-    raise_exception: typing.Callable,
+    raise_exception_mock: typing.Callable,
 ):
     """
     arrange: given a patched jenkins.get_version function that raises an exception.
@@ -96,7 +96,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     assert: the unit status should be in BlockedStatus.
     """
     # speed up waiting by changing default argument values
-    monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception(jenkins.JenkinsError))
+    monkeypatch.setattr(jenkins, "get_version", lambda: raise_exception_mock(jenkins.JenkinsError))
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args: None)
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
@@ -168,7 +168,7 @@ def test__remove_unlisted_plugins_error(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
     exception: Exception,
-    raise_exception: typing.Callable,
+    raise_exception_mock: typing.Callable,
     expected_status: ops.StatusBase,
 ):
     """
@@ -177,7 +177,9 @@ def test__remove_unlisted_plugins_error(
     assert: ActiveStatus with error message is returned.
     """
     monkeypatch.setattr(
-        jenkins, "remove_unlisted_plugins", lambda *_args, **_kwargs: raise_exception(exception)
+        jenkins,
+        "remove_unlisted_plugins",
+        raise_exception_mock(exception),
     )
     harness_container.harness.begin()
 

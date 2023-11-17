@@ -153,7 +153,7 @@ def test__on_agent_relation_joined_relation_data_not_valid(
 )
 def test__on_agent_relation_joined_client_error(
     harness_container: HarnessWithContainer,
-    raise_exception: Callable,
+    raise_exception_mock: Callable,
     monkeypatch: pytest.MonkeyPatch,
     get_relation_data: Callable[[str], dict[str, str]],
     relation: str,
@@ -171,7 +171,7 @@ def test__on_agent_relation_joined_client_error(
     monkeypatch.setattr(
         charm.jenkins,
         "add_agent_node",
-        lambda *_args, **_kwargs: raise_exception(exception=jenkins.JenkinsError()),
+        raise_exception_mock(exception=jenkins.JenkinsError()),
     )
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
@@ -289,7 +289,7 @@ def test__on_agent_relation_departed_no_container(
 def test__on_agent_relation_departed_remove_agent_node_error(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
-    raise_exception: Callable,
+    raise_exception_mock: Callable,
     get_relation_data: Callable[[str], dict[str, str]],
     relation: str,
 ):
@@ -301,7 +301,7 @@ def test__on_agent_relation_departed_remove_agent_node_error(
     monkeypatch.setattr(
         charm.jenkins,
         "remove_agent_node",
-        lambda *_args, **_kwargs: raise_exception(jenkins.JenkinsError),
+        raise_exception_mock(jenkins.JenkinsError),
     )
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
