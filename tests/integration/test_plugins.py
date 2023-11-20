@@ -317,7 +317,7 @@ async def test_rebuilder_plugin(ops_test: OpsTest, unit_web_client: UnitWebClien
     job = unit_web_client.client.create_job("rebuild_test", gen_test_job_xml("k8s"))
     job.invoke().block_until_complete()
 
-    unit_web_client.client.requester.get_url(
+    unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/job/rebuild_test/lastCompletedBuild/rebuild/"
     )
     job.get_last_build().block_until_complete()
