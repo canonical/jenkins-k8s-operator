@@ -195,17 +195,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.unit.status = self._remove_unlisted_plugins(container=container)
 
     def _on_jenkins_home_storage_attached(self, event: ops.StorageAttachedEvent) -> None:
-        """Handle update status event.
+        """Correctly set permission when storage is attached.
 
-        On Update status:
-        1. Remove plugins that are installed but are not allowed by plugins config value.
-        2. Update Jenkins patch version if available and is within restart-time-range config value.
+        Args:
+            event: The event fired when the storage is attached.
         """
         command = [
             "chown",
             "-R",
             f"{jenkins.USER}:{jenkins.GROUP}",
-            event.storage.location.resolve().__str__(),
+            str(event.storage.location.resolve()),
         ]
 
         self.unit.get_container("jenkins").exec(
