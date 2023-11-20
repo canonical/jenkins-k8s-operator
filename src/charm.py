@@ -215,7 +215,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container.exec(
             command,
             timeout=120,
-        )
+        ).wait()
 
 
 if __name__ == "__main__":  # pragma: nocover
