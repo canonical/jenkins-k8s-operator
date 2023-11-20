@@ -200,9 +200,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The event fired when the storage is attached.
         """
-        jenkins_container = self.unit.get_container("jenkins")
-        if not jenkins_container.can_connect():
+        container = self.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
             event.defer()
+            return
 
         command = [
             "chown",
@@ -211,7 +212,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             str(event.storage.location.resolve()),
         ]
 
-        self.unit.get_container("jenkins").exec(
+        container.exec(
             command,
             timeout=120,
         )
