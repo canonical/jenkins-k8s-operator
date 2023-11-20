@@ -320,5 +320,6 @@ async def test_rebuilder_plugin(ops_test: OpsTest, unit_web_client: UnitWebClien
     unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/job/rebuild_test/lastCompletedBuild/rebuild/"
     )
+    job.get_last_build().block_until_complete()
 
     assert job.get_last_buildnumber() == 2, "Rebuild not triggered."
