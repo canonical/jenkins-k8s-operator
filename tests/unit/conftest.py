@@ -251,22 +251,24 @@ def harness_container_fixture(harness: Harness, container: Container) -> Harness
     return HarnessWithContainer(harness=harness, container=container)
 
 
-@pytest.fixture(scope="function", name="raise_exception")
-def raise_exception_fixture():
+@pytest.fixture(scope="function", name="raise_exception_mock")
+def raise_exception_mock_fixture():
     """The mock function for patching."""
 
-    def raise_exception(exception: Exception):
+    def raise_exception_mock(exception: Exception):
         """Raise exception function for monkeypatching.
 
         Args:
             exception: The exception to raise.
 
-        Raises:
-            exception: .
+        Returns:
+            A magic mock that raises an exception when called.
         """
-        raise exception
+        mock = unittest.mock.MagicMock()
+        mock.side_effect = exception
+        return mock
 
-    return raise_exception
+    return raise_exception_mock
 
 
 @pytest.fixture(scope="function", name="get_relation_data")
