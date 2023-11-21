@@ -61,25 +61,25 @@ async def test_jenkins_automatic_update_out_of_range(
     ), "additionally installed plugin cleanedup."
 
 
-async def test_rotate_password_action(unit_web_client: UnitWebClient):
+async def test_rotate_password_action(jenkins_user_client: jenkinsapi.jenkins.Jenkins, unit: Unit):
     """
     arrange: given a jenkins API session that is connected.
     act: when rotate password action is called.
     assert: the session is invalidated and new password is returned.
     """
-    session = unit_web_client.client.requester.session
-    session.auth = (unit_web_client.client.username, unit_web_client.client.password)
-    result = session.get(f"{unit_web_client.web}/manage/")
+    session = jenkins_user_client.requester.session
+    session.auth = (jenkins_user_client.username, jenkins_user_client.password)
+    result = session.get(f"{jenkins_user_client.baseurl}/manage")
     assert result.status_code == 200, "Unable to access Jenkins with initial credentials."
-    action: Action = await unit_web_client.unit.run_action("rotate-credentials")
+    action: Action = await unit.run_action("rotate-credentials")
     await action.wait()
     new_password: str = action.results["password"]
 
-    assert unit_web_client.client.password != new_password, "Password not rotated"
-    result = session.get(f"{unit_web_client.web}/manage/")
+    assert jenkins_user_client.password != new_password, "Password not rotated"
+    result = session.get(f"{jenkins_user_client.baseurl}/manage")
     assert result.status_code == 401, "Session not cleared"
-    new_client = jenkinsapi.jenkins.Jenkins(unit_web_client.web, "admin", new_password)
-    result = new_client.requester.get_url(f"{unit_web_client.web}/manage/")
+    new_client = jenkinsapi.jenkins.Jenkins(jenkins_user_client.baseurl, "admin", new_password)
+    result = new_client.requester.get_url(f"{jenkins_user_client.baseurl}/manage/")
     assert result.status_code == 200, "Invalid password"
 
 

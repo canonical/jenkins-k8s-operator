@@ -140,6 +140,18 @@ async def jenkins_client_fixture(
     return jenkinsapi.jenkins.Jenkins(web_address, "admin", api_token, timeout=60)
 
 
+@pytest_asyncio.fixture(scope="function", name="jenkins_user_client")
+async def jenkins_user_client_fixture(
+    application: Application, web_address: str
+) -> jenkinsapi.jenkins.Jenkins:
+    """The Jenkins user client for mocking web browsing behavior."""
+    jenkins_unit: Unit = application.units[0]
+    action: Action = await jenkins_unit.run_action("get-admin-password")
+    await action.wait()
+    password = action.results["password"]
+    return jenkinsapi.jenkins.Jenkins(web_address, "admin", password, timeout=60)
+
+
 @pytest.fixture(scope="function", name="unit_web_client")
 def unit_web_client_fixture(
     unit: Unit, web_address: str, jenkins_client: jenkinsapi.jenkins.Jenkins
