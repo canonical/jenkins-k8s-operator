@@ -53,7 +53,9 @@ def test_on_get_admin_password_action(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm.actions_observer.on_get_admin_password(mock_event)
 
-    mock_event.set_results.assert_called_once_with({"password": admin_credentials.password})
+    mock_event.set_results.assert_called_once_with(
+        {"password": admin_credentials.password_or_token}
+    )
 
 
 def test_on_rotate_credentials_action_container_not_ready(

@@ -40,7 +40,7 @@ class Observer(ops.Object):
             event.fail("Container not yet ready.")
             return
         credentials = jenkins.get_admin_credentials(container)
-        event.set_results({"password": credentials.password})
+        event.set_results({"password": credentials.password_or_token})
 
     def on_rotate_credentials(self, event: ops.ActionEvent) -> None:
         """Invalidate all sessions and reset admin account password.
