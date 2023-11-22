@@ -179,6 +179,29 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.unit.status = self._remove_unlisted_plugins(container=container)
 
+    def _on_jenkins_home_storage_attached(self, event: ops.StorageAttachedEvent) -> None:
+        """Correctly set permission when storage is attached.
+
+        Args:
+            event: The event fired when the storage is attached.
+        """
+        container = self.unit.get_container(self.state.jenkins_service_name)
+        if not container.can_connect():
+            event.defer()
+            return
+
+        command = [
+            "chown",
+            "-R",
+            f"{jenkins.USER}:{jenkins.GROUP}",
+            str(event.storage.location.resolve()),
+        ]
+
+        container.exec(
+            command,
+            timeout=120,
+        ).wait()
+
 
 if __name__ == "__main__":  # pragma: nocover
     ops.main.main(JenkinsK8sOperatorCharm)

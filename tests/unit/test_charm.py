@@ -21,7 +21,7 @@ import timerange
 from charm import JenkinsK8sOperatorCharm
 
 from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME
-from .types_ import HarnessWithContainer
+from .types_ import Harness, HarnessWithContainer
 
 
 @pytest.mark.parametrize(
@@ -321,3 +321,50 @@ def test__on_update_status(
     jenkins_charm._on_update_status(MagicMock(spec=ops.UpdateStatusEvent))
 
     assert jenkins_charm.unit.status == expected_status
+
+
+def test__on_jenkins_home_storage_attached(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given a base jenkins charm.
+    act: when _on_jenkins_home_storage_attached is called.
+    assert: The chown command was ran on the jenkins container with correct parameters.
+    """
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    container = jenkins_charm.unit.containers["jenkins"]
+    harness.set_can_connect(container, True)
+    # We don't use harness.handle_exec here because we want to assert
+    # the parameters passed to exec()
+    exec_handler = MagicMock()
+    monkeypatch.setattr(container, "exec", exec_handler)
+
+    event = MagicMock()
+    mock_jenkins_home_path = "/var/lib/jenkins"
+    event.storage.location.resolve = lambda: mock_jenkins_home_path
+    jenkins_charm._on_jenkins_home_storage_attached(event)
+
+    exec_handler.assert_called_once_with(
+        ["chown", "-R", "jenkins:jenkins", mock_jenkins_home_path], timeout=120
+    )
+
+
+def test__on_jenkins_home_storage_attached_container_not_ready(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given a base jenkins charm with container not ready.
+    act: when _on_jenkins_home_storage_attached is called.
+    assert: The chown command was not ran.
+    """
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    container = jenkins_charm.unit.containers["jenkins"]
+    harness.set_can_connect(container, False)
+    # We don't use harness.handle_exec here because we want to assert
+    # whether exec() was called
+    exec_handler = MagicMock()
+    monkeypatch.setattr(container, "exec", exec_handler)
+
+    jenkins_charm._on_jenkins_home_storage_attached(MagicMock())
+
+    exec_handler.assert_not_called()
