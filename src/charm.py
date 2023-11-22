@@ -62,6 +62,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.agent_observer = agent.Observer(self, self.state)
         self.cos_observer = cos.Observer(self)
         self.ingress_observer = ingress.Observer(self)
+        self.framework.observe(
+            self.on.jenkins_home_storage_attached, self._on_jenkins_home_storage_attached
+        )
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.update_status, self._on_update_status)
 
