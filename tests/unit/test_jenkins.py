@@ -132,15 +132,15 @@ def test_get_admin_credentials(
     assert jenkins.get_admin_credentials(harness_container.container) == admin_credentials
 
 
-def test__get_api_credentials_error(raise_exception_mock: typing.Callable):
+def test__get_api_credentials_error():
     """
     arrange: given a mocked container that returns the admin api token file content.
     act: admin credentials are fetched over pebble.
     assert: correct admin credentials from the filesystem are returned.
     """
     mock_container = unittest.mock.MagicMock(ops.Container)
-    mock_container.pull = raise_exception_mock(
-        ops.pebble.PathError(kind="not-found", message="Path not found.")
+    mock_container.pull = unittest.mock.MagicMock(
+        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
     )
     with pytest.raises(jenkins.JenkinsBootstrapError):
         jenkins._get_api_credentials(mock_container)
@@ -196,15 +196,13 @@ def test_calculate_env():
         pytest.param(requests.exceptions.ConnectionError, id="Connection"),
     ],
 )
-def test_get_version_error(
-    monkeypatch: pytest.MonkeyPatch, raise_exception_mock: typing.Callable, exception: Exception
-):
+def test_get_version_error(monkeypatch: pytest.MonkeyPatch, exception: Exception):
     """
     arrange: given a monkeypatched request that raises exceptions.
     act: when a request is sent to Jenkins server.
     assert: JenkinsError exception is raised.
     """
-    monkeypatch.setattr(jenkins.requests, "get", raise_exception_mock(exception))
+    monkeypatch.setattr(jenkins.requests, "get", unittest.mock.MagicMock(side_effect=exception))
 
     with pytest.raises(jenkins.JenkinsError):
         jenkins.get_version()
@@ -331,15 +329,15 @@ def test__get_java_proxy_args(
     assert tuple(jenkins._get_java_proxy_args(proxy_config)) == expected_args
 
 
-def test__install_plugins_fail(raise_exception_mock):
+def test__install_plugins_fail():
     """
     arrange: given a mocked container with a mocked failing process.
     act: when _install_plugins is called.
     assert: JenkinsPluginError is raised.
     """
     mock_proc = unittest.mock.MagicMock(spec=ExecProcess)
-    mock_proc.wait_output.side_effect = raise_exception_mock(
-        exception=ExecError(["mock", "command"], 1, "", "Failed to install plugins.")
+    mock_proc.wait_output = unittest.mock.MagicMock(
+        side_effect=ExecError(["mock", "command"], 1, "", "Failed to install plugins.")
     )
     mock_container = unittest.mock.MagicMock(spec=ops.Container)
     mock_container.exec.return_value = mock_proc
@@ -363,15 +361,14 @@ def test__configure_proxy_fail(
     harness_container: HarnessWithContainer,
     proxy_config: state.ProxyConfig,
     mock_client: unittest.mock.MagicMock,
-    raise_exception_mock: typing.Callable,
 ):
     """
     arrange: given a test proxy config and a monkeypatched jenkins client that raises an exception.
     act: when _configure_proxy is called.
     assert: JenkinsProxyError is raised.
     """
-    mock_client.run_groovy_script = raise_exception_mock(
-        exception=jenkinsapi.custom_exceptions.JenkinsAPIException
+    mock_client.run_groovy_script = unittest.mock.MagicMock(
+        side_effect=jenkinsapi.custom_exceptions.JenkinsAPIException
     )
 
     with pytest.raises(jenkins.JenkinsProxyError) as exc:
@@ -458,7 +455,6 @@ def test_bootstrap_fail(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
     jenkins_version: str,
-    raise_exception_mock: typing.Callable,
 ):
     """
     arrange: given mocked container, monkeypatched get_version function and invalid plugins to \
@@ -475,7 +471,7 @@ def test_bootstrap_fail(
     monkeypatch.setattr(
         jenkins,
         "_install_plugins",
-        raise_exception_mock(exception=jenkins.JenkinsPluginError),
+        unittest.mock.MagicMock(side_effect=jenkins.JenkinsPluginError),
     )
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
@@ -678,13 +674,13 @@ def test__is_shutdown_service_unavailable(mock_client: unittest.mock.MagicMock):
     assert jenkins._is_shutdown(mock_client)
 
 
-def test__wait_jenkins_job_shutdown_timeout(monkeypatch: pytest.MonkeyPatch, raise_exception_mock):
+def test__wait_jenkins_job_shutdown_timeout(monkeypatch: pytest.MonkeyPatch):
     """
     arrange: given a patched _is_shutdown request that raises a TimeoutError.
     act: when _wait_jenkins_job_shutdown is called.
     assert: TimeoutError is raised.
     """
-    monkeypatch.setattr(jenkins, "_is_shutdown", raise_exception_mock(TimeoutError))
+    monkeypatch.setattr(jenkins, "_is_shutdown", unittest.mock.MagicMock(side_effect=TimeoutError))
     mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
     with pytest.raises(TimeoutError):
@@ -1053,7 +1049,6 @@ def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-argu
     mock_client: unittest.mock.MagicMock,
     container: ops.Container,
     plugin_groovy_script_result: str,
-    raise_exception_mock: typing.Callable,
     expected_exception: Exception,
 ):
     """
@@ -1067,7 +1062,9 @@ def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-argu
         )
     )
     mock_groovy_script.return_value = plugin_groovy_script_result
-    monkeypatch.setattr(jenkins, "safe_restart", raise_exception_mock(expected_exception))
+    monkeypatch.setattr(
+        jenkins, "safe_restart", unittest.mock.MagicMock(side_effect=expected_exception)
+    )
 
     # mypy doesn't understand that Exception type can match TypeVar("E", bound=BaseException)
     with pytest.raises(expected_exception):  # type: ignore
@@ -1163,7 +1160,6 @@ def test_remove_unlisted_plugins(  # pylint: disable=too-many-arguments
 def test_rotate_credentials_error(
     monkeypatch: pytest.MonkeyPatch,
     container: ops.Container,
-    raise_exception_mock: typing.Callable,
 ):
     """
     arrange: given a monkeypatched _invalidate_sessions that raises JenkinsAPIException.
@@ -1173,7 +1169,7 @@ def test_rotate_credentials_error(
     monkeypatch.setattr(
         jenkins,
         "_invalidate_sessions",
-        raise_exception_mock(jenkinsapi.custom_exceptions.JenkinsAPIException),
+        unittest.mock.MagicMock(side_effect=jenkinsapi.custom_exceptions.JenkinsAPIException),
     )
 
     with pytest.raises(jenkins.JenkinsError):
