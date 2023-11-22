@@ -7,6 +7,7 @@ import typing
 from secrets import token_hex
 
 import jenkinsapi
+import jenkins
 import pytest
 from juju.action import Action
 from juju.application import Application
@@ -106,10 +107,10 @@ async def test_storage_mount_owner(application: Application):
     assert: jenkins_home belongs to jenkins user.
     """
     jenkins_unit: Unit = application.units[0]
-    command = 'stat --printf="%u" /var/lib/jenkins'
+    command = 'stat -c "%u %g" /var/lib/jenkins'
 
     action: Action = await jenkins_unit.run(command=command, timeout=60)
     await action.wait()
 
     assert action.results.get("return-code") == 0
-    assert "2000" in str(action.results.get("stdout"))
+    assert f"{jenkins.UID} {jenkins.GID}" in str(action.results.get("stdout"))

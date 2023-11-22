@@ -54,6 +54,8 @@ REQUIRED_PLUGINS = [
 
 USER = "jenkins"
 GROUP = "jenkins"
+UID = "2000"
+GID = "2000"
 
 BUILT_IN_NODE_NAME = "Built-In Node"
 # The Jenkins stable version RSS feed URL
