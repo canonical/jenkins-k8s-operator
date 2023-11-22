@@ -7,12 +7,13 @@ import typing
 from secrets import token_hex
 
 import jenkinsapi
-import jenkins
 import pytest
 from juju.action import Action
 from juju.application import Application
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
+
+import jenkins
 
 from .helpers import gen_test_job_xml, install_plugins
 from .substrings import assert_substrings_not_in_string
