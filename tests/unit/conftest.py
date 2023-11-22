@@ -169,6 +169,7 @@ def container_fixture(
     proxy_config: state.ProxyConfig,
 ) -> Container:
     """Harness Jenkins workload container that acts as a Jenkins container."""
+    harness.add_storage(state.State.storage_name, count=1, attach=True)
     jenkins_root = harness.get_filesystem_root("jenkins")
     password_file_path = combine_root_paths(jenkins_root, jenkins.PASSWORD_FILE_PATH)
     password_file_path.parent.mkdir(parents=True, exist_ok=True)

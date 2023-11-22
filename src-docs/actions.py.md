@@ -58,7 +58,7 @@ Handle get-admin-password event.
 
 ---
 
-<a href="../src/actions.py#L45"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/actions.py#L42"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `on_rotate_credentials`
 

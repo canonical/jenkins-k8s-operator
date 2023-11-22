@@ -12,7 +12,6 @@ from typing import Callable, cast
 
 import jenkinsapi
 import pytest
-from ops.charm import PebbleReadyEvent
 
 import charm
 import jenkins
@@ -21,37 +20,6 @@ from charm import JenkinsK8sOperatorCharm
 
 from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME, MAINTENANCE_STATUS_NAME
 from .types_ import HarnessWithContainer
-
-
-@pytest.mark.parametrize(
-    "relation",
-    [
-        pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
-    ],
-)
-def test__on_agent_relation_joined_no_container(
-    harness_container: HarnessWithContainer, relation: str
-):
-    """
-    arrange: given a charm with no connectable container.
-    act: when agent relation joined event is fired.
-    assert: the event is deferred.
-    """
-    harness_container.harness.set_can_connect(
-        harness_container.harness.model.unit.containers["jenkins"], False
-    )
-    harness_container.harness.begin()
-    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    mock_event = unittest.mock.MagicMock(spec=PebbleReadyEvent)
-
-    if relation == state.AGENT_RELATION:
-        jenkins_charm.agent_observer._on_agent_relation_joined(mock_event)
-    else:
-        jenkins_charm.agent_observer._on_deprecated_agent_relation_joined(mock_event)
-
-    assert mock_event.defer.to_be_called_once()
-    assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
 
 
 @pytest.mark.parametrize(

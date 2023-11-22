@@ -22,15 +22,7 @@ DEPRECATED_AGENT_RELATION = "agent-deprecated"
 class CharmStateBaseError(Exception):
     """Represents an error with charm state."""
 
-
-class CharmConfigInvalidError(CharmStateBaseError):
-    """Exception raised when a charm configuration is found to be invalid.
-
-    Attributes:
-        msg: Explanation of the error.
-    """
-
-    def __init__(self, msg: str):
+    def __init__(self, msg: str = ""):
         """Initialize a new instance of the CharmConfigInvalidError exception.
 
         Args:
@@ -39,36 +31,16 @@ class CharmConfigInvalidError(CharmStateBaseError):
         self.msg = msg
 
 
+class CharmConfigInvalidError(CharmStateBaseError):
+    """Exception raised when a charm configuration is found to be invalid."""
+
+
 class CharmRelationDataInvalidError(CharmStateBaseError):
-    """Represents an error with invalid data in relation data.
-
-    Attributes:
-        msg: Explanation of the error.
-    """
-
-    def __init__(self, msg: str):
-        """Initialize a new instance of the CharmRelationDataInvalidError exception.
-
-        Args:
-            msg: Explanation of the error.
-        """
-        self.msg = msg
+    """Represents an error with invalid data in relation data."""
 
 
 class CharmIllegalNumUnitsError(CharmStateBaseError):
-    """Represents an error with invalid number of units deployed.
-
-    Attributes:
-        msg: Explanation of the error.
-    """
-
-    def __init__(self, msg: str):
-        """Initialize a new instance of the CharmIllegalNumUnitsError exception.
-
-        Args:
-            msg: Explanation of the error.
-        """
-        self.msg = msg
+    """Represents an error with invalid number of units deployed."""
 
 
 class AgentMeta(BaseModel):
@@ -226,6 +198,7 @@ class State:
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
         jenkins_service_name: The Jenkins service name. Note that the container name is the same.
+        storage_name: The Jenkins home storage name.
     """
 
     restart_time_range: typing.Optional[Range]
@@ -236,6 +209,7 @@ class State:
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
     jenkins_service_name: str = "jenkins"
+    storage_name: str = "jenkins-home"
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":

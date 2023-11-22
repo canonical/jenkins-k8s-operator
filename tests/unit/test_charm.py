@@ -42,24 +42,8 @@ def test___init___invailid_config(
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
-def test__on_jenkins_pebble_ready_no_container(harness_container: HarnessWithContainer):
-    """
-    arrange: given a pebble ready event with container unable to connect.
-    act: when the Jenkins pebble ready event is fired.
-    assert: the event should be deferred.
-    """
-    harness_container.harness.begin()
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    mock_event = unittest.mock.MagicMock(spec=ops.PebbleReadyEvent)
-    mock_event.workload = None
-
-    jenkins_charm._on_jenkins_pebble_ready(mock_event)
-
-    mock_event.defer.assert_called()
-
-
 def test__on_jenkins_pebble_ready_error(
-    harness_container: HarnessWithContainer,
+    harness: Harness,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -76,15 +60,18 @@ def test__on_jenkins_pebble_ready_error(
         unittest.mock.MagicMock(side_effect=jenkins.JenkinsBootstrapError()),
     )
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
+    harness.add_storage(state.State.storage_name, count=1, attach=True)
+    harness.set_can_connect(state.State.jenkins_service_name, True)
+    harness.begin()
 
-    harness_container.harness.begin_with_initial_hooks()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
 
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
 def test__on_jenkins_pebble_ready_get_version_error(
-    harness_container: HarnessWithContainer,
+    harness: Harness,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -100,26 +87,27 @@ def test__on_jenkins_pebble_ready_get_version_error(
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args: None)
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
+    harness.add_storage(state.State.storage_name, count=1, attach=True)
+    harness.set_can_connect(state.State.jenkins_service_name, True)
+    harness.begin()
 
-    harness_container.harness.begin_with_initial_hooks()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
 
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
 @pytest.mark.parametrize(
-    "status_code,expected_status",
+    "exception,expected_status",
     [
-        pytest.param(503, ops.BlockedStatus, id="jenkins not ready"),
-        pytest.param(200, ops.ActiveStatus, id="jenkins ready"),
+        pytest.param(TimeoutError, ops.BlockedStatus, id="jenkins not ready"),
+        pytest.param(None, ops.ActiveStatus, id="jenkins ready"),
     ],
 )
-# there are too many dependent fixtures that cannot be merged.
-def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
-    harness_container: HarnessWithContainer,
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+def test__on_jenkins_pebble_ready(
+    harness: Harness,
     monkeypatch: pytest.MonkeyPatch,
-    status_code: int,
+    exception: Exception | None,
     expected_status: ops.StatusBase,
 ):
     """
@@ -131,18 +119,21 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     # proxy environment is picked up, making the test fail.
     monkeypatch.setattr(state.os, "environ", {})
     # speed up waiting by changing default argument values
-    monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
-    monkeypatch.setattr(jenkins, "_setup_user_token", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
-        requests, "get", functools.partial(mocked_get_request, status_code=status_code)
+        jenkins, "wait_ready", unittest.mock.MagicMock(side_effect=[None, exception])
     )
+    monkeypatch.setattr(jenkins, "bootstrap", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(jenkins, "get_version", lambda *_args, **_kwargs: "1")
+    harness.add_storage(state.State.storage_name, count=1, attach=True)
+    harness.set_can_connect(state.State.jenkins_service_name, True)
+    harness.begin()
 
-    harness_container.harness.begin_with_initial_hooks()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
 
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert (
         jenkins_charm.unit.status.name == expected_status.name
-    ), f"unit should be in {expected_status}"
+    ), f"Expected: {expected_status}, got: {jenkins_charm.unit.status.name}"
 
 
 @pytest.mark.parametrize(

@@ -15,6 +15,7 @@ import agent
 import cos
 import ingress
 import jenkins
+import precondition
 import timerange
 from state import (
     CharmConfigInvalidError,
@@ -50,6 +51,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
+
+        try:
+            precondition.check(self, self.state)
+        except precondition.ConditionCheckError as exc:
+            self.unit.status = ops.WaitingStatus(exc.msg)
+            return
 
         self.actions_observer = actions.Observer(self, self.state)
         self.agent_observer = agent.Observer(self, self.state)
@@ -96,17 +103,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         }
         return ops.pebble.Layer(layer)
 
-    def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
-        """Configure and start Jenkins server.
-
-        Args:
-            event: The event fired when pebble is ready.
-        """
-        container = event.workload
-        if not container or not container.can_connect():
-            event.defer()
-            return
-
+    def _on_jenkins_pebble_ready(self, _: ops.PebbleReadyEvent) -> None:
+        """Configure and start Jenkins server."""
+        container = self.unit.get_container(self.state.jenkins_service_name)
         self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
         # First Jenkins server start installs Jenkins server.
         container.add_layer(

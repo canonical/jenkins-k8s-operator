@@ -61,9 +61,6 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
-            return
         # The relation is joined, it cannot be None, hence the type casting.
         deprecated_agent_relation_meta = typing.cast(
             typing.Mapping[str, AgentMeta], self.state.deprecated_agent_relation_meta
@@ -101,9 +98,6 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
-            return
         # The relation is joined, it cannot be None, hence the type casting.
         agent_relation_meta = typing.cast(
             typing.Mapping[str, AgentMeta], self.state.agent_relation_meta
@@ -145,9 +139,6 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
-            return
 
         # The relation data is removed before this particular hook runs, making the name set by the
         # agent not available. Hence, we can try to infer the name of the unit.
@@ -173,9 +164,6 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
-            return
 
         # The relation data is removed before this particular hook runs, making the name set by the
         # agent not available. Hence, we can try to infer the name of the unit.

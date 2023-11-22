@@ -11,33 +11,12 @@ import unittest.mock
 
 import ops
 import pytest
-from ops.testing import Harness
 
 import charm
 import jenkins
 from charm import JenkinsK8sOperatorCharm
 
 from .types_ import HarnessWithContainer
-
-
-def test_on_get_admin_password_action_container_not_ready(
-    harness_container: HarnessWithContainer,
-):
-    """
-    arrange: given a jenkins container that is not connectable.
-    act: when get-admin-password action is run.
-    assert: the event is failed.
-    """
-    harness_container.harness.set_can_connect(
-        harness_container.harness.model.unit.containers["jenkins"], False
-    )
-    mock_event = unittest.mock.MagicMock(spec=ops.ActionEvent)
-    harness_container.harness.begin()
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    jenkins_charm.actions_observer.on_get_admin_password(mock_event)
-
-    mock_event.fail.assert_called_once()
 
 
 def test_on_get_admin_password_action(
@@ -57,23 +36,6 @@ def test_on_get_admin_password_action(
     mock_event.set_results.assert_called_once_with(
         {"password": admin_credentials.password_or_token}
     )
-
-
-def test_on_rotate_credentials_action_container_not_ready(
-    harness: Harness,
-):
-    """
-    arrange: given a jenkins container that is not connectable.
-    act: when rotate_credentials action is run.
-    assert: the event is failed.
-    """
-    mock_event = unittest.mock.MagicMock(spec=ops.ActionEvent)
-    harness.begin()
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    jenkins_charm.actions_observer.on_rotate_credentials(mock_event)
-
-    mock_event.fail.assert_called_once()
 
 
 def test_on_rotate_credentials_action_api_error(
