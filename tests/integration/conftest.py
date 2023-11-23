@@ -589,16 +589,16 @@ async def ldap_server_ip_fixture(
 
 
 @pytest_asyncio.fixture(scope="module", name="prometheus_related")
-async def prometheus_related_fixture(application: Application):
+async def prometheus_related_fixture(application: Application, model: Model):
     """The prometheus-k8s application related to Jenkins via metrics-endpoint relation."""
-    prometheus = await application.model.deploy(
+    prometheus = await model.deploy(
         "prometheus-k8s", channel="1.0/stable", trust=True, revision=129
     )
-    await application.model.wait_for_idle(
+    await model.wait_for_idle(
         status="active", apps=[prometheus.name], raise_on_error=False, timeout=30 * 60
     )
-    await application.model.add_relation(f"{application.name}:metrics-endpoint", prometheus.name)
-    await application.model.wait_for_idle(
+    await model.add_relation(f"{application.name}:metrics-endpoint", prometheus.name)
+    await model.wait_for_idle(
         status="active",
         apps=[prometheus.name, application.name],
         timeout=20 * 60,
@@ -609,16 +609,14 @@ async def prometheus_related_fixture(application: Application):
 
 
 @pytest_asyncio.fixture(scope="module", name="loki_related")
-async def loki_related_fixture(application: Application):
+async def loki_related_fixture(application: Application, model: Model):
     """The loki-k8s application related to Jenkins via logging relation."""
-    loki = await application.model.deploy(
-        "loki-k8s", channel="1.0/stable", trust=True, revision=91
-    )
-    await application.model.wait_for_idle(
+    loki = await model.deploy("loki-k8s", channel="1.0/stable", trust=True, revision=91)
+    await model.wait_for_idle(
         status="active", apps=[loki.name], raise_on_error=False, timeout=30 * 60
     )
-    await application.model.add_relation(f"{application.name}:logging", loki.name)
-    await application.model.wait_for_idle(
+    await model.add_relation(f"{application.name}:logging", loki.name)
+    await model.wait_for_idle(
         status="active",
         apps=[loki.name, application.name],
         timeout=20 * 60,
@@ -629,16 +627,14 @@ async def loki_related_fixture(application: Application):
 
 
 @pytest_asyncio.fixture(scope="module", name="grafana_related")
-async def grafana_related_fixture(application: Application):
+async def grafana_related_fixture(application: Application, model: Model):
     """The grafana-k8s application related to Jenkins via grafana-dashboard relation."""
-    grafana = await application.model.deploy(
-        "grafana-k8s", channel="1.0/stable", trust=True, revision=82
-    )
-    await application.model.wait_for_idle(
+    grafana = await model.deploy("grafana-k8s", channel="1.0/stable", trust=True, revision=82)
+    await model.wait_for_idle(
         status="active", apps=[grafana.name], raise_on_error=False, timeout=30 * 60
     )
-    await application.model.add_relation(f"{application.name}:grafana-dashboard", grafana.name)
-    await application.model.wait_for_idle(
+    await model.add_relation(f"{application.name}:grafana-dashboard", grafana.name)
+    await model.wait_for_idle(
         status="active",
         apps=[grafana.name, application.name],
         timeout=20 * 60,
