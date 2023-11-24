@@ -28,6 +28,24 @@ if typing.TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+from functools import wraps
+
+
+def _check_pebble_ready_decorator(f: typing.Callable):
+    @wraps(f)
+    def inner(*args):
+        event: ops.EventBase
+        self: JenkinsK8sOperatorCharm
+        self, event, *_ = args
+        container = self.unit.get_container(self.state.jenkins_service_name)
+        logger.info(f"Decorator : {container.name}, {event.__class__}")
+        if not container.can_connect():
+            event.defer()
+            return
+        f(*args)
+
+    return inner
+
 
 class JenkinsK8sOperatorCharm(ops.CharmBase):
     """Charm Jenkins."""
@@ -194,17 +212,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.unit.status = self._remove_unlisted_plugins(container=container)
 
+    @_check_pebble_ready_decorator
     def _on_jenkins_home_storage_attached(self, event: ops.StorageAttachedEvent) -> None:
         """Correctly set permission when storage is attached.
 
         Args:
             event: The event fired when the storage is attached.
         """
+        logger.info("Pebble should be ready now, running change permission")
         container = self.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
-            return
-
         command = [
             "chown",
             "-R",
