@@ -46,6 +46,7 @@ storage:
   jenkins-home:
     type: filesystem
     location: /var/lib/jenkins
+    minimum-size: 10G
 
 requires:
   agent-deprecated:
