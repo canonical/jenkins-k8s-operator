@@ -172,7 +172,7 @@ async def jenkins_k8s_agents_fixture(
 
     yield agent_app
 
-    await model.remove_application(agent_app.name, block_until_done=True, force=True)
+    await model.remove_application(agent_app.name, block_until_done=True)
 
 
 @pytest_asyncio.fixture(scope="function", name="k8s_agent_related_app")
@@ -474,7 +474,7 @@ async def jenkins_with_proxy_fixture(
     async with ops_test.fast_forward(fast_interval="5h"):
         yield application
 
-    await model_with_proxy.remove_application(application.name, force=True, block_until_done=True)
+    await model_with_proxy.remove_application(application.name, block_until_done=True)
 
 
 @pytest_asyncio.fixture(scope="module", name="proxy_jenkins_unit_ip")
