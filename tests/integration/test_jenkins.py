@@ -13,11 +13,12 @@ from juju.application import Application
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
-import jenkins
-
 from .helpers import gen_test_job_xml, install_plugins
 from .substrings import assert_substrings_not_in_string
 from .types_ import UnitWebClient
+
+JENKINS_UID = "2000"
+JENKINS_GID = "2000"
 
 
 async def test_jenkins_update_ui_disabled(
@@ -114,4 +115,4 @@ async def test_storage_mount_owner(application: Application):
     await action.wait()
 
     assert action.results.get("return-code") == 0
-    assert f"{jenkins.UID} {jenkins.GID}" in str(action.results.get("stdout"))
+    assert f"{JENKINS_UID} {JENKINS_GID}" in str(action.results.get("stdout"))
