@@ -3,3 +3,5 @@ jenkinsapi>=0.3,<1
 ops>=2,<3
 pydantic>=1,<2
 requests>=2,<3
+# charmcraft pack fails to build, hence install binary
+jsonschema --only-binary=:all:
