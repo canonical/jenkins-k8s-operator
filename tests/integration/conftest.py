@@ -591,9 +591,7 @@ async def ldap_server_ip_fixture(
 @pytest_asyncio.fixture(scope="module", name="prometheus_related")
 async def prometheus_related_fixture(application: Application, model: Model):
     """The prometheus-k8s application related to Jenkins via metrics-endpoint relation."""
-    prometheus = await model.deploy(
-        "prometheus-k8s", channel="1.0/stable", trust=True, revision=129, series="focal"
-    )
+    prometheus = await model.deploy("prometheus-k8s", channel="1.0/stable", trust=True)
     await model.wait_for_idle(
         status="active", apps=[prometheus.name], raise_on_error=False, timeout=30 * 60
     )
@@ -611,9 +609,7 @@ async def prometheus_related_fixture(application: Application, model: Model):
 @pytest_asyncio.fixture(scope="module", name="loki_related")
 async def loki_related_fixture(application: Application, model: Model):
     """The loki-k8s application related to Jenkins via logging relation."""
-    loki = await model.deploy(
-        "loki-k8s", channel="1.0/stable", trust=True, revision=91, series="focal"
-    )
+    loki = await model.deploy("loki-k8s", channel="1.0/stable", trust=True)
     await model.wait_for_idle(
         status="active", apps=[loki.name], raise_on_error=False, timeout=30 * 60
     )
@@ -631,9 +627,7 @@ async def loki_related_fixture(application: Application, model: Model):
 @pytest_asyncio.fixture(scope="module", name="grafana_related")
 async def grafana_related_fixture(application: Application, model: Model):
     """The grafana-k8s application related to Jenkins via grafana-dashboard relation."""
-    grafana = await model.deploy(
-        "grafana-k8s", channel="1.0/stable", trust=True, revision=82, series="focal"
-    )
+    grafana = await model.deploy("grafana-k8s", channel="1.0/stable", trust=True)
     await model.wait_for_idle(
         status="active", apps=[grafana.name], raise_on_error=False, timeout=30 * 60
     )
