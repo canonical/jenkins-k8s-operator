@@ -48,14 +48,14 @@ async def test_jenkins_automatic_update_out_of_range(
     """
     extra_plugin = "oic-auth"
     await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, (extra_plugin,))
-    ret_code, _, stderr = await ops_test.juju(
-        "run",
-        "--unit",
-        unit_web_client.unit.name,
-        "--",
-        f"{' '.join(libfaketime_env)} {' '.join(update_status_env)} ./dispatch",
+    action: Action = await unit_web_client.unit.run(
+        f"-- {' '.join(libfaketime_env)} {' '.join(update_status_env)} ./dispatch"
     )
-    assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
+    await action.wait()
+    assert (
+        action.status == "completed"
+    ), f"Failed to execute update-status-hook, {action.data['message']}"
+
     assert unit_web_client.client.has_plugin(
         extra_plugin
     ), "additionally installed plugin cleanedup."
