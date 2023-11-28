@@ -253,24 +253,6 @@ def harness_container_fixture(harness: Harness, container: Container) -> Harness
     return HarnessWithContainer(harness=harness, container=container)
 
 
-@pytest.fixture(scope="function", name="raise_exception")
-def raise_exception_fixture():
-    """The mock function for patching."""
-
-    def raise_exception(exception: Exception):
-        """Raise exception function for monkeypatching.
-
-        Args:
-            exception: The exception to raise.
-
-        Raises:
-            exception: .
-        """
-        raise exception
-
-    return raise_exception
-
-
 @pytest.fixture(scope="function", name="get_relation_data")
 def get_relation_data_fixture():
     """The agent relation data required to register agent."""
