@@ -8,7 +8,7 @@ jobs:
     uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
-      channel: 1.26-strict/stable
+      channel: 1.28-strict/stable
       extra-arguments: |
         --kube-config ${GITHUB_WORKSPACE}/kube-config
       modules: '["test_jenkins.py", "test_k8s_agent.py", "test_machine_agent.py", "test_plugins.py", "test_proxy.py", "test_cos.py"]'
