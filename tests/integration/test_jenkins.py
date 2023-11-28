@@ -17,6 +17,9 @@ from .helpers import gen_test_job_xml, install_plugins
 from .substrings import assert_substrings_not_in_string
 from .types_ import UnitWebClient
 
+JENKINS_UID = "2000"
+JENKINS_GID = "2000"
+
 
 async def test_jenkins_update_ui_disabled(
     web_address: str, jenkins_client: jenkinsapi.jenkins.Jenkins
@@ -128,10 +131,10 @@ async def test_storage_mount_owner(application: Application):
     assert: jenkins_home belongs to jenkins user.
     """
     jenkins_unit: Unit = application.units[0]
-    command = 'stat --printf="%u" /var/lib/jenkins'
+    command = 'stat -c "%u %g" /var/lib/jenkins'
 
     action: Action = await jenkins_unit.run(command=command, timeout=60)
     await action.wait()
 
     assert action.results.get("return-code") == 0
-    assert "2000" in str(action.results.get("stdout"))
+    assert f"{JENKINS_UID} {JENKINS_GID}" in str(action.results.get("stdout"))
