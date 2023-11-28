@@ -26,6 +26,7 @@ Thinking about using the Jenkins-k8s Operator for your next project? [Get in tou
 1. [How to](how-to)
    1. [Configure restart-time-range](how-to/configure-restart-time-range.md)
    1. [Get admin password](how-to/get-admin-password.md)
+   1. [Rotate credentials](how-to/rotate-credentials.md)
 1. [Reference](reference)
    1. [Actions](reference/actions.md)
    1. [Configurations](reference/configurations.md)

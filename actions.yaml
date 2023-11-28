@@ -4,3 +4,6 @@
 get-admin-password:
   description: |
     Retrieve the admin password which has been auto-generated during Jenkins install.
+rotate-credentials:
+  description: |
+    Invalidate all current sessions and generate a new password for admin account.
