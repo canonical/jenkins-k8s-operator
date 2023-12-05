@@ -7,8 +7,39 @@ import unittest.mock
 
 import ops
 import pytest
+from ops.testing import Harness
 
 import state
+from charm import JenkinsK8sOperatorCharm
+
+from .types_ import HarnessWithContainer
+
+
+def test_is_storage_ready_no_container(harness: Harness):
+    """
+    arrange: given Jenkins charm with container not yet ready.
+    act: when is_storage_ready is called.
+    assert: Falsy value is returned.
+    """
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    assert not jenkins_charm.state.is_storage_ready
+
+
+def test_is_storage_ready(harness_container: HarnessWithContainer):
+    """
+    arrange: given Jenkins charm with container ready and storage mounted.
+    act: when is_storage_ready is called.
+    assert: Truthy value is returned.
+    """
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    assert jenkins_charm.state.is_storage_ready
 
 
 def test_state_invalid_time_config():

@@ -5,6 +5,9 @@
 # <kbd>module</kbd> `actions.py`
 Jenkins charm actions. 
 
+**Global Variables**
+---------------
+- **JENKINS_SERVICE_NAME**
 
 
 ---

@@ -8,7 +8,7 @@ import typing
 import ops
 
 import jenkins
-from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, AgentMeta, State
+from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, JENKINS_SERVICE_NAME, AgentMeta, State
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +60,8 @@ class Observer(ops.Object):
         Args:
             event: The event fired from an agent joining the relationship.
         """
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
             return
         # The relation is joined, it cannot be None, hence the type casting.
         deprecated_agent_relation_meta = typing.cast(
@@ -100,9 +99,8 @@ class Observer(ops.Object):
         Args:
             event: The event fired from an agent joining the relationship.
         """
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
             return
         # The relation is joined, it cannot be None, hence the type casting.
         agent_relation_meta = typing.cast(
@@ -144,9 +142,8 @@ class Observer(ops.Object):
             event: The event fired when a unit in deprecated agent relation is departed.
         """
         # the event unit cannot be None.
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the
@@ -172,9 +169,8 @@ class Observer(ops.Object):
             event: The event fired when a unit in agent relation is departed.
         """
         # the event unit cannot be None.
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the

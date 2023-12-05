@@ -20,7 +20,7 @@ import state
 import timerange
 from charm import JenkinsK8sOperatorCharm
 
-from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME
+from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME, WAITING_STATUS_NAME
 from .types_ import Harness, HarnessWithContainer
 
 
@@ -42,20 +42,56 @@ def test___init___invailid_config(
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
-def test__on_jenkins_pebble_ready_no_container(harness_container: HarnessWithContainer):
+@pytest.mark.parametrize(
+    "event_handler",
+    [
+        pytest.param("_on_jenkins_home_storage_attached"),
+        pytest.param("_on_jenkins_pebble_ready"),
+        pytest.param("_on_update_status"),
+    ],
+)
+def test_workload_not_ready(harness: Harness, event_handler: str):
     """
-    arrange: given a pebble ready event with container unable to connect.
-    act: when the Jenkins pebble ready event is fired.
-    assert: the event should be deferred.
+    arrange: given a charm with no container ready.
+    act: when an event hook is fired.
+    assert: the charm falls into waiting status.
     """
-    harness_container.harness.begin()
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    mock_event = unittest.mock.MagicMock(spec=ops.PebbleReadyEvent)
-    mock_event.workload = None
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    handler_func = getattr(jenkins_charm, event_handler)
+    mock_event = unittest.mock.MagicMock(spec=ops.WorkloadEvent)
+    mock_event.workload = unittest.mock.MagicMock(spec=ops.model.Container)
+    mock_event.workload.can_connect.return_value = False
 
-    jenkins_charm._on_jenkins_pebble_ready(mock_event)
+    handler_func(mock_event)
 
-    mock_event.defer.assert_called()
+    assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
+
+
+@pytest.mark.parametrize(
+    "event_handler",
+    [
+        pytest.param("_on_jenkins_home_storage_attached"),
+        pytest.param("_on_jenkins_pebble_ready"),
+        pytest.param("_on_update_status"),
+    ],
+)
+def test_storage_not_ready(harness: Harness, event_handler: str):
+    """
+    arrange: given a charm with no storage ready.
+    act: when an event hook is fired.
+    assert: the charm falls into waiting status.
+    """
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    handler_func = getattr(jenkins_charm, event_handler)
+    mock_event = unittest.mock.MagicMock(spec=ops.WorkloadEvent)
+    mock_event.workload = unittest.mock.MagicMock(spec=ops.model.Container)
+    mock_event.workload.can_connect.return_value = True
+
+    handler_func(mock_event)
+
+    assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
 
 
 def test__on_jenkins_pebble_ready_error(
@@ -68,6 +104,7 @@ def test__on_jenkins_pebble_ready_error(
     act: when the jenkins_pebble_ready event is fired.
     assert: the unit status should be in BlockedStatus.
     """
+    harness = harness_container.harness
     # speed up waiting by changing default argument values
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(
@@ -76,10 +113,11 @@ def test__on_jenkins_pebble_ready_error(
         unittest.mock.MagicMock(side_effect=jenkins.JenkinsBootstrapError()),
     )
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
+    harness.begin()
 
-    harness_container.harness.begin_with_initial_hooks()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
 
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
@@ -93,6 +131,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     act: when the jenkins_pebble_ready event is fired.
     assert: the unit status should be in BlockedStatus.
     """
+    harness = harness_container.harness
     # speed up waiting by changing default argument values
     monkeypatch.setattr(
         jenkins, "get_version", unittest.mock.MagicMock(side_effect=jenkins.JenkinsError)
@@ -100,26 +139,25 @@ def test__on_jenkins_pebble_ready_get_version_error(
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args: None)
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
+    harness.begin()
 
-    harness_container.harness.begin_with_initial_hooks()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
 
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
 @pytest.mark.parametrize(
-    "status_code,expected_status",
+    "exception,expected_status",
     [
-        pytest.param(503, ops.BlockedStatus, id="jenkins not ready"),
-        pytest.param(200, ops.ActiveStatus, id="jenkins ready"),
+        pytest.param(TimeoutError, ops.BlockedStatus, id="jenkins not ready"),
+        pytest.param(None, ops.ActiveStatus, id="jenkins ready"),
     ],
 )
-# there are too many dependent fixtures that cannot be merged.
-def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
+def test__on_jenkins_pebble_ready(
     harness_container: HarnessWithContainer,
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
-    status_code: int,
+    exception: Exception | None,
     expected_status: ops.StatusBase,
 ):
     """
@@ -127,19 +165,22 @@ def test__on_jenkins_pebble_ready(  # pylint: disable=too-many-arguments
     act: when the Jenkins pebble ready event is fired.
     assert: the unit status should show expected status.
     """
+    harness = harness_container.harness
     # monkeypatch environment variables because the test is running in self-hosted runners and juju
     # proxy environment is picked up, making the test fail.
     monkeypatch.setattr(state.os, "environ", {})
     # speed up waiting by changing default argument values
-    monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
-    monkeypatch.setattr(jenkins, "_setup_user_token", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
-        requests, "get", functools.partial(mocked_get_request, status_code=status_code)
+        jenkins, "wait_ready", unittest.mock.MagicMock(side_effect=[None, exception])
     )
+    monkeypatch.setattr(jenkins, "bootstrap", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(jenkins, "get_version", lambda *_args, **_kwargs: "1")
+    harness.begin()
 
-    harness_container.harness.begin_with_initial_hooks()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
 
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     assert (
         jenkins_charm.unit.status.name == expected_status.name
     ), f"unit should be in {expected_status}"
@@ -206,30 +247,6 @@ def test__remove_unlisted_plugins(
 
     assert returned_status.name == ACTIVE_STATUS_NAME
     assert returned_status.message == ""
-
-
-def test__on_update_status_no_container(
-    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
-):
-    """
-    arrange: given a charm with container not yet ready to connect.
-    act: when _on_update_status is called.
-    assert: no further functions are called.
-    """
-    mock_remove_unlisted_plugins_func = unittest.mock.MagicMock(
-        spec=JenkinsK8sOperatorCharm._remove_unlisted_plugins
-    )
-    harness, container = harness_container.harness, harness_container.container
-    harness.set_can_connect(container, False)
-    harness.begin()
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    monkeypatch.setattr(
-        jenkins_charm, "_remove_unlisted_plugins", mock_remove_unlisted_plugins_func
-    )
-    jenkins_charm._on_update_status(unittest.mock.MagicMock(spec=ops.UpdateStatusEvent))
-
-    mock_remove_unlisted_plugins_func.assert_not_called()
 
 
 def test__on_update_status_not_in_time_range(

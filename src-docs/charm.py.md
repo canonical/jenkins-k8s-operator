@@ -5,6 +5,9 @@
 # <kbd>module</kbd> `charm.py`
 Charm Jenkins. 
 
+**Global Variables**
+---------------
+- **JENKINS_SERVICE_NAME**
 
 
 ---
@@ -12,7 +15,7 @@ Charm Jenkins.
 ## <kbd>class</kbd> `JenkinsK8sOperatorCharm`
 Charm Jenkins. 
 
-<a href="../src/charm.py#L36"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/charm.py#L37"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 

@@ -10,6 +10,7 @@ import requests
 ACTIVE_STATUS_NAME = "active"
 BLOCKED_STATUS_NAME = "blocked"
 MAINTENANCE_STATUS_NAME = "maintenance"
+WAITING_STATUS_NAME = "waiting"
 
 
 # There aren't enough public methods with this patch class.
