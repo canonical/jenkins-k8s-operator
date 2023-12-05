@@ -252,13 +252,14 @@ The Jenkins k8s operator charm state.
  - <b>`proxy_config`</b>:  Proxy configuration to access Jenkins upstream through. 
  - <b>`plugins`</b>:  The list of allowed plugins to install. 
  - <b>`jenkins_service_name`</b>:  The Jenkins service name. Note that the container name is the same. 
+ - <b>`storage_name`</b>:  The Jenkins home storage name. 
 
 
 
 
 ---
 
-<a href="../src/state.py#L240"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L242"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_charm`
 

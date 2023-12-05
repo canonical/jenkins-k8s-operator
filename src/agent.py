@@ -61,8 +61,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        if not container.can_connect() or not self.model.storages.get(self.state.storage_name):
             return
         # The relation is joined, it cannot be None, hence the type casting.
         deprecated_agent_relation_meta = typing.cast(
@@ -101,8 +100,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        if not container.can_connect() or not self.model.storages.get(self.state.storage_name):
             return
         # The relation is joined, it cannot be None, hence the type casting.
         agent_relation_meta = typing.cast(
@@ -145,8 +143,7 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        if not container.can_connect() or not self.model.storages.get(self.state.storage_name):
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the
@@ -173,8 +170,7 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        if not container.can_connect() or not self.model.storages.get(self.state.storage_name):
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the

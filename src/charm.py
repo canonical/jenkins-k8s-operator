@@ -105,8 +105,13 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The event fired when pebble is ready.
         """
-        container = event.workload
-        if not container or not container.can_connect():
+        container = self.unit.get_container(self.state.jenkins_service_name)
+        if (
+            not container
+            or not container.can_connect()
+            or not self.model.storages.get(self.state.storage_name)
+        ):
+            self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             event.defer()
             return
 
@@ -172,7 +177,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         2. Update Jenkins patch version if available and is within restart-time-range config value.
         """
         container = self.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
+        if not container.can_connect() or not self.model.storages.get(self.state.storage_name):
+            self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             return
 
         if self.state.restart_time_range and not timerange.check_now_within_bound_hours(
@@ -190,7 +196,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """
         container = self.unit.get_container(self.state.jenkins_service_name)
         if not container.can_connect():
-            event.defer()
+            self.unit.status = ops.WaitingStatus("Waiting for pebble.")
             return
 
         command = [

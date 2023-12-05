@@ -226,6 +226,7 @@ class State:
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
         jenkins_service_name: The Jenkins service name. Note that the container name is the same.
+        storage_name: The Jenkins home storage name.
     """
 
     restart_time_range: typing.Optional[Range]
@@ -236,6 +237,7 @@ class State:
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
     jenkins_service_name: str = "jenkins"
+    storage_name: str = "jenkins-home"
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
