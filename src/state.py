@@ -7,11 +7,11 @@ import functools
 import logging
 import os
 import typing
+from pathlib import Path
 
 import ops
 from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
 
-import jenkins
 from timerange import InvalidTimeRangeError, Range
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,7 @@ AGENT_RELATION = "agent"
 DEPRECATED_AGENT_RELATION = "agent-deprecated"
 JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
+JENKINS_HOME_PATH = Path("/var/lib/jenkins")
 
 
 class CharmStateBaseError(Exception):
@@ -217,7 +218,7 @@ class ProxyConfig(BaseModel):
         )
 
 
-def is_storage_ready(charm: ops.CharmBase) -> bool:
+def _is_storage_ready(charm: ops.CharmBase) -> bool:
     """Return whether the Jenkins home storage is mounted.
 
     Args:
@@ -230,7 +231,7 @@ def is_storage_ready(charm: ops.CharmBase) -> bool:
     if not container.can_connect():
         return False
     mount_info: str = container.pull("/proc/mounts").read()
-    return str(jenkins.HOME_PATH) in mount_info
+    return str(JENKINS_HOME_PATH) in mount_info
 
 
 @dataclasses.dataclass(frozen=True)
@@ -314,7 +315,7 @@ class State:
             restart_time_range=restart_time_range,
             agent_relation_meta=agent_relation_meta_map,
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
-            is_storage_ready=is_storage_ready(charm=charm),
+            is_storage_ready=_is_storage_ready(charm=charm),
             plugins=plugins,
             proxy_config=proxy_config,
         )
