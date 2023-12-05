@@ -1,18 +1,13 @@
-# How to configure restart-time-range
+# How to configure update-time-range
 
-### Configure restart-time-range
+### Configure update-time-range
 
-Use the `restart-time-range` configuration to set the time interval when `jenkins-k8s`
-
-1. automatically applies the latest patches for the current
-   [LTS](https://www.jenkins.io/download/lts/) version.
-2. automatically remove plugins that are installed on the system but are not part of the `plugins`
-   configuration option.
-
+Use the `update-time-range` configuration to set the time interval when `jenkins-k8s` automatically
+applies the latest patches for the current [LTS](https://www.jenkins.io/download/lts/) version.
 The minimum time interval is 1 hour. Time range is applied each day of the week.
 
 ```
-juju config jenkins-k8s restart-time-range=<desired-time-range>
+juju config jenkins-k8s update-time-range=<desired-time-range>
 
 # desired-time-range example: 22-03 to allow patching from 10PM-03AM UTC.
 ```
