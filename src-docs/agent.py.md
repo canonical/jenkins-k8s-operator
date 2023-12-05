@@ -9,6 +9,7 @@ The Jenkins agent relation observer.
 ---------------
 - **AGENT_RELATION**
 - **DEPRECATED_AGENT_RELATION**
+- **JENKINS_SERVICE_NAME**
 
 
 ---
@@ -32,12 +33,12 @@ Relation data required for adding the Jenkins agent.
 ## <kbd>class</kbd> `Observer`
 The Jenkins agent relation observer. 
 
-<a href="../src/agent.py#L34"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/agent.py#L31"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
 ```python
-__init__(charm: 'JenkinsK8sOperatorCharm', state: State)
+__init__(charm: CharmBase, state: State)
 ```
 
 Initialize the observer and register event handlers. 

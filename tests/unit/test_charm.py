@@ -42,33 +42,6 @@ def test___init___invailid_config(
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
-def test_is_storage_ready_no_container(harness: Harness):
-    """
-    arrange: given Jenkins charm with container not yet ready.
-    act: when is_storage_ready is called.
-    assert: Falsy value is returned.
-    """
-    harness.begin()
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-
-    assert not jenkins_charm.is_storage_ready
-
-
-def test_is_storage_ready(harness_container: HarnessWithContainer):
-    """
-    arrange: given Jenkins charm with container ready and storage mounted.
-    act: when is_storage_ready is called.
-    assert: Truthy value is returned.
-    """
-    harness = harness_container.harness
-    harness.begin()
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-
-    assert jenkins_charm.is_storage_ready
-
-
 @pytest.mark.parametrize(
     "event_handler",
     [

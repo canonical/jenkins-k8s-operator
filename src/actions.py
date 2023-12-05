@@ -3,21 +3,16 @@
 
 """Jenkins charm actions."""
 
-import typing
-
 import ops
 
 import jenkins
-from state import State
-
-if typing.TYPE_CHECKING:
-    from charm import JenkinsK8sOperatorCharm  # pragma: no cover
+from state import JENKINS_SERVICE_NAME, State
 
 
 class Observer(ops.Object):
     """Jenkins-k8s charm actions observer."""
 
-    def __init__(self, charm: "JenkinsK8sOperatorCharm", state: State):
+    def __init__(self, charm: ops.CharmBase, state: State):
         """Initialize the observer and register actions handlers.
 
         Args:
@@ -40,8 +35,8 @@ class Observer(ops.Object):
         Args:
             event: The event fired from get-admin-password action.
         """
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect() or not self.charm.is_storage_ready:
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
             event.fail("Service not yet ready.")
             return
         credentials = jenkins.get_admin_credentials(container)
@@ -53,8 +48,8 @@ class Observer(ops.Object):
         Args:
             event: The rotate credentials event.
         """
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect() or not self.charm.is_storage_ready:
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
             event.fail("Service not yet ready.")
             return
         try:

@@ -11,12 +11,15 @@ import typing
 import ops
 from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
 
+import jenkins
 from timerange import InvalidTimeRangeError, Range
 
 logger = logging.getLogger(__name__)
 
 AGENT_RELATION = "agent"
 DEPRECATED_AGENT_RELATION = "agent-deprecated"
+JENKINS_SERVICE_NAME = "jenkins"
+JENKINS_HOME_STORAGE_NAME = "jenkins-home"
 
 
 class CharmStateBaseError(Exception):
@@ -214,6 +217,22 @@ class ProxyConfig(BaseModel):
         )
 
 
+def is_storage_ready(charm: ops.CharmBase) -> bool:
+    """Return whether the Jenkins home storage is mounted.
+
+    Args:
+        charm: The Jenkins k8s charm.
+
+    Returns:
+        True if storage is mounted, False otherwise.
+    """
+    container = charm.unit.get_container(JENKINS_SERVICE_NAME)
+    if not container.can_connect():
+        return False
+    mount_info: str = container.pull("/proc/mounts").read()
+    return str(jenkins.HOME_PATH) in mount_info
+
+
 @dataclasses.dataclass(frozen=True)
 class State:
     """The Jenkins k8s operator charm state.
@@ -223,10 +242,9 @@ class State:
         agent_relation_meta: Metadata of all agents from units related through agent relation.
         deprecated_agent_relation_meta: Metadata of all agents from units related through
             deprecated agent relation.
+        is_storage_ready: Whether the Jenkins home storage is mounted.
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
-        jenkins_service_name: The Jenkins service name. Note that the container name is the same.
-        storage_name: The Jenkins home storage name.
     """
 
     restart_time_range: typing.Optional[Range]
@@ -236,8 +254,7 @@ class State:
     ]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
-    jenkins_service_name: str = "jenkins"
-    storage_name: str = "jenkins-home"
+    is_storage_ready: bool
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -297,6 +314,7 @@ class State:
             restart_time_range=restart_time_range,
             agent_relation_meta=agent_relation_meta_map,
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
+            is_storage_ready=is_storage_ready(charm=charm),
             plugins=plugins,
             proxy_config=proxy_config,
         )

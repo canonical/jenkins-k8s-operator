@@ -17,6 +17,7 @@ import ingress
 import jenkins
 import timerange
 from state import (
+    JENKINS_SERVICE_NAME,
     CharmConfigInvalidError,
     CharmIllegalNumUnitsError,
     CharmRelationDataInvalidError,
@@ -31,11 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class JenkinsK8sOperatorCharm(ops.CharmBase):
-    """Charm Jenkins.
-
-    Attributes:
-        is_storage_ready: Whether the Jenkins home storage is mounted.
-    """
+    """Charm Jenkins."""
 
     def __init__(self, *args: typing.Any):
         """Initialize the charm and register event handlers.
@@ -65,19 +62,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.update_status, self._on_update_status)
 
-    @property
-    def is_storage_ready(self) -> bool:
-        """Return whether the Jenkins home storage is mounted.
-
-        Returns:
-            True if storage is mounted, False otherwise.
-        """
-        container = self.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            return False
-        mount_info: str = container.pull("/proc/mounts").read()
-        return str(jenkins.HOME_PATH) in mount_info
-
     def _get_pebble_layer(self, jenkins_env: jenkins.Environment) -> ops.pebble.Layer:
         """Return a dictionary representing a Pebble layer.
 
@@ -91,7 +75,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             "summary": "jenkins layer",
             "description": "pebble config layer for jenkins",
             "services": {
-                self.state.jenkins_service_name: {
+                JENKINS_SERVICE_NAME: {
                     "override": "replace",
                     "summary": "jenkins",
                     "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
@@ -122,8 +106,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The event fired when pebble is ready.
         """
-        container = self.unit.get_container(self.state.jenkins_service_name)
-        if not container or not container.can_connect() or not self.is_storage_ready:
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container or not container.can_connect() or not self.state.is_storage_ready:
             self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             event.defer()
             return
@@ -141,7 +125,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.unit.status = ops.MaintenanceStatus("Configuring Jenkins.")
             jenkins.bootstrap(container, self.state.proxy_config)
             # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
-            container.restart(self.state.jenkins_service_name)
+            container.restart(JENKINS_SERVICE_NAME)
             jenkins.wait_ready()
         except TimeoutError as exc:
             logger.error("Timed out waiting for Jenkins, %s", exc)
@@ -189,8 +173,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         1. Remove plugins that are installed but are not allowed by plugins config value.
         2. Update Jenkins patch version if available and is within restart-time-range config value.
         """
-        container = self.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect() or not self.is_storage_ready:
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
             self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             return
 
@@ -207,7 +191,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The event fired when the storage is attached.
         """
-        container = self.unit.get_container(self.state.jenkins_service_name)
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
         if not container.can_connect():
             self.unit.status = ops.WaitingStatus("Waiting for pebble.")
             return
