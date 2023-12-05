@@ -10,6 +10,9 @@ import ops
 import jenkins
 from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, AgentMeta, State
 
+if typing.TYPE_CHECKING:
+    from charm import JenkinsK8sOperatorCharm  # pragma: no cover
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,7 +31,7 @@ class AgentRelationData(typing.TypedDict):
 class Observer(ops.Object):
     """The Jenkins agent relation observer."""
 
-    def __init__(self, charm: ops.CharmBase, state: State):
+    def __init__(self, charm: "JenkinsK8sOperatorCharm", state: State):
         """Initialize the observer and register event handlers.
 
         Args:
@@ -61,7 +64,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect() or not self.model.storages.get(self.state.storage_name):
+        if not container.can_connect() or not self.charm.is_storage_ready:
             return
         # The relation is joined, it cannot be None, hence the type casting.
         deprecated_agent_relation_meta = typing.cast(
@@ -100,7 +103,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect() or not self.model.storages.get(self.state.storage_name):
+        if not container.can_connect() or not self.charm.is_storage_ready:
             return
         # The relation is joined, it cannot be None, hence the type casting.
         agent_relation_meta = typing.cast(
@@ -143,7 +146,7 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect() or not self.model.storages.get(self.state.storage_name):
+        if not container.can_connect() or not self.charm.is_storage_ready:
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the
@@ -170,7 +173,7 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect() or not self.model.storages.get(self.state.storage_name):
+        if not container.can_connect() or not self.charm.is_storage_ready:
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the

@@ -42,6 +42,33 @@ def test___init___invailid_config(
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
+def test_is_storage_ready_no_container(harness: Harness):
+    """
+    arrange: given Jenkins charm with container not yet ready.
+    act: when is_storage_ready is called.
+    assert: Falsy value is returned.
+    """
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    assert not jenkins_charm.is_storage_ready
+
+
+def test_is_storage_ready(harness_container: HarnessWithContainer):
+    """
+    arrange: given Jenkins charm with container ready and storage mounted.
+    act: when is_storage_ready is called.
+    assert: Truthy value is returned.
+    """
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    assert jenkins_charm.is_storage_ready
+
+
 @pytest.mark.parametrize(
     "event_handler",
     [
@@ -95,7 +122,7 @@ def test_storage_not_ready(harness: Harness, event_handler: str):
 
 
 def test__on_jenkins_pebble_ready_error(
-    harness: Harness,
+    harness_container: HarnessWithContainer,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -104,6 +131,7 @@ def test__on_jenkins_pebble_ready_error(
     act: when the jenkins_pebble_ready event is fired.
     assert: the unit status should be in BlockedStatus.
     """
+    harness = harness_container.harness
     # speed up waiting by changing default argument values
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(
@@ -112,8 +140,6 @@ def test__on_jenkins_pebble_ready_error(
         unittest.mock.MagicMock(side_effect=jenkins.JenkinsBootstrapError()),
     )
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
-    harness.add_storage(state.State.storage_name, count=1, attach=True)
-    harness.set_can_connect(state.State.jenkins_service_name, True)
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
@@ -123,7 +149,7 @@ def test__on_jenkins_pebble_ready_error(
 
 
 def test__on_jenkins_pebble_ready_get_version_error(
-    harness: Harness,
+    harness_container: HarnessWithContainer,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -132,6 +158,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     act: when the jenkins_pebble_ready event is fired.
     assert: the unit status should be in BlockedStatus.
     """
+    harness = harness_container.harness
     # speed up waiting by changing default argument values
     monkeypatch.setattr(
         jenkins, "get_version", unittest.mock.MagicMock(side_effect=jenkins.JenkinsError)
@@ -139,8 +166,6 @@ def test__on_jenkins_pebble_ready_get_version_error(
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args: None)
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
-    harness.add_storage(state.State.storage_name, count=1, attach=True)
-    harness.set_can_connect(state.State.jenkins_service_name, True)
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
@@ -157,7 +182,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     ],
 )
 def test__on_jenkins_pebble_ready(
-    harness: Harness,
+    harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
     exception: Exception | None,
     expected_status: ops.StatusBase,
@@ -167,6 +192,7 @@ def test__on_jenkins_pebble_ready(
     act: when the Jenkins pebble ready event is fired.
     assert: the unit status should show expected status.
     """
+    harness = harness_container.harness
     # monkeypatch environment variables because the test is running in self-hosted runners and juju
     # proxy environment is picked up, making the test fail.
     monkeypatch.setattr(state.os, "environ", {})
@@ -176,8 +202,6 @@ def test__on_jenkins_pebble_ready(
     )
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "get_version", lambda *_args, **_kwargs: "1")
-    harness.add_storage(state.State.storage_name, count=1, attach=True)
-    harness.set_can_connect(state.State.jenkins_service_name, True)
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)

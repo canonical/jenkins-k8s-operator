@@ -12,7 +12,13 @@ Charm Jenkins.
 ## <kbd>class</kbd> `JenkinsK8sOperatorCharm`
 Charm Jenkins. 
 
-<a href="../src/charm.py#L36"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+
+**Attributes:**
+ 
+ - <b>`is_storage_ready`</b>:  Whether the Jenkins home storage is mounted. 
+
+<a href="../src/charm.py#L40"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -52,6 +58,17 @@ Root directory of the charm as it is running.
 #### <kbd>property</kbd> config
 
 A mapping containing the charm's config and current values. 
+
+---
+
+#### <kbd>property</kbd> is_storage_ready
+
+Return whether the Jenkins home storage is mounted. 
+
+
+
+**Returns:**
+  True if storage is mounted, False otherwise. 
 
 ---
 

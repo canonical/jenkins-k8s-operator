@@ -171,6 +171,9 @@ def container_fixture(
     """Harness Jenkins workload container that acts as a Jenkins container."""
     harness.add_storage(state.State.storage_name, count=1, attach=True)
     jenkins_root = harness.get_filesystem_root("jenkins")
+    storage_mount_proc_path = combine_root_paths(jenkins_root, Path("/proc/mounts"))
+    storage_mount_proc_path.parent.mkdir(parents=True, exist_ok=True)
+    storage_mount_proc_path.write_text(str(jenkins.HOME_PATH), "utf-8")
     password_file_path = combine_root_paths(jenkins_root, jenkins.PASSWORD_FILE_PATH)
     password_file_path.parent.mkdir(parents=True, exist_ok=True)
     password_file_path.write_text(admin_credentials.password_or_token, encoding="utf-8")
@@ -250,7 +253,7 @@ def container_fixture(
 
 @pytest.fixture(scope="function", name="harness_container")
 def harness_container_fixture(harness: Harness, container: Container) -> HarnessWithContainer:
-    """Named tuple containing Harness with container."""
+    """Named tuple containing Harness with container with container ready and fs mounted."""
     return HarnessWithContainer(harness=harness, container=container)
 
 
