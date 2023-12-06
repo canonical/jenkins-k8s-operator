@@ -149,7 +149,6 @@ class Observer(ops.Object):
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         if not container.can_connect() or not self.state.is_storage_ready:
             logger.warning("Relation departed before service ready.")
-            event.defer()
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the
