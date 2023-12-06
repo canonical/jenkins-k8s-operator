@@ -481,6 +481,7 @@ def add_agent_node(agent_meta: state.AgentMeta, container: ops.Container) -> Non
         client.create_node(
             name=agent_meta.name,
             num_executors=int(agent_meta.executors),
+            remote_fs=".",
             node_description=agent_meta.name,
             labels=agent_meta.labels,
         )
