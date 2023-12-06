@@ -63,7 +63,7 @@ class Observer(ops.Object):
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         if not container.can_connect() or not self.state.is_storage_ready:
             logger.warning("Service not yet ready. Deferring.")
-            event.defer()
+            event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
         # The relation is joined, it cannot be None, hence the type casting.
         deprecated_agent_relation_meta = typing.cast(
@@ -73,6 +73,7 @@ class Observer(ops.Object):
         agent_meta = deprecated_agent_relation_meta[typing.cast(ops.Unit, event.unit).name]
         if not agent_meta:
             logger.warning("Relation data not ready yet. Deferring.")
+            # The event needs to be retried until the agents have set it's side of relation data.
             event.defer()
             return
 
@@ -104,7 +105,7 @@ class Observer(ops.Object):
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         if not container.can_connect() or not self.state.is_storage_ready:
             logger.warning("Service not yet ready. Deferring.")
-            event.defer()
+            event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
         # The relation is joined, it cannot be None, hence the type casting.
         agent_relation_meta = typing.cast(
@@ -114,6 +115,7 @@ class Observer(ops.Object):
         agent_meta = agent_relation_meta[typing.cast(ops.Unit, event.unit).name]
         if not agent_meta:
             logger.warning("Relation data not ready yet. Deferring.")
+            # The event needs to be retried until the agents have set it's side of relation data.
             event.defer()
             return
 
