@@ -109,7 +109,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         if not container or not container.can_connect() or not self.state.is_storage_ready:
             self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
-            event.defer()
+            event.defer()  # Jenkins installation should be retried until preconditions are met.
             return
 
         self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
