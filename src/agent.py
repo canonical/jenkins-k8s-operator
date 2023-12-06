@@ -62,6 +62,8 @@ class Observer(ops.Object):
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         if not container.can_connect() or not self.state.is_storage_ready:
+            logger.warning("Service not yet ready. Deferring.")
+            event.defer()
             return
         # The relation is joined, it cannot be None, hence the type casting.
         deprecated_agent_relation_meta = typing.cast(
@@ -101,6 +103,8 @@ class Observer(ops.Object):
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         if not container.can_connect() or not self.state.is_storage_ready:
+            logger.warning("Service not yet ready. Deferring.")
+            event.defer()
             return
         # The relation is joined, it cannot be None, hence the type casting.
         agent_relation_meta = typing.cast(
@@ -144,6 +148,8 @@ class Observer(ops.Object):
         # the event unit cannot be None.
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         if not container.can_connect() or not self.state.is_storage_ready:
+            logger.warning("Relation departed before service ready.")
+            event.defer()
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the
@@ -171,6 +177,7 @@ class Observer(ops.Object):
         # the event unit cannot be None.
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         if not container.can_connect() or not self.state.is_storage_ready:
+            logger.warning("Relation departed before service ready.")
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the
