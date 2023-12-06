@@ -8,7 +8,7 @@ import typing
 import ops
 
 import jenkins
-from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, AgentMeta, State
+from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, JENKINS_SERVICE_NAME, AgentMeta, State
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +60,10 @@ class Observer(ops.Object):
         Args:
             event: The event fired from an agent joining the relationship.
         """
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
+            logger.warning("Service not yet ready. Deferring.")
+            event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
         # The relation is joined, it cannot be None, hence the type casting.
         deprecated_agent_relation_meta = typing.cast(
@@ -72,6 +73,7 @@ class Observer(ops.Object):
         agent_meta = deprecated_agent_relation_meta[typing.cast(ops.Unit, event.unit).name]
         if not agent_meta:
             logger.warning("Relation data not ready yet. Deferring.")
+            # The event needs to be retried until the agents have set it's side of relation data.
             event.defer()
             return
 
@@ -100,9 +102,10 @@ class Observer(ops.Object):
         Args:
             event: The event fired from an agent joining the relationship.
         """
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
+            logger.warning("Service not yet ready. Deferring.")
+            event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
         # The relation is joined, it cannot be None, hence the type casting.
         agent_relation_meta = typing.cast(
@@ -112,6 +115,7 @@ class Observer(ops.Object):
         agent_meta = agent_relation_meta[typing.cast(ops.Unit, event.unit).name]
         if not agent_meta:
             logger.warning("Relation data not ready yet. Deferring.")
+            # The event needs to be retried until the agents have set it's side of relation data.
             event.defer()
             return
 
@@ -144,9 +148,9 @@ class Observer(ops.Object):
             event: The event fired when a unit in deprecated agent relation is departed.
         """
         # the event unit cannot be None.
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
+            logger.warning("Relation departed before service ready.")
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the
@@ -172,9 +176,9 @@ class Observer(ops.Object):
             event: The event fired when a unit in agent relation is departed.
         """
         # the event unit cannot be None.
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.defer()
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
+            logger.warning("Relation departed before service ready.")
             return
 
         # The relation data is removed before this particular hook runs, making the name set by the

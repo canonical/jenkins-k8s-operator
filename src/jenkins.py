@@ -22,30 +22,30 @@ import requests
 from pydantic import HttpUrl
 
 import state
+from state import JENKINS_HOME_PATH
 
 logger = logging.getLogger(__name__)
 
 WEB_PORT = 8080
 WEB_URL = f"http://localhost:{WEB_PORT}"
 LOGIN_URL = f"{WEB_URL}/login?from=%2F"
-HOME_PATH = Path("/var/lib/jenkins")
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 # Path to initial Jenkins password file
-PASSWORD_FILE_PATH = HOME_PATH / "secrets/initialAdminPassword"
+PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
 # Path to Jenkins admin API token
-API_TOKEN_PATH = HOME_PATH / "secrets/apiToken"
+API_TOKEN_PATH = JENKINS_HOME_PATH / "secrets/apiToken"
 # Path to last executed Jenkins version file, required to override wizard installation
-LAST_EXEC_VERSION_PATH = HOME_PATH / Path("jenkins.install.InstallUtil.lastExecVersion")
+LAST_EXEC_VERSION_PATH = JENKINS_HOME_PATH / Path("jenkins.install.InstallUtil.lastExecVersion")
 # Path to Jenkins version file, required to override wizard installation
-WIZARD_VERSION_PATH = HOME_PATH / Path("jenkins.install.UpgradeWizard.state")
+WIZARD_VERSION_PATH = JENKINS_HOME_PATH / Path("jenkins.install.UpgradeWizard.state")
 # The Jenkins bootstrapping config path
-CONFIG_FILE_PATH = HOME_PATH / "config.xml"
+CONFIG_FILE_PATH = JENKINS_HOME_PATH / "config.xml"
 # The Jenkins plugins installation directory
-PLUGINS_PATH = HOME_PATH / "plugins"
+PLUGINS_PATH = JENKINS_HOME_PATH / "plugins"
 # The Jenkins logging configuration path
-LOGGING_CONFIG_PATH = HOME_PATH / "logging.properties"
+LOGGING_CONFIG_PATH = JENKINS_HOME_PATH / "logging.properties"
 # The Jenkins logging path as defined in templates/logging.properties file
-LOGGING_PATH = HOME_PATH / "jenkins.log"
+LOGGING_PATH = JENKINS_HOME_PATH / "jenkins.log"
 
 # The plugins that are required for Jenkins to work
 REQUIRED_PLUGINS = [
@@ -218,7 +218,7 @@ def calculate_env() -> Environment:
     Returns:
         The dictionary mapping of environment variables for the Jenkins service.
     """
-    return Environment(JENKINS_HOME=str(HOME_PATH))
+    return Environment(JENKINS_HOME=str(JENKINS_HOME_PATH))
 
 
 def get_version() -> str:

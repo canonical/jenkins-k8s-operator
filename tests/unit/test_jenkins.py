@@ -186,7 +186,7 @@ def test_calculate_env():
     """
     env = jenkins.calculate_env()
 
-    assert env == {"JENKINS_HOME": str(jenkins.HOME_PATH)}
+    assert env == {"JENKINS_HOME": str(state.JENKINS_HOME_PATH)}
 
 
 @pytest.mark.parametrize(

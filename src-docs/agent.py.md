@@ -9,6 +9,7 @@ The Jenkins agent relation observer.
 ---------------
 - **AGENT_RELATION**
 - **DEPRECATED_AGENT_RELATION**
+- **JENKINS_SERVICE_NAME**
 
 
 ---

@@ -17,6 +17,7 @@ import ingress
 import jenkins
 import timerange
 from state import (
+    JENKINS_SERVICE_NAME,
     CharmConfigInvalidError,
     CharmIllegalNumUnitsError,
     CharmRelationDataInvalidError,
@@ -74,7 +75,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             "summary": "jenkins layer",
             "description": "pebble config layer for jenkins",
             "services": {
-                self.state.jenkins_service_name: {
+                JENKINS_SERVICE_NAME: {
                     "override": "replace",
                     "summary": "jenkins",
                     "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
@@ -105,9 +106,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The event fired when pebble is ready.
         """
-        container = event.workload
-        if not container or not container.can_connect():
-            event.defer()
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container or not container.can_connect() or not self.state.is_storage_ready:
+            self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
+            event.defer()  # Jenkins installation should be retried until preconditions are met.
             return
 
         self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
@@ -123,7 +125,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.unit.status = ops.MaintenanceStatus("Configuring Jenkins.")
             jenkins.bootstrap(container, self.state.proxy_config)
             # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
-            container.restart(self.state.jenkins_service_name)
+            container.restart(JENKINS_SERVICE_NAME)
             jenkins.wait_ready()
         except TimeoutError as exc:
             logger.error("Timed out waiting for Jenkins, %s", exc)
@@ -171,8 +173,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         1. Remove plugins that are installed but are not allowed by plugins config value.
         2. Update Jenkins patch version if available and is within restart-time-range config value.
         """
-        container = self.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
+            self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             return
 
         if self.state.restart_time_range and not timerange.check_now_within_bound_hours(
@@ -188,9 +191,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The event fired when the storage is attached.
         """
-        container = self.unit.get_container(self.state.jenkins_service_name)
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
         if not container.can_connect():
-            event.defer()
+            self.unit.status = ops.WaitingStatus("Waiting for pebble.")
             return
 
         command = [

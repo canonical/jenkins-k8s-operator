@@ -6,7 +6,7 @@
 import ops
 
 import jenkins
-from state import State
+from state import JENKINS_SERVICE_NAME, State
 
 
 class Observer(ops.Object):
@@ -35,9 +35,9 @@ class Observer(ops.Object):
         Args:
             event: The event fired from get-admin-password action.
         """
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.fail("Container not yet ready.")
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
+            event.fail("Service not yet ready.")
             return
         credentials = jenkins.get_admin_credentials(container)
         event.set_results({"password": credentials.password_or_token})
@@ -48,9 +48,9 @@ class Observer(ops.Object):
         Args:
             event: The rotate credentials event.
         """
-        container = self.charm.unit.get_container(self.state.jenkins_service_name)
-        if not container.can_connect():
-            event.fail("Container not yet ready.")
+        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
+        if not container.can_connect() or not self.state.is_storage_ready:
+            event.fail("Service not yet ready.")
             return
         try:
             password = jenkins.rotate_credentials(container)
