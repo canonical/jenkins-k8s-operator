@@ -179,7 +179,7 @@ def test__on_jenkins_pebble_ready(
     """
     arrange: given a mocked jenkins client and a patched requests instance.
     act: when the Jenkins pebble ready event is fired.
-    assert: the unit status should show expected status.
+    assert: the unit status should show expected status and the jenkins port should be open.
     """
     harness = harness_container.harness
     monkeypatch.setattr(jenkins, "wait_ready", unittest.mock.MagicMock(return_value=None))
