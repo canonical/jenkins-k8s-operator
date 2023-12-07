@@ -429,3 +429,11 @@ def mock_charm_fixture():
     mock_charm = unittest.mock.MagicMock(spec=CharmBase)
     mock_charm.app.planned_units.return_value = 1
     return mock_charm
+
+
+@pytest.fixture(scope="function", name="patch_os_environ")
+def patch_os_environ_fixture(monkeypatch: pytest.MonkeyPatch):
+    """Monkeypatch os.environ variable to enable testing in self-hosted runners."""
+    # monkeypatch environment variables because the test is running in self-hosted runners and juju
+    # proxy environment is picked up, making the test fail.
+    monkeypatch.setattr(state.os, "environ", {})

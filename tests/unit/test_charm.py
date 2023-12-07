@@ -16,7 +16,6 @@ import pytest
 import requests
 
 import jenkins
-import state
 import timerange
 from charm import JenkinsK8sOperatorCharm
 
@@ -147,6 +146,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
+@pytest.mark.usefixtures("patch_os_environ")
 def test__on_jenkins_pebble_jenkins_not_ready(
     harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
 ):
@@ -156,10 +156,6 @@ def test__on_jenkins_pebble_jenkins_not_ready(
     assert: Jenkins falls into BlockedStatus.
     """
     harness = harness_container.harness
-    # monkeypatch environment variables because the test is running in self-hosted runners and juju
-    # proxy environment is picked up, making the test fail.
-    monkeypatch.setattr(state.os, "environ", {})
-    # speed up waiting by changing default argument values
     monkeypatch.setattr(
         jenkins, "wait_ready", unittest.mock.MagicMock(side_effect=[None, TimeoutError])
     )
@@ -176,6 +172,7 @@ def test__on_jenkins_pebble_jenkins_not_ready(
     ), f"unit should be in {BLOCKED_STATUS_NAME}"
 
 
+@pytest.mark.usefixtures("patch_os_environ")
 def test__on_jenkins_pebble_ready(
     harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
 ):
@@ -185,10 +182,6 @@ def test__on_jenkins_pebble_ready(
     assert: the unit status should show expected status.
     """
     harness = harness_container.harness
-    # monkeypatch environment variables because the test is running in self-hosted runners and juju
-    # proxy environment is picked up, making the test fail.
-    monkeypatch.setattr(state.os, "environ", {})
-    # speed up waiting by changing default argument values
     monkeypatch.setattr(jenkins, "wait_ready", unittest.mock.MagicMock(return_value=None))
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "get_version", lambda *_args, **_kwargs: "1")
