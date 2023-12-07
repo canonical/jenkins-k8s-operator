@@ -147,18 +147,37 @@ def test__on_jenkins_pebble_ready_get_version_error(
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
-@pytest.mark.parametrize(
-    "exception,expected_status",
-    [
-        pytest.param(TimeoutError, ops.BlockedStatus, id="jenkins not ready"),
-        pytest.param(None, ops.ActiveStatus, id="jenkins ready"),
-    ],
-)
+def test__on_jenkins_pebble_jenkins_not_ready(
+    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given a mocked jenkins get_version raises TimeoutError on the second call.
+    act: when the Jenkins pebble ready event is fired.
+    assert: Jenkins falls into BlockedStatus.
+    """
+    harness = harness_container.harness
+    # monkeypatch environment variables because the test is running in self-hosted runners and juju
+    # proxy environment is picked up, making the test fail.
+    monkeypatch.setattr(state.os, "environ", {})
+    # speed up waiting by changing default argument values
+    monkeypatch.setattr(
+        jenkins, "wait_ready", unittest.mock.MagicMock(side_effect=[None, TimeoutError])
+    )
+    monkeypatch.setattr(jenkins, "bootstrap", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(jenkins, "get_version", lambda *_args, **_kwargs: "1")
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    assert (
+        jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
+    ), f"unit should be in {BLOCKED_STATUS_NAME}"
+
+
 def test__on_jenkins_pebble_ready(
-    harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
-    exception: Exception | None,
-    expected_status: ops.StatusBase,
+    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
 ):
     """
     arrange: given a mocked jenkins client and a patched requests instance.
@@ -170,9 +189,7 @@ def test__on_jenkins_pebble_ready(
     # proxy environment is picked up, making the test fail.
     monkeypatch.setattr(state.os, "environ", {})
     # speed up waiting by changing default argument values
-    monkeypatch.setattr(
-        jenkins, "wait_ready", unittest.mock.MagicMock(side_effect=[None, exception])
-    )
+    monkeypatch.setattr(jenkins, "wait_ready", unittest.mock.MagicMock(return_value=None))
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "get_version", lambda *_args, **_kwargs: "1")
     harness.begin()
@@ -182,8 +199,9 @@ def test__on_jenkins_pebble_ready(
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     assert (
-        jenkins_charm.unit.status.name == expected_status.name
-    ), f"unit should be in {expected_status}"
+        jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
+    ), f"unit should be in {ACTIVE_STATUS_NAME}"
+    assert jenkins.WEB_PORT in {open_port.port for open_port in harness.model.unit.opened_ports()}
 
 
 @pytest.mark.parametrize(
