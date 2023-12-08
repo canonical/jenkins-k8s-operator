@@ -144,6 +144,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         self.unit.set_workload_version(version)
+        self.unit.set_ports(jenkins.WEB_PORT)
         self.unit.status = ops.ActiveStatus()
 
     def _remove_unlisted_plugins(self, container: ops.Container) -> ops.StatusBase:
