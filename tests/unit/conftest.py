@@ -431,7 +431,7 @@ def mock_charm_fixture():
     return mock_charm
 
 
-@pytest.fixture(scope="function", name="patch_os_environ")
+@pytest.fixture(scope="function", name="patch_os_environ", autouse=True)
 def patch_os_environ_fixture(monkeypatch: pytest.MonkeyPatch):
     """Monkeypatch os.environ variable to enable testing in self-hosted runners."""
     # monkeypatch environment variables because the test is running in self-hosted runners and juju
