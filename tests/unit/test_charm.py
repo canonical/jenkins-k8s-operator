@@ -201,7 +201,7 @@ def test__on_jenkins_pebble_ready(
         ),
         pytest.param(
             TimeoutError,
-            ops.BlockedStatus("Failed to restart Jenkins after removing plugins"),
+            ops.BlockedStatus("Failed to remove plugins."),
             id="jenkins error",
         ),
     ],

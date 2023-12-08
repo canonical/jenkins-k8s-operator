@@ -1011,6 +1011,23 @@ def test__set_jenkins_system_message(mock_client: unittest.mock.MagicMock):
     mock_groovy_script.assert_called()
 
 
+def test_remove_unlisted_plugins_wait_plugins_install_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    container: ops.Container,
+):
+    """
+    arrange: given a mocked _wait_plugins_install that raises a timeout error.
+    act: when remove_unlisted_plugins is called.
+    assert: JenkinsPluginError is raised.
+    """
+    monkeypatch.setattr(
+        jenkins, "_wait_plugins_install", unittest.mock.MagicMock(side_effect=TimeoutError)
+    )
+
+    with pytest.raises(jenkins.JenkinsPluginError):
+        jenkins.remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
+
+
 def test_remove_unlisted_plugins_delete_error(
     monkeypatch: pytest.MonkeyPatch,
     mock_client: unittest.mock.MagicMock,

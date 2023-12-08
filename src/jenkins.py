@@ -607,8 +607,11 @@ def _get_plugin_name(plugin_info: str) -> str:
     return match.group(1)
 
 
-def _wait_plugins_install(container: ops.Container, timeout=60 * 5):
+def _wait_plugins_install(container: ops.Container, timeout: int = 60 * 5) -> None:
     """Wait until all plugins are installed.
+
+    This function checks for any .tmp files in the plugins directory which indicates that a user
+    might be installing plugins through the UI.
 
     Args:
         container: The Jenkins workload container.
