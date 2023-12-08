@@ -277,7 +277,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L720"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L734"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 
@@ -301,14 +301,14 @@ Remove plugins that are not in the list of desired plugins.
 
 **Raises:**
  
- - <b>`JenkinsPluginError`</b>:  if there was an error removing unlisted plugin. 
+ - <b>`JenkinsPluginError`</b>:  if there was an error removing unlisted plugin or there are plugins  currently being installed. 
  - <b>`JenkinsError`</b>:  if there was an error restarting Jenkins after removing the plugin. 
  - <b>`TimeoutError`</b>:  if it took too long to restart Jenkins after removing the plugin. 
 
 
 ---
 
-<a href="../src/jenkins.py#L810"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L830"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `rotate_credentials`
 

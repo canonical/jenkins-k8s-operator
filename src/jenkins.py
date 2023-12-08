@@ -607,6 +607,20 @@ def _get_plugin_name(plugin_info: str) -> str:
     return match.group(1)
 
 
+def _wait_plugins_install(container: ops.Container, timeout=60 * 5):
+    """Wait until all plugins are installed.
+
+    Args:
+        container: The Jenkins workload container.
+        timeout: Timeout in seconds to wait for plugins to be installed.
+    """
+    _wait_for(
+        lambda: not container.list_files(path="/var/lib/jenkins/plugins/", pattern="*.tmp"),
+        timeout=timeout,
+        check_interval=5,
+    )
+
+
 def _build_dependencies_lookup(
     plugin_dependency_outputs: typing.Iterable[str],
 ) -> dict[str, tuple[str, ...]]:
@@ -727,12 +741,18 @@ def remove_unlisted_plugins(
         container: The workload container.
 
     Raises:
-        JenkinsPluginError: if there was an error removing unlisted plugin.
+        JenkinsPluginError: if there was an error removing unlisted plugin or there are plugins
+            currently being installed.
         JenkinsError: if there was an error restarting Jenkins after removing the plugin.
         TimeoutError: if it took too long to restart Jenkins after removing the plugin.
     """
     if not plugins:
         return
+
+    try:
+        _wait_plugins_install(container=container)
+    except TimeoutError as exc:
+        raise JenkinsPluginError("Plugins currently being installed.") from exc
 
     client = _get_client(_get_api_credentials(container))
     res = client.run_groovy_script(
