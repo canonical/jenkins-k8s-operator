@@ -17,3 +17,5 @@ jobs:
         chmod +x tests/integration/pre_run_script.sh
         ./tests/integration/pre_run_script.sh"
       juju-channel: 3.1/stable
+      self-hosted-runner: true
+      self-hosted-runner-label: "edge"
