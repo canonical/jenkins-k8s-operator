@@ -390,6 +390,7 @@ def _install_plugins(
         str(PLUGINS_PATH),
         "-p",
         " ".join(set(REQUIRED_PLUGINS)),
+        "--latest",
     ]
     proc: ops.pebble.ExecProcess = container.exec(
         command,
@@ -607,6 +608,21 @@ def _get_plugin_name(plugin_info: str) -> str:
     return match.group(1)
 
 
+def _plugin_temporary_files_exist(container: ops.Container) -> bool:
+    """Check if plugin temporary file exists in the plugins installation directory.
+
+    Args:
+        container: The Jenkins workload container.
+
+    Returns:
+        True if temporary plugin download file exists, False otherwise.
+    """
+    if container.list_files(path=str(PLUGINS_PATH), pattern="*.tmp"):
+        logger.warning("Plugins being downloaded, waiting until further actions.")
+        return True
+    return False
+
+
 def _wait_plugins_install(container: ops.Container, timeout: int = 60 * 5) -> None:
     """Wait until all plugins are installed.
 
@@ -618,7 +634,7 @@ def _wait_plugins_install(container: ops.Container, timeout: int = 60 * 5) -> No
         timeout: Timeout in seconds to wait for plugins to be installed.
     """
     _wait_for(
-        lambda: not container.list_files(path="/var/lib/jenkins/plugins/", pattern="*.tmp"),
+        lambda: not _plugin_temporary_files_exist(container),
         timeout=timeout,
         check_interval=5,
     )

@@ -214,6 +214,7 @@ def container_fixture(
                 str(jenkins.PLUGINS_PATH),
                 "-p",
                 required_plugins,
+                "--latest",
             ] == argv:
                 return (0, "", "Done")
             case _ if [
@@ -235,6 +236,7 @@ def container_fixture(
                 str(jenkins.PLUGINS_PATH),
                 "-p",
                 required_plugins,
+                "--latest",
             ] == argv:
                 return (0, "", "Done")
             # pylint: enable=R0801
