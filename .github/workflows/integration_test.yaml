@@ -7,6 +7,9 @@ jobs:
   integration-tests:
     uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
+    permissions:
+      contents: read
+      packages: write
     with:
       channel: 1.28-strict/stable
       extra-arguments: |
