@@ -29,9 +29,7 @@ async def test_jenkins_plugins_config(
     act: when update_status_hook is fired.
     assert: the plugin is uninstalled and the system message is set on Jenkins.
     """
-    await install_plugins(
-        ops_test, unit_web_client.unit, unit_web_client.client, INSTALLED_PLUGINS
-    )
+    await install_plugins(ops_test, unit_web_client, INSTALLED_PLUGINS)
 
     ret_code, _, stderr = await ops_test.juju(
         "exec",
@@ -60,9 +58,7 @@ async def test_git_plugin_k8s_agent(ops_test: OpsTest, unit_web_client: UnitWebC
     act: when a job is dispatched with a git workflow.
     assert: job completes successfully.
     """
-    await install_plugins(
-        ops_test, unit_web_client.unit, unit_web_client.client, INSTALLED_PLUGINS
-    )
+    await install_plugins(ops_test, unit_web_client, INSTALLED_PLUGINS)
 
     job_name = "git-plugin-test-k8s"
     unit_web_client.client.create_job(job_name, gen_git_test_job_xml("k8s"))
@@ -92,7 +88,7 @@ async def test_ldap_plugin(
     act: when ldap plugin is configured and the user is queried.
     assert: the user is authenticated successfully.
     """
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("ldap",))
+    await install_plugins(ops_test, unit_web_client, ("ldap",))
 
     # This is same as: Manage Jenkins > Configure Global Security > Authentication >
     # Security Realm > LDAP > Test LDAP Settings.
@@ -158,9 +154,7 @@ async def test_matrix_combinations_parameter_plugin(
     act: when a multi-configuration job is created.
     assert: a matrix based test is created.
     """
-    await install_plugins(
-        ops_test, unit_web_client.unit, unit_web_client.client, ("matrix-combinations-parameter",)
-    )
+    await install_plugins(ops_test, unit_web_client, ("matrix-combinations-parameter",))
     matrix_project_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
         "matrix-project"
     ]
@@ -196,9 +190,7 @@ async def test_postbuildscript_plugin(
     act: when a postbuildscript job that writes a file to a /tmp folder is dispatched.
     assert: the file is written on the /tmp folder of the job host.
     """
-    await install_plugins(
-        ops_test, unit_web_client.unit, unit_web_client.client, ("postbuildscript",)
-    )
+    await install_plugins(ops_test, unit_web_client, ("postbuildscript",))
     postbuildscript_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
         "postbuildscript"
     ]
@@ -229,7 +221,7 @@ async def test_ssh_agent_plugin(ops_test: OpsTest, unit_web_client: UnitWebClien
     act: when a job is being configured.
     assert: ssh-agent configuration is visible.
     """
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("ssh-agent",))
+    await install_plugins(ops_test, unit_web_client, ("ssh-agent",))
     unit_web_client.client.create_job("ssh_agent_test", gen_test_job_xml("k8s"))
 
     res = unit_web_client.client.requester.get_url(
@@ -246,7 +238,7 @@ async def test_blueocean_plugin(ops_test: OpsTest, unit_web_client: UnitWebClien
     act: when blueocean frontend url is accessed.
     assert: 200 response is returned.
     """
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("blueocean",))
+    await install_plugins(ops_test, unit_web_client, ("blueocean",))
 
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/blue/organizations/jenkins/"
@@ -263,7 +255,7 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     act: when a backup action is run.
     assert: the backup is made on a configured directory.
     """
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("thinBackup",))
+    await install_plugins(ops_test, unit_web_client, ("thinBackup",))
     backup_path = "/srv/jenkins/backup/"
     res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/thinBackup/saveSettings",
@@ -297,7 +289,7 @@ async def test_bzr_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
     act: when a job configuration page is accessed.
     assert: bazaar plugin option exists.
     """
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("bazaar",))
+    await install_plugins(ops_test, unit_web_client, ("bazaar",))
     unit_web_client.client.create_job("bzr_plugin_test", gen_test_job_xml("k8s"))
 
     res = unit_web_client.client.requester.get_url(
@@ -315,7 +307,7 @@ async def test_rebuilder_plugin(ops_test: OpsTest, unit_web_client: UnitWebClien
     act: when a job is built and a rebuild is triggered.
     assert: last job is rebuilt.
     """
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("rebuild",))
+    await install_plugins(ops_test, unit_web_client, ("rebuild",))
 
     job_name = "rebuild_test"
     job = unit_web_client.client.create_job(job_name, gen_test_job_xml("k8s"))
@@ -335,7 +327,7 @@ async def test_openid_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
     act: when an openid endpoint is validated using the plugin.
     assert: the response returns a 200 status code.
     """
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("openid",))
+    await install_plugins(ops_test, unit_web_client, ("openid",))
 
     res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/descriptorByName/hudson.plugins.openid."
@@ -361,7 +353,7 @@ async def test_openid_connect_plugin(
         1. a redirection to Keycloak SSO is made.
         2. native Jenkins login ui is loaded.
     """
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, ("oic-auth",))
+    await install_plugins(ops_test, unit_web_client, ("oic-auth",))
 
     # 1. when jenkins security realm is configured with oidc server and login page is requested.
     payload: dict = {

@@ -50,7 +50,7 @@ async def test_jenkins_automatic_update_out_of_range(
     assert: the maintenance (plugins removal) does not take place.
     """
     extra_plugin = "oic-auth"
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, (extra_plugin,))
+    await install_plugins(ops_test, unit_web_client, (extra_plugin,))
     action: Action = await unit_web_client.unit.run(
         f"-- {' '.join(libfaketime_env)} {' '.join(update_status_env)} ./dispatch"
     )

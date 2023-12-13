@@ -3,72 +3,62 @@
 
 """Helpers for Jenkins-k8s-operator charm integration tests."""
 import inspect
+import logging
 import textwrap
 import time
 import typing
-from functools import partial
 
 import jenkinsapi.jenkins
 import kubernetes.client
 import requests
 from juju.model import Model
 from juju.unit import Unit
-from pytest_operator.plugin import OpsTest
 
 import jenkins
 
+from .types_ import UnitWebClient
+
+logger = logging.getLogger(__name__)
+
 
 async def install_plugins(
-    ops_test: OpsTest,
     unit: Unit,
-    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    unit_web_client: UnitWebClient,
     plugins: typing.Iterable[str],
 ) -> None:
     """Install plugins to Jenkins unit.
 
     Args:
-        ops_test: The Ops testing fixture.
         unit: The Jenkins unit to install plugins to.
-        jenkins_client: The Jenkins client of given unit.
+        unit_web_client: The wrapper around unit, web_address and jenkins_client.
         plugins: Desired plugins to install.
     """
-    plugins = tuple(plugin for plugin in plugins if not jenkins_client.has_plugin(plugin))
+    unit, web, client = unit_web_client.unit, unit_web_client.web, unit_web_client.client
+    plugins = tuple(plugin for plugin in plugins if not client.has_plugin(plugin))
     if not plugins:
         return
 
     post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
     post_data["dynamic_load"] = ""
-    res = jenkins_client.requester.post_url(
-        f"{jenkins_client.baseurl}/manage/pluginManager/install", data=post_data
-    )
+    res = client.requester.post_url(f"{web}/manage/pluginManager/install", data=post_data)
     assert res.status_code == 200, "Failed to request plugins install"
 
-    async def check_temp_files(exist=True) -> bool:
-        """Check if tempfiles exist in Jenkins plugins directory.
-
-        Args:
-            exist: Whether the tmp file should exist.
-
-        Returns:
-            True if .tmp file exists, False otherwise.
-        """
-        ret_code, stdout, stderr = await ops_test.juju(
-            "exec", "--unit", unit.name, "ls /var/lib/jenkins/plugins"
-        )
-        assert not ret_code, f"Failed to check for tmp files, {stderr}"
-        if exist:
-            return "tmp" in stdout
-        return "tmp" not in stdout
-
-    # wait until download starts and finishes
-    await wait_for(check_temp_files)
-    await wait_for(partial(check_temp_files, exist=False))
+    # block until the UI does not have "Pending" in download progress column.
+    await unit.model.block_until(
+        lambda: "Pending"
+        not in str(
+            client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
+            encoding="utf-8",
+        ),
+        timeout=60 * 5,
+        wait_period=10,
+    )
 
     # the library will return 503 or other status codes that are not 200, hence restart and
     # wait rather than check for status code.
-    jenkins_client.safe_restart()
+    client.safe_restart()
     await unit.model.block_until(
-        lambda: requests.get(jenkins_client.baseurl, timeout=10).status_code == 403,
+        lambda: requests.get(web, timeout=10).status_code == 403,
         timeout=300,
         wait_period=10,
     )
