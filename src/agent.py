@@ -120,19 +120,16 @@ class Observer(ops.Object):
             return
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
+        # This is to avoid the None type.
+        assert (binding := self.model.get_binding("juju-info"))  # nosec
+        host = binding.network.bind_address
         try:
-            jenkins.add_agent_node(
-                agent_meta=agent_meta,
-                container=container,
-            )
+            jenkins.add_agent_node(agent_meta=agent_meta, container=container, host=host)
             secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
-        # This is to avoid the None type.
-        assert (binding := self.model.get_binding("juju-info"))  # nosec
-        host = binding.network.bind_address
         event.relation.data[self.model.unit].update(
             {
                 "url": f"http://{host}:{jenkins.WEB_PORT}",
