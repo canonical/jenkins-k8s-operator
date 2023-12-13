@@ -22,14 +22,12 @@ logger = logging.getLogger(__name__)
 
 
 async def install_plugins(
-    unit: Unit,
     unit_web_client: UnitWebClient,
     plugins: typing.Iterable[str],
 ) -> None:
     """Install plugins to Jenkins unit.
 
     Args:
-        unit: The Jenkins unit to install plugins to.
         unit_web_client: The wrapper around unit, web_address and jenkins_client.
         plugins: Desired plugins to install.
     """
