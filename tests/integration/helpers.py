@@ -6,6 +6,7 @@ import inspect
 import textwrap
 import time
 import typing
+from functools import partial
 
 import jenkinsapi.jenkins
 import kubernetes.client
@@ -35,29 +36,33 @@ async def install_plugins(
     if not plugins:
         return
 
-    returncode, stdout, stderr = await ops_test.juju(
-        "ssh",
-        "--container",
-        "jenkins",
-        unit.name,
-        "java",
-        "-jar",
-        f"{jenkins.EXECUTABLES_PATH / 'jenkins-plugin-manager-2.12.13.jar'}",
-        "-w",
-        f"{jenkins.EXECUTABLES_PATH / 'jenkins.war'}",
-        "-d",
-        str(jenkins.PLUGINS_PATH),
-        "-p",
-        " ".join(plugins),
+    post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
+    post_data["dynamic_load"] = ""
+    res = jenkins_client.requester.post_url(
+        f"{jenkins_client.baseurl}/manage/pluginManager/install", data=post_data
     )
-    assert (
-        not returncode
-    ), f"Non-zero return code {returncode} received, stdout: {stdout} stderr: {stderr}"
-    # When there are connectivity issues it retries with other mirrors/links which the output gets
-    # printed in stderr and if not it prints in stdout.
-    assert any(
-        ("Done" in stdout, "Done" in stderr)
-    ), f"Failed to install plugins via juju ssh, {stdout}, {stderr}"
+    assert res.status_code == 200, "Failed to request plugins install"
+
+    async def check_temp_files(exist=True) -> bool:
+        """Check if tempfiles exist in Jenkins plugins directory.
+
+        Args:
+            exist: Whether the tmp file should exist.
+
+        Returns:
+            True if .tmp file exists, False otherwise.
+        """
+        ret_code, stdout, stderr = await ops_test.juju(
+            "exec", "--unit", unit.name, "ls /var/lib/jenkins/plugins"
+        )
+        assert not ret_code, f"Failed to check for tmp files, {stderr}"
+        if exist:
+            return "tmp" in stdout
+        return "tmp" not in stdout
+
+    # wait until download starts and finishes
+    await wait_for(check_temp_files)
+    await wait_for(partial(check_temp_files, exist=False))
 
     # the library will return 503 or other status codes that are not 200, hence restart and
     # wait rather than check for status code.
