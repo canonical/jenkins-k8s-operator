@@ -3,6 +3,7 @@
 
 """Helpers for Jenkins-k8s-operator charm integration tests."""
 import inspect
+import logging
 import textwrap
 import time
 import typing
@@ -12,58 +13,50 @@ import kubernetes.client
 import requests
 from juju.model import Model
 from juju.unit import Unit
-from pytest_operator.plugin import OpsTest
 
 import jenkins
 
+from .types_ import UnitWebClient
+
+logger = logging.getLogger(__name__)
+
 
 async def install_plugins(
-    ops_test: OpsTest,
-    unit: Unit,
-    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    unit_web_client: UnitWebClient,
     plugins: typing.Iterable[str],
 ) -> None:
     """Install plugins to Jenkins unit.
 
     Args:
-        ops_test: The Ops testing fixture.
-        unit: The Jenkins unit to install plugins to.
-        jenkins_client: The Jenkins client of given unit.
+        unit_web_client: The wrapper around unit, web_address and jenkins_client.
         plugins: Desired plugins to install.
     """
-    plugins = tuple(plugin for plugin in plugins if not jenkins_client.has_plugin(plugin))
+    unit, web, client = unit_web_client.unit, unit_web_client.web, unit_web_client.client
+    plugins = tuple(plugin for plugin in plugins if not client.has_plugin(plugin))
     if not plugins:
         return
 
-    returncode, stdout, stderr = await ops_test.juju(
-        "ssh",
-        "--container",
-        "jenkins",
-        unit.name,
-        "java",
-        "-jar",
-        f"{jenkins.EXECUTABLES_PATH / 'jenkins-plugin-manager-2.12.13.jar'}",
-        "-w",
-        f"{jenkins.EXECUTABLES_PATH / 'jenkins.war'}",
-        "-d",
-        str(jenkins.PLUGINS_PATH),
-        "-p",
-        " ".join(plugins),
+    post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
+    post_data["dynamic_load"] = ""
+    res = client.requester.post_url(f"{web}/manage/pluginManager/install", data=post_data)
+    assert res.status_code == 200, "Failed to request plugins install"
+
+    # block until the UI does not have "Pending" in download progress column.
+    await unit.model.block_until(
+        lambda: "Pending"
+        not in str(
+            client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
+            encoding="utf-8",
+        ),
+        timeout=60 * 5,
+        wait_period=10,
     )
-    assert (
-        not returncode
-    ), f"Non-zero return code {returncode} received, stdout: {stdout} stderr: {stderr}"
-    # When there are connectivity issues it retries with other mirrors/links which the output gets
-    # printed in stderr and if not it prints in stdout.
-    assert any(
-        ("Done" in stdout, "Done" in stderr)
-    ), f"Failed to install plugins via juju ssh, {stdout}, {stderr}"
 
     # the library will return 503 or other status codes that are not 200, hence restart and
     # wait rather than check for status code.
-    jenkins_client.safe_restart()
+    client.safe_restart()
     await unit.model.block_until(
-        lambda: requests.get(jenkins_client.baseurl, timeout=10).status_code == 403,
+        lambda: requests.get(web, timeout=10).status_code == 403,
         timeout=300,
         wait_period=10,
     )
