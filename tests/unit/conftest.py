@@ -6,6 +6,7 @@
 import textwrap
 import typing
 import unittest.mock
+from ipaddress import IPv4Address
 from pathlib import Path
 from secrets import token_hex
 
@@ -32,6 +33,9 @@ ROCKCRAFT_YAML = yaml.safe_load(Path("jenkins_rock/rockcraft.yaml").read_text(en
 def harness_fixture():
     """Enable ops test framework harness."""
     harness = Harness(JenkinsK8sOperatorCharm)
+    # The charm code `binding.network.bind_address` for getting unit ip address will fail without
+    # the add_network call.
+    harness.add_network("10.0.0.10")
     yield harness
     harness.cleanup()
 
@@ -437,3 +441,19 @@ def patch_os_environ_fixture(monkeypatch: pytest.MonkeyPatch):
     # monkeypatch environment variables because the test is running in self-hosted runners and juju
     # proxy environment is picked up, making the test fail.
     monkeypatch.setattr(state.os, "environ", {})
+
+
+@pytest.fixture(scope="function", name="patch_jenkins_node")
+def patch_jenkins_node_fixture(monkeypatch: pytest.MonkeyPatch):
+    """Monkeypatch jenkinsapi Node to enable node creation."""
+    mock_node = unittest.mock.MagicMock(spec=jenkinsapi.node.Node)
+    mock_node.return_value.get_node_attributes.return_value = {
+        "json": '{"launcher": {"tunnel": ""}}'
+    }
+    monkeypatch.setattr(jenkins, "Node", mock_node)
+
+
+@pytest.fixture(scope="function", name="mock_ip_addr")
+def mock_ip_addr_fixture():
+    """Mock IPV4 fixture."""
+    return unittest.mock.MagicMock(spec=IPv4Address)

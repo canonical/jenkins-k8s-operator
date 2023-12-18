@@ -14,6 +14,7 @@ import textwrap
 import typing
 import unittest.mock
 from functools import partial
+from ipaddress import IPv4Address
 
 import jenkinsapi.jenkins
 import ops
@@ -553,49 +554,64 @@ def test_get_node_secret(container: ops.Container, mock_client: unittest.mock.Ma
     assert secret == node_secret, "Secret value mismatch."
 
 
-def test_add_agent_node_fail(container: ops.Container, mock_client: unittest.mock.MagicMock):
+@pytest.mark.usefixtures("patch_jenkins_node")
+def test_add_agent_node_fail(
+    container: ops.Container, mock_client: unittest.mock.MagicMock, mock_ip_addr: IPv4Address
+):
     """
     arrange: given a mocked jenkins client that raises an API exception.
     act: when add_agent is called
     assert: the exception is re-raised.
     """
-    mock_client.create_node.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
+    mock_client.create_node_with_config.side_effect = (
+        jenkinsapi.custom_exceptions.JenkinsAPIException
+    )
 
     with pytest.raises(jenkins.JenkinsError):
         jenkins.add_agent_node(
-            state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"), container
+            state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+            container,
+            host=mock_ip_addr,
         )
 
 
+@pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node_already_exists(
-    container: ops.Container, mock_client: unittest.mock.MagicMock
+    container: ops.Container, mock_client: unittest.mock.MagicMock, mock_ip_addr: IPv4Address
 ):
     """
     arrange: given a mocked jenkins client that raises an Already exists exception.
     act: when add_agent is called.
     assert: no exception is raised.
     """
-    mock_client.create_node.side_effect = jenkinsapi.custom_exceptions.AlreadyExists
+    mock_client.create_node_with_config.side_effect = jenkinsapi.custom_exceptions.AlreadyExists
 
     jenkins.add_agent_node(
         state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
         container,
+        host=mock_ip_addr,
     )
 
 
-def test_add_agent_node(container: ops.Container, mock_client: unittest.mock.MagicMock):
+@pytest.mark.usefixtures("patch_jenkins_node")
+def test_add_agent_node(
+    container: ops.Container, mock_client: unittest.mock.MagicMock, mock_ip_addr: IPv4Address
+):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
     assert: no exception is raised.
     """
-    mock_client.create_node.return_value = unittest.mock.MagicMock(spec=jenkinsapi.node.Node)
+    mock_client.create_node_with_config.return_value = unittest.mock.MagicMock(spec=jenkins.Node)
 
     jenkins.add_agent_node(
-        state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"), container
+        state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+        container,
+        host=mock_ip_addr,
     )
 
 
+@pytest.mark.usefixtures("patch_jenkins_node")
 def test_remove_agent_node_fail(container: ops.Container, mock_client: unittest.mock.MagicMock):
     """
     arrange: given a mocked jenkins client.
