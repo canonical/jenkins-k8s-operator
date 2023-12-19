@@ -14,8 +14,76 @@ from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
-from .helpers import gen_git_test_job_xml, gen_test_job_xml, get_job_invoked_unit, install_plugins
+from .helpers import (
+    gen_git_test_job_xml,
+    gen_test_job_xml,
+    get_job_invoked_unit,
+    install_plugins,
+    wait_for,
+)
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, UnitWebClient
+
+
+@pytest.mark.usefixtures("app_with_allowed_plugins")
+async def test_plugins_remove_delay(
+    ops_test: OpsTest, update_status_env: typing.Iterable[str], unit_web_client: UnitWebClient
+):
+    """
+    arrange: given a Jenkins with plugins being installed through UI.
+    act: when update_status_hook is fired.
+    assert: the plugin removal is delayed warning is logged until plugin installation is settled.
+    """
+    post_data = {f"plugin.{plugin}.default": "on" for plugin in ALLOWED_PLUGINS}
+    post_data["dynamic_load"] = ""
+    res = unit_web_client.client.requester.post_url(
+        f"{unit_web_client.web}/manage/pluginManager/install", data=post_data
+    )
+    assert res.status_code == 200, "Failed to request plugins install"
+
+    async def has_temp_files():
+        """Check if tempfiles exist in Jenkins plugins directory.
+
+        Returns:
+            True if .tmp file exists, False otherwise.
+        """
+        ret_code, stdout, stderr = await ops_test.juju(
+            "exec", "--unit", unit_web_client.unit.name, "ls /var/lib/jenkins/plugins"
+        )
+        assert not ret_code, f"Failed to check for tmp files, {stderr}"
+        return "tmp" in stdout
+
+    await wait_for(has_temp_files)
+    ret_code, _, stderr = await ops_test.juju(
+        "exec",
+        "--unit",
+        unit_web_client.unit.name,
+        "--",
+        f"{' '.join(update_status_env)} ./dispatch",
+    )
+    assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
+
+    async def has_delay_log():
+        """Check if juju log contains plugin cleanup delayed log.
+
+        Returns:
+            True if plugin cleanup delayed log exists. False otherwise.
+        """
+        ret_code, stdout, stderr = await ops_test.juju(
+            "debug-log",
+            "--replay",
+            "--no-tail",
+            "--level",
+            "WARNING",
+        )
+        assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
+        return "Plugins being downloaded, waiting until further actions." in stdout
+
+    await wait_for(has_delay_log)
+    unit_web_client.client.safe_restart()
+
+    await wait_for(
+        lambda: all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
+    )
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
