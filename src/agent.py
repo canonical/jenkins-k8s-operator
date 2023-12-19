@@ -61,7 +61,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        # This is to avoid the None type.
+        # This is to avoid the None type, juju-info binding should not be None.
         assert (binding := self.model.get_binding("juju-info"))  # nosec
         host = binding.network.bind_address
         if not container.can_connect() or not self.state.is_storage_ready or not host:
@@ -105,7 +105,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        # This is to avoid the None type.
+        # This is to avoid the None type, juju-info binding should not be None.
         assert (binding := self.model.get_binding("juju-info"))  # nosec
         host = binding.network.bind_address
         if not container.can_connect() or not self.state.is_storage_ready or not host:
