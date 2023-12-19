@@ -119,7 +119,7 @@ Get the Jenkins server version.
 
 ---
 
-<a href="../src/jenkins.py#L411"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L412"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `bootstrap`
 
@@ -145,7 +145,7 @@ Initialize and install Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L449"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L450"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_node_secret`
 
@@ -176,7 +176,7 @@ Get node secret from jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L508"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L509"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `add_agent_node`
 
@@ -207,7 +207,7 @@ Add a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L534"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L535"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_agent_node`
 
@@ -233,7 +233,7 @@ Remove a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L587"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L588"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
@@ -258,7 +258,7 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-<a href="../src/jenkins.py#L612"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L613"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
@@ -282,7 +282,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L760"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L793"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 
@@ -306,14 +306,14 @@ Remove plugins that are not in the list of desired plugins.
 
 **Raises:**
  
- - <b>`JenkinsPluginError`</b>:  if there was an error removing unlisted plugin. 
+ - <b>`JenkinsPluginError`</b>:  if there was an error removing unlisted plugin or there are plugins  currently being installed. 
  - <b>`JenkinsError`</b>:  if there was an error restarting Jenkins after removing the plugin. 
  - <b>`TimeoutError`</b>:  if it took too long to restart Jenkins after removing the plugin. 
 
 
 ---
 
-<a href="../src/jenkins.py#L850"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L889"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `rotate_credentials`
 
