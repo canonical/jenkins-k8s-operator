@@ -493,7 +493,7 @@ def _get_node_config(
         node_dict={
             "num_executors": int(agent_meta.executors),
             "node_description": agent_meta.name,
-            "remote_fs": ".",
+            "remote_fs": "/var/lib/jenkins/",
             "labels": agent_meta.labels,
             "exclusive": False,
         },
