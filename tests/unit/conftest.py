@@ -179,6 +179,8 @@ def container_fixture(
     password_file_path.write_text(admin_credentials.password_or_token, encoding="utf-8")
     api_token_file_path = combine_root_paths(jenkins_root, jenkins.API_TOKEN_PATH)
     api_token_file_path.write_text(admin_credentials.password_or_token, encoding="utf-8")
+    plugins_path = combine_root_paths(jenkins_root, jenkins.PLUGINS_PATH)
+    plugins_path.mkdir(parents=True, exist_ok=True)
 
     def cmd_handler(argv: list[str]) -> tuple[int, str, str]:
         """Handle the python command execution inside the Flask container.
@@ -212,6 +214,7 @@ def container_fixture(
                 str(jenkins.PLUGINS_PATH),
                 "-p",
                 required_plugins,
+                "--latest",
             ] == argv:
                 return (0, "", "Done")
             case _ if [
@@ -233,6 +236,7 @@ def container_fixture(
                 str(jenkins.PLUGINS_PATH),
                 "-p",
                 required_plugins,
+                "--latest",
             ] == argv:
                 return (0, "", "Done")
             # pylint: enable=R0801
