@@ -6,12 +6,14 @@
 import dataclasses
 import functools
 import itertools
+import json
 import logging
 import re
 import secrets
 import textwrap
 import typing
 from datetime import datetime, timedelta
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from time import sleep
 
@@ -19,6 +21,7 @@ import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
 import ops
 import requests
+from jenkinsapi.node import Node
 from pydantic import HttpUrl
 
 import state
@@ -467,24 +470,61 @@ def get_node_secret(node_name: str, container: ops.Container) -> str:
         raise JenkinsError("Failed to run groovy script getting node secret.") from exc
 
 
-def add_agent_node(agent_meta: state.AgentMeta, container: ops.Container) -> None:
+def _get_node_config(
+    agent_meta: state.AgentMeta,
+    container: ops.Container,
+    host: typing.Union[IPv4Address, IPv6Address, str],
+) -> dict[str, typing.Any]:
+    """Get agent node configuration dictionary values.
+
+    Args:
+        agent_meta: The Jenkins agent metadata to create the node from.
+        container: The Jenkins workload container.
+        host: The Jenkins server ip address for direct agent tunnel connection.
+
+    Returns:
+        A dictionary mapping of agent configuration values.
+    """
+    client = _get_client(_get_api_credentials(container))
+    node = Node(
+        jenkins_obj=client,
+        baseurl=WEB_URL,
+        nodename=agent_meta.name,
+        node_dict={
+            "num_executors": int(agent_meta.executors),
+            "node_description": agent_meta.name,
+            "remote_fs": "/var/lib/jenkins/",
+            "labels": agent_meta.labels,
+            "exclusive": False,
+        },
+    )
+    attribs = node.get_node_attributes()
+    meta = json.loads(attribs["json"])
+    # the field can either take "HOST:PORT", ":PORT", or "HOST:"
+    meta["launcher"]["tunnel"] = f"{host}:"
+    attribs["json"] = json.dumps(meta)
+    return attribs
+
+
+def add_agent_node(
+    agent_meta: state.AgentMeta,
+    container: ops.Container,
+    host: typing.Union[IPv4Address, IPv6Address, str],
+) -> None:
     """Add a Jenkins agent node.
 
     Args:
         agent_meta: The Jenkins agent metadata to create the node from.
         container: The Jenkins workload container.
+        host: The Jenkins server ip address for direct agent tunnel connection.
 
     Raises:
         JenkinsError: if an error occurred running groovy script creating the node.
     """
     client = _get_client(_get_api_credentials(container))
     try:
-        client.create_node(
-            name=agent_meta.name,
-            num_executors=int(agent_meta.executors),
-            node_description=agent_meta.name,
-            labels=agent_meta.labels,
-        )
+        config = _get_node_config(agent_meta=agent_meta, container=container, host=host)
+        client.create_node_with_config(name=agent_meta.name, config=config)
     except jenkinsapi.custom_exceptions.AlreadyExists:
         pass
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:

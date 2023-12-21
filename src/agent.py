@@ -61,7 +61,10 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not self.state.is_storage_ready:
+        # This is to avoid the None type, juju-info binding should not be None.
+        assert (binding := self.model.get_binding("juju-info"))  # nosec
+        host = binding.network.bind_address
+        if not container.can_connect() or not self.state.is_storage_ready or not host:
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -82,15 +85,14 @@ class Observer(ops.Object):
             jenkins.add_agent_node(
                 agent_meta=agent_meta,
                 container=container,
+                # mypy doesn't understand that host can no longer be None.
+                host=host,
             )
             secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
-        # This is to avoid the None type.
-        assert (binding := self.model.get_binding("juju-info"))  # nosec
-        host = binding.network.bind_address
         event.relation.data[self.model.unit].update(
             AgentRelationData(url=f"http://{host}:{jenkins.WEB_PORT}", secret=secret)
         )
@@ -103,7 +105,10 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not self.state.is_storage_ready:
+        # This is to avoid the None type, juju-info binding should not be None.
+        assert (binding := self.model.get_binding("juju-info"))  # nosec
+        host = binding.network.bind_address
+        if not container.can_connect() or not self.state.is_storage_ready or not host:
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -121,18 +126,12 @@ class Observer(ops.Object):
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
-            jenkins.add_agent_node(
-                agent_meta=agent_meta,
-                container=container,
-            )
+            jenkins.add_agent_node(agent_meta=agent_meta, container=container, host=host)
             secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
-        # This is to avoid the None type.
-        assert (binding := self.model.get_binding("juju-info"))  # nosec
-        host = binding.network.bind_address
         event.relation.data[self.model.unit].update(
             {
                 "url": f"http://{host}:{jenkins.WEB_PORT}",
