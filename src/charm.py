@@ -144,7 +144,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         self.unit.set_workload_version(version)
-        self.unit.set_ports(jenkins.WEB_PORT)
         self.unit.status = ops.ActiveStatus()
 
     def _remove_unlisted_plugins(self, container: ops.Container) -> ops.StatusBase:
@@ -195,6 +194,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         if not container.can_connect():
             self.unit.status = ops.WaitingStatus("Waiting for pebble.")
+            # This event should be handled again once the container becomes available.
+            event.defer()
             return
 
         command = [
