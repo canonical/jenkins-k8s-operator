@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Jenkins-k8s charm agent unit tests."""
@@ -200,6 +200,7 @@ def test__on_agent_relation_joined_client_error(
         pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
+@pytest.mark.usefixtures("patch_jenkins_node")
 def test__on_agent_relation_joined(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
@@ -221,9 +222,6 @@ def test__on_agent_relation_joined(
         "get_node_secret",
         lambda *_args, **_kwargs: secrets.token_hex(),
     )
-    # The charm code `binding.network.bind_address` for getting unit ip address will fail without
-    # the add_network call.
-    harness_container.harness.add_network("10.0.0.10")
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(

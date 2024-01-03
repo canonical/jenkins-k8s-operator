@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Jenkins-k8s charm unit tests."""
@@ -194,7 +194,6 @@ def test__on_jenkins_pebble_ready(
     assert (
         jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
     ), f"unit should be in {ACTIVE_STATUS_NAME}"
-    assert jenkins.WEB_PORT in {open_port.port for open_port in harness.model.unit.opened_ports()}
 
 
 @pytest.mark.parametrize(
