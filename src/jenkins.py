@@ -175,7 +175,7 @@ class StorageMountError(JenkinsBootstrapError):
 
 
 def is_storage_ready(container: ops.Container) -> bool:
-    """Return whether the Jenkins home storage is mounted.
+    """Return whether the Jenkins home directory is mounted and owned by jenkins.
 
     Args:
         container: The Jenkins workload container.
@@ -184,14 +184,14 @@ def is_storage_ready(container: ops.Container) -> bool:
         StorageMountError: if there was an error getting storage information.
 
     Returns:
-        True if storage is mounted, False otherwise.
+        True if home directory is mounted and owned by jenkins, False otherwise.
     """
     mount_info: str = container.pull("/proc/mounts").read()
     if str(JENKINS_HOME_PATH) not in mount_info:
         return False
     proc: ops.pebble.ExecProcess = container.exec(["stat", "-c", "%U", str(JENKINS_HOME_PATH)])
     try:
-        (stdout, _) = proc.wait_output()
+        stdout, _ = proc.wait_output()
     except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
         raise StorageMountError("Error fetching storage ownership info.") from exc
     return "jenkins" in stdout

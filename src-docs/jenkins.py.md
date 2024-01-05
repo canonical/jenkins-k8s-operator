@@ -61,7 +61,7 @@ Wait until Jenkins service is up.
 is_storage_ready(container: Container) → bool
 ```
 
-Return whether the Jenkins home storage is mounted. 
+Return whether the Jenkins home directory is mounted and owned by jenkins. 
 
 
 
@@ -78,7 +78,7 @@ Return whether the Jenkins home storage is mounted.
 
 
 **Returns:**
- True if storage is mounted, False otherwise. 
+ True if home directory is mounted and owned by jenkins, False otherwise. 
 
 
 ---
