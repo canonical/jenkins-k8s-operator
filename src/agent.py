@@ -64,7 +64,7 @@ class Observer(ops.Object):
         # This is to avoid the None type, juju-info binding should not be None.
         assert (binding := self.model.get_binding("juju-info"))  # nosec
         host = binding.network.bind_address
-        if not container.can_connect() or not self.state.is_storage_ready or not host:
+        if not container.can_connect() or not jenkins.is_storage_ready(container) or not host:
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -108,7 +108,7 @@ class Observer(ops.Object):
         # This is to avoid the None type, juju-info binding should not be None.
         assert (binding := self.model.get_binding("juju-info"))  # nosec
         host = binding.network.bind_address
-        if not container.can_connect() or not self.state.is_storage_ready or not host:
+        if not container.can_connect() or not jenkins.is_storage_ready(container) or not host:
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -148,7 +148,7 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not self.state.is_storage_ready:
+        if not container.can_connect() or not jenkins.is_storage_ready(container):
             logger.warning("Relation departed before service ready.")
             return
 
@@ -176,7 +176,7 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not self.state.is_storage_ready:
+        if not container.can_connect() or not jenkins.is_storage_ready(container):
             logger.warning("Relation departed before service ready.")
             return
 

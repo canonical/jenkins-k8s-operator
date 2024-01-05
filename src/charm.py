@@ -105,9 +105,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         Args:
             event: The event fired when pebble is ready.
+
+        Raises:
+            TimeoutError: if there was an error waiting for Jenkins service to come up.
+            JenkinsBootstrapError: if there was an error installing Jenkins.
+            JenkinsError: if there was an error fetching Jenkins version.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container or not container.can_connect() or not self.state.is_storage_ready:
+        if not container or not container.can_connect() or not jenkins.is_storage_ready(container):
             self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             event.defer()  # Jenkins installation should be retried until preconditions are met.
             return
@@ -129,19 +134,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             jenkins.wait_ready()
         except TimeoutError as exc:
             logger.error("Timed out waiting for Jenkins, %s", exc)
-            self.unit.status = ops.BlockedStatus("Timed out waiting for Jenkins.")
-            return
+            raise
         except jenkins.JenkinsBootstrapError as exc:
             logger.error("Error installing plugins, %s", exc)
-            self.unit.status = ops.BlockedStatus("Error installling plugins.")
-            return
+            raise
 
         try:
             version = jenkins.get_version()
         except jenkins.JenkinsError as exc:
             logger.error("Failed to get Jenkins version, %s", exc)
-            self.unit.status = ops.BlockedStatus("Failed to get Jenkins version.")
-            return
+            raise
 
         self.unit.set_workload_version(version)
         self.unit.status = ops.ActiveStatus()
@@ -174,7 +176,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         2. Update Jenkins patch version if available and is within restart-time-range config value.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not self.state.is_storage_ready:
+        if not container.can_connect() or not jenkins.is_storage_ready(container):
             self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             return
 

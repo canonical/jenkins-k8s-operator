@@ -251,7 +251,6 @@ The Jenkins k8s operator charm state.
  - <b>`restart_time_range`</b>:  Time range to allow Jenkins to update version. 
  - <b>`agent_relation_meta`</b>:  Metadata of all agents from units related through agent relation. 
  - <b>`deprecated_agent_relation_meta`</b>:  Metadata of all agents from units related through  deprecated agent relation. 
- - <b>`is_storage_ready`</b>:  Whether the Jenkins home storage is mounted. 
  - <b>`proxy_config`</b>:  Proxy configuration to access Jenkins upstream through. 
  - <b>`plugins`</b>:  The list of allowed plugins to install. 
 
@@ -260,7 +259,7 @@ The Jenkins k8s operator charm state.
 
 ---
 
-<a href="../src/state.py#L260"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L242"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_charm`
 
