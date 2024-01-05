@@ -3,43 +3,12 @@
 
 """Jenkins-k8s state module tests."""
 import typing
-import unittest.mock
+from unittest.mock import MagicMock
 
 import ops
 import pytest
-from ops.testing import Harness
 
 import state
-from charm import JenkinsK8sOperatorCharm
-
-from .types_ import HarnessWithContainer
-
-
-def test_is_storage_ready_no_container(harness: Harness):
-    """
-    arrange: given Jenkins charm with container not yet ready.
-    act: when is_storage_ready is called.
-    assert: Falsy value is returned.
-    """
-    harness.begin()
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-
-    assert not jenkins_charm.state.is_storage_ready
-
-
-def test_is_storage_ready(harness_container: HarnessWithContainer):
-    """
-    arrange: given Jenkins charm with container ready and storage mounted.
-    act: when is_storage_ready is called.
-    assert: Truthy value is returned.
-    """
-    harness = harness_container.harness
-    harness.begin()
-
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-
-    assert jenkins_charm.state.is_storage_ready
 
 
 def test_state_invalid_time_config():
@@ -48,7 +17,7 @@ def test_state_invalid_time_config():
     act: when state is initialized through from_charm method.
     assert: CharmConfigInvalidError is raised.
     """
-    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
+    mock_charm = MagicMock(spec=ops.CharmBase)
     mock_charm.config = {"restart-time-range": "-1"}
 
     with pytest.raises(state.CharmConfigInvalidError):
@@ -61,7 +30,7 @@ def test_state_invalid_time_config():
         pytest.param("", id="empty string"),
     ],
 )
-def test_no_time_range_config(time_range: str, mock_charm: unittest.mock.MagicMock):
+def test_no_time_range_config(time_range: str, mock_charm: MagicMock):
     """
     arrange: given an empty time range config value.
     act: when state is instantiated.
@@ -118,7 +87,7 @@ def test_proxyconfig_invalid(monkeypatch: pytest.MonkeyPatch):
     assert: CharmConfigInvalidError is raised.
     """
     monkeypatch.setattr(state.os, "environ", {"JUJU_CHARM_HTTP_PROXY": "INVALID_URL"})
-    mock_charm = unittest.mock.MagicMock(spec=ops.CharmBase)
+    mock_charm = MagicMock(spec=ops.CharmBase)
     mock_charm.config = {}
 
     with pytest.raises(state.CharmConfigInvalidError):
@@ -140,7 +109,7 @@ def test_proxyconfig_none(monkeypatch: pytest.MonkeyPatch):
 def test_proxyconfig_from_charm_env(
     monkeypatch: pytest.MonkeyPatch,
     proxy_config: state.ProxyConfig,
-    mock_charm: unittest.mock.MagicMock,
+    mock_charm: MagicMock,
 ):
     """
     arrange: given a monkeypatched os.environ with proxy configurations.
@@ -165,7 +134,7 @@ def test_proxyconfig_from_charm_env(
     assert config.no_proxy == proxy_config.no_proxy
 
 
-def test_plugins_config_none(mock_charm: unittest.mock.MagicMock):
+def test_plugins_config_none(mock_charm: MagicMock):
     """
     arrange: given a charm with no plugins config.
     act: when state is initialized from charm.
@@ -177,7 +146,7 @@ def test_plugins_config_none(mock_charm: unittest.mock.MagicMock):
     assert config.plugins is None
 
 
-def test_plugins_config(mock_charm: unittest.mock.MagicMock):
+def test_plugins_config(mock_charm: MagicMock):
     """
     arrange: given a charm with comma separated plugins.
     act: when state is initialized from charm.
@@ -190,7 +159,7 @@ def test_plugins_config(mock_charm: unittest.mock.MagicMock):
     assert tuple(config.plugins) == ("hello", "world")
 
 
-def test_invalid_num_units(mock_charm: unittest.mock.MagicMock):
+def test_invalid_num_units(mock_charm: MagicMock):
     """
     arrange: given a mock charm with more than 1 unit of deployment.
     act: when state is initialized from charm.

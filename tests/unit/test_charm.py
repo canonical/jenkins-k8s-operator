@@ -101,7 +101,7 @@ def test__on_jenkins_pebble_ready_error(
     """
     arrange: given a patched jenkins bootstrap method that raises an exception.
     act: when the jenkins_pebble_ready event is fired.
-    assert: the unit status should be in BlockedStatus.
+    assert: the charm raises an error.
     """
     harness = harness_container.harness
     # speed up waiting by changing default argument values
@@ -109,15 +109,14 @@ def test__on_jenkins_pebble_ready_error(
     monkeypatch.setattr(
         jenkins,
         "bootstrap",
-        unittest.mock.MagicMock(side_effect=jenkins.JenkinsBootstrapError()),
+        unittest.mock.MagicMock(side_effect=jenkins.JenkinsBootstrapError),
     )
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
-
-    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
 
 
 def test__on_jenkins_pebble_ready_get_version_error(
@@ -128,7 +127,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     """
     arrange: given a patched jenkins.get_version function that raises an exception.
     act: when the jenkins_pebble_ready event is fired.
-    assert: the unit status should be in BlockedStatus.
+    assert: the charm raises an error.
     """
     harness = harness_container.harness
     # speed up waiting by changing default argument values
@@ -141,9 +140,9 @@ def test__on_jenkins_pebble_ready_get_version_error(
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
 
-    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
+    with pytest.raises(jenkins.JenkinsError):
+        jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
 
 
 @pytest.mark.usefixtures("patch_os_environ")
@@ -153,7 +152,7 @@ def test__on_jenkins_pebble_jenkins_not_ready(
     """
     arrange: given a mocked jenkins get_version raises TimeoutError on the second call.
     act: when the Jenkins pebble ready event is fired.
-    assert: Jenkins falls into BlockedStatus.
+    assert: the charm raises an error.
     """
     harness = harness_container.harness
     monkeypatch.setattr(
@@ -164,12 +163,9 @@ def test__on_jenkins_pebble_jenkins_not_ready(
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
 
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    assert (
-        jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
-    ), f"unit should be in {BLOCKED_STATUS_NAME}"
+    with pytest.raises(TimeoutError):
+        jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
 
 
 @pytest.mark.usefixtures("patch_os_environ")

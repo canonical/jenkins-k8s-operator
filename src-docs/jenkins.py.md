@@ -53,7 +53,37 @@ Wait until Jenkins service is up.
 
 ---
 
-<a href="../src/jenkins.py#L174"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L177"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+## <kbd>function</kbd> `is_storage_ready`
+
+```python
+is_storage_ready(container: Container) → bool
+```
+
+Return whether the Jenkins home storage is mounted. 
+
+
+
+**Args:**
+ 
+ - <b>`container`</b>:  The Jenkins workload container. 
+
+
+
+**Raises:**
+ 
+ - <b>`StorageMountError`</b>:  if there was an error getting storage information. 
+
+
+
+**Returns:**
+ True if storage is mounted, False otherwise. 
+
+
+---
+
+<a href="../src/jenkins.py#L213"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_admin_credentials`
 
@@ -77,7 +107,7 @@ Retrieve admin credentials.
 
 ---
 
-<a href="../src/jenkins.py#L218"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L257"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `calculate_env`
 
@@ -95,7 +125,7 @@ Return a dictionary for Jenkins Pebble layer.
 
 ---
 
-<a href="../src/jenkins.py#L227"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L266"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_version`
 
@@ -119,7 +149,7 @@ Get the Jenkins server version.
 
 ---
 
-<a href="../src/jenkins.py#L412"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L451"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `bootstrap`
 
@@ -145,7 +175,7 @@ Initialize and install Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L450"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L489"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_node_secret`
 
@@ -176,7 +206,7 @@ Get node secret from jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L509"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L548"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `add_agent_node`
 
@@ -207,7 +237,7 @@ Add a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L535"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L574"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_agent_node`
 
@@ -233,7 +263,7 @@ Remove a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L588"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L627"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
@@ -258,7 +288,7 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-<a href="../src/jenkins.py#L613"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L652"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
@@ -282,7 +312,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L793"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L832"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 
@@ -313,7 +343,7 @@ Remove plugins that are not in the list of desired plugins.
 
 ---
 
-<a href="../src/jenkins.py#L889"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L928"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `rotate_credentials`
 
@@ -430,6 +460,37 @@ An error occurred trying to restart Jenkins.
 
 ## <kbd>class</kbd> `JenkinsUpdateError`
 An error occurred trying to update Jenkins. 
+
+
+
+
+
+---
+
+## <kbd>class</kbd> `StorageMountError`
+Represents an error probing for Jenkins storage mount. 
+
+
+
+**Attributes:**
+ 
+ - <b>`msg`</b>:  Explanation of the error. 
+
+<a href="../src/jenkins.py#L168"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `__init__`
+
+```python
+__init__(msg: str)
+```
+
+Initialize a new instance of the StorageMountError exception. 
+
+
+
+**Args:**
+ 
+ - <b>`msg`</b>:  Explanation of the error. 
 
 
 

@@ -8,6 +8,7 @@
 # pylint:disable=protected-access, too-many-lines
 
 
+import io
 import re
 import secrets
 import textwrap
@@ -15,6 +16,7 @@ import typing
 import unittest.mock
 from functools import partial
 from ipaddress import IPv4Address
+from unittest.mock import MagicMock
 
 import jenkinsapi.jenkins
 import ops
@@ -122,6 +124,34 @@ def test_wait_ready(
     jenkins.wait_ready(1, 1)
 
 
+def test_is_storage_ready_not_ready():
+    """
+    arrange: given a mocked container pull that does not have Jenkins home path in /proc/mounts.
+    act: when is_storage_ready is called.
+    assert: Falsy value is returned.
+    """
+    mock_container = MagicMock(ops.Container)
+    mock_container.pull.return_value = io.StringIO("")
+
+    assert not jenkins.is_storage_ready(container=mock_container)
+
+
+def test_is_storage_ready_proc_error():
+    """
+    arrange: given a mocked container exec that raises an error.
+    act: when is_storage_ready is called.
+    assert: StorageMountError is raised.
+    """
+    mock_container = MagicMock(ops.Container)
+    mock_container.pull.return_value = io.StringIO(str((state.JENKINS_HOME_PATH)))
+    mock_proc = MagicMock(ops.pebble.ExecProcess)
+    mock_proc.wait_output.side_effect = [ops.pebble.ChangeError(err="", change=MagicMock())]
+    mock_container.exec.return_value = mock_proc
+
+    with pytest.raises(jenkins.StorageMountError):
+        jenkins.is_storage_ready(container=mock_container)
+
+
 def test_get_admin_credentials(
     harness_container: HarnessWithContainer, admin_credentials: jenkins.Credentials
 ):
@@ -139,8 +169,8 @@ def test__get_api_credentials_error():
     act: admin credentials are fetched over pebble.
     assert: correct admin credentials from the filesystem are returned.
     """
-    mock_container = unittest.mock.MagicMock(ops.Container)
-    mock_container.pull = unittest.mock.MagicMock(
+    mock_container = MagicMock(ops.Container)
+    mock_container.pull = MagicMock(
         side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
     )
     with pytest.raises(jenkins.JenkinsBootstrapError):
@@ -167,7 +197,7 @@ def test__setup_user_token(
     assert: generate_new_api_token is called and the contents are written to local path.
     """
     test_api_token = secrets.token_hex(16)
-    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
     mock_client.generate_new_api_token.return_value = test_api_token
     monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
@@ -203,7 +233,7 @@ def test_get_version_error(monkeypatch: pytest.MonkeyPatch, exception: Exception
     act: when a request is sent to Jenkins server.
     assert: JenkinsError exception is raised.
     """
-    monkeypatch.setattr(jenkins.requests, "get", unittest.mock.MagicMock(side_effect=exception))
+    monkeypatch.setattr(jenkins.requests, "get", MagicMock(side_effect=exception))
 
     with pytest.raises(jenkins.JenkinsError):
         jenkins.get_version()
@@ -336,11 +366,11 @@ def test__install_plugins_fail():
     act: when _install_plugins is called.
     assert: JenkinsPluginError is raised.
     """
-    mock_proc = unittest.mock.MagicMock(spec=ExecProcess)
-    mock_proc.wait_output = unittest.mock.MagicMock(
+    mock_proc = MagicMock(spec=ExecProcess)
+    mock_proc.wait_output = MagicMock(
         side_effect=ExecError(["mock", "command"], 1, "", "Failed to install plugins.")
     )
-    mock_container = unittest.mock.MagicMock(spec=ops.Container)
+    mock_container = MagicMock(spec=ops.Container)
     mock_container.exec.return_value = mock_proc
 
     with pytest.raises(jenkins.JenkinsPluginError):
@@ -361,14 +391,14 @@ def test__install_plugins(
 def test__configure_proxy_fail(
     harness_container: HarnessWithContainer,
     proxy_config: state.ProxyConfig,
-    mock_client: unittest.mock.MagicMock,
+    mock_client: MagicMock,
 ):
     """
     arrange: given a test proxy config and a monkeypatched jenkins client that raises an exception.
     act: when _configure_proxy is called.
     assert: JenkinsProxyError is raised.
     """
-    mock_client.run_groovy_script = unittest.mock.MagicMock(
+    mock_client.run_groovy_script = MagicMock(
         side_effect=jenkinsapi.custom_exceptions.JenkinsAPIException
     )
 
@@ -381,14 +411,14 @@ def test__configure_proxy_fail(
 def test__configure_proxy_partial(
     harness_container: HarnessWithContainer,
     partial_proxy_config: state.ProxyConfig,
-    mock_client: unittest.mock.MagicMock,
+    mock_client: MagicMock,
 ):
     """
     arrange: given a test partial proxy config and a mock jenkins client.
     act: when _configure_proxy is called.
     assert: mock client is called with correct proxy arguments.
     """
-    mock_run_groovy_script = unittest.mock.MagicMock()
+    mock_run_groovy_script = MagicMock()
     mock_client.run_groovy_script = mock_run_groovy_script
 
     jenkins._configure_proxy(harness_container.container, partial_proxy_config)
@@ -404,14 +434,14 @@ def test__configure_proxy_partial(
 def test__configure_proxy_http(
     harness_container: HarnessWithContainer,
     http_partial_proxy_config: state.ProxyConfig,
-    mock_client: unittest.mock.MagicMock,
+    mock_client: MagicMock,
 ):
     """
     arrange: given a test partial http proxy config and a mock jenkins client.
     act: when _configure_proxy is called.
     assert: mock client is called with correct proxy arguments.
     """
-    mock_run_groovy_script = unittest.mock.MagicMock()
+    mock_run_groovy_script = MagicMock()
     mock_client.run_groovy_script = mock_run_groovy_script
 
     jenkins._configure_proxy(harness_container.container, http_partial_proxy_config)
@@ -429,14 +459,14 @@ def test__configure_proxy_http(
 def test__configure_proxy(
     harness_container: HarnessWithContainer,
     proxy_config: state.ProxyConfig,
-    mock_client: unittest.mock.MagicMock,
+    mock_client: MagicMock,
 ):
     """
     arrange: given a test proxy config and a mock jenkins client.
     act: when _configure_proxy is called.
     assert: mock client is called with correct proxy arguments.
     """
-    mock_run_groovy_script = unittest.mock.MagicMock()
+    mock_run_groovy_script = MagicMock()
     mock_client.run_groovy_script = mock_run_groovy_script
 
     jenkins._configure_proxy(harness_container.container, proxy_config)
@@ -472,7 +502,7 @@ def test_bootstrap_fail(
     monkeypatch.setattr(
         jenkins,
         "_install_plugins",
-        unittest.mock.MagicMock(side_effect=jenkins.JenkinsPluginError),
+        MagicMock(side_effect=jenkins.JenkinsPluginError),
     )
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
@@ -513,7 +543,7 @@ def test_get_client(admin_credentials: jenkins.Credentials):
     act: when get_client is called with credentials.
     assert: the Jenkins API client is returned.
     """
-    expected_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    expected_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
     with unittest.mock.patch("jenkinsapi.jenkins.Jenkins", return_value=expected_client):
         client = jenkins._get_client(admin_credentials)
@@ -528,7 +558,7 @@ def test_get_client(admin_credentials: jenkins.Credentials):
         )
 
 
-def test_get_node_secret_api_error(container: ops.Container, mock_client: unittest.mock.MagicMock):
+def test_get_node_secret_api_error(container: ops.Container, mock_client: MagicMock):
     """
     arrange: given a mocked Jenkins client that raises an error.
     act: when a groovy script is executed through the client.
@@ -540,7 +570,7 @@ def test_get_node_secret_api_error(container: ops.Container, mock_client: unitte
         jenkins.get_node_secret("jenkins-agent", container)
 
 
-def test_get_node_secret(container: ops.Container, mock_client: unittest.mock.MagicMock):
+def test_get_node_secret(container: ops.Container, mock_client: MagicMock):
     """
     arrange: given a mocked Jenkins client.
     act: when a groovy script getting a node secret is executed.
@@ -556,7 +586,7 @@ def test_get_node_secret(container: ops.Container, mock_client: unittest.mock.Ma
 
 @pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node_fail(
-    container: ops.Container, mock_client: unittest.mock.MagicMock, mock_ip_addr: IPv4Address
+    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
 ):
     """
     arrange: given a mocked jenkins client that raises an API exception.
@@ -577,7 +607,7 @@ def test_add_agent_node_fail(
 
 @pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node_already_exists(
-    container: ops.Container, mock_client: unittest.mock.MagicMock, mock_ip_addr: IPv4Address
+    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
 ):
     """
     arrange: given a mocked jenkins client that raises an Already exists exception.
@@ -595,14 +625,14 @@ def test_add_agent_node_already_exists(
 
 @pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node(
-    container: ops.Container, mock_client: unittest.mock.MagicMock, mock_ip_addr: IPv4Address
+    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
 ):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
     assert: no exception is raised.
     """
-    mock_client.create_node_with_config.return_value = unittest.mock.MagicMock(spec=jenkins.Node)
+    mock_client.create_node_with_config.return_value = MagicMock(spec=jenkins.Node)
 
     jenkins.add_agent_node(
         state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
@@ -612,7 +642,7 @@ def test_add_agent_node(
 
 
 @pytest.mark.usefixtures("patch_jenkins_node")
-def test_remove_agent_node_fail(container: ops.Container, mock_client: unittest.mock.MagicMock):
+def test_remove_agent_node_fail(container: ops.Container, mock_client: MagicMock):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
@@ -624,13 +654,13 @@ def test_remove_agent_node_fail(container: ops.Container, mock_client: unittest.
         jenkins.remove_agent_node("jekins-agent-0", container)
 
 
-def test_remove_agent_node(container: ops.Container, mock_client: unittest.mock.MagicMock):
+def test_remove_agent_node(container: ops.Container, mock_client: MagicMock):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
     assert: no exception is raised.
     """
-    mock_delete = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins.delete_node)
+    mock_delete = MagicMock(spec=jenkinsapi.jenkins.Jenkins.delete_node)
     mock_client.delete_node = mock_delete
 
     jenkins.remove_agent_node("jekins-agent-0", container)
@@ -645,16 +675,14 @@ def test_remove_agent_node(container: ops.Container, mock_client: unittest.mock.
         pytest.param(404, id="Not found response"),
     ],
 )
-def test__wait_jenkins_job_shutdown_false(
-    response_status: int, mock_client: unittest.mock.MagicMock
-):
+def test__wait_jenkins_job_shutdown_false(response_status: int, mock_client: MagicMock):
     """
     arrange: given a mocked Jenkins client that returns any other status code apart from 503.
     act: when _is_shutdown is called.
     assert: False is returned.
     """
-    mock_requester = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Requester)
-    mock_response = unittest.mock.MagicMock(requests.Response)
+    mock_requester = MagicMock(spec=jenkinsapi.jenkins.Requester)
+    mock_response = MagicMock(requests.Response)
     mock_client.requester = mock_requester
     mock_requester.get_url.return_value = mock_response
     mock_response.status_code = response_status
@@ -662,27 +690,27 @@ def test__wait_jenkins_job_shutdown_false(
     assert not jenkins._is_shutdown(mock_client)
 
 
-def test__is_shutdown_connection_error(mock_client: unittest.mock.MagicMock):
+def test__is_shutdown_connection_error(mock_client: MagicMock):
     """
     arrange: given a mocked Jenkins client that raises a ConnectionError.
     act: when _is_shutdown is called.
     assert: True is returned.
     """
-    mock_requester = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Requester)
+    mock_requester = MagicMock(spec=jenkinsapi.jenkins.Requester)
     mock_client.requester = mock_requester
     mock_requester.get_url.side_effect = requests.ConnectionError
 
     assert jenkins._is_shutdown(mock_client)
 
 
-def test__is_shutdown_service_unavailable(mock_client: unittest.mock.MagicMock):
+def test__is_shutdown_service_unavailable(mock_client: MagicMock):
     """
     arrange: given a mocked Jenkins client that raises a service unavailable status.
     act: when _is_shutdown is called.
     assert: True is returned.
     """
-    mock_requester = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Requester)
-    mock_response = unittest.mock.MagicMock(requests.Response)
+    mock_requester = MagicMock(spec=jenkinsapi.jenkins.Requester)
+    mock_response = MagicMock(requests.Response)
     mock_client.requester = mock_requester
     mock_requester.get_url.return_value = mock_response
     mock_response.status_code = 503
@@ -696,8 +724,8 @@ def test__wait_jenkins_job_shutdown_timeout(monkeypatch: pytest.MonkeyPatch):
     act: when _wait_jenkins_job_shutdown is called.
     assert: TimeoutError is raised.
     """
-    monkeypatch.setattr(jenkins, "_is_shutdown", unittest.mock.MagicMock(side_effect=TimeoutError))
-    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    monkeypatch.setattr(jenkins, "_is_shutdown", MagicMock(side_effect=TimeoutError))
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
     with pytest.raises(TimeoutError):
         jenkins._wait_jenkins_job_shutdown(mock_client)
@@ -710,14 +738,12 @@ def test__wait_jenkins_job_shutdown(monkeypatch: pytest.MonkeyPatch):
     assert: No exceptions are raised.
     """
     monkeypatch.setattr(jenkins, "_is_shutdown", lambda *_args, **kwargs: True)
-    mock_client = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
     jenkins._wait_jenkins_job_shutdown(mock_client)
 
 
-def test_safe_restart_failure(
-    harness_container: HarnessWithContainer, mock_client: unittest.mock.MagicMock
-):
+def test_safe_restart_failure(harness_container: HarnessWithContainer, mock_client: MagicMock):
     """
     arrange: given a mocked Jenkins API client that raises JenkinsAPIException.
     act: when safe_restart is called.
@@ -732,7 +758,7 @@ def test_safe_restart_failure(
 def test_safe_restart(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
-    mock_client: unittest.mock.MagicMock,
+    mock_client: MagicMock,
 ):
     """
     arrange: given a mocked Jenkins API client that does not raise an exception.
@@ -998,7 +1024,7 @@ def test__get_top_level_plugins(
     assert top_level_plugins == expected_top_level_plugins
 
 
-def test__set_jenkins_system_message_error(mock_client: unittest.mock.MagicMock):
+def test__set_jenkins_system_message_error(mock_client: MagicMock):
     """
     arrange: given a monkeypatched yaml.safe_load function that returns an empty dictionary.
     act: when _set_jenkins_system_message is called.
@@ -1010,7 +1036,7 @@ def test__set_jenkins_system_message_error(mock_client: unittest.mock.MagicMock)
         jenkins._set_jenkins_system_message("test", mock_client)
 
 
-def test__set_jenkins_system_message(mock_client: unittest.mock.MagicMock):
+def test__set_jenkins_system_message(mock_client: MagicMock):
     """
     arrange: given a mock_client and a system message.
     act: when _set_jenkins_system_message is called.
@@ -1018,9 +1044,7 @@ def test__set_jenkins_system_message(mock_client: unittest.mock.MagicMock):
     """
     message = "hello world!"
     mock_client.run_groovy_script = (
-        mock_groovy_script := unittest.mock.MagicMock(
-            spec=jenkinsapi.jenkins.Jenkins.run_groovy_script
-        )
+        mock_groovy_script := MagicMock(spec=jenkinsapi.jenkins.Jenkins.run_groovy_script)
     )
     jenkins._set_jenkins_system_message(message, mock_client)
 
@@ -1033,8 +1057,8 @@ def test__plugin_temporary_files_exist():
     act: when _plugin_temporary_files_exist is called.
     assert: Truthy value is returned.
     """
-    mock_container = unittest.mock.MagicMock(spec=ops.Container)
-    mock_container.list_files.return_value = [unittest.mock.MagicMock(spec=ops.pebble.FileInfo)]
+    mock_container = MagicMock(spec=ops.Container)
+    mock_container.list_files.return_value = [MagicMock(spec=ops.pebble.FileInfo)]
 
     assert jenkins._plugin_temporary_files_exist(container=mock_container)
 
@@ -1048,9 +1072,7 @@ def test_remove_unlisted_plugins_wait_plugins_install_timeout(
     act: when remove_unlisted_plugins is called.
     assert: JenkinsPluginError is raised.
     """
-    monkeypatch.setattr(
-        jenkins, "_wait_plugins_install", unittest.mock.MagicMock(side_effect=TimeoutError)
-    )
+    monkeypatch.setattr(jenkins, "_wait_plugins_install", MagicMock(side_effect=TimeoutError))
 
     with pytest.raises(jenkins.JenkinsPluginError):
         jenkins.remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
@@ -1058,7 +1080,7 @@ def test_remove_unlisted_plugins_wait_plugins_install_timeout(
 
 def test_remove_unlisted_plugins_delete_error(
     monkeypatch: pytest.MonkeyPatch,
-    mock_client: unittest.mock.MagicMock,
+    mock_client: MagicMock,
     container: ops.Container,
     plugin_groovy_script_result: str,
 ):
@@ -1068,9 +1090,7 @@ def test_remove_unlisted_plugins_delete_error(
     assert: JenkinsPluginError is raised.
     """
     mock_client.run_groovy_script = (
-        mock_groovy_script := unittest.mock.MagicMock(
-            spec=jenkinsapi.jenkins.Jenkins.run_groovy_script
-        )
+        mock_groovy_script := MagicMock(spec=jenkinsapi.jenkins.Jenkins.run_groovy_script)
     )
     mock_groovy_script.return_value = plugin_groovy_script_result
     mock_client.delete_plugins.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
@@ -1091,7 +1111,7 @@ def test_remove_unlisted_plugins_delete_error(
 # all arguments below are required
 def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-arguments
     monkeypatch: pytest.MonkeyPatch,
-    mock_client: unittest.mock.MagicMock,
+    mock_client: MagicMock,
     container: ops.Container,
     plugin_groovy_script_result: str,
     expected_exception: Exception,
@@ -1102,14 +1122,10 @@ def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-argu
     assert: exceptions are re-raised.
     """
     mock_client.run_groovy_script = (
-        mock_groovy_script := unittest.mock.MagicMock(
-            spec=jenkinsapi.jenkins.Jenkins.run_groovy_script
-        )
+        mock_groovy_script := MagicMock(spec=jenkinsapi.jenkins.Jenkins.run_groovy_script)
     )
     mock_groovy_script.return_value = plugin_groovy_script_result
-    monkeypatch.setattr(
-        jenkins, "safe_restart", unittest.mock.MagicMock(side_effect=expected_exception)
-    )
+    monkeypatch.setattr(jenkins, "safe_restart", MagicMock(side_effect=expected_exception))
 
     # mypy doesn't understand that Exception type can match TypeVar("E", bound=BaseException)
     with pytest.raises(expected_exception):  # type: ignore
@@ -1172,7 +1188,7 @@ def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-argu
 # all arguments below are required
 def test_remove_unlisted_plugins(  # pylint: disable=too-many-arguments
     monkeypatch: pytest.MonkeyPatch,
-    mock_client: unittest.mock.MagicMock,
+    mock_client: MagicMock,
     container: ops.Container,
     desired_plugins: tuple[str],
     groovy_script_output: str,
@@ -1184,9 +1200,7 @@ def test_remove_unlisted_plugins(  # pylint: disable=too-many-arguments
     assert: delete function call is made with expected plugins.
     """
     mock_client.run_groovy_script = (
-        mock_groovy_script := unittest.mock.MagicMock(
-            spec=jenkinsapi.jenkins.Jenkins.run_groovy_script
-        )
+        mock_groovy_script := MagicMock(spec=jenkinsapi.jenkins.Jenkins.run_groovy_script)
     )
     mock_groovy_script.return_value = groovy_script_output
     monkeypatch.setattr(jenkins, "safe_restart", lambda *_args, **_kwargs: None)
@@ -1214,7 +1228,7 @@ def test_rotate_credentials_error(
     monkeypatch.setattr(
         jenkins,
         "_invalidate_sessions",
-        unittest.mock.MagicMock(side_effect=jenkinsapi.custom_exceptions.JenkinsAPIException),
+        MagicMock(side_effect=jenkinsapi.custom_exceptions.JenkinsAPIException),
     )
 
     with pytest.raises(jenkins.JenkinsError):

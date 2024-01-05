@@ -220,7 +220,7 @@ def container_fixture(
                 required_plugins,
                 "--latest",
             ] == argv:
-                return (0, "", "Done")
+                return (0, "Done", "")
             case _ if [
                 "java",
                 f"-Dhttp.proxyHost={proxy_config.http_proxy.host}",
@@ -242,7 +242,9 @@ def container_fixture(
                 required_plugins,
                 "--latest",
             ] == argv:
-                return (0, "", "Done")
+                return (0, "Done", "")
+            case _ if ["stat", "-c", "%U", str(state.JENKINS_HOME_PATH)] == argv:
+                return (0, jenkins.USER, "")
             # pylint: enable=R0801
             case _:
                 raise RuntimeError(f"unknown command: {argv}")
@@ -254,6 +256,9 @@ def container_fixture(
     harness.set_can_connect(container, True)
     harness.register_command_handler(  # type: ignore # pylint: disable=no-member
         container=container, executable="java", handler=cmd_handler
+    )
+    harness.register_command_handler(  # type: ignore # pylint: disable=no-member
+        container=container, executable="stat", handler=cmd_handler
     )
 
     return container

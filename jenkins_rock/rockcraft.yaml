@@ -5,17 +5,22 @@ name: jenkins
 summary: Jenkins rock
 description: Jenkins OCI image for the Jenkins charm
 version: "1.0"
-base: ubuntu:22.04
-build-base: ubuntu:22.04
+base: ubuntu@22.04
+build-base: ubuntu@22.04
 license: Apache-2.0
 platforms:
   amd64:
 services:
   jenkins:
-    override: merge
-    summary: The Jenkins server.
-    command: java -Djava.awt.headless=true -jar /srv/jenkins/jenkins.war
+    override: replace
+    summary: jenkins
     startup: enabled
+    command: java -Djava.awt.headless=true -Djava.util.logging.config.file=/var/lib/jenkins/logging.properties -jar /srv/jenkins/jenkins.war
+    environment:
+      JENKINS_HOME: /var/lib/jenkins
+    user: jenkins
+    group: jenkins
+    
 parts:
   add-user:
     plugin: nil
