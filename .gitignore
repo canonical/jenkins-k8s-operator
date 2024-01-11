@@ -132,3 +132,7 @@ dmypy.json
 
 # charm artifact
 *.charm
+
+# Requirements file required for packing
+requirements.txt
+requirements-last-pack.txt
