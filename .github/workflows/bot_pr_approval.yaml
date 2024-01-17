@@ -5,5 +5,5 @@ on:
 
 jobs:
   bot_pr_approval:
-    uses: canonical/operator-workflows/.github/workflows/auto_update_charm_libs.yaml@bot-pr-approval
+    uses: canonical/operator-workflows/.github/workflows/bot_pr_approval.yaml@bot-pr-approval
     secrets: inherit
