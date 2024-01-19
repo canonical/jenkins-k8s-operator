@@ -268,7 +268,7 @@ async def jenkins_machine_agents_fixture(
     app: Application = await machine_model.deploy(
         "jenkins-agent",
         channel="latest/edge",
-        config={"labels": "machine"},
+        config={"jenkins_agent_labels": "machine"},
         application_name=f"jenkins-agent-{app_suffix}",
         num_units=num_units,
     )
