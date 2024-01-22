@@ -20,6 +20,9 @@ from .helpers import (
     get_job_invoked_unit,
     install_plugins,
     wait_for,
+    create_secret_file_credentials,
+    create_kubernetes_cloud,
+    gen_test_pipeline_with_custom_script_xml,
 )
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, UnitWebClient
 
@@ -472,3 +475,53 @@ async def test_openid_connect_plugin(
     assert res.status_code == 404, "Security realm login not reset."
     res = requests.get(f"{unit_web_client.web}/login?from=%2F", timeout=30)
     assert res.status_code == 200, "Failed to load Jenkins native login UI."
+
+
+async def test_kuberentes_plugin(unit_web_client: UnitWebClient, kube_config: str):
+    """
+    arrange: given a Jenkins charm with kubernetes plugin installed and configured with credentials from microk8s.
+    act: Run a job using an agent provided by the kubernetes plugin.
+    assert: Job succeeds.
+    """
+    # Use plain credentials to be able to create secret-file/secret-text credentials
+    await install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
+
+    # Create credentials
+    credentials_id = create_secret_file_credentials(unit_web_client, kube_config)
+    assert credentials_id
+    kubernetes_cloud_name = create_kubernetes_cloud(unit_web_client, credentials_id)
+    assert kubernetes_cloud_name
+    pipeline_script = """
+podTemplate(yaml: '''
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  some-label: some-label-value
+              spec:
+                containers:
+                - name: httpd
+                  image: httpd
+                  command:
+                  - sleep
+                  args:
+                  - 99d
+                  tty: true
+''') {
+  node(POD_LABEL) {
+    stage('Integration Test') {
+      sh '''#!/bin/bash -x
+        hostname
+        pwd
+        whoami
+      '''
+    }
+  }
+}"""
+    job = unit_web_client.client.create_job(
+        "kubernetes_plugin_test", gen_test_pipeline_with_custom_script_xml(pipeline_script)
+    )
+    queue_item = job.invoke()
+    queue_item.block_until_complete()
+    build: jenkinsapi.build.Build = queue_item.get_build()
+    assert build.get_status() == "SUCCESS"

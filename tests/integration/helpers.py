@@ -7,6 +7,7 @@ import logging
 import textwrap
 import time
 import typing
+import secrets
 
 import jenkinsapi.jenkins
 import kubernetes.client
@@ -266,3 +267,129 @@ def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Uni
         if unit.name.replace("/", "-") == invoked_agent:
             return unit
     return None
+
+
+def gen_test_pipeline_with_custom_script_xml(script: str):
+    """Generate a job xml with custom pipeline script.
+
+    Args:
+        script: Custom pipeline script.
+
+    Returns:
+        The job XML.
+    """
+    return textwrap.dedent(
+        f"""
+        <flow-definition plugin="workflow-job@1385.vb_58b_86ea_fff1">
+            <actions/>
+            <description></description>
+            <keepDependencies>false</keepDependencies>
+            <properties/>
+            <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3837.v305192405b_c0">
+                <script>{script}</script>
+                <sandbox>true</sandbox>
+            </definition>
+            <triggers/>
+            <disabled>false</disabled>
+        </flow-definition>
+        """
+    )
+
+
+def create_secret_file_credentials(
+    unit_web_client: UnitWebClient, kube_config: str
+) -> typing.Optional[str]:
+    """Return the necessary components to create a credentials using the jenkins API.
+
+    Args:
+        kube_config: path to the kube_config file.
+
+    Returns:
+        The tuple of the credentials_id, request payload, file bytestream and headers
+    """
+    url = f"{unit_web_client.web}/credentials/store/system/domain/_/createCredentials"
+    credentials_id = f"kube-config-{secrets.token_hex(4)}"
+    payload = {
+        "json": f"""{{
+            "": "4",
+            "credentials": {{
+                "file": "file0",
+                "id": "{credentials_id}",
+                "description": "Created by API",
+                "stapler-class": "org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl",
+                "$class": "org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl",
+            }},
+        }}"""
+    }
+
+    files = [("file0", ("config", open(kube_config, "rb"), "application/octet-stream"))]
+
+    accept_header = (
+        "text/html,"
+        "application/xhtml+xml,"
+        "application/xml;q=0.9,"
+        "image/avif,image/webp,"
+        "image/apng,"
+        "*/*;q=0.8,"
+        "application/signed-exchange;v=b3;q=0.9'"
+    )
+    headers = {
+        "Accept": accept_header,
+    }
+
+    logger.info("Creating jenkins credentials, params: %s %s %s", headers, files, payload)
+    res = unit_web_client.client.requester.post_url(
+        url=url, headers=headers, data=payload, files=files
+    )
+    logger.info("Credential created, %s", res.status_code)
+    return credentials_id if res.status_code == 200 else None
+
+
+def create_kubernetes_cloud(
+    unit_web_client: UnitWebClient, kube_config_credentials_id: str
+) -> typing.Optional[str]:
+    """Use the jenkins client to create a new kubernetes cloud.
+
+    Args:
+        unit_web_client
+        kube_config_credentials_id
+
+    Returns:
+        The HTTP response object
+    """
+    kubernetes_test_cloud_name = "kubernetes"
+
+    url = f"{unit_web_client.web}/manage/cloud/doCreate"
+
+    payload = {
+        "name": kubernetes_test_cloud_name,
+        "type": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
+        "json": f"""
+        {{
+            "name": "{kubernetes_test_cloud_name}",
+            "credentialsId": "{kube_config_credentials_id}",
+            "jenkinsUrl": "{unit_web_client.web}",
+            "type": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
+            "Submit": "",
+        }}""",
+        "Submit": '""',
+    }
+    accept_header = (
+        "text/html,"
+        "application/xhtml+xml,"
+        "application/xml;q=0.9,"
+        "image/avif,"
+        "image/webp,"
+        "image/apng,"
+        "*/*;q=0.8,"
+        "application/signed-exchange;v=b3;q=0.7"
+    )
+    headers = {
+        "Accept": accept_header,
+    }
+
+    logger.info("Creating jenkins kubernets cloud, params: %s %s", headers, payload)
+    res = unit_web_client.client.requester.post_url(url=url, headers=headers, data=payload)
+    logger.info("Cloud created, %s", res.status_code)
+
+    return kubernetes_test_cloud_name if res.status_code == 200 else None
