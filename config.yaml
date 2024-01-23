@@ -17,3 +17,4 @@ options:
       Comma-separated list of allowed plugin short names. If empty, any plugin can be installed.
       Plugins installed by the user and their dependencies will be removed automatically if not on
       the list. Included plugins are not automatically installed. 
+    default: "bazaar,docker-build-publish,ldap,matrix-combinations-parameter,postbuildscript,ssh-agent,blueocean,thinBackup,rebuild,openid,oic-auth"
