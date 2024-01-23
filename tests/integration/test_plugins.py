@@ -389,12 +389,12 @@ async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
     assert: pipeline-groovy-lib plugin option exists.
     """
     await install_plugins(unit_web_client, ("pipeline-groovy-lib",))
-    res = unit_web_client.client.requester.get_url(
-        f"{unit_web_client.web}/manage/configure"
-    )
+    res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configure")
 
     config_page = str(res.content, "utf-8")
-    assert "Global Pipeline Libraries" in config_page, f"Groovy libs configuration option not found. {config_page}"
+    assert (
+        "Global Pipeline Libraries" in config_page
+    ), f"Groovy libs configuration option not found. {config_page}"
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
