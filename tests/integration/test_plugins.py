@@ -4,6 +4,7 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import json
+import logging
 import typing
 
 import jenkinsapi.plugin
@@ -26,6 +27,8 @@ from .helpers import (
     wait_for,
 )
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, UnitWebClient
+
+logger = logging.getLogger()
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -499,4 +502,7 @@ async def test_kuberentes_plugin(unit_web_client: UnitWebClient, kube_config: st
     queue_item = job.invoke()
     queue_item.block_until_complete()
     build: jenkinsapi.build.Build = queue_item.get_build()
+    log_stream = build.stream_logs()
+    logs = "".join(log_stream)
+    logger.info("build logs: %s", logs)
     assert build.get_status() == "SUCCESS"
