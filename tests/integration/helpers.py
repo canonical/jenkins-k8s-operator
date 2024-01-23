@@ -4,10 +4,10 @@
 """Helpers for Jenkins-k8s-operator charm integration tests."""
 import inspect
 import logging
+import secrets
 import textwrap
 import time
 import typing
-import secrets
 
 import jenkinsapi.jenkins
 import kubernetes.client
@@ -285,7 +285,9 @@ def gen_test_pipeline_with_custom_script_xml(script: str):
             <description></description>
             <keepDependencies>false</keepDependencies>
             <properties/>
-            <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3837.v305192405b_c0">
+            <definition
+                class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition"
+                plugin="workflow-cps@3837.v305192405b_c0">
                 <script>{script}</script>
                 <sandbox>true</sandbox>
             </definition>
@@ -296,12 +298,48 @@ def gen_test_pipeline_with_custom_script_xml(script: str):
     )
 
 
+def kubernetes_test_pipeline_script() -> str:
+    """Generate a test pipeline script using the kubernetes plugin.
+
+    Return:
+        The pipeline script
+    """
+    return textwrap.dedent(
+        """
+        podTemplate(yaml: '''
+            apiVersion: v1
+            kind: Pod
+            metadata:
+            labels:
+                some-label: some-label-value
+            spec:
+            containers:
+            - name: httpd
+              image: httpd
+              command:
+              - sleep
+              args:
+              - 99d
+              tty: true
+        ''') {
+        node(POD_LABEL) {
+            stage('Integration Test') {
+            sh '''#!/bin/bash
+                hostname
+            '''
+            }
+        }
+        }"""
+    )
+
+
 def create_secret_file_credentials(
     unit_web_client: UnitWebClient, kube_config: str
 ) -> typing.Optional[str]:
     """Return the necessary components to create a credentials using the jenkins API.
 
     Args:
+        unit_web_client: Client for Jenkins's remote access API.
         kube_config: path to the kube_config file.
 
     Returns:
@@ -322,8 +360,6 @@ def create_secret_file_credentials(
         }}"""
     }
 
-    files = [("file0", ("config", open(kube_config, "rb"), "application/octet-stream"))]
-
     accept_header = (
         "text/html,"
         "application/xhtml+xml,"
@@ -337,12 +373,14 @@ def create_secret_file_credentials(
         "Accept": accept_header,
     }
 
-    logger.info("Creating jenkins credentials, params: %s %s %s", headers, files, payload)
-    res = unit_web_client.client.requester.post_url(
-        url=url, headers=headers, data=payload, files=files
-    )
-    logger.info("Credential created, %s", res.status_code)
-    return credentials_id if res.status_code == 200 else None
+    with open(kube_config, "rb") as kube_config_file:
+        files = [("file0", ("config", kube_config_file, "application/octet-stream"))]
+        logger.info("Creating jenkins credentials, params: %s %s %s", headers, files, payload)
+        res = unit_web_client.client.requester.post_url(
+            url=url, headers=headers, data=payload, files=files
+        )
+        logger.info("Credential created, %s", res.status_code)
+        return credentials_id if res.status_code == 200 else None
 
 
 def create_kubernetes_cloud(
@@ -351,8 +389,8 @@ def create_kubernetes_cloud(
     """Use the jenkins client to create a new kubernetes cloud.
 
     Args:
-        unit_web_client
-        kube_config_credentials_id
+        unit_web_client: Client for Jenkins's remote access API.
+        kube_config_credentials_id: credential id stored in jenkins.
 
     Returns:
         The HTTP response object

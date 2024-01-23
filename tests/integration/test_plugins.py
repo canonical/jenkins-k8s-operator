@@ -15,14 +15,15 @@ from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
 from .helpers import (
+    create_kubernetes_cloud,
+    create_secret_file_credentials,
     gen_git_test_job_xml,
     gen_test_job_xml,
+    gen_test_pipeline_with_custom_script_xml,
     get_job_invoked_unit,
     install_plugins,
+    kubernetes_test_pipeline_script,
     wait_for,
-    create_secret_file_credentials,
-    create_kubernetes_cloud,
-    gen_test_pipeline_with_custom_script_xml,
 )
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, UnitWebClient
 
@@ -479,7 +480,7 @@ async def test_openid_connect_plugin(
 
 async def test_kuberentes_plugin(unit_web_client: UnitWebClient, kube_config: str):
     """
-    arrange: given a Jenkins charm with kubernetes plugin installed and configured with credentials from microk8s.
+    arrange: given a Jenkins charm with kubernetes plugin installed and credentials from microk8s.
     act: Run a job using an agent provided by the kubernetes plugin.
     assert: Job succeeds.
     """
@@ -491,35 +492,9 @@ async def test_kuberentes_plugin(unit_web_client: UnitWebClient, kube_config: st
     assert credentials_id
     kubernetes_cloud_name = create_kubernetes_cloud(unit_web_client, credentials_id)
     assert kubernetes_cloud_name
-    pipeline_script = """
-podTemplate(yaml: '''
-              apiVersion: v1
-              kind: Pod
-              metadata:
-                labels:
-                  some-label: some-label-value
-              spec:
-                containers:
-                - name: httpd
-                  image: httpd
-                  command:
-                  - sleep
-                  args:
-                  - 99d
-                  tty: true
-''') {
-  node(POD_LABEL) {
-    stage('Integration Test') {
-      sh '''#!/bin/bash -x
-        hostname
-        pwd
-        whoami
-      '''
-    }
-  }
-}"""
     job = unit_web_client.client.create_job(
-        "kubernetes_plugin_test", gen_test_pipeline_with_custom_script_xml(pipeline_script)
+        "kubernetes_plugin_test",
+        gen_test_pipeline_with_custom_script_xml(kubernetes_test_pipeline_script()),
     )
     queue_item = job.invoke()
     queue_item.block_until_complete()
