@@ -408,8 +408,10 @@ def create_kubernetes_cloud(
             "credentialsId": "{kube_config_credentials_id}",
             "jenkinsUrl": "{unit_web_client.web}",
             "type": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
+            "webSocket":true,
             "Submit": "",
         }}""",
+        "webSocket": True,
         "Submit": '""',
     }
     accept_header = (
