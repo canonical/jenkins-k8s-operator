@@ -372,6 +372,23 @@ async def test_bzr_plugin(unit_web_client: UnitWebClient):
     assert "Bazaar" in config_page, f"Bzr configuration option not found. {config_page}"
 
 
+async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with docker-build-publish plugin installed.
+    act: when a job configuration page is accessed.
+    assert: docker-build-publish plugin option exists.
+    """
+    await install_plugins(unit_web_client, ("docker-build-publish",))
+    unit_web_client.client.create_job("docker_plugin_test", gen_test_job_xml("k8s"))
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/job/docker_plugin_test/configure"
+    )
+    config_page = str(res.content, "utf-8")
+    assert (
+        "Docker Build and Publish" in config_page
+    ), f"docker-build-publish configuration option not found. {config_page}"
+
+
 @pytest.mark.usefixtures("k8s_agent_related_app")
 async def test_rebuilder_plugin(unit_web_client: UnitWebClient):
     """
