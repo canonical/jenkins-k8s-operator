@@ -336,14 +336,15 @@ def kubernetes_test_pipeline_script() -> str:
 def create_secret_file_credentials(
     unit_web_client: UnitWebClient, kube_config: str
 ) -> typing.Optional[str]:
-    """Return the necessary components to create a credentials using the jenkins API.
+    """Use the jenkins client to create a new secretfile credential.
+    plain-credentials plugin is required.
 
     Args:
         unit_web_client: Client for Jenkins's remote access API.
         kube_config: path to the kube_config file.
 
     Returns:
-        The tuple of the credentials_id, request payload, file bytestream and headers
+        The id of the created credential, or None in case of error.
     """
     url = f"{unit_web_client.web}/credentials/store/system/domain/_/createCredentials"
     credentials_id = f"kube-config-{secrets.token_hex(4)}"
@@ -393,7 +394,7 @@ def create_kubernetes_cloud(
         kube_config_credentials_id: credential id stored in jenkins.
 
     Returns:
-        The HTTP response object
+        The created kubernetes cloud name or None in case of error.
     """
     kubernetes_test_cloud_name = "kubernetes"
 
