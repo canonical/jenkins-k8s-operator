@@ -4,6 +4,7 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import json
+import logging
 import typing
 
 import jenkinsapi.plugin
@@ -15,13 +16,19 @@ from pytest_operator.plugin import OpsTest
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
 from .helpers import (
+    create_kubernetes_cloud,
+    create_secret_file_credentials,
     gen_git_test_job_xml,
     gen_test_job_xml,
+    gen_test_pipeline_with_custom_script_xml,
     get_job_invoked_unit,
     install_plugins,
+    kubernetes_test_pipeline_script,
     wait_for,
 )
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, UnitWebClient
+
+logger = logging.getLogger()
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -504,3 +511,30 @@ async def test_openid_connect_plugin(
     assert res.status_code == 404, "Security realm login not reset."
     res = requests.get(f"{unit_web_client.web}/login?from=%2F", timeout=30)
     assert res.status_code == 200, "Failed to load Jenkins native login UI."
+
+
+async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: str):
+    """
+    arrange: given a Jenkins charm with kubernetes plugin installed and credentials from microk8s.
+    act: Run a job using an agent provided by the kubernetes plugin.
+    assert: Job succeeds.
+    """
+    # Use plain credentials to be able to create secret-file/secret-text credentials
+    await install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
+
+    # Create credentials
+    credentials_id = create_secret_file_credentials(unit_web_client, kube_config)
+    assert credentials_id
+    kubernetes_cloud_name = create_kubernetes_cloud(unit_web_client, credentials_id)
+    assert kubernetes_cloud_name
+    job = unit_web_client.client.create_job(
+        "kubernetes_plugin_test",
+        gen_test_pipeline_with_custom_script_xml(kubernetes_test_pipeline_script()),
+    )
+    queue_item = job.invoke()
+    queue_item.block_until_complete()
+    build: jenkinsapi.build.Build = queue_item.get_build()
+    log_stream = build.stream_logs()
+    logs = "".join(log_stream)
+    logger.debug("build logs: %s", logs)
+    assert build.get_status() == "SUCCESS"

@@ -4,6 +4,7 @@
 """Helpers for Jenkins-k8s-operator charm integration tests."""
 import inspect
 import logging
+import secrets
 import textwrap
 import time
 import typing
@@ -266,3 +267,171 @@ def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Uni
         if unit.name.replace("/", "-") == invoked_agent:
             return unit
     return None
+
+
+def gen_test_pipeline_with_custom_script_xml(script: str) -> str:
+    """Generate a job xml with custom pipeline script.
+
+    Args:
+        script: Custom pipeline script.
+
+    Returns:
+        The job XML.
+    """
+    return textwrap.dedent(
+        f"""
+        <flow-definition plugin="workflow-job@1385.vb_58b_86ea_fff1">
+            <actions/>
+            <description></description>
+            <keepDependencies>false</keepDependencies>
+            <properties/>
+            <definition
+                class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition"
+                plugin="workflow-cps@3837.v305192405b_c0">
+                <script>{script}</script>
+                <sandbox>true</sandbox>
+            </definition>
+            <triggers/>
+            <disabled>false</disabled>
+        </flow-definition>
+        """
+    )
+
+
+def kubernetes_test_pipeline_script() -> str:
+    """Generate a test pipeline script using the kubernetes plugin.
+
+    Return:
+        The pipeline script
+    """
+    return textwrap.dedent(
+        """
+        podTemplate(yaml: '''
+            apiVersion: v1
+            kind: Pod
+            metadata:
+            labels:
+                some-label: some-label-value
+            spec:
+            containers:
+            - name: httpd
+              image: httpd
+              command:
+              - sleep
+              args:
+              - 99d
+              tty: true
+        ''') {
+        node(POD_LABEL) {
+            stage('Integration Test') {
+            sh '''#!/bin/bash
+                hostname
+            '''
+            }
+        }
+        }"""
+    )
+
+
+def create_secret_file_credentials(
+    unit_web_client: UnitWebClient, kube_config: str
+) -> typing.Optional[str]:
+    """Use the jenkins client to create a new secretfile credential.
+    plain-credentials plugin is required.
+
+    Args:
+        unit_web_client: Client for Jenkins's remote access API.
+        kube_config: path to the kube_config file.
+
+    Returns:
+        The id of the created credential, or None in case of error.
+    """
+    url = f"{unit_web_client.web}/credentials/store/system/domain/_/createCredentials"
+    credentials_id = f"kube-config-{secrets.token_hex(4)}"
+    payload = {
+        "json": f"""{{
+            "": "4",
+            "credentials": {{
+                "file": "file0",
+                "id": "{credentials_id}",
+                "description": "Created by API",
+                "stapler-class": "org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl",
+                "$class": "org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl",
+            }},
+        }}"""
+    }
+
+    accept_header = (
+        "text/html,"
+        "application/xhtml+xml,"
+        "application/xml;q=0.9,"
+        "image/avif,image/webp,"
+        "image/apng,"
+        "*/*;q=0.8,"
+        "application/signed-exchange;v=b3;q=0.9'"
+    )
+    headers = {
+        "Accept": accept_header,
+    }
+
+    with open(kube_config, "rb") as kube_config_file:
+        files = [("file0", ("config", kube_config_file, "application/octet-stream"))]
+        logger.debug("Creating jenkins credentials, params: %s %s %s", headers, files, payload)
+        res = unit_web_client.client.requester.post_url(
+            url=url, headers=headers, data=payload, files=files
+        )
+        logger.debug("Credential created, %s", res.status_code)
+        return credentials_id if res.status_code == 200 else None
+
+
+def create_kubernetes_cloud(
+    unit_web_client: UnitWebClient, kube_config_credentials_id: str
+) -> typing.Optional[str]:
+    """Use the Jenkins client to add a Kubernetes cloud.
+    For dynamic agent provisioning through pods.
+
+    Args:
+        unit_web_client: Client for Jenkins's remote access API.
+        kube_config_credentials_id: credential id stored in jenkins.
+
+    Returns:
+        The created kubernetes cloud name or None in case of error.
+    """
+    kubernetes_test_cloud_name = "kubernetes"
+
+    url = f"{unit_web_client.web}/manage/cloud/doCreate"
+
+    payload = {
+        "name": kubernetes_test_cloud_name,
+        "type": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
+        "json": f"""
+        {{
+            "name": "{kubernetes_test_cloud_name}",
+            "credentialsId": "{kube_config_credentials_id}",
+            "jenkinsUrl": "{unit_web_client.web}",
+            "type": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
+            "webSocket":true,
+            "Submit": "",
+        }}""",
+        "webSocket": True,
+        "Submit": '""',
+    }
+    accept_header = (
+        "text/html,"
+        "application/xhtml+xml,"
+        "application/xml;q=0.9,"
+        "image/avif,"
+        "image/webp,"
+        "image/apng,"
+        "*/*;q=0.8,"
+        "application/signed-exchange;v=b3;q=0.7"
+    )
+    headers = {
+        "Accept": accept_header,
+    }
+
+    logger.debug("Creating jenkins kubernets cloud, params: %s %s", headers, payload)
+    res = unit_web_client.client.requester.post_url(url=url, headers=headers, data=payload)
+    logger.debug("Cloud created, %s", res.status_code)
+
+    return kubernetes_test_cloud_name if res.status_code == 200 else None
