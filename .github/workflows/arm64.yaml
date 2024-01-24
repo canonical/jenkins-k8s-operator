@@ -1,11 +1,11 @@
-name: Provide approval for bot PRs
+name: Pack charm for arm64
 
 on:
   pull_request:
 
 jobs:
   arm64:
-    name: Show architecture
+    name: Pack charm
     runs-on: self-hosted-arm64-large
     steps:
       - name: Show architecture
