@@ -376,18 +376,18 @@ def create_secret_file_credentials(
 
     with open(kube_config, "rb") as kube_config_file:
         files = [("file0", ("config", kube_config_file, "application/octet-stream"))]
-        logger.info("Creating jenkins credentials, params: %s %s %s", headers, files, payload)
+        logger.debug("Creating jenkins credentials, params: %s %s %s", headers, files, payload)
         res = unit_web_client.client.requester.post_url(
             url=url, headers=headers, data=payload, files=files
         )
-        logger.info("Credential created, %s", res.status_code)
+        logger.debug("Credential created, %s", res.status_code)
         return credentials_id if res.status_code == 200 else None
 
 
 def create_kubernetes_cloud(
     unit_web_client: UnitWebClient, kube_config_credentials_id: str
 ) -> typing.Optional[str]:
-    """Use the jenkins client to create a new kubernetes cloud.
+    """Use the Jenkins client to add a Kubernetes cloud for dynamic agent provisioning through pods.
 
     Args:
         unit_web_client: Client for Jenkins's remote access API.
@@ -429,8 +429,8 @@ def create_kubernetes_cloud(
         "Accept": accept_header,
     }
 
-    logger.info("Creating jenkins kubernets cloud, params: %s %s", headers, payload)
+    logger.debug("Creating jenkins kubernets cloud, params: %s %s", headers, payload)
     res = unit_web_client.client.requester.post_url(url=url, headers=headers, data=payload)
-    logger.info("Cloud created, %s", res.status_code)
+    logger.debug("Cloud created, %s", res.status_code)
 
     return kubernetes_test_cloud_name if res.status_code == 200 else None

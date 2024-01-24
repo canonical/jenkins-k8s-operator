@@ -536,5 +536,5 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
     build: jenkinsapi.build.Build = queue_item.get_build()
     log_stream = build.stream_logs()
     logs = "".join(log_stream)
-    logger.info("build logs: %s", logs)
+    logger.debug("build logs: %s", logs)
     assert build.get_status() == "SUCCESS"
