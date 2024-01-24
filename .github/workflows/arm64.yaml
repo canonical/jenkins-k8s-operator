@@ -11,3 +11,8 @@ jobs:
       - name: Show architecture
         run: |
           uname -m
+      - uses: actions/checkout@v4.1.1
+      - name: Pack charm
+        run: |
+          sudo snap install charmcraft --classic --channel latest/stable
+          charmcraft pack -v
