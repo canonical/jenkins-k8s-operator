@@ -387,7 +387,8 @@ def create_secret_file_credentials(
 def create_kubernetes_cloud(
     unit_web_client: UnitWebClient, kube_config_credentials_id: str
 ) -> typing.Optional[str]:
-    """Use the Jenkins client to add a Kubernetes cloud for dynamic agent provisioning through pods.
+    """Use the Jenkins client to add a Kubernetes cloud.
+    For dynamic agent provisioning through pods.
 
     Args:
         unit_web_client: Client for Jenkins's remote access API.
