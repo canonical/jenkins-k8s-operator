@@ -269,7 +269,7 @@ def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Uni
     return None
 
 
-def gen_test_pipeline_with_custom_script_xml(script: str):
+def gen_test_pipeline_with_custom_script_xml(script: str) -> str:
     """Generate a job xml with custom pipeline script.
 
     Args:
