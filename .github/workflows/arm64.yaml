@@ -15,4 +15,5 @@ jobs:
       - name: Pack charm
         run: |
           sudo snap install charmcraft --classic --channel latest/stable
+          lxd init --auto
           charmcraft pack -v
