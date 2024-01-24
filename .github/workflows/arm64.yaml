@@ -1,4 +1,4 @@
-name: Pack charm for arm64
+name: Pack charm for arm64!
 
 on:
   pull_request:
