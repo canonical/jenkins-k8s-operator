@@ -1,0 +1,13 @@
+name: Provide approval for bot PRs
+
+on:
+  pull_request:
+
+jobs:
+  arm64:
+    name: Show architecture
+    runs-on: self-hosted-arm64-large
+    steps:
+      - name: Show architecture
+        run: |
+          uname -m
