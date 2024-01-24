@@ -513,7 +513,7 @@ async def test_openid_connect_plugin(
     assert res.status_code == 200, "Failed to load Jenkins native login UI."
 
 
-async def test_kuberentes_plugin(unit_web_client: UnitWebClient, kube_config: str):
+async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: str):
     """
     arrange: given a Jenkins charm with kubernetes plugin installed and credentials from microk8s.
     act: Run a job using an agent provided by the kubernetes plugin.
