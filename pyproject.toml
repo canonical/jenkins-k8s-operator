@@ -56,3 +56,23 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+
+[tool.poetry]
+name = "jenkins-k8s-operator"
+version = "1.0.0"
+description = ""
+authors = ["IS DevOps <https://launchpad.net/~canonical-is-devops>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+cosl = "0.0.7"
+jenkinsapi = "0.3.13"
+ops = "2.9.0"
+pydantic = "1.10.13"
+requests = "2.31.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
