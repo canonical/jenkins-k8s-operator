@@ -404,13 +404,11 @@ async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
     assert (
         "Invoke Dependency-Check" in job_page
     ), f"Dependency check job configuration option not found. {job_page}"
-    res = unit_web_client.client.requester.get_url(
-        f"{unit_web_client.web}/manage/configureTools/"
-    )
+    res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configureTools/")
     tools_page = str(res.content, "utf-8")
     assert (
         "Dependency-Check installations" in tools_page
-    ), f"Dependency check tool configuration option not found. {tools_page}"    
+    ), f"Dependency check tool configuration option not found. {tools_page}"
 
 
 async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
