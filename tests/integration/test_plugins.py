@@ -389,6 +389,22 @@ async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
     ), f"docker-build-publish configuration option not found. {config_page}"
 
 
+async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with reverse-proxy-auth-plugin plugin installed.
+    act: when the security configuration is accessed.
+    assert: reverse-proxy-auth-plugin plugin option exists.
+    """
+    await install_plugins(unit_web_client, ("reverse-proxy-auth-plugin",))
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/manage/configureSecurity"
+    )
+    config_page = str(res.content, "utf-8")
+    assert (
+        "HTTP Header by reverse proxy" in config_page
+    ), f"reverse-proxy-auth-plugin configuration option not found. {config_page}"
+
+
 async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with dependency-check-jenkins-plugin plugin installed.
