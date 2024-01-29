@@ -4,7 +4,7 @@ A [Juju](https://juju.is/) [charm](https://juju.is/docs/olm/charmed-operators)
 deploying and managing [Jenkins](https://jenkins.io/) on Kubernetes. Jenkins is an open source
 automation server, providing plugins to support building, deploying and automating any project.
 
-Jenkins is an extendable continuous integration server that monitors executions of repeated jobs. 
+Jenkins is an extendable continuous integration server that monitors executions of repeated jobs.
 The focus of Jenkins is the building/testing of software projects continuously, and monitoring
 executions of externally-run jobs. More information at http://jenkins-ci.org/.
 

@@ -1,0 +1,19 @@
+name: Pack charm for arm64!
+
+on:
+  pull_request:
+
+jobs:
+  arm64:
+    name: Pack charm
+    runs-on: self-hosted-arm64-large
+    steps:
+      - name: Show architecture
+        run: |
+          uname -m
+      - uses: actions/checkout@v4.1.1
+      - name: Pack charm
+        run: |
+          sudo snap install charmcraft --classic --channel latest/stable
+          lxd init --auto
+          charmcraft pack -v
