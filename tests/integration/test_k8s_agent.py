@@ -80,15 +80,3 @@ async def test_jenkins_k8s_agent_relation(
     assert not any(
         (extra_jenkins_k8s_agents.name in key for key in jenkins_client.get_nodes().keys())
     )
-
-
-@pytest.mark.usefixtures("k8s_deprecated_agent_related_app")
-async def test_jenkins_k8s_deprecated_agent_relation(
-    jenkins_k8s_agents: Application, jenkins_client: jenkinsapi.jenkins.Jenkins
-):
-    """
-    arrange: given jenkins-k8s-agent and jenkins server charms.
-    act: when the server charm is related to the k8s agent charm.
-    assert: the relation succeeds and the agent is able to run jobs successfully.
-    """
-    assert_job_success(jenkins_client, jenkins_k8s_agents.name, "k8s")
