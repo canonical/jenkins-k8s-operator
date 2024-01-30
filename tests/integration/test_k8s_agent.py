@@ -7,7 +7,6 @@ import logging
 from pathlib import Path
 
 import jenkinsapi.jenkins
-import pytest
 import requests
 import yaml
 from juju.application import Application
