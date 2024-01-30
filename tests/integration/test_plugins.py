@@ -396,10 +396,12 @@ async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
     assert: reverse-proxy-auth-plugin plugin option exists.
     """
     await install_plugins(unit_web_client, ("reverse-proxy-auth-plugin",))
+
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/manage/configureSecurity"
     )
     config_page = str(res.content, "utf-8")
+    
     assert (
         "HTTP Header by reverse proxy" in config_page
     ), f"reverse-proxy-auth-plugin configuration option not found. {config_page}"
