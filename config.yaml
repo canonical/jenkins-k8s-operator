@@ -8,7 +8,7 @@ options:
       Preferred UTC time range in 24 hour format for restarting Jenkins. If empty, restart will
       take place whenever Jenkins needs to restart. Jenkins will need to restart on the following
       occasion. Plugins that are not part of `allowed-plugins` configuration option are detected.
-      For example, 03-05 will allow Jenkins restart to take place from 3AM UTC to 5AM UTC. 
+      For example, 03-05 will allow Jenkins restart to take place from 3AM UTC to 5AM UTC.
       Awaits for running job completion for 5 minutes.
     default: ""
   allowed-plugins:
@@ -16,5 +16,18 @@ options:
     description: >
       Comma-separated list of allowed plugin short names. If empty, any plugin can be installed.
       Plugins installed by the user and their dependencies will be removed automatically if not on
-      the list. Included plugins are not automatically installed. 
+      the list. Included plugins are not automatically installed.
     default: "bazaar,blueocean,dependency-check-jenkins-plugin,docker-build-publish,git,kubernetes,ldap,matrix-combinations-parameter,oic-auth,openid,pipeline-groovy-lib,postbuildscript,rebuild,reverse-proxy-auth-plugin,ssh-agent,thinBackup"
+  external-url:
+    type: string
+    description: >
+      Configure the charm to use this URL when establishing relations with agent charms.
+      This is useful when connecting agents from outside of the charm's Kubernetes cluster.
+      It is assumed that this url is reachable to the agents.
+    default: ""
+  agent-enable-websocket:
+    type: boolean
+    description: >
+      Configure inbound agents to use Websocket and skip TCP port 50000.
+      This is useful when the charm is deployed behind a reverse-proxy or behind a firewall.
+    default: false

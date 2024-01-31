@@ -513,6 +513,7 @@ def _get_node_config(
     agent_meta: state.AgentMeta,
     container: ops.Container,
     host: typing.Union[IPv4Address, IPv6Address, str],
+    enable_websocket: bool,
 ) -> dict[str, typing.Any]:
     """Get agent node configuration dictionary values.
 
@@ -539,8 +540,12 @@ def _get_node_config(
     )
     attribs = node.get_node_attributes()
     meta = json.loads(attribs["json"])
-    # the field can either take "HOST:PORT", ":PORT", or "HOST:"
-    meta["launcher"]["tunnel"] = f"{host}:"
+    # Websocket is mutually exclusive with tunnel connect through
+    if enable_websocket:
+        meta["enable-websocket"] = enable_websocket
+    else:
+        # the field can either take "HOST:PORT", ":PORT", or "HOST:"
+        meta["launcher"]["tunnel"] = f"{host}:"
     attribs["json"] = json.dumps(meta)
     return attribs
 
@@ -549,6 +554,7 @@ def add_agent_node(
     agent_meta: state.AgentMeta,
     container: ops.Container,
     host: typing.Union[IPv4Address, IPv6Address, str],
+    enable_websocket: bool,
 ) -> None:
     """Add a Jenkins agent node.
 
@@ -562,7 +568,12 @@ def add_agent_node(
     """
     client = _get_client(_get_api_credentials(container))
     try:
-        config = _get_node_config(agent_meta=agent_meta, container=container, host=host)
+        config = _get_node_config(
+            agent_meta=agent_meta,
+            container=container,
+            host=host,
+            enable_websocket=enable_websocket,
+        )
         client.create_node_with_config(name=agent_meta.name, config=config)
     except jenkinsapi.custom_exceptions.AlreadyExists:
         pass

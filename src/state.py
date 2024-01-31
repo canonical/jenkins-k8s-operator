@@ -10,7 +10,16 @@ import typing
 from pathlib import Path
 
 import ops
-from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    Field,
+    HttpUrl,
+    StrictBool,
+    ValidationError,
+    tools,
+    validator,
+)
 
 from timerange import InvalidTimeRangeError, Range
 
@@ -229,6 +238,9 @@ class State:
             deprecated agent relation.
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
+        external_url: Configured external url for inbound agents.
+        agent_enable_websocket: Use websocket for inbound agents.
+
     """
 
     restart_time_range: typing.Optional[Range]
@@ -238,6 +250,8 @@ class State:
     ]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
+    external_url: typing.Optional[AnyHttpUrl]
+    agent_enable_websocket: StrictBool
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -255,6 +269,8 @@ class State:
             CharmIllegalNumUnitsError: if more than 1 unit of Jenkins charm is deployed.
         """
         time_range_str = charm.config.get("restart-time-range")
+        external_url = charm.config.get("external-url")
+        agent_enable_websocket = charm.config.get("agent-enable-websocket")
         if time_range_str:
             try:
                 restart_time_range = Range.from_str(time_range_str)
@@ -299,4 +315,6 @@ class State:
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
             plugins=plugins,
             proxy_config=proxy_config,
+            external_url=tools.parse_obj_as(AnyHttpUrl, external_url) or "",
+            agent_enable_websocket=agent_enable_websocket,
         )
