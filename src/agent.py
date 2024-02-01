@@ -80,7 +80,7 @@ class Observer(ops.Object):
             event.defer()
             return
 
-        enable_websocket = bool(self.state.agent_enable_websocket)
+        enable_websocket = bool(self.state.remoting_config.enable_websocket)
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
             jenkins.add_agent_node(
@@ -95,10 +95,11 @@ class Observer(ops.Object):
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
+        configured_remoting_external_url = self.state.remoting_config.external_url
         jenkins_url = (
             f"http://{host}:{jenkins.WEB_PORT}"
-            if self.state.external_url
-            else str(self.state.external_url)
+            if not configured_remoting_external_url
+            else str(configured_remoting_external_url)
         )
         event.relation.data[self.model.unit].update(
             AgentRelationData(url=jenkins_url, secret=secret)
@@ -131,7 +132,7 @@ class Observer(ops.Object):
             event.defer()
             return
 
-        enable_websocket = bool(self.state.agent_enable_websocket)
+        enable_websocket = bool(self.state.remoting_config.enable_websocket)
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
             jenkins.add_agent_node(
@@ -145,10 +146,11 @@ class Observer(ops.Object):
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
+        configured_remoting_external_url = self.state.remoting_config.external_url
         jenkins_url = (
             f"http://{host}:{jenkins.WEB_PORT}"
-            if self.state.external_url
-            else str(self.state.external_url)
+            if not configured_remoting_external_url
+            else str(configured_remoting_external_url)
         )
         event.relation.data[self.model.unit].update(
             {

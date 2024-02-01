@@ -521,6 +521,7 @@ def _get_node_config(
         agent_meta: The Jenkins agent metadata to create the node from.
         container: The Jenkins workload container.
         host: The Jenkins server ip address for direct agent tunnel connection.
+        enable_websocket: Whether to use websocket for inbound agent connections.
 
     Returns:
         A dictionary mapping of agent configuration values.
@@ -542,7 +543,7 @@ def _get_node_config(
     meta = json.loads(attribs["json"])
     # Websocket is mutually exclusive with tunnel connect through
     if enable_websocket:
-        meta["enable-websocket"] = enable_websocket
+        meta["launcher"]["webSocket"] = enable_websocket
     else:
         # the field can either take "HOST:PORT", ":PORT", or "HOST:"
         meta["launcher"]["tunnel"] = f"{host}:"
@@ -562,6 +563,7 @@ def add_agent_node(
         agent_meta: The Jenkins agent metadata to create the node from.
         container: The Jenkins workload container.
         host: The Jenkins server ip address for direct agent tunnel connection.
+        enable_websocket: Whether to use websocket for inbound agent connections.
 
     Raises:
         JenkinsError: if an error occurred running groovy script creating the node.
