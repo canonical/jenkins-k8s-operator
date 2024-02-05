@@ -790,9 +790,9 @@ async def ingress_application_related_fixture(application: Application, external
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await application.model.deploy(
         "traefik-k8s",
-        channel="1.0/stable",
+        channel="edge",
         trust=True,
-        config={"external_hostname": external_hostname},
+        config={"external_hostname": external_hostname, "enable_experimental_forward_auth": True},
     )
     await application.model.wait_for_idle(
         status="active", apps=[traefik.name], raise_on_error=False, timeout=30 * 60
@@ -806,3 +806,33 @@ async def ingress_application_related_fixture(application: Application, external
         raise_on_error=False,
     )
     return traefik
+
+
+@pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
+async def oathkeeper_application_related_fixture(application: Application, ingress_related: Application):
+    """The application related to Jenkins via auth_proxy v0 relation."""
+    self_signed_certificates = await application.model.deploy(
+        "self-signed-certificates",
+        channel="edge",
+        trust=True,
+    )
+    oathkeeper = await application.model.deploy(
+        "oathkeeper",
+        channel="edge",
+        trust=True,
+    )
+    await application.model.wait_for_idle(
+        status="active", apps=[oathkeeper.name, self_signed_certificates.name], raise_on_error=False, timeout=30 * 60
+    )
+    await application.model.add_relation(f"{application.name}:auth-proxy", oathkeeper.name)
+    await application.model.add_relation(f"{oathkeeper.name}:certificates", self_signed_certificates.name)
+    await application.model.add_relation(f"{ingress_related.name}:experimental-forward-auth", oathkeeper.name)
+    await application.model.add_relation(f"{ingress_related.name}:receive-ca-cert", self_signed_certificates.name)
+    await application.model.wait_for_idle(
+        status="active",
+        apps=[application, ingress_related.name, oathkeeper.name, self_signed_certificates.name],
+        timeout=20 * 60,
+        idle_period=30,
+        raise_on_error=False,
+    )
+    return application

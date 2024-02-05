@@ -12,7 +12,7 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 import jenkins
 import state
 
-AUTH_PROXY_ALLOWED_ENDPOINTS = [jenkins.LOGIN_URL]
+AUTH_PROXY_ALLOWED_ENDPOINTS = []
 AUTH_PROXY_HEADERS = ["X-User"]
 
 
