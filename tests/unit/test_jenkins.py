@@ -124,6 +124,27 @@ def test_wait_ready(
     jenkins.wait_ready(1, 1)
 
 
+def test_is_storage_ready_no_container():
+    """
+    arrange: nothing.
+    act: when is_storage_ready is called without passing a container.
+    assert: Falsy value is returned.
+    """
+    assert not jenkins.is_storage_ready(container=None)
+
+
+def test_is_storage_ready_cant_connect():
+    """
+    arrange: given a mocked container to which connection is not possible.
+    act: when is_storage_ready is called.
+    assert: Falsy value is returned.
+    """
+    mock_container = MagicMock(ops.Container)
+    mock_container.can_connect.return_value = False
+
+    assert not jenkins.is_storage_ready(container=mock_container)
+
+
 def test_is_storage_ready_not_ready():
     """
     arrange: given a mocked container pull that does not have Jenkins home path in /proc/mounts.
@@ -294,6 +315,21 @@ def test__install_config(harness_container: HarnessWithContainer):
     jnlp_match = re.search(r"<slaveAgentPort>(\d+)</slaveAgentPort>", config_xml)
     assert jnlp_match, "Configuration for jnlp port not found."
     assert jnlp_match.group(1) == "50000", "jnlp not set as default port."
+
+
+def test_install_auth_proxy_config(harness_container: HarnessWithContainer):
+    """
+    arrange: given a mocked uninitialized container.
+    act: when install_auth_proxy_config is called.
+    assert: jenkins configuration file is generated.
+    """
+    jenkins.install_auth_proxy_config(harness_container.container)
+
+    config_xml = str(
+        harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
+    )
+
+    assert "ReverseProxySecurityRealm" in config_xml
 
 
 @pytest.mark.parametrize(

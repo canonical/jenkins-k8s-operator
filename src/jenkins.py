@@ -174,7 +174,7 @@ class StorageMountError(JenkinsBootstrapError):
         self.msg = msg
 
 
-def is_storage_ready(container: ops.Container) -> bool:
+def is_storage_ready(container: typing.Optional[ops.Container]) -> bool:
     """Return whether the Jenkins home directory is mounted and owned by jenkins.
 
     Args:
@@ -186,6 +186,8 @@ def is_storage_ready(container: ops.Container) -> bool:
     Returns:
         True if home directory is mounted and owned by jenkins, False otherwise.
     """
+    if not container or not container.can_connect():
+        return False
     mount_info: str = container.pull("/proc/mounts").read()
     if str(JENKINS_HOME_PATH) not in mount_info:
         return False
@@ -307,16 +309,35 @@ def _unlock_wizard(container: ops.Container) -> None:
     )
 
 
-def _install_configs(container: ops.Container) -> None:
+def _install_jenkins_config(container: ops.Container, filename: str) -> None:
     """Install jenkins-config.xml.
 
     Args:
         container: The Jenkins workload container.
+        filename: the source file to copy contents from.
     """
-    with open("templates/jenkins-config.xml", encoding="utf-8") as jenkins_config_file:
+    with open(filename, encoding="utf-8") as jenkins_config_file:
         container.push(CONFIG_FILE_PATH, jenkins_config_file, user=USER, group=GROUP)
+
+
+def _install_configs(container: ops.Container) -> None:
+    """Install jenkins-config.xml and logging files.
+
+    Args:
+        container: The Jenkins workload container.
+    """
+    _install_jenkins_config(container, "templates/jenkins-config.xml")
     with open("templates/logging.properties", encoding="utf-8") as jenkins_logging_config_file:
         container.push(LOGGING_CONFIG_PATH, jenkins_logging_config_file, user=USER, group=GROUP)
+
+
+def install_auth_proxy_config(container: ops.Container) -> None:
+    """Install jenkins-config.xml for auth_proxy.
+
+    Args:
+        container: The Jenkins workload container.
+    """
+    _install_jenkins_config(container, "templates/reverse-proxy-auth-jenkins-config.xml")
 
 
 def _setup_user_token(container: ops.Container) -> None:

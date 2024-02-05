@@ -83,7 +83,7 @@ Return whether the Jenkins home directory is mounted and owned by jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L213"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L215"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_admin_credentials`
 
@@ -107,7 +107,7 @@ Retrieve admin credentials.
 
 ---
 
-<a href="../src/jenkins.py#L257"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L259"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `calculate_env`
 
@@ -125,7 +125,7 @@ Return a dictionary for Jenkins Pebble layer.
 
 ---
 
-<a href="../src/jenkins.py#L266"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L268"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_version`
 
@@ -149,7 +149,7 @@ Get the Jenkins server version.
 
 ---
 
-<a href="../src/jenkins.py#L451"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L453"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `bootstrap`
 
@@ -175,7 +175,7 @@ Initialize and install Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L489"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L491"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_node_secret`
 
@@ -206,7 +206,7 @@ Get node secret from jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L548"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L550"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `add_agent_node`
 
@@ -237,7 +237,7 @@ Add a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L574"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L576"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_agent_node`
 
@@ -263,7 +263,7 @@ Remove a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L627"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L629"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
@@ -288,7 +288,7 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-<a href="../src/jenkins.py#L652"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L654"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
@@ -312,7 +312,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L832"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L834"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 
@@ -343,7 +343,7 @@ Remove plugins that are not in the list of desired plugins.
 
 ---
 
-<a href="../src/jenkins.py#L928"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L930"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `rotate_credentials`
 

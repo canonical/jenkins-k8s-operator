@@ -12,6 +12,7 @@ import ops
 
 import actions
 import agent
+import auth_proxy
 import cos
 import ingress
 import jenkins
@@ -56,6 +57,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.agent_observer = agent.Observer(self, self.state)
         self.cos_observer = cos.Observer(self)
         self.ingress_observer = ingress.Observer(self)
+        self.auth_proxy_observer = auth_proxy.Observer(self, self.ingress_observer.ingress)
         self.framework.observe(
             self.on.jenkins_home_storage_attached, self._on_jenkins_home_storage_attached
         )
@@ -112,7 +114,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             JenkinsError: if there was an error fetching Jenkins version.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container or not container.can_connect() or not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container):
             self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             event.defer()  # Jenkins installation should be retried until preconditions are met.
             return
@@ -176,7 +178,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         2. Update Jenkins patch version if available and is within restart-time-range config value.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container):
             self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             return
 
