@@ -58,7 +58,7 @@ Wait until Jenkins service is up.
 ## <kbd>function</kbd> `is_storage_ready`
 
 ```python
-is_storage_ready(container: Container) → bool
+is_storage_ready(container: Optional[Container]) → bool
 ```
 
 Return whether the Jenkins home directory is mounted and owned by jenkins. 
@@ -149,7 +149,26 @@ Get the Jenkins server version.
 
 ---
 
-<a href="../src/jenkins.py#L453"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L334"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+## <kbd>function</kbd> `install_auth_proxy_config`
+
+```python
+install_auth_proxy_config(container: Container) → None
+```
+
+Install jenkins-config.xml for auth_proxy. 
+
+
+
+**Args:**
+ 
+ - <b>`container`</b>:  The Jenkins workload container. 
+
+
+---
+
+<a href="../src/jenkins.py#L472"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `bootstrap`
 
@@ -175,7 +194,7 @@ Initialize and install Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L491"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L510"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_node_secret`
 
@@ -206,7 +225,7 @@ Get node secret from jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L550"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L569"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `add_agent_node`
 
@@ -237,7 +256,7 @@ Add a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L576"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L595"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_agent_node`
 
@@ -263,7 +282,7 @@ Remove a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L629"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L648"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
@@ -288,7 +307,7 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-<a href="../src/jenkins.py#L654"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L673"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
@@ -312,7 +331,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L834"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L853"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 
@@ -343,7 +362,7 @@ Remove plugins that are not in the list of desired plugins.
 
 ---
 
-<a href="../src/jenkins.py#L930"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L949"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `rotate_credentials`
 
