@@ -10,13 +10,13 @@ from juju.model import Model
 
 
 @pytest.mark.abort_on_fail
-async def test_auth_proxy_integration(
+async def test_auth_proxy_integration_retuns_not_authorized(
     model: Model, ingress_related: Application, external_hostname: str
 ):
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
     act: send a request to the ingress in /.
-    assert: the response is not authorised.
+    assert: a 401 is returned.
     """
     status = await model.get_status(filters=[ingress_related.name])
     unit = next(iter(status.applications[ingress_related.name].units))
