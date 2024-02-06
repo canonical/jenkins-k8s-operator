@@ -841,7 +841,12 @@ async def oathkeeper_application_related_fixture(
     )
     await application.model.wait_for_idle(
         status="active",
-        apps=[application, ingress_related.name, oathkeeper.name, self_signed_certificates.name],
+        apps=[
+            application.name,
+            ingress_related.name,
+            oathkeeper.name,
+            self_signed_certificates.name,
+        ],
         timeout=20 * 60,
         idle_period=30,
         raise_on_error=False,
