@@ -281,7 +281,7 @@ async def test_postbuildscript_plugin(
     unit = get_job_invoked_unit(job, jenkins_k8s_agents.units)
     assert unit, f"Agent unit running the job not found, {job.get_last_build().get_slave()}"
     ret, stdout, stderr = await ops_test.juju(
-        "ssh", "--container", "jenkins-k8s-agent", unit.name, "cat", test_output_path
+        "ssh", "--container", "jenkins-agent-k8s", unit.name, "cat", test_output_path
     )
     assert ret == 0, f"Failed to scp test output file, {stderr}"
     assert stdout == test_output
