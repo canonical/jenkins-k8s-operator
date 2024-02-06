@@ -281,7 +281,7 @@ async def test_postbuildscript_plugin(
     unit = get_job_invoked_unit(job, jenkins_k8s_agents.units)
     assert unit, f"Agent unit running the job not found, {job.get_last_build().get_slave()}"
     ret, stdout, stderr = await ops_test.juju(
-        "ssh", "--container", "jenkins-k8s-agent", unit.name, "cat", test_output_path
+        "ssh", "--container", "jenkins-agent-k8s", unit.name, "cat", test_output_path
     )
     assert ret == 0, f"Failed to scp test output file, {stderr}"
     assert stdout == test_output
@@ -387,6 +387,46 @@ async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
     assert (
         "Docker Build and Publish" in config_page
     ), f"docker-build-publish configuration option not found. {config_page}"
+
+
+async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with reverse-proxy-auth-plugin plugin installed.
+    act: when the security configuration is accessed.
+    assert: reverse-proxy-auth-plugin plugin option exists.
+    """
+    await install_plugins(unit_web_client, ("reverse-proxy-auth-plugin",))
+
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/manage/configureSecurity"
+    )
+    config_page = str(res.content, "utf-8")
+
+    assert (
+        "HTTP Header by reverse proxy" in config_page
+    ), f"reverse-proxy-auth-plugin configuration option not found. {config_page}"
+
+
+async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with dependency-check-jenkins-plugin plugin installed.
+    act: when a job configuration page is accessed.
+    assert: dependency-check-jenkins-plugin plugin option exists.
+    """
+    await install_plugins(unit_web_client, ("dependency-check-jenkins-plugin",))
+    unit_web_client.client.create_job("deps_plugin_test", gen_test_job_xml("k8s"))
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/job/deps_plugin_test/configure"
+    )
+    job_page = str(res.content, "utf-8")
+    assert (
+        "Invoke Dependency-Check" in job_page
+    ), f"Dependency check job configuration option not found. {job_page}"
+    res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configureTools/")
+    tools_page = str(res.content, "utf-8")
+    assert (
+        "Dependency-Check installations" in tools_page
+    ), f"Dependency check tool configuration option not found. {tools_page}"
 
 
 async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
