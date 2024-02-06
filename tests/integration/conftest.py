@@ -851,4 +851,4 @@ async def oathkeeper_application_related_fixture(
         idle_period=30,
         raise_on_error=False,
     )
-    return application
+    return ingress_related
