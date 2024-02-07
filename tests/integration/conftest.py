@@ -808,4 +808,4 @@ async def ingress_application_related_fixture(application: Application, external
         idle_period=30,
         raise_on_error=False,
     )
-    return application
+    return traefik
