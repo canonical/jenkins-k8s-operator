@@ -49,7 +49,7 @@ async def install_plugins(
             client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
             encoding="utf-8",
         ),
-        timeout=60 * 5,
+        timeout=60 * 10,
         wait_period=10,
     )
 
@@ -58,7 +58,7 @@ async def install_plugins(
     client.safe_restart()
     await unit.model.block_until(
         lambda: requests.get(web, timeout=10).status_code == 403,
-        timeout=300,
+        timeout=600,
         wait_period=10,
     )
 
