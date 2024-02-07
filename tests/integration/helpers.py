@@ -267,6 +267,37 @@ async def wait_for(
     raise TimeoutError()
 
 
+async def generate_client_from_application(ops_test, jenkins_unit, address) -> UnitWebClient:
+    """Generate a Jenkins client directly from the Juju unit, without fixtures.
+
+    Args:
+        ops_test: OpsTest framework
+        jenkins_unit: Juju Jenkins-k8s unit.
+        address: IP address from the Jenkins unit.
+
+    Returns:
+        A Jenkins web client.
+    """
+    # pylint: disable=duplicate-code
+    ret, api_token, stderr = await ops_test.juju(
+        "ssh",
+        "--container",
+        "jenkins",
+        jenkins_unit.name,
+        "cat",
+        str(jenkins.API_TOKEN_PATH),
+    )
+    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
+    jenkins_client = jenkinsapi.jenkins.Jenkins(
+        f"http://{address}:{jenkins.WEB_PORT}", "admin", api_token, timeout=60 * 10
+    )
+    # pylint: enable=duplicate-code
+    unit_web_client = UnitWebClient(
+        unit=jenkins_unit, web=f"http://{address}:{jenkins.WEB_PORT}", client=jenkins_client
+    )
+    return unit_web_client
+
+
 def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Unit]) -> Unit | None:
     """Get the jenkins unit that has run the latest job.
 
