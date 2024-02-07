@@ -35,8 +35,8 @@ async def test_jenkins_deploy_with_plugins(ops_test: OpsTest, model: Model):
         "jenkins-k8s",
         application_name=JENKINS_APP_NAME,
         channel="edge",
+        config={"allowed-plugins": ",".join(ALL_PLUGINS)}
     )
-    await application.set_config({"allowed-plugins": ",".join(ALL_PLUGINS)})
     await model.wait_for_idle(status="active", timeout=30 * 60)
     address = await get_model_jenkins_unit_address(model, JENKINS_APP_NAME)
     jenkins_unit = application.units[0]
