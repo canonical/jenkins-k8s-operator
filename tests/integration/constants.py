@@ -15,7 +15,6 @@ ALL_PLUGINS = [
     "kubernetes",
     "ldap",
     "matrix-combinations-parameter",
-    "momentjs",
     "oic-auth",
     "openid",
     "pipeline-groovy-lib",

@@ -60,7 +60,9 @@ async def test_jenkins_deploy_with_plugins(ops_test: OpsTest, jenkins_image: str
     await install_plugins(unit_web_client, ALL_PLUGINS)
 
 
-async def test_jenkins_upgrade_check_plugins(ops_test: OpsTest, jenkins_image: str):  #type: ignore[too-many-locals]
+async def test_jenkins_upgrade_check_plugins(  # pylint: disable=too-many-locals
+    ops_test: OpsTest, jenkins_image: str
+):
     """
     arrange: given charm has been built, deployed and plugins have been installed.
     act: get Jenkins' version, upgrade the charm and if the versions differ, check plugins.
