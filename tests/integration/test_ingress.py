@@ -27,4 +27,5 @@ async def test_ingress_integration(
         timeout=5,
     )
     print(response)
+    print(response.content)
     assert response.status_code == 200
