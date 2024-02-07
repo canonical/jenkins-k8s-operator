@@ -27,7 +27,7 @@ async def test_ingress_integration(
     unit = next(iter(status.applications[application.name].units))
     address = status["applications"][application.name]["units"][unit]["address"]
     response = requests.get(
-        f"http://{address}:8080{jenkins.LOGIN_PATH}",
+        f"http://{address}:{jenkins.PORT}{jenkins.LOGIN_PATH}",
         headers={"Host": f"{model.name}-{application.name}.{external_hostname}"},
         timeout=5,
     )
