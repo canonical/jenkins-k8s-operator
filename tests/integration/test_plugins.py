@@ -28,7 +28,7 @@ from .helpers import (
 )
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, UnitWebClient
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -281,7 +281,7 @@ async def test_postbuildscript_plugin(
     unit = get_job_invoked_unit(job, jenkins_k8s_agents.units)
     assert unit, f"Agent unit running the job not found, {job.get_last_build().get_slave()}"
     ret, stdout, stderr = await ops_test.juju(
-        "ssh", "--container", "jenkins-k8s-agent", unit.name, "cat", test_output_path
+        "ssh", "--container", "jenkins-agent-k8s", unit.name, "cat", test_output_path
     )
     assert ret == 0, f"Failed to scp test output file, {stderr}"
     assert stdout == test_output
@@ -561,8 +561,6 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
     """
     # Use plain credentials to be able to create secret-file/secret-text credentials
     await install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
-
-    # Create credentials
     credentials_id = create_secret_file_credentials(unit_web_client, kube_config)
     assert credentials_id
     kubernetes_cloud_name = create_kubernetes_cloud(unit_web_client, credentials_id)
@@ -571,8 +569,10 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
         "kubernetes_plugin_test",
         gen_test_pipeline_with_custom_script_xml(kubernetes_test_pipeline_script()),
     )
+
     queue_item = job.invoke()
     queue_item.block_until_complete()
+
     build: jenkinsapi.build.Build = queue_item.get_build()
     log_stream = build.stream_logs()
     logs = "".join(log_stream)

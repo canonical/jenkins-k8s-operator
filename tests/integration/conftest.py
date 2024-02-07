@@ -792,7 +792,11 @@ async def ingress_application_related_fixture(application: Application, external
         "traefik-k8s",
         channel="edge",
         trust=True,
-        config={"external_hostname": external_hostname, "enable_experimental_forward_auth": True},
+        config={
+            "external_hostname": external_hostname,
+            "routing_mode": "subdomain",
+            "enable_experimental_forward_auth": True
+        },
     )
     await application.model.wait_for_idle(
         status="active", apps=[traefik.name], raise_on_error=False, timeout=30 * 60
