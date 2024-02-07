@@ -378,7 +378,7 @@ def create_secret_file_credentials(
         files = [("file0", ("config", kube_config_file, "application/octet-stream"))]
         logger.debug("Creating jenkins credentials, params: %s %s %s", headers, files, payload)
         res = unit_web_client.client.requester.post_url(
-            url=url, headers=headers, data=payload, files=files
+            url=url, headers=headers, data=payload, files=files, timeout=30
         )
         logger.debug("Credential created, %s", res.status_code)
         return credentials_id if res.status_code == 200 else None
@@ -431,7 +431,9 @@ def create_kubernetes_cloud(
     }
 
     logger.debug("Creating jenkins kubernets cloud, params: %s %s", headers, payload)
-    res = unit_web_client.client.requester.post_url(url=url, headers=headers, data=payload)
+    res = unit_web_client.client.requester.post_url(
+        url=url, headers=headers, data=payload, timeout=30
+    )
     logger.debug("Cloud created, %s", res.status_code)
 
     return kubernetes_test_cloud_name if res.status_code == 200 else None

@@ -28,7 +28,7 @@ from .helpers import (
 )
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, UnitWebClient
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -561,8 +561,6 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
     """
     # Use plain credentials to be able to create secret-file/secret-text credentials
     await install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
-
-    # Create credentials
     credentials_id = create_secret_file_credentials(unit_web_client, kube_config)
     assert credentials_id
     kubernetes_cloud_name = create_kubernetes_cloud(unit_web_client, credentials_id)
@@ -571,8 +569,10 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
         "kubernetes_plugin_test",
         gen_test_pipeline_with_custom_script_xml(kubernetes_test_pipeline_script()),
     )
+
     queue_item = job.invoke()
     queue_item.block_until_complete()
+
     build: jenkinsapi.build.Build = queue_item.get_build()
     log_stream = build.stream_logs()
     logs = "".join(log_stream)
