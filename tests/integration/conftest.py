@@ -792,7 +792,10 @@ async def ingress_application_related_fixture(application: Application, external
         "traefik-k8s",
         channel="1.0/stable",
         trust=True,
-        config={"external_hostname": external_hostname},
+        config={
+            "external_hostname": external_hostname,
+            "routing_mode": "subdomain",
+        },
     )
     await application.model.wait_for_idle(
         status="active", apps=[traefik.name], raise_on_error=False, timeout=30 * 60
@@ -805,4 +808,4 @@ async def ingress_application_related_fixture(application: Application, external
         idle_period=30,
         raise_on_error=False,
     )
-    return traefik
+    return application

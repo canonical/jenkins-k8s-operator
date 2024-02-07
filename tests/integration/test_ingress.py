@@ -8,10 +8,12 @@ import requests
 from juju.application import Application
 from juju.model import Model
 
+import jenkins
+
 
 @pytest.mark.abort_on_fail
 async def test_ingress_integration(
-    model: Model, application: Application, ingress_related: Application, external_hostname: str
+    model: Model, ingress_related: Application, external_hostname: str
 ):
     """
     arrange: deploy the Jenkins charm and establish relations via ingress.
@@ -22,10 +24,8 @@ async def test_ingress_integration(
     unit = next(iter(status.applications[ingress_related.name].units))
     address = status["applications"][ingress_related.name]["units"][unit]["address"]
     response = requests.get(
-        f"http://{address}",
-        headers={"Host": f"{model.name}-{application.name}.{external_hostname}"},
+        f"http://{address}:8080{jenkins.LOGIN_PATH}",
+        headers={"Host": f"{model.name}-{ingress_related.name}.{external_hostname}"},
         timeout=5,
     )
-    print(response)
-    print(response.content)
     assert response.status_code == 200
