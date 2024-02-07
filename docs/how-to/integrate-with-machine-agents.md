@@ -41,6 +41,49 @@ The output should look similar to the contents below:
 Application "jenkins-agent" endpoints [agent] available at "admin/tutorial.jenkins-agent"
 ```
 
+### (Optional) configure external URL for agent discovery and configure websocket
+If you are deploying your jenkins-k8s charm on environments other than microk8s,
+there is a high chance that the cross-model relation will not work unless you set the
+`remoting-external-url` configuration value. This is because by default the charm sends its
+kubernetes pod IP through the relation to the agent(s) to be used to initialize connection.
+This IP is usually internal to the Kubernetes cluster and thus not accessible for the machine
+agents on the machine cloud.
+
+There are multiple ways in which this is possible, below is one of the possible methods to
+enable agent discovery using a Kubernetes NodePort service.
+
+Create the kubernetes NodePort service
+```
+$ cat <<'EOF' | kubectl create -f -
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name: jenkins-k8s
+  name: jenkins-k8s-nodeport
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: jenkins-k8s
+  type: NodePort
+status:
+  loadBalancer: {}
+EOF
+```
+
+Configure remoting-external-url with `http://<node-ip>:<node-port>`:
+```
+juju config jenkins-k8s remoting-external-url=http://<node-ip>:<node-port>
+```
+
+Enable websocket, this will allow the agent to use WebSocket rather than JNLP which requires TCP port 50000 to be opened:
+```
+juju config jenkins-k8s remoting-enable-websocket=true
+```
+
 ### Relate Jenkins agents through the offer
 
 Switch back to the k8s model where `jenkins-k8s` charm is deployed. An example of the switch
