@@ -31,7 +31,8 @@ logger = logging.getLogger(__name__)
 
 WEB_PORT = 8080
 WEB_URL = f"http://localhost:{WEB_PORT}"
-LOGIN_URL = f"{WEB_URL}/login?from=%2F"
+LOGIN_PATH = "/login?from=%2F"
+LOGIN_URL = f"{WEB_URL}{LOGIN_PATH}"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"

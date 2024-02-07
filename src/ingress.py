@@ -20,5 +20,4 @@ class Observer(ops.Object):
         """
         super().__init__(charm, "ingress-observer")
         self.charm = charm
-
-        self.ingress = IngressPerAppRequirer(self.charm, port=jenkins.WEB_PORT)
+        self.ingress = IngressPerAppRequirer(self.charm, port=jenkins.WEB_PORT, strip_prefix=True)
