@@ -602,6 +602,7 @@ def test_add_agent_node_fail(
             state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
             container,
             host=mock_ip_addr,
+            enable_websocket=False,
         )
 
 
@@ -620,6 +621,7 @@ def test_add_agent_node_already_exists(
         state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
         container,
         host=mock_ip_addr,
+        enable_websocket=False,
     )
 
 
@@ -638,6 +640,26 @@ def test_add_agent_node(
         state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
         container,
         host=mock_ip_addr,
+        enable_websocket=False,
+    )
+
+
+@pytest.mark.usefixtures("patch_jenkins_node")
+def test_add_agent_node_websocket(
+    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
+):
+    """
+    arrange: given a mocked jenkins client.
+    act: when add_agent is called.
+    assert: no exception is raised.
+    """
+    mock_client.create_node_with_config.return_value = MagicMock(spec=jenkins.Node)
+
+    jenkins.add_agent_node(
+        state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+        container,
+        host=mock_ip_addr,
+        enable_websocket=True,
     )
 
 

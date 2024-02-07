@@ -10,7 +10,16 @@ import typing
 from pathlib import Path
 
 import ops
-from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    Field,
+    HttpUrl,
+    StrictBool,
+    ValidationError,
+    tools,
+    validator,
+)
 
 from timerange import InvalidTimeRangeError, Range
 
@@ -218,6 +227,40 @@ class ProxyConfig(BaseModel):
         )
 
 
+class RemotingConfig(BaseModel):
+    """Configuration for inbound agent connections.
+
+    Attributes:
+        external_url: External URL for inbound agent connections.
+        enable_websocket: Use websocket for inbound agent connections.
+    """
+
+    external_url: typing.Optional[AnyHttpUrl]
+    enable_websocket: StrictBool
+
+    @classmethod
+    def from_config(cls, config: ops.ConfigData) -> "RemotingConfig":
+        """Instantiate RemotingConfig from juju charm config data.
+
+        Args:
+            config: the charm's config data
+
+        Returns:
+            RemotingConfig with validated attributes.
+        """
+        config_remoting_external_url = config.get("remoting-external-url")
+        external_url = (
+            tools.parse_obj_as(AnyHttpUrl, config_remoting_external_url)
+            if config_remoting_external_url
+            else None
+        )
+        enable_websocket = bool(config.get("remoting-enable-websocket"))
+        return cls(
+            external_url=external_url,
+            enable_websocket=enable_websocket,
+        )
+
+
 @dataclasses.dataclass(frozen=True)
 class State:
     """The Jenkins k8s operator charm state.
@@ -229,6 +272,8 @@ class State:
             deprecated agent relation.
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
+        remoting_config: Configuration for inbound agents.
+
     """
 
     restart_time_range: typing.Optional[Range]
@@ -238,6 +283,7 @@ class State:
     ]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
+    remoting_config: RemotingConfig
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -254,17 +300,19 @@ class State:
             CharmRelationDataInvalidError: if invalid relation data was received.
             CharmIllegalNumUnitsError: if more than 1 unit of Jenkins charm is deployed.
         """
-        time_range_str = charm.config.get("restart-time-range")
-        if time_range_str:
-            try:
+        try:
+            remoting_config = RemotingConfig.from_config(config=charm.config)
+            time_range_str = charm.config.get("restart-time-range")
+            if time_range_str:
                 restart_time_range = Range.from_str(time_range_str)
-            except InvalidTimeRangeError as exc:
-                logger.error("Invalid config value for restart-time-range, %s", exc)
-                raise CharmConfigInvalidError(
-                    "Invalid config value for restart-time-range."
-                ) from exc
-        else:
-            restart_time_range = None
+            else:
+                restart_time_range = None
+        except InvalidTimeRangeError as exc:
+            logger.error("Invalid config value for restart-time-range, %s", exc)
+            raise CharmConfigInvalidError("Invalid config value for restart-time range.") from exc
+        except ValidationError as exc:
+            logger.error("Invalid charm configuration, %s", exc)
+            raise CharmConfigInvalidError("Invalid charm configuration.") from exc
 
         try:
             agent_relation_meta_map = _get_agent_meta_map_from_relation(
@@ -299,4 +347,5 @@ class State:
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
             plugins=plugins,
             proxy_config=proxy_config,
+            remoting_config=remoting_config,
         )
