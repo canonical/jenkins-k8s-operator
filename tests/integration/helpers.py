@@ -58,9 +58,25 @@ async def install_plugins(
     client.safe_restart()
     await unit.model.block_until(
         lambda: requests.get(web, timeout=10).status_code == 403,
-        timeout=600,
+        timeout=60 * 10,
         wait_period=10,
     )
+
+
+async def get_model_jenkins_unit_address(model: Model, app_name: str):
+    """Extract the address of a given unit.
+
+    Args:
+        model: Juju model
+        app_name: Juju application name
+
+    Returns:
+        the IP address of the Jenkins unit.
+    """
+    status = await model.get_status()
+    unit = list(status.applications[app_name].units)[0]
+    address = status["applications"][app_name]["units"][unit]["address"]
+    return address
 
 
 def gen_test_job_xml(node_label: str):
