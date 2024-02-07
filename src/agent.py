@@ -80,6 +80,7 @@ class Observer(ops.Object):
             event.defer()
             return
 
+        enable_websocket = bool(self.state.remoting_config.enable_websocket)
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
             jenkins.add_agent_node(
@@ -87,14 +88,21 @@ class Observer(ops.Object):
                 container=container,
                 # mypy doesn't understand that host can no longer be None.
                 host=host,
+                enable_websocket=enable_websocket,
             )
             secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
+        configured_remoting_external_url = self.state.remoting_config.external_url
+        jenkins_url = (
+            f"http://{host}:{jenkins.WEB_PORT}"
+            if not configured_remoting_external_url
+            else str(configured_remoting_external_url)
+        )
         event.relation.data[self.model.unit].update(
-            AgentRelationData(url=f"http://{host}:{jenkins.WEB_PORT}", secret=secret)
+            AgentRelationData(url=jenkins_url, secret=secret)
         )
         self.charm.unit.status = ops.ActiveStatus()
 
@@ -124,17 +132,29 @@ class Observer(ops.Object):
             event.defer()
             return
 
+        enable_websocket = bool(self.state.remoting_config.enable_websocket)
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
-            jenkins.add_agent_node(agent_meta=agent_meta, container=container, host=host)
+            jenkins.add_agent_node(
+                agent_meta=agent_meta,
+                container=container,
+                host=host,
+                enable_websocket=enable_websocket,
+            )
             secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
+        configured_remoting_external_url = self.state.remoting_config.external_url
+        jenkins_url = (
+            f"http://{host}:{jenkins.WEB_PORT}"
+            if not configured_remoting_external_url
+            else str(configured_remoting_external_url)
+        )
         event.relation.data[self.model.unit].update(
             {
-                "url": f"http://{host}:{jenkins.WEB_PORT}",
+                "url": jenkins_url,
                 f"{agent_meta.name}_secret": secret,
             }
         )
