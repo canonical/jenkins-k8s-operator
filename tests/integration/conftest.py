@@ -795,7 +795,7 @@ async def ingress_application_related_fixture(application: Application, external
         config={
             "external_hostname": external_hostname,
             "routing_mode": "subdomain",
-            "enable_experimental_forward_auth": True
+            "enable_experimental_forward_auth": True,
         },
     )
     await application.model.wait_for_idle(
