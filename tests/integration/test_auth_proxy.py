@@ -10,6 +10,8 @@ import requests
 from juju.application import Application
 from juju.model import Model
 
+import jenkins
+
 
 @pytest.mark.abort_on_fail
 async def test_auth_proxy_integration_retuns_not_authorized(
@@ -24,7 +26,7 @@ async def test_auth_proxy_integration_retuns_not_authorized(
     unit = next(iter(status.applications[application.name].units))
     address = status["applications"][application.name]["units"][unit]["address"]
     response = requests.get(
-        f"http://{unit.address}:{jenkins.WEB_PORT}",
+        f"http://{address}:{jenkins.WEB_PORT}",
         headers={"Host": f"{model.name}-{application.name}.{external_hostname}"},
         timeout=5,
     )
