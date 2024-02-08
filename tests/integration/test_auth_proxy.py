@@ -30,7 +30,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
         headers={"Host": f"{model.name}-{application.name}.{external_hostname}"},
         timeout=5,
     )
-    assert response.status_code == 401
+    assert response.status_code == 403
 
 
 @pytest.mark.abort_on_fail
