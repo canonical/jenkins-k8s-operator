@@ -864,8 +864,6 @@ async def oathkeeper_application_related_fixture(
     return oathkeeper
 
 
-
-
 @pytest.fixture()
 def external_user_email() -> str:
     """Username for testing proxy authentication."""
