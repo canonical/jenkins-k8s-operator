@@ -827,6 +827,11 @@ async def oathkeeper_application_related_fixture(
         channel="edge",
         trust=True,
     )
+    identity_platform = await application.model.deploy(
+        "identity-platform",
+        channel="edge",
+        trust=True,
+    )
     await application.model.wait_for_idle(
         status="active",
         apps=[oathkeeper.name, self_signed_certificates.name],
@@ -855,4 +860,19 @@ async def oathkeeper_application_related_fixture(
         idle_period=30,
         raise_on_error=False,
     )
+    print(identity_platform)
     return oathkeeper
+
+
+
+
+@pytest.fixture()
+def external_user_email() -> str:
+    """Username for testing proxy authentication."""
+    return "admin@example.com"
+
+
+@pytest.fixture()
+def external_user_password() -> str:
+    """Password for testing proxy authentication."""
+    return secrets.token_hex()
