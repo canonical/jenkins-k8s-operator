@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """DEX deployment and utilities for testing."""
@@ -20,7 +19,7 @@ from requests.exceptions import RequestException
 logger = logging.getLogger(__name__)
 
 
-DEX_MANIFESTS = Path(__file__).parent / "dex.yaml"
+DEX_MANIFESTS = Path(__file__).parent / "files" / "dex.yaml"
 
 
 def get_dex_manifest(
