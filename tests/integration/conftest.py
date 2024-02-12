@@ -844,9 +844,7 @@ async def oathkeeper_application_related_fixture(
     await application.model.add_relation(
         f"{ingress_related.name}:receive-ca-cert", "self_signed_certificates"
     )
-    await application.model.add_relation(
-        f"{oathkeeper.name}:kratos-endpoint-info", "kratos"
-    )
+    await application.model.add_relation(f"{oathkeeper.name}:kratos-endpoint-info", "kratos")
     await application.model.wait_for_idle(
         status="active",
         apps=[
