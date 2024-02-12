@@ -829,7 +829,7 @@ async def oathkeeper_application_related_fixture(
     )
     await application.model.wait_for_idle(
         status="active",
-        apps=[oathkeeper.name, identity_platform.name],
+        apps=[oathkeeper.name] + [app.name for app in identity_platform],
         raise_on_error=False,
         timeout=30 * 60,
     )
