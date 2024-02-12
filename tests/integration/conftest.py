@@ -813,9 +813,7 @@ async def ingress_application_related_fixture(application: Application, external
 
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
-async def oathkeeper_application_related_fixture(
-    application: Application, ingress_related: Application
-):
+async def oathkeeper_application_related_fixture(application: Application):
     """The application related to Jenkins via auth_proxy v0 relation."""
     oathkeeper = await application.model.deploy(
         "oathkeeper",
@@ -839,17 +837,16 @@ async def oathkeeper_application_related_fixture(
     )
     print(identity_platform)
     await application.model.add_relation(
-        f"{ingress_related.name}:experimental-forward-auth", oathkeeper.name
+        "traefik-public:experimental-forward-auth", oathkeeper.name
     )
     await application.model.add_relation(
-        f"{ingress_related.name}:receive-ca-cert", "self_signed_certificates"
+        "traefik-public:receive-ca-cert", "self_signed_certificates"
     )
     await application.model.add_relation(f"{oathkeeper.name}:kratos-endpoint-info", "kratos")
     await application.model.wait_for_idle(
         status="active",
         apps=[
             application.name,
-            ingress_related.name,
             oathkeeper.name,
         ]
         + [app.name for app in identity_platform],
