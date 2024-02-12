@@ -814,7 +814,7 @@ async def ingress_application_related_fixture(application: Application, external
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
 async def oathkeeper_application_related_fixture(
-    application: Application
+    application: Application, ingress_related: Application
 ):
     """The application related to Jenkins via auth_proxy v0 relation."""
     self_signed_certificates = await application.model.deploy(
