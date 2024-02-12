@@ -851,12 +851,12 @@ async def oathkeeper_application_related_fixture(
             application.name,
             ingress_related.name,
             oathkeeper.name,
-        ],
+        ]
+        + [app.name for app in identity_platform],
         timeout=20 * 60,
         idle_period=30,
         raise_on_error=False,
     )
-    print(identity_platform)
     return oathkeeper
 
 
