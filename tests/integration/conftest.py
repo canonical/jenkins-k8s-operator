@@ -835,14 +835,14 @@ async def oathkeeper_application_related_fixture(
     )
     await application.model.add_relation(f"{application.name}:auth-proxy", oathkeeper.name)
     await application.model.add_relation(
-        f"{oathkeeper.name}:certificates", self_signed_certificates.name
+        f"{oathkeeper.name}:certificates", "self_signed_certificates"
     )
     print(identity_platform)
     await application.model.add_relation(
         f"{ingress_related.name}:experimental-forward-auth", oathkeeper.name
     )
     await application.model.add_relation(
-        f"{ingress_related.name}:receive-ca-cert", self_signed_certificates.name
+        f"{ingress_related.name}:receive-ca-cert", "self_signed_certificates"
     )
     await application.model.add_relation(
         f"{oathkeeper.name}:kratos-endpoint-info", "kratos"
