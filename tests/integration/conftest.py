@@ -817,11 +817,6 @@ async def oathkeeper_application_related_fixture(
     application: Application, ingress_related: Application
 ):
     """The application related to Jenkins via auth_proxy v0 relation."""
-    self_signed_certificates = await application.model.deploy(
-        "self-signed-certificates",
-        channel="edge",
-        trust=True,
-    )
     oathkeeper = await application.model.deploy(
         "oathkeeper",
         channel="edge",
@@ -834,7 +829,7 @@ async def oathkeeper_application_related_fixture(
     )
     await application.model.wait_for_idle(
         status="active",
-        apps=[oathkeeper.name, self_signed_certificates.name],
+        apps=[oathkeeper.name, identity_platform.name],
         raise_on_error=False,
         timeout=30 * 60,
     )
@@ -849,13 +844,15 @@ async def oathkeeper_application_related_fixture(
     await application.model.add_relation(
         f"{ingress_related.name}:receive-ca-cert", self_signed_certificates.name
     )
+    await application.model.add_relation(
+        f"{oathkeeper.name}:kratos-endpoint-info", "kratos"
+    )
     await application.model.wait_for_idle(
         status="active",
         apps=[
             application.name,
             ingress_related.name,
             oathkeeper.name,
-            self_signed_certificates.name,
         ],
         timeout=20 * 60,
         idle_period=30,
