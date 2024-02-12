@@ -3,13 +3,13 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+import os
 import random
 import secrets
 import string
 import typing
 
 import jenkinsapi.jenkins
-import kubernetes.client
 import kubernetes.config
 import kubernetes.stream
 import pytest
@@ -20,6 +20,8 @@ from juju.client._definitions import FullStatus, UnitStatus
 from juju.model import Controller, Model
 from juju.unit import Unit
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
+from lightkube import Client, KubeConfig
+from lightkube.core.exceptions import ApiError
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
@@ -27,8 +29,11 @@ import jenkins
 import state
 
 from .constants import ALLOWED_PLUGINS
+from .dex import apply_dex_resources, create_dex_resources, get_dex_manifest, get_dex_service_url
 from .helpers import get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
+
+KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
 
 
 @pytest.fixture(scope="module", name="model")
@@ -843,6 +848,15 @@ async def oathkeeper_application_related_fixture(application: Application):
         "traefik-public:receive-ca-cert", "self_signed_certificates"
     )
     await application.model.add_relation(f"{oathkeeper.name}:kratos-endpoint-info", "kratos")
+    await application.model.applications["kratos-external-idp-integrator"].set_config(
+        {
+            "client_id": "client_id",
+            "client_secret": "client_secret",
+            "provider": "generic",
+            "issuer_url": "https://path/to/dex",
+            "scope": "profile email",
+        }
+    )
     await application.model.wait_for_idle(
         status="active",
         apps=[
@@ -855,6 +869,39 @@ async def oathkeeper_application_related_fixture(application: Application):
         raise_on_error=False,
     )
     return oathkeeper
+
+
+@pytest.fixture(scope="session", name="client")
+def client_fixture() -> Client:
+    """k8s client."""
+    return Client(config=KubeConfig.from_file(KUBECONFIG), field_manager="dex-test")
+
+
+@pytest.fixture(scope="module")
+def ext_idp_service(ops_test: OpsTest, client: Client) -> typing.Generator[str, None, None]:
+    """Deploy a DEX service on top of k8s for authentication."""
+    # Use ops-lib-manifests?
+    try:
+        create_dex_resources(client)
+
+        # We need to set the dex issuer_url to be the IP that was assigned to
+        # the dex service by metallb. We can't know that before hand, so we
+        # reapply the dex manifests.
+        apply_dex_resources(client)
+
+        yield get_dex_service_url(client)
+    finally:
+        if not ops_test.keep_model:
+            for obj in get_dex_manifest():
+                try:
+                    # mypy doesn't work well with lightkube
+                    client.delete(
+                        type(obj),
+                        obj.metadata.name,  # type: ignore
+                        namespace=obj.metadata.namespace,  # type: ignore
+                    )
+                except ApiError:
+                    pass
 
 
 @pytest.fixture()
