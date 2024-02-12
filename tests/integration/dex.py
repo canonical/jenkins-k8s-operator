@@ -111,10 +111,10 @@ def wait_until_dex_is_ready(client: Client, issuer_url: Optional[str] = None) ->
 
 def _apply_dex_manifests(
     client: Client,
-    client_id: str = "client_id",
-    client_secret: str = "client_secret",
-    redirect_uri: str = "",
-    issuer_url: Optional[str] = None,
+    client_id: str,
+    client_secret: str,
+    redirect_uri: str,
+    issuer_url: Optional[str],
 ) -> None:
     """Apply the DEX manifest definitions.
 
@@ -139,7 +139,7 @@ def _apply_dex_manifests(
 def create_dex_resources(
     client: Client,
     client_id: str = "client_id",
-    client_secret: str = "client_secret",
+    client_secret: str = "client_secret",  # nosec
     redirect_uri: str = "",
     issuer_url: Optional[str] = None,
 ):
@@ -167,7 +167,7 @@ def create_dex_resources(
 def apply_dex_resources(
     client: Client,
     client_id: str = "client_id",
-    client_secret: str = "client_secret",
+    client_secret: str = "client_secret",  # nosec
     redirect_uri: str = "",
     issuer_url: Optional[str] = None,
 ) -> None:
