@@ -53,17 +53,20 @@ async def test_auth_proxy_integration_authorized(
 ) -> None:
     """
     arrange: Deploy jenkins, the authentication bundle, DEX and configure hydra.
-    act:
-    assert:
+    act: log into via DEX
+    assert: the browser is redirected to the Jenkins URL with response code 200
     """
     redirect_uri = f"https://{reverse_proxy_address}/{application.model.name}-{application.name}/"
-    app = application.model.applications["hydra"]
-    action = await app.units[0].run_action(
-        "create-oauth-client",
-        **{
-            "redirect-uris": [redirect_uri],
-            "grant-types": ["authorization_code"],
-        },
+    action = (
+        await application.model.applications["hydra"]
+        .units[0]
+        .run_action(
+            "create-oauth-client",
+            **{
+                "redirect-uris": [redirect_uri],
+                "grant-types": ["authorization_code"],
+            },
+        )
     )
     result = (await action.wait()).results
 
@@ -100,4 +103,5 @@ async def test_auth_proxy_integration_authorized(
     await page.get_by_placeholder("password").fill(external_user_password)
     await page.get_by_role("button", name="Login").click()
 
-    await page.wait_for_url(redirect_uri + "?*")
+    async with page.expect_response(redirect_uri + "?*") as response_info:
+        assert (await response_info.value).ok
