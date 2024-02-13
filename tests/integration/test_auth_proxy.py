@@ -5,10 +5,16 @@
 
 # pylint: disable=unused-argument
 
+import re
+from secrets import token_urlsafe
+from urllib.parse import urlencode
+
 import pytest
 import requests
 from juju.application import Application
 from juju.model import Model
+from playwright.async_api import expect
+from playwright.async_api._generated import Page
 
 import jenkins
 
@@ -30,27 +36,68 @@ async def test_auth_proxy_integration_returns_not_authorized(
         headers={"Host": f"{model.name}-{application.name}.{external_hostname}"},
         timeout=5,
     )
+
     assert response.status_code == 403
 
 
+# pylint: disable=too-many-arguments
 @pytest.mark.abort_on_fail
 async def test_auth_proxy_integration_authorized(
-    model: Model, application: Application, oathkeeper_related: Application, external_hostname: str
-):
+    ext_idp_service: str,
+    external_user_email: str,
+    external_user_password: str,
+    page: Page,
+    reverse_proxy_address: str,
+    application: Application,
+    oathkeeper_related: Application,
+) -> None:
     """
-    arrange: deploy the Jenkins charm and establish auth_proxy relations.
-    act: send a request to the ingress in /.
-    assert: a 401 is returned.
+    arrange: Deploy jenkins, the authentication bundle, DEX and configure hydra.
+    act:
+    assert:
     """
-    status = await model.get_status(filters=[application.name])
-    unit = next(iter(status.applications[application.name].units))
-    address = status["applications"][application.name]["units"][unit]["address"]
-    response = requests.get(
-        f"http://{address}:{jenkins.WEB_PORT}",
-        headers={
-            "Host": f"{model.name}-{application.name}.{external_hostname}",
-            "X-User": "admin",
+    redirect_uri = f"https://{reverse_proxy_address}/{application.model.name}-{application.name}/"
+    app = application.model.applications["hydra"]
+    action = await app.units[0].run_action(
+        "create-oauth-client",
+        **{
+            "redirect-uris": [redirect_uri],
+            "grant-types": ["authorization_code"],
         },
-        timeout=5,
     )
-    assert response.status_code == 200
+    result = (await action.wait()).results
+
+    hydra_url = f"https://{reverse_proxy_address}/{application.model.name}-hydra/"
+
+    # Go to hydra authorization endpoint
+    params = {
+        "client_id": result["client-id"],
+        "redirect_uri": result["client-secret"],
+        "response_type": "code",
+        "response_mode": "query",
+        "scope": "openid profile email",
+        "state": token_urlsafe(),
+        "nonce": token_urlsafe(),
+    }
+    await page.goto(f"{hydra_url}oauth2/auth?{urlencode(params)}")
+
+    expected_url = (
+        f"https://{reverse_proxy_address}/{application.model.name}"
+        f"-identity-platform-login-ui-operator/ui/login"
+    )
+    await expect(page).to_have_url(re.compile(rf"{expected_url}*"))
+
+    # Choose provider
+    async with page.expect_navigation():
+        await page.get_by_role("button", name="Dex").click()
+
+    await expect(page).to_have_url(re.compile(rf"{ext_idp_service}*"))
+
+    # Login
+    await page.get_by_placeholder("email address").click()
+    await page.get_by_placeholder("email address").fill(external_user_email)
+    await page.get_by_placeholder("password").click()
+    await page.get_by_placeholder("password").fill(external_user_password)
+    await page.get_by_role("button", name="Login").click()
+
+    await page.wait_for_url(redirect_uri + "?*")

@@ -22,6 +22,7 @@ from juju.unit import Unit
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 from lightkube import Client, KubeConfig
 from lightkube.core.exceptions import ApiError
+from playwright.async_api._generated import BrowserContext, Page
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
@@ -903,3 +904,19 @@ def external_user_email() -> str:
 def external_user_password() -> str:
     """Password for testing proxy authentication."""
     return secrets.token_hex()
+
+
+@pytest.fixture()
+async def reverse_proxy_address(model: Model) -> str:
+    """Get the address of the proxied application."""
+    status = await model.get_status()
+    address = status["applications"]["traefik-public"]["public-address"]
+    return address
+
+
+@pytest.fixture
+async def page(context: BrowserContext) -> typing.AsyncGenerator[Page, None]:
+    """Playwright page."""
+    new_page = await context.new_page()
+    yield new_page
+    await new_page.close()
