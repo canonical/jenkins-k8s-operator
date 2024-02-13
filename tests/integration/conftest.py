@@ -830,17 +830,10 @@ async def oathkeeper_application_related_fixture(application: Application):
         channel="edge",
         trust=True,
     )
-    await application.model.wait_for_idle(
-        status="active",
-        apps=[oathkeeper.name] + [app.name for app in identity_platform],
-        raise_on_error=False,
-        timeout=30 * 60,
-    )
     await application.model.add_relation(f"{application.name}:auth-proxy", oathkeeper.name)
     await application.model.add_relation(
         f"{oathkeeper.name}:certificates", "self_signed_certificates"
     )
-    print(identity_platform)
     await application.model.add_relation(
         "traefik-public:experimental-forward-auth", oathkeeper.name
     )
@@ -859,14 +852,10 @@ async def oathkeeper_application_related_fixture(application: Application):
     )
     await application.model.wait_for_idle(
         status="active",
-        apps=[
-            application.name,
-            oathkeeper.name,
-        ]
-        + [app.name for app in identity_platform],
-        timeout=20 * 60,
-        idle_period=30,
+        apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
         raise_on_error=False,
+        timeout=30 * 60,
+        idle_period=5,
     )
     return oathkeeper
 

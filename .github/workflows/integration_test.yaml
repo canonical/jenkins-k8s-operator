@@ -19,3 +19,4 @@ jobs:
       juju-channel: 3.1/stable
       self-hosted-runner: true
       self-hosted-runner-label: "xlarge"
+      microk8s-addons: "dns ingress metallb rbac storage"
