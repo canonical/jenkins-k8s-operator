@@ -11,9 +11,9 @@ from typing import List, Optional
 
 import requests
 from lightkube import Client, codecs
-from lightkube.core.exceptions import ApiError, ObjectDeleted
+from lightkube.core.exceptions import ObjectDeleted
 from lightkube.resources.apps_v1 import Deployment
-from lightkube.resources.core_v1 import Pod, Service
+from lightkube.resources.core_v1 import Pod
 from requests.exceptions import RequestException
 
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ def _wait_until_dex_is_ready(client: Client, issuer_url: Optional[str] = None) -
             pass
     client.wait(Deployment, "dex", namespace="dex", for_conditions=["Available"])
     if not issuer_url:
-        issuer_url = get_dex_service_url(client)
+        issuer_url = get_dex_service_url()
 
     resp = requests.get(join(issuer_url, ".well-known/openid-configuration"), timeout=5)
     if resp.status_code != 200:
@@ -181,10 +181,7 @@ def apply_dex_resources(
         issuer_url: issuer URL.
     """
     if not issuer_url:
-        try:
-            issuer_url = get_dex_service_url(client)
-        except ApiError:
-            logger.info("No service found for dex")
+        issuer_url = get_dex_service_url()
 
     _apply_dex_manifests(
         client,
@@ -201,18 +198,10 @@ def apply_dex_resources(
     wait_until_dex_is_ready(client, issuer_url)
 
 
-def get_dex_service_url(client: Client) -> str:
+def get_dex_service_url() -> str:
     """Get the DEX service URL.
-
-    Args:
-    client: k8s client.
 
     Returns:
         the service URL.
     """
-    service = client.get(Service, "dex", namespace="dex")
-    # mypy doesn't work well with lightkube
-    print(service.status)
-    print(service.status.loadBalancer)
-    print(service.status.loadBalancer.ingress)
-    return f"http://{service.status.loadBalancer.ingress[0].ip}:5556/"  # type: ignore
+    return "http://dex.dex.svc.cluster.local:5556/"
