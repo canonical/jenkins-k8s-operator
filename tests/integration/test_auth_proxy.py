@@ -23,7 +23,6 @@ async def test_auth_proxy_integration_returns_not_authorized(
     model: Model,
     application: Application,
     oathkeeper_related: Application,
-    external_hostname: str,
 ) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
@@ -34,7 +33,6 @@ async def test_auth_proxy_integration_returns_not_authorized(
     address = status["applications"]["traefik-public"]["public-address"]
     response = requests.get(
         f"https://{address}/{application.model.name}-{application.name}/",
-        headers={"Host": f"{external_hostname}"},
         verify=False,
         timeout=5,
     )
