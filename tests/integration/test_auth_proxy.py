@@ -16,24 +16,21 @@ from juju.model import Model
 from playwright.async_api import expect
 from playwright.async_api._generated import Page
 
-import jenkins
-
 
 @pytest.mark.abort_on_fail
 async def test_auth_proxy_integration_returns_not_authorized(
-    model: Model, application: Application, oathkeeper_related: Application, external_hostname: str
-):
+    model: Model,
+    application: Application,
+    oathkeeper_related: Application,
+    reverse_proxy_address: str,
+) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
-    act: send a request to the ingress in /.
+    act: send a request Jenkins.
     assert: a 401 is returned.
     """
-    status = await model.get_status(filters=[application.name])
-    unit = next(iter(status.applications[application.name].units))
-    address = status["applications"][application.name]["units"][unit]["address"]
     response = requests.get(
-        f"http://{address}:{jenkins.WEB_PORT}",
-        headers={"Host": f"{model.name}-{application.name}.{external_hostname}"},
+        f"https://{reverse_proxy_address}/{application.model.name}-{application.name}/",
         timeout=5,
     )
 

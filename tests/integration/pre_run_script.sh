@@ -7,7 +7,7 @@
 # https://github.com/canonical/operator-workflows/blob/main/.github/workflows/integration_test.yaml
 
 
-# The IAM bundle required metallb to be enabled 
+# The IAM bundle requires metallb to be enabled 
 IPADDR=$(ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc')
 microk8s enable "metallb:$IPADDR-$IPADDR"
 
