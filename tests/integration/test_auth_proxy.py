@@ -23,6 +23,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
     model: Model,
     application: Application,
     oathkeeper_related: Application,
+    external_hostname: str,
 ) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.

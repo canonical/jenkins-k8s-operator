@@ -819,7 +819,7 @@ async def ingress_application_related_fixture(application: Application, external
 
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
-async def oathkeeper_application_related_fixture(application: Application):
+async def oathkeeper_application_related_fixture(application: Application, external_hostname: str):
     """The application related to Jenkins via auth_proxy v0 relation."""
     oathkeeper = await application.model.deploy(
         "oathkeeper",
@@ -850,6 +850,11 @@ async def oathkeeper_application_related_fixture(application: Application):
             "provider": "generic",
             "issuer_url": "https://path/to/dex",
             "scope": "profile email",
+        }
+    )
+    await application.model.applications["traefik-public"].set_config(
+        {
+            "external_hostname": external_hostname,
         }
     )
     await application.model.wait_for_idle(
