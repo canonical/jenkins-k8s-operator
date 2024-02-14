@@ -33,6 +33,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
     address = status["applications"]["traefik-public"]["public-address"]
     response = requests.get(
         f"https://{address}/{application.model.name}-{application.name}/",
+        headers={"Host": f"{external_hostname}"},
         verify=False,
         timeout=5,
     )
