@@ -212,7 +212,4 @@ def get_dex_service_url(client: Client) -> str:
     """
     service = client.get(Service, "dex", namespace="dex")
     # mypy doesn't work well with lightkube
-    print(service.status)
-    print(service.status.loadBalancer)
-    print(service.status.loadBalancer.ingress)
     return f"http://{service.status.loadBalancer.ingress[0].ip}:5556/"  # type: ignore
