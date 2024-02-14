@@ -12,8 +12,10 @@ import typing
 import jenkinsapi.jenkins
 import kubernetes.client
 import requests
+from juju.application import Application
 from juju.model import Model
 from juju.unit import Unit
+from pytest_operator.plugin import OpsTest
 
 import jenkins
 
@@ -267,17 +269,21 @@ async def wait_for(
     raise TimeoutError()
 
 
-async def generate_client_from_application(ops_test, jenkins_unit, address) -> UnitWebClient:
-    """Generate a Jenkins client directly from the Juju unit, without fixtures.
+async def generate_client_from_application(
+    ops_test: OpsTest, jenkins_app: Application
+) -> UnitWebClient:
+    """Generate a Jenkins client directly from the Juju application, without fixtures.
 
     Args:
         ops_test: OpsTest framework
-        jenkins_unit: Juju Jenkins-k8s unit.
-        address: IP address from the Jenkins unit.
+        jenkins_app: Juju Jenkins-k8s application.
 
     Returns:
         A Jenkins web client.
     """
+    assert ops_test.model
+    address = await get_model_jenkins_unit_address(ops_test.model, jenkins_app.name)
+    jenkins_unit = jenkins_app.units[0]
     # pylint: disable=duplicate-code
     ret, api_token, stderr = await ops_test.juju(
         "ssh",

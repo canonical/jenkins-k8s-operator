@@ -10,48 +10,48 @@ import ops
 import requests
 from juju.application import Application
 from juju.model import Model
-from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
 import jenkins
 
-from .constants import ALL_PLUGINS
 from .helpers import (
+    gen_git_test_job_xml,
     generate_client_from_application,
     get_model_jenkins_unit_address,
-    install_plugins,
 )
 
 LOGGER = logging.getLogger(__name__)
 JENKINS_APP_NAME = "jenkins-k8s-upgrade"
+JOB_NAME = "test_job"
 
 
-async def test_jenkins_deploy_with_plugins(ops_test: OpsTest, model: Model):
+async def test_jenkins_deploy_with_job(ops_test: OpsTest, model: Model):
     """
     arrange: given a juju model.
-    act: deploy Jenkins, instantiate the Jenkins client and install the plugins.
+
+    act: deploy Jenkins, instantiate the Jenkins client and define a job.
+
     assert: the deployment has no errors.
     """
     application: Application = await model.deploy(
         "jenkins-k8s",
         application_name=JENKINS_APP_NAME,
-        channel="edge",
-        config={"allowed-plugins": ",".join(ALL_PLUGINS)},
+        channel="stable",
     )
     await model.wait_for_idle(status="active", timeout=30 * 60)
-    address = await get_model_jenkins_unit_address(model, JENKINS_APP_NAME)
-    jenkins_unit = application.units[0]
-    unit_web_client = await generate_client_from_application(ops_test, jenkins_unit, address)
-    await install_plugins(unit_web_client, ALL_PLUGINS)
+    unit_web_client = await generate_client_from_application(ops_test, application)
+    unit_web_client.client.create_job(JOB_NAME, gen_git_test_job_xml("k8s"))
 
 
-async def test_jenkins_upgrade_check_plugins(
+async def test_jenkins_upgrade_check_job(
     ops_test: OpsTest, jenkins_image: str, model: Model, charm: ops.CharmBase
 ):
     """
-    arrange: given charm has been built, deployed and plugins have been installed.
-    act: get Jenkins' version, upgrade the charm and if the versions differ, check plugins.
-    assert: all the installed plugins are up and running.
+    arrange: given charm has been built, deployed and a job has been defined.
+
+    act: get Jenkins' version and upgrade the charm.
+
+    assert: if Jenkins versions differ, the job persists.
     """
     application = model.applications[JENKINS_APP_NAME]
     address = await get_model_jenkins_unit_address(model, JENKINS_APP_NAME)
@@ -62,9 +62,6 @@ async def test_jenkins_upgrade_check_plugins(
     address = await get_model_jenkins_unit_address(model, JENKINS_APP_NAME)
     response = requests.get(f"http://{address}:{jenkins.WEB_PORT}", timeout=60)
     if old_version != response.headers["X-Jenkins"]:
-        jenkins_unit: Unit = application.units[0]
-        unit_web_client = await generate_client_from_application(ops_test, jenkins_unit, address)
-        troubled_plugins = [
-            plugin for plugin in ALL_PLUGINS if not unit_web_client.client.has_plugin(plugin)
-        ]
-        assert troubled_plugins == [], f"The following plugins have trouble: {troubled_plugins}"
+        unit_web_client = await generate_client_from_application(ops_test, application)
+        job = unit_web_client.client.get_job(JOB_NAME)
+        assert job.name == JOB_NAME
