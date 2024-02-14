@@ -18,19 +18,21 @@ from playwright.async_api._generated import Page
 
 
 @pytest.mark.abort_on_fail
+@pytest.mark.asyncio
 async def test_auth_proxy_integration_returns_not_authorized(
     model: Model,
     application: Application,
     oathkeeper_related: Application,
-    reverse_proxy_address: str,
 ) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
     act: send a request Jenkins.
     assert: a 401 is returned.
     """
+    status = await model.get_status()
+    address = status["applications"]["traefik-public"]["public-address"]
     response = requests.get(
-        f"https://{reverse_proxy_address}/{application.model.name}-{application.name}/",
+        f"https://{address}/{application.model.name}-{application.name}/",
         timeout=5,
     )
 
@@ -39,12 +41,12 @@ async def test_auth_proxy_integration_returns_not_authorized(
 
 # pylint: disable=too-many-arguments
 @pytest.mark.abort_on_fail
+@pytest.mark.asyncio
 async def test_auth_proxy_integration_authorized(
     ext_idp_service: str,
     external_user_email: str,
     external_user_password: str,
     page: Page,
-    reverse_proxy_address: str,
     application: Application,
     oathkeeper_related: Application,
 ) -> None:
@@ -53,7 +55,9 @@ async def test_auth_proxy_integration_authorized(
     act: log into via DEX
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
-    redirect_uri = f"https://{reverse_proxy_address}/{application.model.name}-{application.name}/"
+    status = await application.model.get_status()
+    address = status["applications"]["traefik-public"]["public-address"]
+    redirect_uri = f"https://{address}/{application.model.name}-{application.name}/"
     action = (
         await application.model.applications["hydra"]
         .units[0]
@@ -67,7 +71,7 @@ async def test_auth_proxy_integration_authorized(
     )
     result = (await action.wait()).results
 
-    hydra_url = f"https://{reverse_proxy_address}/{application.model.name}-hydra/"
+    hydra_url = f"https://{address}/{application.model.name}-hydra/"
 
     # Go to hydra authorization endpoint
     params = {
@@ -82,7 +86,7 @@ async def test_auth_proxy_integration_authorized(
     await page.goto(f"{hydra_url}oauth2/auth?{urlencode(params)}")
 
     expected_url = (
-        f"https://{reverse_proxy_address}/{application.model.name}"
+        f"https://{address}/{application.model.name}"
         f"-identity-platform-login-ui-operator/ui/login"
     )
     await expect(page).to_have_url(re.compile(rf"{expected_url}*"))

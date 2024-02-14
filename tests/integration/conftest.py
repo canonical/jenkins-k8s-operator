@@ -907,14 +907,6 @@ def external_user_password() -> str:
     return secrets.token_hex()
 
 
-@pytest.fixture()
-async def reverse_proxy_address(model: Model) -> str:
-    """Get the address of the proxied application."""
-    status = await model.get_status()
-    address = status["applications"]["traefik-public"]["public-address"]
-    return address
-
-
 @pytest.fixture
 async def page(context: BrowserContext) -> typing.AsyncGenerator[Page, None]:
     """Playwright page."""
