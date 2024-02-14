@@ -22,5 +22,5 @@ echo "Switching to testing model"
 TESTING_MODEL="$(juju switch)"
 juju models
 juju controllers
-echo $TESTING_MODEL
+echo "$TESTING_MODEL"
 sg snap_microk8s -c "juju switch $TESTING_MODEL"
