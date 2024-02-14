@@ -852,11 +852,6 @@ async def oathkeeper_application_related_fixture(application: Application, exter
             "scope": "profile email",
         }
     )
-    await application.model.applications["traefik-public"].set_config(
-        {
-            "external_hostname": external_hostname,
-        }
-    )
     await application.model.wait_for_idle(
         status="active",
         apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
