@@ -848,7 +848,7 @@ async def oathkeeper_application_related_fixture(application: Application):
             "client_id": "client_id",
             "client_secret": "client_secret",
             "provider": "generic",
-            "issuer_url": get_dex_service_url(),
+            "issuer_url": "https://path/to/dex",
             "scope": "profile email",
         }
     )
@@ -880,7 +880,7 @@ def ext_idp_service(ops_test: OpsTest, client: Client) -> typing.Generator[str, 
         # reapply the dex manifests.
         apply_dex_resources(client)
 
-        yield get_dex_service_url()
+        yield get_dex_service_url(client)
     finally:
         if not ops_test.keep_model:
             for obj in get_dex_manifest():

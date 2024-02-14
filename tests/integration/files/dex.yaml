@@ -56,7 +56,7 @@ metadata:
   namespace: dex
 data:
   config.yaml: |
-    issuer: {{ d("http://dex.dex.svc.cluster.local:5556", true) }}
+    issuer: {{ issuer_url | d("http://dex.dex.svc.cluster.local:5556", true) }}
     storage:
       type: kubernetes
       config:
