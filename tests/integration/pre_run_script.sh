@@ -18,6 +18,6 @@ echo "bootstrapping lxd juju controller"
 sg snap_microk8s -c "microk8s status --wait-ready"
 sg snap_microk8s -c "juju bootstrap localhost localhost"
 
-juju controllers --format json
+TESTING_CONTROLLER="$(juju controllers --format json | jq '.controllers | with_entries(select(.key | endswith("microk8s"))) | to_entries[0] | .key')"
 echo "Switching to testing model"
-sg snap_microk8s -c "juju switch testing"
+sg snap_microk8s -c "juju switch $TESTING_CONTROLLER"
