@@ -18,5 +18,6 @@ echo "bootstrapping lxd juju controller"
 sg snap_microk8s -c "microk8s status --wait-ready"
 sg snap_microk8s -c "juju bootstrap localhost localhost"
 
+juju controllers
 echo "Switching to testing model"
 sg snap_microk8s -c "juju switch microk8s/localhost"
