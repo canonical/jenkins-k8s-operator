@@ -80,7 +80,6 @@ async def application_fixture(
 ) -> AsyncGenerator[Application, None]:
     """Deploy the charm."""
     resources = {"jenkins-image": jenkins_image}
-
     # Deploy the charm and wait for active/idle status
     application = await model.deploy(charm, resources=resources, series="jammy")
     await model.wait_for_idle(
@@ -173,8 +172,7 @@ def app_suffix_fixture():
     """Get random 4 char length application suffix."""
     # secrets random hex cannot be used because it has chances to generate numeric only suffix
     # which will return "<application-name> is not a valid application tag"
-    app_suffix = "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
-    return app_suffix
+    return "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agents")
@@ -189,9 +187,7 @@ async def jenkins_k8s_agents_fixture(
         application_name=f"jenkins-agentk8s-{app_suffix}",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
-
     yield agent_app
-
     await model.remove_application(agent_app.name, block_until_done=True)
 
 
@@ -207,7 +203,6 @@ async def k8s_agent_related_app_fixture(
     await application.model.wait_for_idle(
         apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
     )
-
     yield application
 
 
@@ -223,7 +218,6 @@ async def extra_jenkins_k8s_agents_fixture(
         application_name="jenkins-agentk8s-extra",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
-
     yield agent_app
 
 
@@ -237,7 +231,6 @@ async def k8s_deprecated_agent_related_app_fixture(
     await application.model.wait_for_idle(
         apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
     )
-
     yield application
 
 
@@ -246,9 +239,7 @@ async def machine_controller_fixture() -> AsyncGenerator[Controller, None]:
     """The lxd controller."""
     controller = Controller()
     await controller.connect_controller("localhost")
-
     yield controller
-
     await controller.disconnect()
 
 
@@ -260,9 +251,7 @@ async def machine_model_fixture(
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
     model = await machine_controller.add_model(machine_model_name)
     await model.connect(f"localhost:admin/{model.name}")
-
     yield model
-
     await model.disconnect()
 
 
@@ -284,7 +273,6 @@ async def jenkins_machine_agents_fixture(
     await machine_model.wait_for_idle(
         apps=[app.name], status="blocked", idle_period=30, timeout=1200, check_freq=5
     )
-
     yield app
 
 
@@ -307,7 +295,6 @@ async def machine_agent_related_app_fixture(
         apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5
     )
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
-
     yield application
 
 
@@ -325,7 +312,6 @@ async def machine_deprecated_agent_related_app_fixture(
     )
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
-
     yield application
 
 
@@ -339,9 +325,7 @@ def freeze_time_fixture() -> str:
 async def app_with_restart_time_range_fixture(application: Application):
     """Application with restart-time-range configured."""
     await application.set_config({"restart-time-range": "03-05"})
-
     yield application
-
     await application.reset_config(["restart-time-range"])
 
 
@@ -877,12 +861,10 @@ def ext_idp_service(ops_test: OpsTest, client: Client) -> Generator[str, None, N
     # Use ops-lib-manifests?
     try:
         create_dex_resources(client)
-
         # We need to set the dex issuer_url to be the IP that was assigned to
         # the dex service by metallb. We can't know that before hand, so we
         # reapply the dex manifests.
         apply_dex_resources(client)
-
         yield get_dex_service_url(client)
     finally:
         if not ops_test.keep_model:
@@ -912,8 +894,8 @@ def external_user_password() -> str:
 
 # The playwright fixtures are taken from:
 # https://github.com/microsoft/playwright-python/blob/main/tests/async/conftest.py
-@pytest.fixture(scope="module")
-def launch_arguments(pytestconfig: Any) -> Dict[str, Any]:
+@pytest.fixture(scope="module", name="launch_arguments")
+def launch_arguments_fixture(pytestconfig: Any) -> Dict[str, Any]:
     """Launch arguments for playwright."""
     return {
         "headless": not pytestconfig.getoption("--headed") and not os.getenv("HEADFUL"),
@@ -928,8 +910,8 @@ async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
         yield playwright_object
 
 
-@pytest.fixture(scope="module")
-def browser_type(playwright: AsyncPlaywright, browser_name: str) -> BrowserType:
+@pytest.fixture(scope="module", name="browser_type")
+def browser_type_fixture(playwright: AsyncPlaywright, browser_name: str) -> BrowserType:
     """Browser type for playwright."""
     if browser_name == "firefox":
         return playwright.firefox
