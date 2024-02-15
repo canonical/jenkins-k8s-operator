@@ -7,7 +7,7 @@ import os
 import random
 import secrets
 import string
-import typing
+from typing import Any, AsyncGenerator, Callable, Coroutine, Dict, Generator, Iterable
 
 import jenkinsapi.jenkins
 import kubernetes.config
@@ -22,7 +22,9 @@ from juju.unit import Unit
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 from lightkube import Client, KubeConfig
 from lightkube.core.exceptions import ApiError
-from playwright.async_api._generated import BrowserContext, Page
+from playwright.async_api import async_playwright
+from playwright.async_api._generated import Browser, BrowserContext, BrowserType, Page
+from playwright.async_api._generated import Playwright as AsyncPlaywright
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
@@ -75,7 +77,7 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
 @pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
     ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """Deploy the charm."""
     resources = {"jenkins-image": jenkins_image}
 
@@ -178,7 +180,7 @@ def app_suffix_fixture():
 @pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agents")
 async def jenkins_k8s_agents_fixture(
     model: Model, app_suffix: str
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
@@ -212,7 +214,7 @@ async def k8s_agent_related_app_fixture(
 @pytest_asyncio.fixture(scope="function", name="extra_jenkins_k8s_agents")
 async def extra_jenkins_k8s_agents_fixture(
     model: Model,
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
@@ -240,7 +242,7 @@ async def k8s_deprecated_agent_related_app_fixture(
 
 
 @pytest_asyncio.fixture(scope="module", name="machine_controller")
-async def machine_controller_fixture() -> typing.AsyncGenerator[Controller, None]:
+async def machine_controller_fixture() -> AsyncGenerator[Controller, None]:
     """The lxd controller."""
     controller = Controller()
     await controller.connect_controller("localhost")
@@ -253,7 +255,7 @@ async def machine_controller_fixture() -> typing.AsyncGenerator[Controller, None
 @pytest_asyncio.fixture(scope="module", name="machine_model")
 async def machine_model_fixture(
     machine_controller: Controller,
-) -> typing.AsyncGenerator[Model, None]:
+) -> AsyncGenerator[Model, None]:
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
     model = await machine_controller.add_model(machine_model_name)
@@ -267,7 +269,7 @@ async def machine_model_fixture(
 @pytest_asyncio.fixture(scope="function", name="jenkins_machine_agents")
 async def jenkins_machine_agents_fixture(
     machine_model: Model, num_units: int, app_suffix: str
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """The jenkins machine agent with 3 units to be used for new agent relation."""
     # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
     # stable.
@@ -354,7 +356,7 @@ async def libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit) -> Unit:
 
 
 @pytest.fixture(scope="function", name="libfaketime_env")
-def libfaketime_env_fixture(freeze_time: str) -> typing.Iterable[str]:
+def libfaketime_env_fixture(freeze_time: str) -> Iterable[str]:
     """The environment variables for using libfaketime."""
     return (
         'LD_PRELOAD="/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1"',
@@ -363,7 +365,7 @@ def libfaketime_env_fixture(freeze_time: str) -> typing.Iterable[str]:
 
 
 @pytest.fixture(scope="function", name="update_status_env")
-def update_status_env_fixture(model: Model, unit: Unit) -> typing.Iterable[str]:
+def update_status_env_fixture(model: Model, unit: Unit) -> Iterable[str]:
     """The environment variables for executing Juju hooks."""
     return (
         "JUJU_DISPATCH_PATH=hooks/update-status",
@@ -455,7 +457,7 @@ async def tinyproxy_ip_fixture(
 @pytest_asyncio.fixture(scope="module", name="model_with_proxy")
 async def model_with_proxy_fixture(
     model: Model, tinyproxy_ip: str, tinyproxy_port: int
-) -> typing.AsyncGenerator[Model, None]:
+) -> AsyncGenerator[Model, None]:
     """Model with proxy configuration values."""
     tinyproxy_url = f"http://{tinyproxy_ip}:{tinyproxy_port}"
     await model.set_config({"juju-http-proxy": tinyproxy_url, "juju-https-proxy": tinyproxy_url})
@@ -468,7 +470,7 @@ async def model_with_proxy_fixture(
 @pytest_asyncio.fixture(scope="module", name="jenkins_with_proxy")
 async def jenkins_with_proxy_fixture(
     model_with_proxy: Model, charm: str, ops_test: OpsTest, jenkins_image: str
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """Jenkins server charm deployed under model with proxy configuration."""
     resources = {"jenkins-image": jenkins_image}
 
@@ -535,7 +537,7 @@ async def jenkins_with_proxy_client_fixture(
 @pytest_asyncio.fixture(scope="function", name="app_with_allowed_plugins")
 async def app_with_allowed_plugins_fixture(
     application: Application,
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """Jenkins charm with plugins configured."""
     await application.set_config({"allowed-plugins": ",".join(ALLOWED_PLUGINS)})
 
@@ -870,7 +872,7 @@ def client_fixture() -> Client:
 
 
 @pytest.fixture(scope="module")
-def ext_idp_service(ops_test: OpsTest, client: Client) -> typing.Generator[str, None, None]:
+def ext_idp_service(ops_test: OpsTest, client: Client) -> Generator[str, None, None]:
     """Deploy a DEX service on top of k8s for authentication."""
     # Use ops-lib-manifests?
     try:
@@ -908,8 +910,71 @@ def external_user_password() -> str:
     return secrets.token_hex()
 
 
+# The playwright fixtures are taken from:
+# https://github.com/microsoft/playwright-python/blob/main/tests/async/conftest.py
+@pytest.fixture(scope="module")
+def launch_arguments(pytestconfig: Any) -> Dict[str, Any]:
+    """Launch arguments for playwright."""
+    return {
+        "headless": not pytestconfig.getoption("--headed") and not os.getenv("HEADFUL"),
+        "channel": pytestconfig.getoption("--browser-channel"),
+    }
+
+
+@pytest.fixture(scope="module", name="playwright")
+async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
+    """Playwright object."""
+    async with async_playwright() as playwright_object:
+        yield playwright_object
+
+
+@pytest.fixture(scope="module")
+def browser_type(playwright: AsyncPlaywright, browser_name: str) -> BrowserType:
+    """Browser type for playwright."""
+    if browser_name == "firefox":
+        return playwright.firefox
+    if browser_name == "webkit":
+        return playwright.webkit
+    return playwright.chromium
+
+
+@pytest.fixture(name="context_factory")
+async def context_factory_fixture(
+    browser: Browser,
+) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, BrowserContext]], None]:
+    """Playwright context factory."""
+    contexts = []
+
+    async def launch(**kwargs: Any) -> BrowserContext:
+        """Launch browser.
+
+        Args:
+            kwargs: kwargs.
+
+        Returns:
+            the browser context.
+        """
+        context = await browser.new_context(**kwargs)
+        contexts.append(context)
+        return context
+
+    yield launch
+    for context in contexts:
+        await context.close()
+
+
+@pytest.fixture(name="context")
+async def context_fixture(
+    context_factory: Callable[..., Coroutine[Any, Any, BrowserContext]]
+) -> AsyncGenerator[BrowserContext, None]:
+    """Playwright context."""
+    context = await context_factory(ignore_https_errors=True)
+    yield context
+    await context.close()
+
+
 @pytest.fixture
-async def page(context: BrowserContext) -> typing.AsyncGenerator[Page, None]:
+async def page(context: BrowserContext) -> AsyncGenerator[Page, None]:
     """Playwright page."""
     new_page = await context.new_page()
     yield new_page
