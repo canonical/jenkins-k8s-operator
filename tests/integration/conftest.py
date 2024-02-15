@@ -832,7 +832,6 @@ async def oathkeeper_application_related_fixture(application: Application):
         trust=True,
     )
     await application.model.add_relation(f"{application.name}:auth-proxy", oathkeeper.name)
-    await application.model.add_relation(f"{application.name}:auth-proxy", "traefik-public")
     await application.model.add_relation(f"{application.name}:ingress", "traefik-public")
     print(f"{oathkeeper.name}:certificates")
     await application.model.add_relation(
