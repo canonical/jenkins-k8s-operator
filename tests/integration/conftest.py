@@ -938,6 +938,31 @@ def browser_type(playwright: AsyncPlaywright, browser_name: str) -> BrowserType:
     return playwright.chromium
 
 
+@pytest.fixture(scope="module", name="browser_factory")
+async def browser_factory_fixture(
+    launch_arguments: Dict, browser_type: BrowserType
+) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, Browser]], None]:
+    """Browser factory."""
+    browsers = []
+
+    async def launch(**kwargs: Any) -> Browser:
+        """Launch browser.
+
+        Args:
+            kwargs: kwargs.
+
+        Returns:
+            a browser instance.
+        """
+        browser = await browser_type.launch(**launch_arguments, **kwargs)
+        browsers.append(browser)
+        return browser
+
+    yield launch
+    for browser in browsers:
+        await browser.close()
+
+
 @pytest.fixture(scope="module", name="browser")
 async def browser_fixture(
     browser_factory: Callable[..., Coroutine[Any, Any, Browser]]
