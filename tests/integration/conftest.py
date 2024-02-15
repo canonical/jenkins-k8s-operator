@@ -902,9 +902,9 @@ async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
 
 
 @pytest.fixture(scope="module", name="browser_type")
-def browser_type_fixture(playwright: AsyncPlaywright) -> BrowserType:
+async def browser_type_fixture(playwright: AsyncPlaywright) -> AsyncGenerator[BrowserType, None]:
     """Browser type for playwright."""
-    return playwright.firefox
+    yield playwright.firefox
 
 
 @pytest.fixture(scope="module", name="browser_factory")
