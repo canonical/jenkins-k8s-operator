@@ -819,7 +819,7 @@ async def ingress_application_related_fixture(application: Application, external
 
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
-async def oathkeeper_application_related_fixture(application: Application, external_hostname: str):
+async def oathkeeper_application_related_fixture(application: Application):
     """The application related to Jenkins via auth_proxy v0 relation."""
     oathkeeper = await application.model.deploy(
         "oathkeeper",
