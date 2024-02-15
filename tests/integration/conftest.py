@@ -894,20 +894,20 @@ def external_user_password() -> str:
 
 # The playwright fixtures are taken from:
 # https://github.com/microsoft/playwright-python/blob/main/tests/async/conftest.py
-@pytest.fixture(scope="module", name="playwright")
+@pytest_asyncio.fixture(scope="module", name="playwright")
 async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
     """Playwright object."""
     async with async_playwright() as playwright_object:
         yield playwright_object
 
 
-@pytest.fixture(scope="module", name="browser_type")
+@pytest_asyncio.fixture(scope="module", name="browser_type")
 async def browser_type_fixture(playwright: AsyncPlaywright) -> AsyncGenerator[BrowserType, None]:
     """Browser type for playwright."""
     yield playwright.firefox
 
 
-@pytest.fixture(scope="module", name="browser_factory")
+@pytest_asyncio.fixture(scope="module", name="browser_factory")
 async def browser_factory_fixture(
     browser_type: BrowserType,
 ) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, Browser]], None]:
@@ -932,7 +932,7 @@ async def browser_factory_fixture(
         await browser.close()
 
 
-@pytest.fixture(scope="module", name="browser")
+@pytest_asyncio.fixture(scope="module", name="browser")
 async def browser_fixture(
     browser_factory: Callable[..., Coroutine[Any, Any, Browser]]
 ) -> AsyncGenerator[Browser, None]:
@@ -942,7 +942,7 @@ async def browser_fixture(
     await browser.close()
 
 
-@pytest.fixture(name="context_factory")
+@pytest_asyncio.fixture(name="context_factory")
 async def context_factory_fixture(
     browser: Browser,
 ) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, BrowserContext]], None]:
@@ -967,7 +967,7 @@ async def context_factory_fixture(
         await context.close()
 
 
-@pytest.fixture(name="context")
+@pytest_asyncio.fixture(name="context")
 async def context_fixture(
     context_factory: Callable[..., Coroutine[Any, Any, BrowserContext]]
 ) -> AsyncGenerator[BrowserContext, None]:
@@ -977,7 +977,7 @@ async def context_fixture(
     await context.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def page(context: BrowserContext) -> AsyncGenerator[Page, None]:
     """Playwright page."""
     new_page = await context.new_page()
