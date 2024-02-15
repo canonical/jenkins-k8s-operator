@@ -7,7 +7,7 @@ import os
 import random
 import secrets
 import string
-from typing import Any, AsyncGenerator, Callable, Coroutine, Dict, Generator, Iterable
+from typing import Any, AsyncGenerator, Callable, Coroutine, Generator, Iterable
 
 import jenkinsapi.jenkins
 import kubernetes.config
@@ -894,15 +894,6 @@ def external_user_password() -> str:
 
 # The playwright fixtures are taken from:
 # https://github.com/microsoft/playwright-python/blob/main/tests/async/conftest.py
-@pytest.fixture(scope="module", name="launch_arguments")
-def launch_arguments_fixture(pytestconfig: Any) -> Dict[str, Any]:
-    """Launch arguments for playwright."""
-    return {
-        "headless": not pytestconfig.getoption("--headed") and not os.getenv("HEADFUL"),
-        "channel": pytestconfig.getoption("--browser-channel"),
-    }
-
-
 @pytest.fixture(scope="module", name="playwright")
 async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
     """Playwright object."""
@@ -911,18 +902,14 @@ async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
 
 
 @pytest.fixture(scope="module", name="browser_type")
-def browser_type_fixture(playwright: AsyncPlaywright, browser_name: str) -> BrowserType:
+def browser_type_fixture(playwright: AsyncPlaywright) -> BrowserType:
     """Browser type for playwright."""
-    if browser_name == "firefox":
-        return playwright.firefox
-    if browser_name == "webkit":
-        return playwright.webkit
-    return playwright.chromium
+    return playwright.firefox
 
 
 @pytest.fixture(scope="module", name="browser_factory")
 async def browser_factory_fixture(
-    launch_arguments: Dict, browser_type: BrowserType
+    browser_type: BrowserType,
 ) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, Browser]], None]:
     """Browser factory."""
     browsers = []
@@ -936,7 +923,7 @@ async def browser_factory_fixture(
         Returns:
             a browser instance.
         """
-        browser = await browser_type.launch(**launch_arguments, **kwargs)
+        browser = await browser_type.launch(**kwargs)
         browsers.append(browser)
         return browser
 
