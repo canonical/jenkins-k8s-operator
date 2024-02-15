@@ -31,7 +31,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
     """
     status = await model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
-    response = requests.get(
+    response = requests.get(  # nosec
         f"https://{address}/{application.model.name}-{application.name}/",
         verify=False,
         timeout=5,
