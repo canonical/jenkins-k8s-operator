@@ -39,7 +39,7 @@ async def test_jenkins_deploy_with_job(ops_test: OpsTest, model: Model):
         channel="stable",
     )
     await model.wait_for_idle(status="active", timeout=30 * 60)
-    unit_web_client = await generate_client_from_application(ops_test, application)
+    unit_web_client = await generate_client_from_application(ops_test, model, application)
     unit_web_client.client.create_job(JOB_NAME, gen_git_test_job_xml("k8s"))
 
 
@@ -62,6 +62,6 @@ async def test_jenkins_upgrade_check_job(
     address = await get_model_jenkins_unit_address(model, JENKINS_APP_NAME)
     response = requests.get(f"http://{address}:{jenkins.WEB_PORT}", timeout=60)
     if old_version != response.headers["X-Jenkins"]:
-        unit_web_client = await generate_client_from_application(ops_test, application)
+        unit_web_client = await generate_client_from_application(ops_test, model, application)
         job = unit_web_client.client.get_job(JOB_NAME)
         assert job.name == JOB_NAME
