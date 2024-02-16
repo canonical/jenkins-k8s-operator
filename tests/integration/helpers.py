@@ -276,14 +276,16 @@ async def generate_client_from_application(
 
     Args:
         ops_test: OpsTest framework
+        model: Juju model
         jenkins_app: Juju Jenkins-k8s application.
 
     Returns:
         A Jenkins web client.
     """
-    assert ops_test.model
-    address = await get_model_jenkins_unit_address(ops_test.model, jenkins_app.name)
+    assert model
+    address = await get_model_jenkins_unit_address(model, jenkins_app.name)
     jenkins_unit = jenkins_app.units[0]
+    # pylint: disable=duplicate-code
     ret, api_token, stderr = await ops_test.juju(
         "ssh",
         "--container",
@@ -296,6 +298,7 @@ async def generate_client_from_application(
     jenkins_client = jenkinsapi.jenkins.Jenkins(
         f"http://{address}:{jenkins.WEB_PORT}", "admin", api_token, timeout=60 * 10
     )
+    # pylint: enable=duplicate-code
     unit_web_client = UnitWebClient(
         unit=jenkins_unit, web=f"http://{address}:{jenkins.WEB_PORT}", client=jenkins_client
     )
