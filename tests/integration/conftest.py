@@ -829,7 +829,7 @@ async def oathkeeper_application_related_fixture(application: Application):
     await application.model.add_relation(
         "traefik-public:receive-ca-cert", "self-signed-certificates"
     )
-    await application.model.add_relation(f"{oathkeeper.name}:kratos-endpoint-info", "kratos")
+    await application.model.add_relation(f"{oathkeeper.name}:kratos-info", "kratos")
     await application.model.applications["kratos-external-idp-integrator"].set_config(
         {
             "client_id": "client_id",
