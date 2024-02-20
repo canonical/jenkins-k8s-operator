@@ -7,10 +7,8 @@
 # https://github.com/canonical/operator-workflows/blob/main/.github/workflows/integration_test.yaml
 
 
-# The IAM bundle requires metallb to be enabled 
-IPADDR=$(ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc')
-microk8s enable "metallb:$IPADDR-$IPADDR"
-echo "$IPADDR"
+# The IAM bundle requires metallb to be enabled and the tests require 3 IPs
+microk8s enable "metallb:10.15.119.2-10.15.119.4"
 
 # Jenkins machine agent charm is deployed on lxd and Jenkins-k8s server charm is deployed on
 # microk8s.
