@@ -7,6 +7,8 @@
 import logging
 
 import ops
+import pytest
+import pytest_asyncio
 import requests
 from juju.application import Application
 from juju.model import Model
@@ -16,7 +18,7 @@ import jenkins
 
 from .helpers import (
     gen_git_test_job_xml,
-    generate_client_from_application,
+    generate_unit_web_client_from_application,
     get_model_jenkins_unit_address,
 )
 
@@ -25,7 +27,8 @@ JENKINS_APP_NAME = "jenkins-k8s-upgrade"
 JOB_NAME = "test_job"
 
 
-async def test_jenkins_deploy_with_job(ops_test: OpsTest, model: Model):
+@pytest_asyncio.fixture(scope="module")
+async def jenkins_upgrade_depl(ops_test: OpsTest, model: Model):
     """
     arrange: given a juju model.
 
@@ -39,10 +42,11 @@ async def test_jenkins_deploy_with_job(ops_test: OpsTest, model: Model):
         channel="stable",
     )
     await model.wait_for_idle(status="active", timeout=30 * 60)
-    unit_web_client = await generate_client_from_application(ops_test, model, application)
+    unit_web_client = await generate_unit_web_client_from_application(ops_test, model, application)
     unit_web_client.client.create_job(JOB_NAME, gen_git_test_job_xml("k8s"))
 
 
+@pytest.mark.usefixtures("jenkins_upgrade_depl")
 async def test_jenkins_upgrade_check_job(
     ops_test: OpsTest, jenkins_image: str, model: Model, charm: ops.CharmBase
 ):
@@ -62,6 +66,8 @@ async def test_jenkins_upgrade_check_job(
     address = await get_model_jenkins_unit_address(model, JENKINS_APP_NAME)
     response = requests.get(f"http://{address}:{jenkins.WEB_PORT}", timeout=60)
     if old_version != response.headers["X-Jenkins"]:
-        unit_web_client = await generate_client_from_application(ops_test, model, application)
+        unit_web_client = await generate_unit_web_client_from_application(
+            ops_test, model, application
+        )
         job = unit_web_client.client.get_job(JOB_NAME)
         assert job.name == JOB_NAME

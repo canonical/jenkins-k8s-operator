@@ -269,10 +269,38 @@ async def wait_for(
     raise TimeoutError()
 
 
-async def generate_client_from_application(
+async def generate_jenkins_client_from_application(
+    ops_test: OpsTest, jenkins_app: Application, address: str
+):
+    """Generate a Jenkins client directly from the Juju application.
+
+    Args:
+        ops_test: OpsTest framework
+        jenkins_app: Juju Jenkins-k8s application.
+        address: IP address of the jenkins unit.
+
+    Returns:
+        A Jenkins web client.
+    """
+    jenkins_unit = jenkins_app.units[0]
+    ret, api_token, stderr = await ops_test.juju(
+        "ssh",
+        "--container",
+        "jenkins",
+        jenkins_unit.name,
+        "cat",
+        str(jenkins.API_TOKEN_PATH),
+    )
+    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
+    return jenkinsapi.jenkins.Jenkins(
+        f"http://{address}:{jenkins.WEB_PORT}", "admin", api_token, timeout=60 * 10
+    )
+
+
+async def generate_unit_web_client_from_application(
     ops_test: OpsTest, model: Model, jenkins_app: Application
 ) -> UnitWebClient:
-    """Generate a Jenkins client directly from the Juju application, without fixtures.
+    """Generate a UnitWebClient client directly from the Juju application.
 
     Args:
         ops_test: OpsTest framework
@@ -285,20 +313,7 @@ async def generate_client_from_application(
     assert model
     address = await get_model_jenkins_unit_address(model, jenkins_app.name)
     jenkins_unit = jenkins_app.units[0]
-    # pylint: disable=duplicate-code
-    ret, api_token, stderr = await ops_test.juju(
-        "ssh",
-        "--container",
-        "jenkins",
-        jenkins_unit.name,
-        "cat",
-        str(jenkins.API_TOKEN_PATH),
-    )
-    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
-    jenkins_client = jenkinsapi.jenkins.Jenkins(
-        f"http://{address}:{jenkins.WEB_PORT}", "admin", api_token, timeout=60 * 10
-    )
-    # pylint: enable=duplicate-code
+    jenkins_client = await generate_jenkins_client_from_application(ops_test, jenkins_app, address)
     unit_web_client = UnitWebClient(
         unit=jenkins_unit, web=f"http://{address}:{jenkins.WEB_PORT}", client=jenkins_client
     )
