@@ -186,9 +186,9 @@ def test_get_admin_credentials(
 
 def test__get_api_credentials_error():
     """
-    arrange: given a mocked container that returns the admin api token file content.
+    arrange: set up a container raising an exception.
     act: admin credentials are fetched over pebble.
-    assert: correct admin credentials from the filesystem are returned.
+    assert: a JenkinsBootstrapError is raised..
     """
     mock_container = MagicMock(ops.Container)
     mock_container.pull = MagicMock(
@@ -228,6 +228,25 @@ def test__setup_user_token(
         harness_container.container.pull(jenkins.API_TOKEN_PATH, encoding="utf-8").read()
         == test_api_token
     )
+
+
+def test__setup_user_token_raises_exception(monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given a container raising an exception and a monkeypatched mocked jenkinsapi client.
+    act: when _setup_user_token is called.
+    assert: a JenkinsBootstrapError is raised.
+    """
+    test_api_token = secrets.token_hex(16)
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.generate_new_api_token.return_value = test_api_token
+    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
+    mock_container = MagicMock(ops.Container)
+    mock_container.pull = MagicMock(
+        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
+    )
+
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins._setup_user_token(mock_container)
 
 
 def test_calculate_env():
@@ -300,7 +319,26 @@ def test__unlock_wizard(
     )
 
 
-def test__install_config(harness_container: HarnessWithContainer):
+def test__unlock_wizard_raises_exception(
+    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """
+    arrange: given a container raising an exception and a monkeypatched Jenkins client.
+    act: unlock_jenkins is called.
+    assert: a JenkinsBootstrapError is raised.
+    """
+    monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=403))
+    mock_container = MagicMock(ops.Container)
+    mock_container.push = MagicMock(
+        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
+    )
+
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins._unlock_wizard(mock_container)
+
+
+def test_install_config(harness_container: HarnessWithContainer):
     """
     arrange: given a mocked uninitialized container.
     act: when _install_config is called.
@@ -317,6 +355,21 @@ def test__install_config(harness_container: HarnessWithContainer):
     assert jnlp_match.group(1) == "50000", "jnlp not set as default port."
 
 
+def test_install_config_raises_exception():
+    """
+    arrange: set up a container raising an exception.
+    act: when _install_config is called.
+    assert: a JenkinsBootstrapError is raised.
+    """
+    mock_container = MagicMock(ops.Container)
+    mock_container.push = MagicMock(
+        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
+    )
+
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins._install_configs(mock_container)
+
+
 def test_install_auth_proxy_config(harness_container: HarnessWithContainer):
     """
     arrange: given a mocked uninitialized container.
@@ -330,6 +383,21 @@ def test_install_auth_proxy_config(harness_container: HarnessWithContainer):
     )
 
     assert "ReverseProxySecurityRealm" in config_xml
+
+
+def test_install_auth_proxy_config_raises_exception():
+    """
+    arrange: set up a container raising an exception.
+    act: when install_auth_proxy_config is called.
+    assert: a JenkinsBootstrapError is raised.
+    """
+    mock_container = MagicMock(ops.Container)
+    mock_container.push = MagicMock(
+        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
+    )
+
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins.install_auth_proxy_config(mock_container)
 
 
 @pytest.mark.parametrize(
@@ -400,7 +468,7 @@ def test__install_plugins_fail():
     """
     arrange: given a mocked container with a mocked failing process.
     act: when _install_plugins is called.
-    assert: JenkinsPluginError is raised.
+    assert: JenkinsBootstrapError is raised.
     """
     mock_proc = MagicMock(spec=ExecProcess)
     mock_proc.wait_output = MagicMock(
@@ -409,7 +477,7 @@ def test__install_plugins_fail():
     mock_container = MagicMock(spec=ops.Container)
     mock_container.exec.return_value = mock_proc
 
-    with pytest.raises(jenkins.JenkinsPluginError):
+    with pytest.raises(jenkins.JenkinsBootstrapError):
         jenkins._install_plugins(mock_container)
 
 
@@ -432,13 +500,13 @@ def test__configure_proxy_fail(
     """
     arrange: given a test proxy config and a monkeypatched jenkins client that raises an exception.
     act: when _configure_proxy is called.
-    assert: JenkinsProxyError is raised.
+    assert: JenkinsBootstrapError is raised.
     """
     mock_client.run_groovy_script = MagicMock(
         side_effect=jenkinsapi.custom_exceptions.JenkinsAPIException
     )
 
-    with pytest.raises(jenkins.JenkinsProxyError) as exc:
+    with pytest.raises(jenkins.JenkinsBootstrapError) as exc:
         jenkins._configure_proxy(harness_container.container, proxy_config)
 
     assert exc.value.args[0] == "Proxy configuration failed."
@@ -527,7 +595,7 @@ def test_bootstrap_fail(
     arrange: given mocked container, monkeypatched get_version function and invalid plugins to \
         install.
     act: when bootstrap is called.
-    assert: JenkinsPluginError is raised.
+    assert: JenkinsBootstrapError is raised.
     """
     monkeypatch.setattr(jenkins, "get_version", lambda: jenkins_version)
     monkeypatch.setattr(
@@ -538,7 +606,7 @@ def test_bootstrap_fail(
     monkeypatch.setattr(
         jenkins,
         "_install_plugins",
-        MagicMock(side_effect=jenkins.JenkinsPluginError),
+        MagicMock(side_effect=jenkins.JenkinsBootstrapError),
     )
 
     with pytest.raises(jenkins.JenkinsBootstrapError):

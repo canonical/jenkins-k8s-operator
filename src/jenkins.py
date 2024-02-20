@@ -72,13 +72,13 @@ SYSTEM_PROPERTY_HEADLESS = "java.awt.headless=true"
 # Java system property to load logging configuration from file
 SYSTEM_PROPERTY_LOGGING = f"java.util.logging.config.file={LOGGING_CONFIG_PATH}"
 
+AUTH_PROXY_JENKINS_CONFIG_TEMPLATE = "templates/reverse-proxy-auth-jenkins-config.xml"
+DEFAULT_JENKINS_CONFIG = "templates/jenkins-config.xml"
+JENKINS_LOGGING_CONFIG = "templates/logging.properties"
+
 
 class JenkinsError(Exception):
     """Base exception for Jenkins errors."""
-
-
-class JenkinsProxyError(JenkinsError):
-    """An error occurred configuring Jenkins proxy."""
 
 
 class JenkinsPluginError(JenkinsError):
@@ -91,18 +91,6 @@ class JenkinsBootstrapError(JenkinsError):
 
 class ValidationError(Exception):
     """An unexpected data is encountered."""
-
-
-class JenkinsNetworkError(JenkinsError):
-    """An error occurred communicating with the upstream Jenkins server."""
-
-
-class JenkinsUpdateError(JenkinsError):
-    """An error occurred trying to update Jenkins."""
-
-
-class JenkinsRestartError(JenkinsError):
-    """An error occurred trying to restart Jenkins."""
 
 
 def _wait_for(
@@ -290,35 +278,49 @@ def _unlock_wizard(container: ops.Container) -> None:
 
     Args:
         container: The Jenkins workload container.
+
+    Raises:
+        JenkinsBootstrapError: if the wizard can not be unlocked.
     """
-    version = get_version()
-    container.push(
-        LAST_EXEC_VERSION_PATH,
-        version,
-        encoding="utf-8",
-        make_dirs=True,
-        user=USER,
-        group=GROUP,
-    )
-    container.push(
-        WIZARD_VERSION_PATH,
-        version,
-        encoding="utf-8",
-        make_dirs=True,
-        user=USER,
-        group=GROUP,
-    )
+    try:
+        version = get_version()
+        container.push(
+            LAST_EXEC_VERSION_PATH,
+            version,
+            encoding="utf-8",
+            make_dirs=True,
+            user=USER,
+            group=GROUP,
+        )
+        container.push(
+            WIZARD_VERSION_PATH,
+            version,
+            encoding="utf-8",
+            make_dirs=True,
+            user=USER,
+            group=GROUP,
+        )
+    except (ops.pebble.PathError, JenkinsError) as exc:
+        raise JenkinsBootstrapError("Failed to unlock wizard.") from exc
 
 
-def _install_jenkins_config(container: ops.Container, filename: str) -> None:
+def _install_config(container: ops.Container, filename: str, destination_path: Path) -> None:
     """Install jenkins-config.xml.
 
     Args:
         container: The Jenkins workload container.
         filename: the source file to copy contents from.
+        destination_path: the target path.
+
+    Raises:
+        JenkinsBootstrapError: if the config can not be installed.
+
     """
-    with open(filename, encoding="utf-8") as jenkins_config_file:
-        container.push(CONFIG_FILE_PATH, jenkins_config_file, user=USER, group=GROUP)
+    try:
+        with open(filename, encoding="utf-8") as jenkins_config_file:
+            container.push(destination_path, jenkins_config_file, user=USER, group=GROUP)
+    except ops.pebble.PathError as exc:
+        raise JenkinsBootstrapError("Failed to install configuration.") from exc
 
 
 def _install_configs(container: ops.Container) -> None:
@@ -327,9 +329,8 @@ def _install_configs(container: ops.Container) -> None:
     Args:
         container: The Jenkins workload container.
     """
-    _install_jenkins_config(container, "templates/jenkins-config.xml")
-    with open("templates/logging.properties", encoding="utf-8") as jenkins_logging_config_file:
-        container.push(LOGGING_CONFIG_PATH, jenkins_logging_config_file, user=USER, group=GROUP)
+    _install_config(container, DEFAULT_JENKINS_CONFIG, CONFIG_FILE_PATH)
+    _install_config(container, JENKINS_LOGGING_CONFIG, LOGGING_CONFIG_PATH)
 
 
 def install_auth_proxy_config(container: ops.Container) -> None:
@@ -338,7 +339,7 @@ def install_auth_proxy_config(container: ops.Container) -> None:
     Args:
         container: The Jenkins workload container.
     """
-    _install_jenkins_config(container, "templates/reverse-proxy-auth-jenkins-config.xml")
+    _install_config(container, AUTH_PROXY_JENKINS_CONFIG_TEMPLATE, CONFIG_FILE_PATH)
 
 
 def _setup_user_token(container: ops.Container) -> None:
@@ -346,10 +347,16 @@ def _setup_user_token(container: ops.Container) -> None:
 
     Args:
         container: The Jenkins workload container.
+
+    Raises:
+        JenkinsBootstrapError: if the token can not be setup.
     """
-    client = _get_client(get_admin_credentials(container))
-    token: str = client.generate_new_api_token("juju_api_token")
-    container.push(API_TOKEN_PATH, token, user=USER, group=GROUP)
+    try:
+        client = _get_client(get_admin_credentials(container))
+        token: str = client.generate_new_api_token("juju_api_token")
+        container.push(API_TOKEN_PATH, token, user=USER, group=GROUP)
+    except ops.pebble.PathError as exc:
+        raise JenkinsBootstrapError("Failed to setup user token.") from exc
 
 
 def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
@@ -388,7 +395,7 @@ def _configure_proxy(
         proxy_config: The proxy settings to apply.
 
     Raises:
-        JenkinsProxyError: if an error occurred running proxy configuration script.
+        JenkinsBootstrapError: if an error occurred running proxy configuration script.
     """
     if not proxy_config:
         return
@@ -399,7 +406,7 @@ def _configure_proxy(
         client.run_groovy_script(f"proxy = new ProxyConfiguration({parsed_args})\nproxy.save()")
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to configure proxy, %s", exc)
-        raise JenkinsProxyError("Proxy configuration failed.") from exc
+        raise JenkinsBootstrapError("Proxy configuration failed.") from exc
 
 
 def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
@@ -440,7 +447,7 @@ def _install_plugins(
         proxy_config: The proxy settings to apply.
 
     Raises:
-        JenkinsPluginError: if an error occurred installing the plugin.
+        JenkinsBootstrapError: if an error occurred installing the plugin.
     """
     proxy_args = [] if not proxy_config else _get_java_proxy_args(proxy_config)
     command = [
@@ -467,7 +474,7 @@ def _install_plugins(
         proc.wait_output()
     except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
         logger.error("Failed to install plugins, %s", exc)
-        raise JenkinsPluginError("Failed to install plugins.") from exc
+        raise JenkinsBootstrapError("Failed to install plugins.") from exc
 
 
 def bootstrap(container: ops.Container, proxy_config: state.ProxyConfig | None = None) -> None:
@@ -480,13 +487,13 @@ def bootstrap(container: ops.Container, proxy_config: state.ProxyConfig | None =
     Raises:
         JenkinsBootstrapError: if there was an error installing given plugins or required plugins.
     """
-    _unlock_wizard(container)
-    _install_configs(container)
-    _setup_user_token(container)
     try:
+        _unlock_wizard(container)
+        _install_configs(container)
+        _setup_user_token(container)
         _configure_proxy(container, proxy_config)
         _install_plugins(container, proxy_config)
-    except (JenkinsProxyError, JenkinsPluginError) as exc:
+    except JenkinsBootstrapError as exc:
         raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
 
 
@@ -638,9 +645,7 @@ def _is_shutdown(client: jenkinsapi.jenkins.Jenkins) -> bool:
     except requests.ConnectionError:
         # If jenkins is unavailable to connect, it is shutting down.
         return True
-    if res.status_code == 503:
-        return True
-    return False
+    return res.status_code == 503
 
 
 def _wait_jenkins_job_shutdown(client: jenkinsapi.jenkins.Jenkins) -> None:
@@ -670,9 +675,8 @@ def safe_restart(container: ops.Container) -> None:
     """
     client = _get_client(_get_api_credentials(container))
     try:
-        # There is a bug with wait_for_reboot in the jenkinsapi
+        # Workaround for bug in the jenkinsapi preventing reboot
         # https://github.com/pycontribs/jenkinsapi/issues/844
-        # will resort to custom workaround until the issue is fixed.
         client.safe_restart(wait_for_reboot=False)
         _wait_jenkins_job_shutdown(client)
     except (
@@ -781,7 +785,6 @@ def _build_dependencies_lookup(
         except ValidationError as exc:
             logger.error("Invalid plugin dependency, %s", exc)
             continue
-
     return dependency_lookup
 
 
@@ -834,7 +837,6 @@ def _filter_dependent_plugins(
     dependent_plugins: set[str] = set()
     for _, dependencies in dependency_lookup.items():
         dependent_plugins = dependent_plugins.union(dependencies)
-
     return set(plugins) - dependent_plugins
 
 
@@ -909,10 +911,9 @@ plugins.each {
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to remove the following plugins: %s, %s", plugins_to_remove, exc)
         raise JenkinsPluginError("Failed to remove plugins.") from exc
+
     logger.debug("Removed %s", plugins_to_remove)
-
     top_level_plugins = _filter_dependent_plugins(plugins_to_remove, dependency_lookup)
-
     try:
         safe_restart(container)
         wait_ready()
