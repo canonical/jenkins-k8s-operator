@@ -17,7 +17,7 @@ juju deploy oathkeeper --channel edge --trust
 juju integrate oathkeeper:certificates self-signed-certificates
 ```
 
-To leverage proxy authentication, enable traefiks feature and integrate the traefik charm instante with oathkeeper. As earlier, traefik-public is already deployed as part of the bundle.
+To leverage proxy authentication, enable traefik's `enable_experimental_forward_auth` feature and integrate the traefik charm instance with Oathkeeper. As earlier, traefik-public is already deployed as part of the bundle.
 ```
 juju config traefik-public enable_experimental_forward_auth=True
 juju integrate oathkeeper traefik-public:experimental-forward-auth
