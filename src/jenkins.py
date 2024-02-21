@@ -38,7 +38,7 @@ EXECUTABLES_PATH = Path("/srv/jenkins/")
 PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
 # Path to Jenkins admin API token
 API_TOKEN_PATH = JENKINS_HOME_PATH / "secrets/apiToken"
-JUJU_API_TOKEN = "juju_api_token"
+JUJU_API_TOKEN = "juju_api_token"  # nosec
 # Path to last executed Jenkins version file, required to override wizard installation
 LAST_EXEC_VERSION_PATH = JENKINS_HOME_PATH / Path("jenkins.install.InstallUtil.lastExecVersion")
 # Path to Jenkins version file, required to override wizard installation
