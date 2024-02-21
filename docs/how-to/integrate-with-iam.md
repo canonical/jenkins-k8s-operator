@@ -1,6 +1,6 @@
 # How to integrate with IAM
 
-This charm supports integration with the [IAM bundle](https://charmhub.io/iam) via [Oathkeeper](https://charmhub.io/oathkeeper), adding an authentication layer that will front the Jenkins applications. When enabled, the [reverse-proxy-auth-plugin](https://plugins.jenkins.io/reverse-proxy-auth-plugin/) will be installed and configured, blocking unaothorised access to Jenkins.
+This charm supports integration with the [IAM bundle](https://charmhub.io/iam) via [Oathkeeper](https://charmhub.io/oathkeeper), adding an authentication layer that will front the Jenkins applications. When enabled, the [reverse-proxy-auth-plugin](https://plugins.jenkins.io/reverse-proxy-auth-plugin/) will be installed and configured, blocking unauthorised access to Jenkins.
 
 The steps to enable this mechanism are described below.
 
