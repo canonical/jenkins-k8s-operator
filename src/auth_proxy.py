@@ -39,6 +39,9 @@ class Observer(ops.Object):
         self.charm.framework.observe(
             self.charm.on["auth-proxy"].relation_joined, self._auth_proxy_relation_joined
         )
+        self.charm.framework.observe(
+            self.charm.on["auth-proxy"].relation_departed, self._auth_proxy_relation_departed
+        )
 
     def _auth_proxy_relation_joined(self, event: ops.RelationCreatedEvent) -> None:
         """Configure the auth proxy.
@@ -59,3 +62,17 @@ class Observer(ops.Object):
         )
         self.auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
         jenkins.install_auth_proxy_config(container)
+
+    def _auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+        """Unconfigure the auth proxy.
+
+        Args:
+            event: the event triggering the handler.
+        """
+        container = self.charm.unit.get_container(state.JENKINS_SERVICE_NAME)
+        if not jenkins.is_storage_ready(container):
+            logger.warning("Service not yet ready. Deferring.")
+            event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
+            return
+
+        jenkins.install_default_config(container)

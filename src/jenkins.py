@@ -329,8 +329,17 @@ def _install_configs(container: ops.Container) -> None:
     Args:
         container: The Jenkins workload container.
     """
-    _install_config(container, DEFAULT_JENKINS_CONFIG, CONFIG_FILE_PATH)
+    install_default_config(container)
     _install_config(container, JENKINS_LOGGING_CONFIG, LOGGING_CONFIG_PATH)
+
+
+def install_default_config(container: ops.Container) -> None:
+    """Install default jenkins-config.xml.
+
+    Args:
+        container: The Jenkins workload container.
+    """
+    _install_config(container, DEFAULT_JENKINS_CONFIG, CONFIG_FILE_PATH)
 
 
 def install_auth_proxy_config(container: ops.Container) -> None:
