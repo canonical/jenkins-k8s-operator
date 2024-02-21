@@ -317,8 +317,8 @@ def _install_config(container: ops.Container, filename: str, destination_path: P
 
     """
     try:
-        with open(filename, encoding="utf-8") as jenkins_config_file:
-            container.push(destination_path, jenkins_config_file, user=USER, group=GROUP)
+        jenkins_config_file = Path(filename).read_text(encoding="utf-8")
+        container.push(destination_path, jenkins_config_file, user=USER, group=GROUP)
     except ops.pebble.PathError as exc:
         raise JenkinsBootstrapError("Failed to install configuration.") from exc
 
