@@ -27,6 +27,7 @@ from state import (
 if typing.TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
 
+AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.actions_observer = actions.Observer(self, self.state)
         self.agent_observer = agent.Observer(self, self.state)
         self.cos_observer = cos.Observer(self)
-        self.ingress_observer = ingress.Observer(self)
+        self.ingress_observer = ingress.Observer(self, AGENT_DISCOVERY_INGRESS_RELATION_NAME)
+        # Ingress dedicated to agent discovery
+        self.agent_discovery_ingress_observer = ingress.Observer(self)
+
         self.framework.observe(
             self.on.jenkins_home_storage_attached, self._on_jenkins_home_storage_attached
         )

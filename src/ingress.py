@@ -3,6 +3,8 @@
 
 """Observer module for Jenkins to ingress integration."""
 
+import typing
+
 import ops
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
@@ -12,7 +14,7 @@ import jenkins
 class Observer(ops.Object):
     """The Jenkins Ingress integration observer."""
 
-    def __init__(self, charm: ops.CharmBase):
+    def __init__(self, charm: ops.CharmBase, relation_name: typing.Optional[str] = None):
         """Initialize the observer and register event handlers.
 
         Args:
@@ -20,4 +22,12 @@ class Observer(ops.Object):
         """
         super().__init__(charm, "ingress-observer")
         self.charm = charm
-        self.ingress = IngressPerAppRequirer(self.charm, port=jenkins.WEB_PORT, strip_prefix=True)
+        requirer_args = {}
+        if relation_name:
+            requirer_args["relation_name"] = relation_name
+        self.ingress = IngressPerAppRequirer(
+            self.charm,
+            *requirer_args,
+            port=jenkins.WEB_PORT,
+            strip_prefix=True,
+        )
