@@ -79,12 +79,15 @@ async def application_fixture(
     ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
 ) -> AsyncGenerator[Application, None]:
     """Deploy the charm."""
-    del os.environ["HTTP_PROXY"]
-    del os.environ["HTTPS_PROXY"]
-    del os.environ["NO_PROXY"]
-    del os.environ["http_proxy"]
-    del os.environ["https_proxy"]
-    del os.environ["no_proxy"]
+    try:
+        del os.environ["HTTP_PROXY"]
+        del os.environ["HTTPS_PROXY"]
+        del os.environ["NO_PROXY"]
+        del os.environ["http_proxy"]
+        del os.environ["https_proxy"]
+        del os.environ["no_proxy"]
+    except KeyError:
+        pass
 
     resources = {"jenkins-image": jenkins_image}
     # Deploy the charm and wait for active/idle status
@@ -814,12 +817,15 @@ async def ingress_application_related_fixture(application: Application, external
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
 async def oathkeeper_application_related_fixture(application: Application):
     """The application related to Jenkins via auth_proxy v0 relation."""
-    del os.environ["HTTP_PROXY"]
-    del os.environ["HTTPS_PROXY"]
-    del os.environ["NO_PROXY"]
-    del os.environ["http_proxy"]
-    del os.environ["https_proxy"]
-    del os.environ["no_proxy"]
+    try:
+        del os.environ["HTTP_PROXY"]
+        del os.environ["HTTPS_PROXY"]
+        del os.environ["NO_PROXY"]
+        del os.environ["http_proxy"]
+        del os.environ["https_proxy"]
+        del os.environ["no_proxy"]
+    except KeyError:
+        pass
     oathkeeper = await application.model.deploy(
         "oathkeeper",
         channel="edge",
