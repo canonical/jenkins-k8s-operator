@@ -2,7 +2,8 @@
 # See LICENSE file for licensing details.
 
 """Integration tests for jenkins-k8s-operator with auth_proxy."""
-
+import logging
+import os
 # pylint: disable=unused-argument
 
 import re
@@ -29,6 +30,8 @@ async def test_auth_proxy_integration_returns_not_authorized(
     act: send a request Jenkins.
     assert: a 401 is returned.
     """
+    logging.info("os environment: %s", os.environ)
+
     status = await model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
     response = requests.get(  # nosec
@@ -56,6 +59,7 @@ async def test_auth_proxy_integration_authorized(
     act: log into via DEX
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
+    logging.info("os environment: %s", os.environ)
     status = await application.model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
     redirect_uri = f"https://{address}/{application.model.name}-{application.name}/"

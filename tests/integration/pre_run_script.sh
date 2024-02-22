@@ -20,3 +20,4 @@ sg snap_microk8s -c "juju bootstrap localhost localhost"
 TESTING_CONTROLLER="$(juju controllers --format json | jq '.controllers | with_entries(select(.key | endswith("microk8s"))) | to_entries[0] | .key')"
 echo "Switching to testing model"
 sg snap_microk8s -c "juju switch $TESTING_CONTROLLER"
+sudo apt-get install libasound2 -y
