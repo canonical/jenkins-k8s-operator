@@ -14,8 +14,6 @@ from juju.application import Application
 from juju.model import Model
 from pytest_operator.plugin import OpsTest
 
-import jenkins
-
 from .helpers import (
     gen_git_test_job_xml,
     generate_unit_web_client_from_application,

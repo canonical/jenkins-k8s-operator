@@ -292,9 +292,7 @@ async def generate_jenkins_client_from_application(
         str(jenkins.API_TOKEN_PATH),
     )
     assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
-    return jenkinsapi.jenkins.Jenkins(
-        f"{address}", "admin", api_token, timeout=60
-    )
+    return jenkinsapi.jenkins.Jenkins(f"{address}", "admin", api_token, timeout=60)
 
 
 async def generate_unit_web_client_from_application(
@@ -314,9 +312,7 @@ async def generate_unit_web_client_from_application(
     address = await get_model_jenkins_unit_address(model, jenkins_app.name)
     jenkins_unit = jenkins_app.units[0]
     jenkins_client = await generate_jenkins_client_from_application(ops_test, jenkins_app, address)
-    unit_web_client = UnitWebClient(
-        unit=jenkins_unit, web=address, client=jenkins_client
-    )
+    unit_web_client = UnitWebClient(unit=jenkins_unit, web=address, client=jenkins_client)
     return unit_web_client
 
 
