@@ -6,18 +6,11 @@ import dataclasses
 import functools
 import logging
 import os
-import socket
 import typing
 from pathlib import Path
 
 import ops
-from pydantic import (
-    BaseModel,
-    Field,
-    HttpUrl,
-    ValidationError,
-    validator,
-)
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
 
 from timerange import InvalidTimeRangeError, Range
 
@@ -195,30 +188,6 @@ def _get_agent_meta_map_from_relation(
     return unit_metadata_mapping
 
 
-def _get_agent_discovery_url_from_charm(charm: ops.CharmBase) -> str:
-    """Return the external hostname to be passed to agents via the integration.
-    If we do not have an ingress, then use the pod ip as hostname.
-    The reason to prefer this over the pod name (which is the actual
-    hostname visible from the pod) or a K8s service, is that those
-    are routable virtually exclusively inside the cluster (as they rely)
-    on the cluster's DNS service, while the ip address is _sometimes_
-    routable from the outside, e.g., when deploying on MicroK8s on Linux.
-
-    Attributes:
-        charm: The charm root JenkinsK8SOperatorCharm.
-    """
-
-    # Check if an ingress URL is available
-    try:
-        if ingress_url := charm.agent_discovery_ingress_observer.ingress.url:
-            return ingress_url
-    except ops.ModelError as e:
-        # We only log the error here as we can fallback to using pod IP if ingress is not available
-        logger.error("Failed obtaining external url: %s. Shutting down?", e)
-    # Fallback to pod IP
-    return f"http://{socket.getfqdn()}:{WEB_PORT}"
-
-
 class ProxyConfig(BaseModel):
     """Configuration for accessing Jenkins through proxy.
 
@@ -271,7 +240,6 @@ class State:
     ]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
-    agent_discovery_url: str
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -331,5 +299,4 @@ class State:
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
             plugins=plugins,
             proxy_config=proxy_config,
-            agent_discovery_url=_get_agent_discovery_url_from_charm(charm=charm),
         )

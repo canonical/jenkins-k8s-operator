@@ -13,7 +13,6 @@ import secrets
 import textwrap
 import typing
 from datetime import datetime, timedelta
-from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from time import sleep
 
@@ -519,7 +518,6 @@ def _get_node_config(
     Args:
         agent_meta: The Jenkins agent metadata to create the node from.
         container: The Jenkins workload container.
-        host: The Jenkins server ip address for direct agent tunnel connection.
 
     Returns:
         A dictionary mapping of agent configuration values.
@@ -551,8 +549,6 @@ def add_agent_node(agent_meta: state.AgentMeta, container: ops.Container) -> Non
     Args:
         agent_meta: The Jenkins agent metadata to create the node from.
         container: The Jenkins workload container.
-        host: The Jenkins server ip address for direct agent tunnel connection.
-        enable_websocket: Whether to use websocket for inbound agent connections.
 
     Raises:
         JenkinsError: if an error occurred running groovy script creating the node.

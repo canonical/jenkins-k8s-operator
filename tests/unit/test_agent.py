@@ -6,12 +6,16 @@
 # Need access to protected functions for testing
 # pylint:disable=protected-access
 
+import json
 import secrets
+import socket
 import unittest.mock
 from typing import Callable, cast
 
 import jenkinsapi
 import pytest
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
+from ops import ModelError
 from ops.charm import PebbleReadyEvent
 
 import charm
@@ -20,7 +24,7 @@ import state
 from charm import JenkinsK8sOperatorCharm
 
 from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME, MAINTENANCE_STATUS_NAME
-from .types_ import HarnessWithContainer
+from .types_ import Harness, HarnessWithContainer
 
 
 @pytest.mark.parametrize(
@@ -356,3 +360,120 @@ def test__on_agent_relation_departed(
     assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
     assert not jenkins_charm.unit.status.message
     mocked_remove_agent.assert_called_once()
+
+
+def test_agent_discovery_url(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given a base jenkins charm with no ingress.
+    act: access the charm's agent_discovery_url property.
+    assert: the charm returns the value from socket.get_fqdn().
+    """
+    harness.begin()
+    mock_fqdn = "test"
+    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
+
+    assert (
+        harness.charm.agent_observer.agent_discovery_url
+        == f"http://{mock_fqdn}:{jenkins.WEB_PORT}"
+    )
+
+
+def test_agent_discovery_url_with_ingress(harness: Harness):
+    """
+    arrange: given a base jenkins charm with ingress integration.
+    act: start the charm and add an ingress integration with traefik.
+    assert: charm.agent_observer.agent_discovery_url is the value
+    from the ingress integration databag.
+    """
+    harness.begin()
+
+    mock_ingress_url = "http://ingress.test"
+    harness.add_relation(
+        "agent-discovery-ingress",
+        "traefik-k8s",
+        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
+    )
+
+    assert harness.charm.agent_observer.agent_discovery_url == mock_ingress_url
+
+
+def test_agent_discovery_url_with_ingress_model_error(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given a base jenkins charm and mocked ingress requirer to raise ModelError.
+    act: start the charm and add an ingress integration with traefik.
+    assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
+    """
+    mock_fqdn = "test"
+    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
+    monkeypatch.setattr(
+        IngressPerAppRequirer, "url", unittest.mock.PropertyMock(side_effect=ModelError)
+    )
+
+    harness.begin()
+    harness.add_relation(
+        "agent-discovery-ingress",
+        "traefik-k8s",
+        app_data={"ingress": json.dumps({"url": "http://ingress.test"})},
+    )
+
+    assert (
+        harness.charm.agent_observer.agent_discovery_url
+        == f"http://{mock_fqdn}:{jenkins.WEB_PORT}"
+    )
+
+
+def test_reconfigure_agent_discovery_url(
+    harness: Harness,
+    get_relation_data: Callable[[str], dict[str, str]],
+):
+    """
+    arrange: given a base jenkins charm integrated with the jenkins-agent charm.
+    act: add an integration with traefik.
+    assert: the discovery url in the integration databag is changed to the ingress url.
+    """
+    relation_id = harness.add_relation(state.AGENT_RELATION, "jenkins-agent")
+    harness.add_relation_unit(relation_id, "jenkins-agent/0")
+    harness.update_relation_data(
+        relation_id, "jenkins-agent/0", get_relation_data(state.AGENT_RELATION)
+    )
+    harness.begin()
+
+    mock_ingress_url = "http://ingress.test"
+    harness.add_relation(
+        "agent-discovery-ingress",
+        "traefik-k8s",
+        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
+    )
+
+    assert (
+        harness.get_relation_data(relation_id, harness.model.unit.name)["url"] == mock_ingress_url
+    )
+
+
+def test_reconfigure_agent_discovery_url_unchanged(
+    harness: Harness,
+    get_relation_data: Callable[[str], dict[str, str]],
+):
+    """
+    arrange: given a base jenkins charm integrated with the jenkins-agent charm.
+    The integration databag contains an agent discovery url.
+    act: add an integration with traefik providing the same url.
+    assert: the discovery url in the integration databag is not changed.
+    """
+    mock_ingress_url = "http://ingress.test"
+    relation_id = harness.add_relation(
+        state.AGENT_RELATION, "jenkins-agent", unit_data=get_relation_data(state.AGENT_RELATION)
+    )
+    harness.update_relation_data(relation_id, harness.model.unit.name, {"url": mock_ingress_url})
+    harness.begin()
+    harness.add_relation(
+        "agent-discovery-ingress",
+        "traefik-k8s",
+        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
+    )
+
+    assert (
+        harness.get_relation_data(relation_id, harness.model.unit.name)["url"] == mock_ingress_url
+    )

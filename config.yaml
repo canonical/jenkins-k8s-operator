@@ -18,17 +18,3 @@ options:
       Plugins installed by the user and their dependencies will be removed automatically if not on
       the list. Included plugins are not automatically installed.
     default: "bazaar,blueocean,dependency-check-jenkins-plugin,docker-build-publish,git,kubernetes,ldap,matrix-combinations-parameter,oic-auth,openid,pipeline-groovy-lib,postbuildscript,rebuild,reverse-proxy-auth-plugin,ssh-agent,thinBackup"
-  remoting-external-url:
-    type: string
-    description: >
-      Configure the charm to use this URL when establishing relations with agent charms.
-      This is useful when connecting agents from outside of the charm's Kubernetes cluster.
-      It is assumed that this url is reachable to the agents. A schema (http:// or https://)
-      is required
-    default: ""
-  remoting-enable-websocket:
-    type: boolean
-    description: >
-      Configure inbound agents to use Websocket and skip TCP port 50000.
-      This is useful when the charm is deployed behind a reverse-proxy or behind a firewall.
-    default: false

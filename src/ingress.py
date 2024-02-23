@@ -19,6 +19,8 @@ class Observer(ops.Object):
 
         Args:
             charm: The parent charm to attach the observer to.
+            key: The ops's Object identifier, to have a unique path for event handling.
+            relation_name: The ingress relation that this observer is managing.
         """
         super().__init__(charm, key)
         self.charm = charm

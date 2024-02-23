@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class JenkinsK8sOperatorCharm(ops.CharmBase):
-    """Charm Jenkins."""
+    """Charmed Jenkins."""
 
     def __init__(self, *args: typing.Any):
         """Initialize the charm and register event handlers.
@@ -45,11 +45,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             RuntimeError: if invalid state value was encountered from relation.
         """
         super().__init__(*args)
-        # Ingress dedicated to agent discovery
-        self.agent_discovery_ingress_observer = ingress.Observer(
-            self, "agent-discovery-ingress-observer", AGENT_DISCOVERY_INGRESS_RELATION_NAME
-        )
-
         try:
             self.state = State.from_charm(self)
         except (CharmConfigInvalidError, CharmIllegalNumUnitsError) as exc:
@@ -58,11 +53,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
 
+        # Ingress dedicated to agent discovery
+        self.agent_discovery_ingress_observer = ingress.Observer(
+            self, "agent-discovery-ingress-observer", AGENT_DISCOVERY_INGRESS_RELATION_NAME
+        )
         self.actions_observer = actions.Observer(self, self.state)
-        self.agent_observer = agent.Observer(self, self.state)
+        self.agent_observer = agent.Observer(
+            self, self.state, self.agent_discovery_ingress_observer
+        )
         self.cos_observer = cos.Observer(self)
         self.ingress_observer = ingress.Observer(self, "ingress-observer")
-
         self.framework.observe(
             self.on.jenkins_home_storage_attached, self._on_jenkins_home_storage_attached
         )
@@ -153,8 +153,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             raise
 
         self.unit.set_workload_version(version)
-        status_msg = f"Agent discovery url: {self.state.agent_discovery_url}"
-        self.unit.status = ops.ActiveStatus(status_msg)
+        self.unit.status = ops.ActiveStatus()
 
     def _remove_unlisted_plugins(self, container: ops.Container) -> ops.StatusBase:
         """Remove plugins that are installed but not allowed.

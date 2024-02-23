@@ -3,10 +3,12 @@
 
 """The Jenkins agent relation observer."""
 import logging
+import socket
 import typing
 
 import ops
 
+import ingress
 import jenkins
 from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, JENKINS_SERVICE_NAME, AgentMeta, State
 
@@ -26,18 +28,24 @@ class AgentRelationData(typing.TypedDict):
 
 
 class Observer(ops.Object):
-    """The Jenkins agent relation observer."""
+    """The Jenkins agent relation observer.
 
-    def __init__(self, charm: ops.CharmBase, state: State):
+    Attributes:
+        agent_discovery_url: external hostname to be passed to agents for discovery.
+    """
+
+    def __init__(self, charm: ops.CharmBase, state: State, ingress_observer: ingress.Observer):
         """Initialize the observer and register event handlers.
 
         Args:
             charm: The parent charm to attach the observer to.
             state: The charm state.
+            ingress_observer: The ingress observer responsible for agent discovery.
         """
         super().__init__(charm, "agent-observer")
         self.charm = charm
         self.state = state
+        self.ingress_observer = ingress_observer
 
         charm.framework.observe(
             charm.on[DEPRECATED_AGENT_RELATION].relation_joined,
@@ -55,13 +63,40 @@ class Observer(ops.Object):
         )
         # Event hooks for agent-discovery-ingress
         charm.framework.observe(
-            charm.agent_discovery_ingress_observer.ingress.on.ready,
+            ingress_observer.ingress.on.ready,
             self.reconfigure_agent_discovery,
         )
         charm.framework.observe(
-            charm.agent_discovery_ingress_observer.ingress.on.revoked,
+            ingress_observer.ingress.on.revoked,
             self.reconfigure_agent_discovery,
         )
+
+    @property
+    def agent_discovery_url(self) -> str:
+        """Return the external hostname to be passed to agents via the integration.
+
+        If we do not have an ingress, then use the pod ip as hostname.
+        The reason to prefer this over the pod name (which is the actual
+        hostname visible from the pod) or a K8s service, is that those
+        are routable virtually exclusively inside the cluster (as they rely)
+        on the cluster's DNS service, while the ip address is _sometimes_
+        routable from the outside, e.g., when deploying on MicroK8s on Linux.
+
+        Attributes:
+            charm: The charm root JenkinsK8SOperatorCharm.
+        """
+        # Check if an ingress URL is available
+        try:
+            if ingress_url := self.ingress_observer.ingress.url:
+                return ingress_url
+        except ops.ModelError as e:
+            # We only log the error here as we can fallback to using pod IP
+            # if ingress is not available
+            logger.error(
+                "Failed obtaining agent discovery url: %s, is the charm shutting down?", e
+            )
+        # Fallback to pod IP
+        return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
 
     def _on_deprecated_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
         """Handle deprecated agent relation joined event.
@@ -94,7 +129,7 @@ class Observer(ops.Object):
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
-        jenkins_url = self.state.agent_discovery_url
+        jenkins_url = self.agent_discovery_url
         event.relation.data[self.model.unit].update(
             AgentRelationData(url=jenkins_url, secret=secret)
         )
@@ -131,7 +166,7 @@ class Observer(ops.Object):
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
-        jenkins_url = self.state.agent_discovery_url
+        jenkins_url = self.agent_discovery_url
         event.relation.data[self.model.unit].update(
             {"url": jenkins_url, f"{agent_meta.name}_secret": secret}
         )
@@ -193,19 +228,13 @@ class Observer(ops.Object):
             return
         self.charm.unit.status = ops.ActiveStatus()
 
-    def reconfigure_agent_discovery(self, _) -> None:
+    def reconfigure_agent_discovery(self, _: ops.EventBase) -> None:
         """Update the agent discovery URL in each of the connected agent's integration data.
+
         Will cause agents to restart!!
         """
-        logger.info("Agent discovery URL: %s", self.state.agent_discovery_url)
-        logger.info("Agent relations: %s", self.model.relations[AGENT_RELATION])
         for relation in self.model.relations[AGENT_RELATION]:
             relation_discovery_url = relation.data[self.model.unit].get("url")
-            if relation_discovery_url and relation_discovery_url == self.state.agent_discovery_url:
+            if relation_discovery_url and relation_discovery_url == self.agent_discovery_url:
                 continue
-            logger.info(
-                "updating relation data for %s: \{'url': %s\}",
-                relation.app,
-                self.state.agent_discovery_url,
-            )
-            relation.data[self.model.unit].update({"url": self.state.agent_discovery_url})
+            relation.data[self.model.unit].update({"url": self.agent_discovery_url})
