@@ -77,7 +77,7 @@ async def test_auth_proxy_integration_authorized(
     # Go to hydra authorization endpoint
     params = {
         "client_id": result["client-id"],
-        "redirect_uri": result["client-secret"],
+        "redirect_uri": redirect_uri,
         "response_type": "code",
         "response_mode": "query",
         "scope": "openid profile email",
