@@ -59,12 +59,12 @@ async def test_jenkins_upgrade_check_job(
     """
     application = model.applications[JENKINS_APP_NAME]
     address = await get_model_jenkins_unit_address(model, JENKINS_APP_NAME)
-    response = requests.get(f"http://{address}:{jenkins.WEB_PORT}", timeout=60)
+    response = requests.get(address, timeout=60)
     old_version = response.headers["X-Jenkins"]
     await application.refresh(path=charm, resources={"jenkins-image": jenkins_image})
     await model.wait_for_idle(status="active", timeout=30 * 60)
     address = await get_model_jenkins_unit_address(model, JENKINS_APP_NAME)
-    response = requests.get(f"http://{address}:{jenkins.WEB_PORT}", timeout=60)
+    response = requests.get(address, timeout=60)
     if old_version != response.headers["X-Jenkins"]:
         unit_web_client = await generate_unit_web_client_from_application(
             ops_test, model, application
