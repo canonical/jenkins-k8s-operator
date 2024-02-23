@@ -6,18 +6,16 @@ import dataclasses
 import functools
 import logging
 import os
+import socket
 import typing
 from pathlib import Path
 
 import ops
 from pydantic import (
-    AnyHttpUrl,
     BaseModel,
     Field,
     HttpUrl,
-    StrictBool,
     ValidationError,
-    tools,
     validator,
 )
 
@@ -30,6 +28,7 @@ DEPRECATED_AGENT_RELATION = "agent-deprecated"
 JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
 JENKINS_HOME_PATH = Path("/var/lib/jenkins")
+WEB_PORT = 8080
 
 
 class CharmStateBaseError(Exception):
@@ -196,6 +195,30 @@ def _get_agent_meta_map_from_relation(
     return unit_metadata_mapping
 
 
+def _get_agent_discovery_url_from_charm(charm: ops.CharmBase) -> str:
+    """Return the external hostname to be passed to agents via the integration.
+    If we do not have an ingress, then use the pod ip as hostname.
+    The reason to prefer this over the pod name (which is the actual
+    hostname visible from the pod) or a K8s service, is that those
+    are routable virtually exclusively inside the cluster (as they rely)
+    on the cluster's DNS service, while the ip address is _sometimes_
+    routable from the outside, e.g., when deploying on MicroK8s on Linux.
+
+    Attributes:
+        charm: The charm root JenkinsK8SOperatorCharm.
+    """
+
+    # Check if an ingress URL is available
+    try:
+        if ingress_url := charm.agent_discovery_ingress_observer.ingress.url:
+            return ingress_url
+    except ops.ModelError as e:
+        # We only log the error here as we can fallback to using pod IP if ingress is not available
+        logger.error("Failed obtaining external url: %s. Shutting down?", e)
+    # Fallback to pod IP
+    return f"http://{socket.getfqdn()}:{WEB_PORT}"
+
+
 class ProxyConfig(BaseModel):
     """Configuration for accessing Jenkins through proxy.
 
@@ -227,40 +250,6 @@ class ProxyConfig(BaseModel):
         )
 
 
-class RemotingConfig(BaseModel):
-    """Configuration for inbound agent connections.
-
-    Attributes:
-        external_url: External URL for inbound agent connections.
-        enable_websocket: Use websocket for inbound agent connections.
-    """
-
-    external_url: typing.Optional[AnyHttpUrl]
-    enable_websocket: StrictBool
-
-    @classmethod
-    def from_config(cls, config: ops.ConfigData) -> "RemotingConfig":
-        """Instantiate RemotingConfig from juju charm config data.
-
-        Args:
-            config: the charm's config data
-
-        Returns:
-            RemotingConfig with validated attributes.
-        """
-        config_remoting_external_url = config.get("remoting-external-url")
-        external_url = (
-            tools.parse_obj_as(AnyHttpUrl, config_remoting_external_url)
-            if config_remoting_external_url
-            else None
-        )
-        enable_websocket = bool(config.get("remoting-enable-websocket"))
-        return cls(
-            external_url=external_url,
-            enable_websocket=enable_websocket,
-        )
-
-
 @dataclasses.dataclass(frozen=True)
 class State:
     """The Jenkins k8s operator charm state.
@@ -272,7 +261,6 @@ class State:
             deprecated agent relation.
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
-        remoting_config: Configuration for inbound agents.
 
     """
 
@@ -283,7 +271,7 @@ class State:
     ]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
-    remoting_config: RemotingConfig
+    agent_discovery_url: str
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -301,7 +289,6 @@ class State:
             CharmIllegalNumUnitsError: if more than 1 unit of Jenkins charm is deployed.
         """
         try:
-            remoting_config = RemotingConfig.from_config(config=charm.config)
             time_range_str = charm.config.get("restart-time-range")
             if time_range_str:
                 restart_time_range = Range.from_str(time_range_str)
@@ -310,9 +297,6 @@ class State:
         except InvalidTimeRangeError as exc:
             logger.error("Invalid config value for restart-time-range, %s", exc)
             raise CharmConfigInvalidError("Invalid config value for restart-time range.") from exc
-        except ValidationError as exc:
-            logger.error("Invalid charm configuration, %s", exc)
-            raise CharmConfigInvalidError("Invalid charm configuration.") from exc
 
         try:
             agent_relation_meta_map = _get_agent_meta_map_from_relation(
@@ -347,5 +331,5 @@ class State:
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
             plugins=plugins,
             proxy_config=proxy_config,
-            remoting_config=remoting_config,
+            agent_discovery_url=_get_agent_discovery_url_from_charm(charm=charm),
         )

@@ -14,20 +14,20 @@ import jenkins
 class Observer(ops.Object):
     """The Jenkins Ingress integration observer."""
 
-    def __init__(self, charm: ops.CharmBase, relation_name: typing.Optional[str] = None):
+    def __init__(self, charm: ops.CharmBase, key: str, relation_name: typing.Optional[str] = None):
         """Initialize the observer and register event handlers.
 
         Args:
             charm: The parent charm to attach the observer to.
         """
-        super().__init__(charm, "ingress-observer")
+        super().__init__(charm, key)
         self.charm = charm
         requirer_args = {}
         if relation_name:
             requirer_args["relation_name"] = relation_name
         self.ingress = IngressPerAppRequirer(
             self.charm,
-            *requirer_args,
+            **requirer_args,
             port=jenkins.WEB_PORT,
             strip_prefix=True,
         )

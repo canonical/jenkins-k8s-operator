@@ -53,6 +53,15 @@ class Observer(ops.Object):
         charm.framework.observe(
             charm.on[AGENT_RELATION].relation_departed, self._on_agent_relation_departed
         )
+        # Event hooks for agent-discovery-ingress
+        charm.framework.observe(
+            charm.agent_discovery_ingress_observer.ingress.on.ready,
+            self.reconfigure_agent_discovery,
+        )
+        charm.framework.observe(
+            charm.agent_discovery_ingress_observer.ingress.on.revoked,
+            self.reconfigure_agent_discovery,
+        )
 
     def _on_deprecated_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
         """Handle deprecated agent relation joined event.
@@ -61,10 +70,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        # This is to avoid the None type, juju-info binding should not be None.
-        assert (binding := self.model.get_binding("juju-info"))  # nosec
-        host = binding.network.bind_address
-        if not container.can_connect() or not jenkins.is_storage_ready(container) or not host:
+        if not container.can_connect() or not jenkins.is_storage_ready(container):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -80,27 +86,15 @@ class Observer(ops.Object):
             event.defer()
             return
 
-        enable_websocket = bool(self.state.remoting_config.enable_websocket)
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
-            jenkins.add_agent_node(
-                agent_meta=agent_meta,
-                container=container,
-                # mypy doesn't understand that host can no longer be None.
-                host=host,
-                enable_websocket=enable_websocket,
-            )
+            jenkins.add_agent_node(agent_meta=agent_meta, container=container)
             secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
-        configured_remoting_external_url = self.state.remoting_config.external_url
-        jenkins_url = (
-            f"http://{host}:{jenkins.WEB_PORT}"
-            if not configured_remoting_external_url
-            else str(configured_remoting_external_url)
-        )
+        jenkins_url = self.state.agent_discovery_url
         event.relation.data[self.model.unit].update(
             AgentRelationData(url=jenkins_url, secret=secret)
         )
@@ -113,10 +107,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        # This is to avoid the None type, juju-info binding should not be None.
-        assert (binding := self.model.get_binding("juju-info"))  # nosec
-        host = binding.network.bind_address
-        if not container.can_connect() or not jenkins.is_storage_ready(container) or not host:
+        if not container.can_connect() or not jenkins.is_storage_ready(container):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -132,31 +123,17 @@ class Observer(ops.Object):
             event.defer()
             return
 
-        enable_websocket = bool(self.state.remoting_config.enable_websocket)
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
-            jenkins.add_agent_node(
-                agent_meta=agent_meta,
-                container=container,
-                host=host,
-                enable_websocket=enable_websocket,
-            )
+            jenkins.add_agent_node(agent_meta=agent_meta, container=container)
             secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
-        configured_remoting_external_url = self.state.remoting_config.external_url
-        jenkins_url = (
-            f"http://{host}:{jenkins.WEB_PORT}"
-            if not configured_remoting_external_url
-            else str(configured_remoting_external_url)
-        )
+        jenkins_url = self.state.agent_discovery_url
         event.relation.data[self.model.unit].update(
-            {
-                "url": jenkins_url,
-                f"{agent_meta.name}_secret": secret,
-            }
+            {"url": jenkins_url, f"{agent_meta.name}_secret": secret}
         )
         self.charm.unit.status = ops.ActiveStatus()
 
@@ -215,3 +192,20 @@ class Observer(ops.Object):
             self.charm.unit.status = ops.ActiveStatus(f"Failed to remove {agent_name}")
             return
         self.charm.unit.status = ops.ActiveStatus()
+
+    def reconfigure_agent_discovery(self, _) -> None:
+        """Update the agent discovery URL in each of the connected agent's integration data.
+        Will cause agents to restart!!
+        """
+        logger.info("Agent discovery URL: %s", self.state.agent_discovery_url)
+        logger.info("Agent relations: %s", self.model.relations[AGENT_RELATION])
+        for relation in self.model.relations[AGENT_RELATION]:
+            relation_discovery_url = relation.data[self.model.unit].get("url")
+            if relation_discovery_url and relation_discovery_url == self.state.agent_discovery_url:
+                continue
+            logger.info(
+                "updating relation data for %s: \{'url': %s\}",
+                relation.app,
+                self.state.agent_discovery_url,
+            )
+            relation.data[self.model.unit].update({"url": self.state.agent_discovery_url})
