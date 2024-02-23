@@ -82,8 +82,8 @@ class Observer(ops.Object):
         on the cluster's DNS service, while the ip address is _sometimes_
         routable from the outside, e.g., when deploying on MicroK8s on Linux.
 
-        Attributes:
-            charm: The charm root JenkinsK8SOperatorCharm.
+        Returns:
+            The charm's agent discovery url.
         """
         # Check if an ingress URL is available
         try:
