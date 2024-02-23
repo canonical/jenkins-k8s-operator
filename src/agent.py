@@ -89,11 +89,11 @@ class Observer(ops.Object):
         try:
             if ingress_url := self.ingress_observer.ingress.url:
                 return ingress_url
-        except ops.ModelError as e:
+        except ops.ModelError as exc:
             # We only log the error here as we can fallback to using pod IP
             # if ingress is not available
             logger.error(
-                "Failed obtaining agent discovery url: %s, is the charm shutting down?", e
+                "Failed obtaining agent discovery url: %s, is the charm shutting down?", exc
             )
         # Fallback to pod IP
         return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
