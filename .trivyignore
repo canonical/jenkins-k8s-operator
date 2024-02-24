@@ -3,3 +3,10 @@ CVE-2016-1000027
 # Jenkins Plugin Manager CVEs
 CVE-2023-5072
 GHSA-4jq9-2xhw-jpx7
+# Fix hasn't been released upstream
+# https://github.com/jenkinsci/jenkins/pull/8971
+CVE-2024-25710
+CVE-2024-26308
+# https://github.com/jenkinsci/jenkins/pull/8696
+# Fixed in 5.3.32
+CVE-2024-22243
