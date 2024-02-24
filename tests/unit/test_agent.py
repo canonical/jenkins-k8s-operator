@@ -6,6 +6,7 @@
 # Need access to protected functions for testing
 # pylint:disable=protected-access
 
+import ipaddress
 import json
 import secrets
 import socket
@@ -15,7 +16,7 @@ from typing import Callable, cast
 import jenkinsapi
 import pytest
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from ops import ModelError
+from ops import Model, ModelError, Network
 from ops.charm import PebbleReadyEvent
 
 import charm
@@ -362,22 +363,6 @@ def test__on_agent_relation_departed(
     mocked_remove_agent.assert_called_once()
 
 
-def test_agent_discovery_url(harness: Harness, monkeypatch: pytest.MonkeyPatch):
-    """
-    arrange: given a base jenkins charm with no ingress.
-    act: access the charm's agent_discovery_url property.
-    assert: the charm returns the value from socket.get_fqdn().
-    """
-    harness.begin()
-    mock_fqdn = "test"
-    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
-
-    assert (
-        harness.charm.agent_observer.agent_discovery_url
-        == f"http://{mock_fqdn}:{jenkins.WEB_PORT}"
-    )
-
-
 def test_agent_discovery_url_with_ingress(harness: Harness):
     """
     arrange: given a base jenkins charm with ingress integration.
@@ -397,7 +382,24 @@ def test_agent_discovery_url_with_ingress(harness: Harness):
     assert harness.charm.agent_observer.agent_discovery_url == mock_ingress_url
 
 
-def test_agent_discovery_url_with_ingress_model_error(
+def test_agent_discovery_url_fqdn_fallback(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given a base jenkins charm with no ingress.
+    act: access the charm's agent_discovery_url property.
+    assert: the charm returns the value from socket.get_fqdn().
+    """
+    harness.begin()
+    mock_fqdn = "test"
+    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
+    monkeypatch.setattr(ipaddress, "ip_address", unittest.mock.MagicMock(side_effect=ValueError))
+
+    assert (
+        harness.charm.agent_observer.agent_discovery_url
+        == f"http://{mock_fqdn}:{jenkins.WEB_PORT}"
+    )
+
+
+def test_agent_discovery_url_model_error_null_binding(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ):
     """
@@ -406,10 +408,11 @@ def test_agent_discovery_url_with_ingress_model_error(
     assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
     """
     mock_fqdn = "test"
-    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
     monkeypatch.setattr(
         IngressPerAppRequirer, "url", unittest.mock.PropertyMock(side_effect=ModelError)
     )
+    monkeypatch.setattr(Model, "get_binding", unittest.mock.MagicMock(return_value=None))
+    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
 
     harness.begin()
     harness.add_relation(
@@ -421,6 +424,61 @@ def test_agent_discovery_url_with_ingress_model_error(
     assert (
         harness.charm.agent_observer.agent_discovery_url
         == f"http://{mock_fqdn}:{jenkins.WEB_PORT}"
+    )
+
+
+def test_agent_discovery_url_with_ingress_ip_validation_error(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given a base jenkins charm and mocked ingress requirer to raise ModelError.
+    act: start the charm and add an ingress integration with traefik.
+    assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
+    """
+    monkeypatch.setattr(
+        IngressPerAppRequirer, "url", unittest.mock.PropertyMock(side_effect=ModelError)
+    )
+    monkeypatch.setattr(ipaddress, "ip_address", unittest.mock.MagicMock(side_effect=ValueError))
+    mock_fqdn = "test"
+    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
+
+    harness.begin()
+    harness.add_relation(
+        "agent-discovery-ingress",
+        "traefik-k8s",
+        app_data={"ingress": json.dumps({"url": "http://ingress.test"})},
+    )
+
+    assert (
+        harness.charm.agent_observer.agent_discovery_url
+        == f"http://{mock_fqdn}:{jenkins.WEB_PORT}"
+    )
+
+
+def test_agent_discovery_url_pod_ip(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given a base jenkins charm and mocked ingress requirer to raise ModelError.
+    act: start the charm and add an ingress integration with traefik.
+    assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
+    """
+    mock_pod_ip = "10.10.10.10"
+    monkeypatch.setattr(
+        IngressPerAppRequirer, "url", unittest.mock.PropertyMock(side_effect=ModelError)
+    )
+    monkeypatch.setattr(
+        Network, "bind_address", unittest.mock.PropertyMock(return_value=mock_pod_ip)
+    )
+
+    harness.begin()
+    harness.add_relation(
+        "agent-discovery-ingress",
+        "traefik-k8s",
+        app_data={"ingress": json.dumps({"url": "http://ingress.test"})},
+    )
+
+    assert (
+        harness.charm.agent_observer.agent_discovery_url
+        == f"http://{mock_pod_ip}:{jenkins.WEB_PORT}"
     )
 
 
