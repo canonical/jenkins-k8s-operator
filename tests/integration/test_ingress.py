@@ -18,18 +18,23 @@ from charm import AGENT_DISCOVERY_INGRESS_RELATION_NAME
 
 @pytest.mark.abort_on_fail
 async def test_ingress_integration(
-    model: Model, application: Application, ingress_related: Application, external_hostname: str
+    model: Model,
+    application: Application,
+    traefik_application: Application,
+    external_hostname: str,
 ):
     """
     arrange: deploy the Jenkins charm and establish relations via ingress.
     act: send a request to the ingress in /.
     assert: the response succeeds.
     """
-    status = await model.get_status(filters=[application.name])
-    unit = next(iter(status.applications[application.name].units))
-    address = status["applications"][application.name]["units"][unit]["address"]
+    await application.relate("ingress", traefik_application.name)
+
+    status = await model.get_status(filters=[traefik_application.name])
+    unit = next(iter(status.applications[traefik_application.name].units))
+    traefik_address = status["applications"][traefik_application.name]["units"][unit]["address"]
     response = requests.get(
-        f"http://{address}:{jenkins.WEB_PORT}{jenkins.LOGIN_PATH}",
+        f"http://{traefik_address}:{jenkins.WEB_PORT}{jenkins.LOGIN_PATH}",
         headers={"Host": f"{model.name}-{application.name}.{external_hostname}"},
         timeout=5,
     )

@@ -785,32 +785,6 @@ def external_hostname_fixture() -> str:
     return "juju.test"
 
 
-@pytest_asyncio.fixture(scope="function", name="ingress_related")
-async def ingress_application_related_fixture(application: Application, external_hostname: str):
-    """The application related to Jenkins via ingress v2 relation."""
-    traefik = await application.model.deploy(
-        "traefik-k8s",
-        channel="1.0/stable",
-        trust=True,
-        config={
-            "external_hostname": external_hostname,
-            "routing_mode": "subdomain",
-        },
-    )
-    await application.model.wait_for_idle(
-        status="active", apps=[traefik.name], raise_on_error=False, timeout=30 * 60
-    )
-    await application.model.add_relation(f"{application.name}:ingress", traefik.name)
-    await application.model.wait_for_idle(
-        status="active",
-        apps=[traefik.name, application.name],
-        timeout=20 * 60,
-        idle_period=30,
-        raise_on_error=False,
-    )
-    return traefik
-
-
 @pytest_asyncio.fixture(scope="function", name="traefik_application")
 async def traefik_application_fixture(model: Model, external_hostname: str):
     """The application related to Jenkins via ingress v2 relation."""
@@ -833,4 +807,7 @@ async def traefik_application_fixture(model: Model, external_hostname: str):
         idle_period=30,
         raise_on_error=False,
     )
-    return traefik
+
+    yield traefik
+
+    await model.remove_application(traefik.name, block_until_done=True)
