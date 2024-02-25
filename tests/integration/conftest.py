@@ -785,7 +785,7 @@ def external_hostname_fixture() -> str:
     return "juju.test"
 
 
-@pytest_asyncio.fixture(scope="module", name="ingress_related")
+@pytest_asyncio.fixture(scope="function", name="ingress_related")
 async def ingress_application_related_fixture(application: Application, external_hostname: str):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await application.model.deploy(
@@ -811,7 +811,7 @@ async def ingress_application_related_fixture(application: Application, external
     return traefik
 
 
-@pytest_asyncio.fixture(scope="module", name="traefik_application")
+@pytest_asyncio.fixture(scope="function", name="traefik_application")
 async def traefik_application_fixture(model: Model, external_hostname: str):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
