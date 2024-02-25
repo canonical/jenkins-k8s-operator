@@ -29,12 +29,11 @@ async def test_ingress_integration(
     assert: the response succeeds.
     """
     await application.relate("ingress", traefik_application.name)
-
-    status = await model.get_status(filters=[traefik_application.name])
-    unit = next(iter(status.applications[traefik_application.name].units))
-    traefik_address = status["applications"][traefik_application.name]["units"][unit]["address"]
+    status = await model.get_status(filters=[application.name, traefik_application.name])
+    unit = next(iter(status.applications[application.name].units))
+    address = status["applications"][application.name]["units"][unit]["address"]
     response = requests.get(
-        f"http://{traefik_address}:{jenkins.WEB_PORT}{jenkins.LOGIN_PATH}",
+        f"http://{address}:{jenkins.WEB_PORT}{jenkins.LOGIN_PATH}",
         headers={"Host": f"{model.name}-{application.name}.{external_hostname}"},
         timeout=5,
     )
