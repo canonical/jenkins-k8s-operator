@@ -309,7 +309,8 @@ async def generate_unit_web_client_from_application(
         A Jenkins web client.
     """
     assert model
-    address = await get_model_jenkins_unit_address(model, jenkins_app.name)
+    unit_ip = await get_model_jenkins_unit_address(model, jenkins_app.name)
+    address = f"http://{unit_ip}:8080"
     jenkins_unit = jenkins_app.units[0]
     jenkins_client = await generate_jenkins_client_from_application(ops_test, jenkins_app, address)
     unit_web_client = UnitWebClient(unit=jenkins_unit, web=address, client=jenkins_client)
