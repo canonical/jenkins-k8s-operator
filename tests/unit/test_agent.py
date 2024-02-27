@@ -384,7 +384,7 @@ def test_agent_discovery_url_with_ingress(harness: Harness):
 
 def test_agent_discovery_url_fqdn_fallback(harness: Harness, monkeypatch: pytest.MonkeyPatch):
     """
-    arrange: given a base jenkins charm with no ingress.
+    arrange: given a base jenkins charm with no ingress and an invalid ip.
     act: access the charm's agent_discovery_url property.
     assert: the charm returns the value from socket.get_fqdn().
     """
