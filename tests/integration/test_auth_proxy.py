@@ -50,14 +50,14 @@ async def test_auth_proxy_integration_authorized(
     oathkeeper_related: Application,
 ) -> None:
     """
-    arrange: Deploy jenkins, the authentication bundle, DEX and configure hydra.
+    arrange: Deploy jenkins, the authentication bundle and DEX.
     act: log into via DEX
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
     status = await application.model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
     jenkins_url = f"https://{address}/{application.model.name}-{application.name}/"
-    
+
     await page.goto(jenkins_url)
 
     expected_url = (
@@ -79,5 +79,5 @@ async def test_auth_proxy_integration_authorized(
     await page.get_by_placeholder("password").fill(external_user_password)
     await page.get_by_role("button", name="Login").click()
 
-    async with page.expect_response(redirect_uri + "?*") as response_info:
+    async with page.expect_response(jenkins_url + "?*") as response_info:
         assert (await response_info.value).ok
