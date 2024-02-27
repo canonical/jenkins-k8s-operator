@@ -11,6 +11,7 @@ import requests
 from juju.application import Application
 from juju.model import Model
 
+import jenkins
 import state
 from charm import AGENT_DISCOVERY_INGRESS_RELATION_NAME
 
@@ -28,16 +29,20 @@ async def test_ingress_integration(
     assert: the response succeeds.
     """
     await application.relate("ingress", traefik_application.name)
+    await model.wait_for_idle(
+        apps=[application.name, traefik_application.name], wait_for_active=True, timeout=20 * 60
+    )
     # Find traefik IP
     status = await model.get_status(filters=[traefik_application.name])
     unit = next(iter(status.applications[traefik_application.name].units))
     traefik_address = status["applications"][traefik_application.name]["units"][unit]["address"]
     response = requests.get(
-        f"http://{traefik_address}",
+        f"http://{traefik_address}/{jenkins.LOGIN_URL}",
         headers={"Host": f"{model.name}-{application.name}.{external_hostname}"},
         timeout=5,
     )
-    assert response.status_code == 200
+
+    assert "Authentication required" in str(response.content)
 
 
 # This will only work on microk8s !!

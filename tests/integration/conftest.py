@@ -255,6 +255,9 @@ async def machine_model_fixture(
 
     yield model
 
+    await machine_controller.destroy_models(
+        model.name, destroy_storage=True, force=True, max_wait=10 * 60
+    )
     await model.disconnect()
 
 
@@ -785,7 +788,7 @@ def external_hostname_fixture() -> str:
     return "juju.test"
 
 
-@pytest_asyncio.fixture(scope="function", name="traefik_application")
+@pytest_asyncio.fixture(scope="module", name="traefik_application")
 async def traefik_application_fixture(model: Model, external_hostname: str):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
@@ -807,5 +810,3 @@ async def traefik_application_fixture(model: Model, external_hostname: str):
     )
 
     yield traefik
-
-    await model.remove_application(traefik.name, block_until_done=True)
