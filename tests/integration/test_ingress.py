@@ -10,9 +10,7 @@ import pytest
 import requests
 from juju.application import Application
 from juju.model import Model
-from juju.unit import Unit
 
-import jenkins
 import state
 from charm import AGENT_DISCOVERY_INGRESS_RELATION_NAME
 
@@ -52,9 +50,9 @@ async def test_agent_discovery_ingress_integration(
     jenkins_machine_agents: Application,
 ):
     """
-    arrange: deploy the Jenkins charm and establish relations via ingress.
-    act: send a request to the ingress in /.
-    assert: the response succeeds.
+    arrange: deploy the Jenkins charm, ingress, and a machine agent.
+    act: integrate the charms with each other and update the machine agent's dns record.
+    assert: All units should be in active status.
     """
     await application.relate(
         AGENT_DISCOVERY_INGRESS_RELATION_NAME, f"{traefik_application.name}:ingress"
@@ -64,7 +62,8 @@ async def test_agent_discovery_ingress_integration(
     unit = next(iter(status.applications[traefik_application.name].units))
     traefik_address = status["applications"][traefik_application.name]["units"][unit]["address"]
     # Add dns record
-    command = f"sudo echo '{traefik_address} {model.name}-{application.name}.{external_hostname}' >> /etc/hosts"
+    ingress_hostname = f"{traefik_address} {model.name}-{application.name}.{external_hostname}"
+    command = f"sudo echo '{ingress_hostname}' >> /etc/hosts"
     for unit in jenkins_machine_agents.units:
         action = await unit.run(command)
         await action.wait()

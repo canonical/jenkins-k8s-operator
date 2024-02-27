@@ -116,7 +116,7 @@ class Observer(ops.Object):
             Whether the IP address is a valid unit IP address
         """
         try:
-            _ = ipaddress.ip_address(address)
+            ipaddress.ip_address(address)
         except ValueError:
             return False
 
