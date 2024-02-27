@@ -178,7 +178,7 @@ async def jenkins_k8s_agents_fixture(
         "jenkins-agent-k8s",
         config={"jenkins_agent_labels": "k8s"},
         channel="latest/edge",
-        application_name=f"jenkins-agentk8s-{app_suffix}",
+        application_name=f"jenkins-agent-k8s-{app_suffix}",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
 
@@ -797,9 +797,7 @@ async def traefik_application_fixture(model: Model, external_hostname: str):
             "routing_mode": "subdomain",
         },
     )
-    await model.wait_for_idle(
-        status="active", apps=[traefik.name], raise_on_error=False, timeout=30 * 60
-    )
+
     await model.wait_for_idle(
         status="active",
         apps=[traefik.name],
