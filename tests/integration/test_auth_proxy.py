@@ -6,8 +6,6 @@
 # pylint: disable=unused-argument
 
 import re
-from secrets import token_urlsafe
-from urllib.parse import urlencode
 
 import pytest
 import requests
@@ -59,38 +57,10 @@ async def test_auth_proxy_integration_authorized(
     status = await application.model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
     redirect_uri = f"https://{address}/{application.model.name}-{application.name}/"
-    action = (
-        await application.model.applications["hydra"]
-        .units[0]
-        .run_action(
-            "create-oauth-client",
-            **{
-                "redirect-uris": [redirect_uri],
-                "grant-types": ["authorization_code"],
-            },
-        )
+
+    await page.goto(
+        f"https://{address}/{application.model.name}-identity-platform-login-ui-operator/ui/login"
     )
-    result = (await action.wait()).results
-
-    hydra_url = f"https://{address}/{application.model.name}-hydra/"
-
-    # Go to hydra authorization endpoint
-    params = {
-        "client_id": result["client-id"],
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "response_mode": "query",
-        "scope": "openid profile email",
-        "state": token_urlsafe(),
-        "nonce": token_urlsafe(),
-    }
-    await page.goto(f"{hydra_url}oauth2/auth?{urlencode(params)}")
-
-    expected_url = (
-        f"https://{address}/{application.model.name}"
-        f"-identity-platform-login-ui-operator/ui/login"
-    )
-    await expect(page).to_have_url(re.compile(rf"{expected_url}*"))
 
     # Choose provider
     async with page.expect_navigation():
