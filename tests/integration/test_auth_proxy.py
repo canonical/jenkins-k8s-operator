@@ -56,11 +56,15 @@ async def test_auth_proxy_integration_authorized(
     """
     status = await application.model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
-    redirect_uri = f"https://{address}/{application.model.name}-{application.name}/"
+    jenkins_url = f"https://{address}/{application.model.name}-{application.name}/"
+    
+    await page.goto(jenkins_url)
 
-    await page.goto(
-        f"https://{address}/{application.model.name}-identity-platform-login-ui-operator/ui/login"
+    expected_url = (
+        f"https://{address}/{application.model.name}"
+        f"-identity-platform-login-ui-operator/ui/login"
     )
+    await expect(page).to_have_url(re.compile(rf"{expected_url}*"))
 
     # Choose provider
     async with page.expect_navigation():
