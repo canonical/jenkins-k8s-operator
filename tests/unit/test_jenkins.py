@@ -370,36 +370,6 @@ def test_install_config_raises_exception():
         jenkins._install_configs(mock_container)
 
 
-def test_install_auth_proxy_config(harness_container: HarnessWithContainer):
-    """
-    arrange: given a mocked uninitialized container.
-    act: when install_auth_proxy_config is called.
-    assert: jenkins configuration file is generated.
-    """
-    jenkins.install_auth_proxy_config(harness_container.container)
-
-    config_xml = str(
-        harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
-    )
-
-    assert "ReverseProxySecurityRealm" in config_xml
-
-
-def test_install_auth_proxy_config_raises_exception():
-    """
-    arrange: set up a container raising an exception.
-    act: when install_auth_proxy_config is called.
-    assert: a JenkinsBootstrapError is raised.
-    """
-    mock_container = MagicMock(ops.Container)
-    mock_container.push = MagicMock(
-        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
-    )
-
-    with pytest.raises(jenkins.JenkinsBootstrapError):
-        jenkins.install_auth_proxy_config(mock_container)
-
-
 @pytest.mark.parametrize(
     "proxy_config,expected_args",
     [

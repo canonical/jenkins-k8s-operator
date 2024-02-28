@@ -61,7 +61,6 @@ class Observer(ops.Object):
             headers=AUTH_PROXY_HEADERS,
         )
         self.auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
-        # jenkins.install_auth_proxy_config(container)
 
     def _auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
         """Unconfigure the auth proxy.
