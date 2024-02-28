@@ -805,7 +805,7 @@ async def ingress_application_related_fixture(application: Application, external
 
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
-async def oathkeeper_application_related_fixture(application: Application):
+async def oathkeeper_application_related_fixture(application: Application, ext_idp_service: str):
     """The application related to Jenkins via auth_proxy v0 relation."""
     oathkeeper = await application.model.deploy(
         "oathkeeper",
@@ -834,7 +834,7 @@ async def oathkeeper_application_related_fixture(application: Application):
             "client_id": "client_id",
             "client_secret": "client_secret",
             "provider": "generic",
-            "issuer_url": "http://dex.dex.svc.cluster.local:5556",
+            "issuer_url": ext_idp_service,
             "scope": "profile email",
         }
     )
