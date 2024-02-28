@@ -811,7 +811,9 @@ async def ingress_application_related_fixture(application: Application, external
 
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
-async def oathkeeper_application_related_fixture(application: Application, ext_idp_service: str):
+async def oathkeeper_application_related_fixture(
+    application: Application, client: Client, ext_idp_service: str
+):
     """The application related to Jenkins via auth_proxy v0 relation."""
     oathkeeper = await application.model.deploy(
         "oathkeeper",
@@ -861,7 +863,7 @@ async def oathkeeper_application_related_fixture(application: Application, ext_i
 
     action_output = await get_redirect_uri_action.wait()
 
-    update_redirect_uri(redirect_uri=action_output.results["redirect-uri"])
+    update_redirect_uri(client, action_output.results["redirect-uri"])
     return oathkeeper
 
 
