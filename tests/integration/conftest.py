@@ -833,7 +833,7 @@ async def oathkeeper_application_related_fixture(application: Application, ext_i
         {
             "client_id": "client_id",
             "client_secret": "client_secret",
-            "provider": "Dex",
+            "provider": "generic",
             "issuer_url": ext_idp_service,
             "scope": "profile email",
         }
