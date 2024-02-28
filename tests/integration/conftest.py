@@ -834,7 +834,7 @@ async def oathkeeper_application_related_fixture(application: Application):
             "client_id": "client_id",
             "client_secret": "client_secret",
             "provider": "generic",
-            "issuer_url": "https://path/to/dex",
+            "issuer_url": "http://dex.dex.svc.cluster.local:5556",
             "scope": "profile email",
         }
     )
