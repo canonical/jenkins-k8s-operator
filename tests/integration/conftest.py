@@ -856,8 +856,8 @@ def client_fixture() -> Client:
     return Client(config=KubeConfig.from_file(KUBECONFIG), field_manager="dex-test")
 
 
-@pytest.fixture(scope="module")
-def ext_idp_service(ops_test: OpsTest, client: Client) -> Generator[str, None, None]:
+@pytest.fixture(scope="module", name="ext_idp_service")
+def ext_idp_service_fixture(ops_test: OpsTest, client: Client) -> Generator[str, None, None]:
     """Deploy a DEX service on top of k8s for authentication."""
     # Use ops-lib-manifests?
     try:
