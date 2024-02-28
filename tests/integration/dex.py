@@ -201,11 +201,21 @@ def apply_dex_resources(
     wait_until_dex_is_ready(client, issuer_url)
 
 
+def update_redirect_uri(client: Client, redirect_uri: str) -> None:
+    """Update DEX's redirect URI.
+
+    Args:
+        client: k8s client.
+        redirect_uri: THE NEW REDIRECT uri.
+    """
+    apply_dex_resources(client, redirect_uri=redirect_uri)
+
+
 def get_dex_service_url(client: Client) -> str:
     """Get the DEX service URL.
 
     Args:
-    client: k8s client.
+        client: k8s client.
 
     Returns:
         the service URL.

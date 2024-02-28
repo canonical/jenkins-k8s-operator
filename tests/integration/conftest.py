@@ -32,7 +32,13 @@ import jenkins
 import state
 
 from .constants import ALLOWED_PLUGINS
-from .dex import apply_dex_resources, create_dex_resources, get_dex_manifest, get_dex_service_url
+from .dex import (
+    apply_dex_resources,
+    create_dex_resources,
+    get_dex_manifest,
+    get_dex_service_url,
+    update_redirect_uri,
+)
 from .helpers import get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
@@ -847,6 +853,15 @@ async def oathkeeper_application_related_fixture(application: Application, ext_i
         timeout=30 * 60,
         idle_period=5,
     )
+    get_redirect_uri_action = (
+        await application.model.applications["kratos-external-idp-integrator"]
+        .units[0]
+        .run_action("get-redirect-uri")
+    )
+
+    action_output = await get_redirect_uri_action.wait()
+
+    update_redirect_uri(redirect_uri=action_output.results["redirect-uri"])
     return oathkeeper
 
 
