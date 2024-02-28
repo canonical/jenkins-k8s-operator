@@ -440,7 +440,6 @@ async def tinyproxy_ip_fixture(
     spec: kubernetes.client.V1DaemonSetSpec = tiny_proxy_daemonset.spec
     template: kubernetes.client.V1PodTemplateSpec = spec.template
     metadata: kubernetes.client.V1ObjectMeta = template.metadata
-
     return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
 
 
@@ -451,9 +450,7 @@ async def model_with_proxy_fixture(
     """Model with proxy configuration values."""
     tinyproxy_url = f"http://{tinyproxy_ip}:{tinyproxy_port}"
     await model.set_config({"juju-http-proxy": tinyproxy_url, "juju-https-proxy": tinyproxy_url})
-
     yield model
-
     await model.set_config({"juju-http-proxy": "", "juju-https-proxy": ""})
 
 
@@ -516,7 +513,6 @@ async def jenkins_with_proxy_client_fixture(
     action: Action = await jenkins_unit.run_action("get-admin-password")
     await action.wait()
     password = action.results["password"]
-
     # Initialization of the jenkins client will raise an exception if unable to connect to the
     # server.
     return jenkinsapi.jenkins.Jenkins(
@@ -530,9 +526,7 @@ async def app_with_allowed_plugins_fixture(
 ) -> AsyncGenerator[Application, None]:
     """Jenkins charm with plugins configured."""
     await application.set_config({"allowed-plugins": ",".join(ALLOWED_PLUGINS)})
-
     yield application
-
     await application.reset_config(to_default=["allowed-plugins"])
 
 
@@ -593,7 +587,6 @@ async def ldap_server_ip_fixture(
     spec: kubernetes.client.V1DeploymentSpec = ldap_server.spec
     template: kubernetes.client.V1PodTemplateSpec = spec.template
     metadata: kubernetes.client.V1ObjectMeta = template.metadata
-
     return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
 
 
@@ -860,9 +853,7 @@ async def oathkeeper_application_related_fixture(
         .units[0]
         .run_action("get-redirect-uri")
     )
-
     action_output = await get_redirect_uri_action.wait()
-
     update_redirect_uri(client, action_output.results["redirect-uri"])
     return oathkeeper
 
