@@ -6,6 +6,8 @@
 
 # pylint: disable=unused-argument
 
+import typing
+
 import pytest
 import requests
 from juju.application import Application
@@ -20,7 +22,7 @@ from charm import AGENT_DISCOVERY_INGRESS_RELATION_NAME
 async def test_ingress_integration(
     model: Model,
     application: Application,
-    traefik_application: Application,
+    traefik_application_and_unit_ip: typing.Tuple[Application, str],
     external_hostname: str,
 ):
     """
@@ -28,14 +30,11 @@ async def test_ingress_integration(
     act: send a request to the ingress in /.
     assert: the response succeeds.
     """
+    traefik_application, traefik_address = traefik_application_and_unit_ip
     await application.relate("ingress", traefik_application.name)
     await model.wait_for_idle(
         apps=[application.name, traefik_application.name], wait_for_active=True, timeout=20 * 60
     )
-    # Find traefik IP
-    status = await model.get_status(filters=[traefik_application.name])
-    unit = next(iter(status.applications[traefik_application.name].units))
-    traefik_address = status["applications"][traefik_application.name]["units"][unit]["address"]
     response = requests.get(
         f"http://{traefik_address}/{jenkins.LOGIN_URL}",
         headers={"Host": f"{model.name}-{application.name}.{external_hostname}"},
@@ -50,7 +49,7 @@ async def test_ingress_integration(
 async def test_agent_discovery_ingress_integration(
     model: Model,
     application: Application,
-    traefik_application: Application,
+    traefik_application_and_unit_ip: typing.Tuple[Application, str],
     external_hostname: str,
     jenkins_machine_agents: Application,
 ):
@@ -59,13 +58,10 @@ async def test_agent_discovery_ingress_integration(
     act: integrate the charms with each other and update the machine agent's dns record.
     assert: All units should be in active status.
     """
+    traefik_application, traefik_address = traefik_application_and_unit_ip
     await application.relate(
         AGENT_DISCOVERY_INGRESS_RELATION_NAME, f"{traefik_application.name}:ingress"
     )
-    # Find traefik IP
-    status = await model.get_status(filters=[traefik_application.name])
-    unit = next(iter(status.applications[traefik_application.name].units))
-    traefik_address = status["applications"][traefik_application.name]["units"][unit]["address"]
     # Add dns record
     ingress_hostname = f"{traefik_address} {model.name}-{application.name}.{external_hostname}"
     command = f"sudo echo '{ingress_hostname}' >> /etc/hosts"

@@ -788,7 +788,7 @@ def external_hostname_fixture() -> str:
     return "juju.test"
 
 
-@pytest_asyncio.fixture(scope="module", name="traefik_application")
+@pytest_asyncio.fixture(scope="module", name="traefik_application_and_unit_ip")
 async def traefik_application_fixture(model: Model, external_hostname: str):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
@@ -809,4 +809,8 @@ async def traefik_application_fixture(model: Model, external_hostname: str):
         raise_on_error=False,
     )
 
-    yield traefik
+    status = await model.get_status(filters=[traefik.name])
+    unit = next(iter(status.applications[traefik.name].units))
+    traefik_address = status["applications"][traefik.name]["units"][unit]["address"]
+
+    return (traefik, traefik_address)
