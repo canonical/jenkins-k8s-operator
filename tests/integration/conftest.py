@@ -839,6 +839,8 @@ async def oathkeeper_application_related_fixture(application: Application):
             "scope": "profile email",
         }
     )
+    # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
+    await application.model.applications["kratos"].set_config({"dev": "True"})
     await application.model.wait_for_idle(
         status="active",
         apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
