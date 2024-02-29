@@ -10,6 +10,9 @@ import ops
 from charms.oathkeeper.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
+import jenkins
+import state
+
 AUTH_PROXY_ALLOWED_ENDPOINTS: List[str] = []
 AUTH_PROXY_HEADERS = ["X-User"]
 
@@ -36,6 +39,9 @@ class Observer(ops.Object):
         self.charm.framework.observe(
             self.charm.on["auth-proxy"].relation_joined, self._auth_proxy_relation_joined
         )
+        self.charm.framework.observe(
+            self.charm.on["auth-proxy"].relation_departed, self._auth_proxy_relation_departed
+        )
 
     def _auth_proxy_relation_joined(self, event: ops.RelationCreatedEvent) -> None:
         """Configure the auth proxy.
@@ -43,7 +49,8 @@ class Observer(ops.Object):
         Args:
             event: the event triggering the handler.
         """
-        if not self.ingress.url:
+        container = self.charm.unit.get_container(state.JENKINS_SERVICE_NAME)
+        if not jenkins.is_storage_ready(container) or not self.ingress.url:
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -53,5 +60,18 @@ class Observer(ops.Object):
             allowed_endpoints=AUTH_PROXY_ALLOWED_ENDPOINTS,
             headers=AUTH_PROXY_HEADERS,
         )
-        print(self.auth_proxy)
         self.auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
+
+    def _auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+        """Unconfigure the auth proxy.
+
+        Args:
+            event: the event triggering the handler.
+        """
+        container = self.charm.unit.get_container(state.JENKINS_SERVICE_NAME)
+        if not jenkins.is_storage_ready(container):
+            logger.warning("Service not yet ready. Deferring.")
+            event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
+            return
+
+        jenkins.install_default_config(container)
