@@ -382,7 +382,7 @@ def test_install_auth_proxy_config(harness_container: HarnessWithContainer):
         harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
     )
 
-    assert "ReverseProxySecurityRealm" in config_xml
+    assert "<useSecurity>false</useSecurity>" in config_xml
 
 
 def test_install_auth_proxy_config_raises_exception():

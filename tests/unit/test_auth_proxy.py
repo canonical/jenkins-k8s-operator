@@ -5,9 +5,10 @@
 
 # pylint:disable=protected-access
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import ops
+from charms.oathkeeper.v0.auth_proxy import AuthProxyRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.testing import Harness
 
@@ -58,8 +59,12 @@ def test_auth_proxy_relation_joined(install_auth_proxy_config_mock, _):
     mock_ingress = MagicMock(spec=IngressPerAppRequirer)
     mock_ingress.url.return_value = "https://example.com"
     harness.charm.auth_proxy_observer.ingress = mock_ingress
+    harness.charm.auth_proxy_observer.auth_proxy = MagicMock(spec=AuthProxyRequirer)
     harness.charm.auth_proxy_observer._auth_proxy_relation_joined(mock_event)
 
+    harness.charm.auth_proxy_observer.auth_proxy.update_auth_proxy_config.assert_called_once_with(
+        auth_proxy_config=ANY
+    )
     install_auth_proxy_config_mock.assert_called_once()
 
 

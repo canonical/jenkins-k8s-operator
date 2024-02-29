@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<hudson>
+  <useSecurity>false</useSecurity>
+  <numExecutors>0</numExecutors>
+  <slaveAgentPort>50000</slaveAgentPort>
+  <disabledAdministrativeMonitors>
+    <string>hudson.model.UpdateCenter$CoreUpdateMonitor</string>
+  </disabledAdministrativeMonitors>
+</hudson>
