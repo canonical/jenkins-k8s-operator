@@ -203,7 +203,7 @@ async def k8s_agent_related_app_fixture(
     application: Application,
 ):
     """The Jenkins-k8s server charm related to Jenkins-k8s agent charm through agent relation."""
-    await application.integrate(
+    await application.relate(
         state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
     )
     await application.model.wait_for_idle(
@@ -233,7 +233,7 @@ async def k8s_deprecated_agent_related_app_fixture(
     application: Application,
 ):
     """The Jenkins-k8s charm related to Jenkins-k8s agent through deprecated agent relation."""
-    await application.integrate(state.DEPRECATED_AGENT_RELATION, jenkins_k8s_agents.name)
+    await application.relate(state.DEPRECATED_AGENT_RELATION, jenkins_k8s_agents.name)
     await application.model.wait_for_idle(
         apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
     )
@@ -293,7 +293,7 @@ async def machine_agent_related_app_fixture(
     await machine_model.wait_for_idle(
         apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5
     )
-    await model.integrate(
+    await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
@@ -312,7 +312,7 @@ async def machine_deprecated_agent_related_app_fixture(
     """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
     model: Model = application.model
     machine_model: Model = jenkins_machine_agents.model
-    await model.integrate(
+    await model.relate(
         f"{application.name}:{state.DEPRECATED_AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{state.DEPRECATED_AGENT_RELATION}",
     )

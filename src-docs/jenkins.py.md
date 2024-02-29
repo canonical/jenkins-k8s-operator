@@ -11,7 +11,6 @@ Functions to operate Jenkins.
 - **WEB_URL**
 - **LOGIN_PATH**
 - **LOGIN_URL**
-- **JUJU_API_TOKEN**
 - **REQUIRED_PLUGINS**
 - **USER**
 - **GROUP**
@@ -20,6 +19,7 @@ Functions to operate Jenkins.
 - **WAR_DOWNLOAD_URL**
 - **SYSTEM_PROPERTY_HEADLESS**
 - **SYSTEM_PROPERTY_LOGGING**
+- **AUTH_PROXY_JENKINS_CONFIG_TEMPLATE**
 - **DEFAULT_JENKINS_CONFIG**
 - **JENKINS_LOGGING_CONFIG**
 - **PLUGIN_NAME_GROUP**
@@ -172,7 +172,26 @@ Install default jenkins-config.xml.
 
 ---
 
-<a href="../src/jenkins.py#L480"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L345"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+## <kbd>function</kbd> `install_auth_proxy_config`
+
+```python
+install_auth_proxy_config(container: Container) → None
+```
+
+Install jenkins-config.xml for auth_proxy. 
+
+
+
+**Args:**
+ 
+ - <b>`container`</b>:  The Jenkins workload container. 
+
+
+---
+
+<a href="../src/jenkins.py#L489"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `bootstrap`
 
@@ -198,7 +217,7 @@ Initialize and install Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L518"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L527"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_node_secret`
 
@@ -229,7 +248,7 @@ Get node secret from jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L583"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L592"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `add_agent_node`
 
@@ -262,7 +281,7 @@ Add a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L616"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L625"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_agent_node`
 
@@ -288,7 +307,7 @@ Remove a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L667"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L676"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
@@ -313,7 +332,7 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-<a href="../src/jenkins.py#L691"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L700"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
@@ -337,7 +356,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L869"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L878"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 
@@ -368,7 +387,7 @@ Remove plugins that are not in the list of desired plugins.
 
 ---
 
-<a href="../src/jenkins.py#L964"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L973"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `rotate_credentials`
 

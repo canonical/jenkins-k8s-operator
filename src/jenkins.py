@@ -73,6 +73,7 @@ SYSTEM_PROPERTY_HEADLESS = "java.awt.headless=true"
 # Java system property to load logging configuration from file
 SYSTEM_PROPERTY_LOGGING = f"java.util.logging.config.file={LOGGING_CONFIG_PATH}"
 
+AUTH_PROXY_JENKINS_CONFIG_TEMPLATE = "templates/reverse-proxy-auth-jenkins-config.xml"
 DEFAULT_JENKINS_CONFIG = "templates/jenkins-config.xml"
 JENKINS_LOGGING_CONFIG = "templates/logging.properties"
 
@@ -340,6 +341,15 @@ def install_default_config(container: ops.Container) -> None:
         container: The Jenkins workload container.
     """
     _install_config(container, DEFAULT_JENKINS_CONFIG, CONFIG_FILE_PATH)
+
+
+def install_auth_proxy_config(container: ops.Container) -> None:
+    """Install jenkins-config.xml for auth_proxy.
+
+    Args:
+        container: The Jenkins workload container.
+    """
+    _install_config(container, AUTH_PROXY_JENKINS_CONFIG_TEMPLATE, CONFIG_FILE_PATH)
 
 
 def _setup_user_token(container: ops.Container) -> None:
