@@ -53,4 +53,5 @@ class Observer(ops.Object):
             allowed_endpoints=AUTH_PROXY_ALLOWED_ENDPOINTS,
             headers=AUTH_PROXY_HEADERS,
         )
+        print(self.auth_proxy)
         self.auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
