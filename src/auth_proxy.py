@@ -3,6 +3,8 @@
 
 """Observer module for Jenkins to auth_proxy integration."""
 
+# pylint: disable=protected-access
+
 import logging
 from typing import List
 
@@ -48,6 +50,9 @@ class Observer(ops.Object):
 
         Args:
             event: the event triggering the handler.
+
+        Raises:
+            JenkinsError: if Jenkins fails to restart.
         """
         container = self.charm.unit.get_container(state.JENKINS_SERVICE_NAME)
         if not jenkins.is_storage_ready(container) or not self.ingress.url:
@@ -62,12 +67,20 @@ class Observer(ops.Object):
         )
         self.auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
         jenkins.install_auth_proxy_config(container)
+        try:
+            jenkins.safe_restart(container)
+            jenkins.wait_ready()
+        except (jenkins.JenkinsError, TimeoutError) as exc:
+            raise jenkins.JenkinsError("Failed to restart after config.xml update.") from exc
 
     def _auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
         """Unconfigure the auth proxy.
 
         Args:
             event: the event triggering the handler.
+
+        Raises:
+            JenkinsError: if Jenkins fails to restart.
         """
         container = self.charm.unit.get_container(state.JENKINS_SERVICE_NAME)
         if not jenkins.is_storage_ready(container):
@@ -76,3 +89,16 @@ class Observer(ops.Object):
             return
 
         jenkins.install_default_config(container)
+        try:
+            jenkins.safe_restart(container)
+            jenkins.wait_ready()
+        except (jenkins.JenkinsError, TimeoutError) as exc:
+            raise jenkins.JenkinsError("Failed to restart after config.xml update.") from exc
+
+    def has_relation_data(self) -> bool:
+        """Check if there's a relation with data for auth proxy.
+
+        Returns: True if there's a relation with data.
+        """
+        relation = self.auth_proxy.model.get_relation(relation_name=self.auth_proxy._relation_name)
+        return relation and bool(relation.data[self.model.app])

@@ -3,6 +3,8 @@
 
 """Functions to operate Jenkins."""
 
+# pylint: disable=too-many-lines
+
 import dataclasses
 import functools
 import itertools
@@ -324,13 +326,14 @@ def _install_config(container: ops.Container, filename: str, destination_path: P
         raise JenkinsBootstrapError("Failed to install configuration.") from exc
 
 
-def _install_configs(container: ops.Container) -> None:
+def _install_configs(container: ops.Container, jenkins_config_file: str) -> None:
     """Install jenkins-config.xml and logging files.
 
     Args:
         container: The Jenkins workload container.
+        jenkins_config_file: the path to the Jenkins configuration file to install.
     """
-    install_default_config(container)
+    _install_config(container, jenkins_config_file, CONFIG_FILE_PATH)
     _install_config(container, JENKINS_LOGGING_CONFIG, LOGGING_CONFIG_PATH)
 
 
@@ -487,11 +490,16 @@ def _install_plugins(
         raise JenkinsBootstrapError("Failed to install plugins.") from exc
 
 
-def bootstrap(container: ops.Container, proxy_config: state.ProxyConfig | None = None) -> None:
+def bootstrap(
+    container: ops.Container,
+    jenkins_config_file: str,
+    proxy_config: state.ProxyConfig | None = None,
+) -> None:
     """Initialize and install Jenkins.
 
     Args:
         container: The Jenkins workload container.
+        jenkins_config_file: the path to the Jenkins configuration file to install.
         proxy_config: The Jenkins proxy configuration settings.
 
     Raises:
@@ -499,7 +507,7 @@ def bootstrap(container: ops.Container, proxy_config: state.ProxyConfig | None =
     """
     try:
         _unlock_wizard(container)
-        _install_configs(container)
+        _install_configs(container, jenkins_config_file)
         _setup_user_token(container)
         _configure_proxy(container, proxy_config)
         _install_plugins(container, proxy_config)

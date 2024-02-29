@@ -344,7 +344,7 @@ def test_install_config(harness_container: HarnessWithContainer):
     act: when _install_config is called.
     assert: jenkins configuration file is generated.
     """
-    jenkins._install_configs(harness_container.container)
+    jenkins._install_configs(harness_container.container, jenkins.DEFAULT_JENKINS_CONFIG)
 
     config_xml = str(
         harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
@@ -367,7 +367,7 @@ def test_install_config_raises_exception():
     )
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
-        jenkins._install_configs(mock_container)
+        jenkins._install_configs(mock_container, jenkins.DEFAULT_JENKINS_CONFIG)
 
 
 def test_install_auth_proxy_config(harness_container: HarnessWithContainer):
@@ -610,7 +610,7 @@ def test_bootstrap_fail(
     )
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
-        jenkins.bootstrap(container=harness_container.container)
+        jenkins.bootstrap(harness_container.container, jenkins.DEFAULT_JENKINS_CONFIG)
 
 
 def test_bootstrap(
@@ -630,15 +630,16 @@ def test_bootstrap(
         lambda *_args, **kwargs: None,
     )
 
-    jenkins.bootstrap(container=harness_container.container)
+    jenkins.bootstrap(harness_container.container, jenkins.DEFAULT_JENKINS_CONFIG)
 
     assert harness_container.container.pull(
         jenkins.LAST_EXEC_VERSION_PATH, encoding="utf-8"
     ).read()
     assert harness_container.container.pull(jenkins.WIZARD_VERSION_PATH, encoding="utf-8").read()
-    assert harness_container.container.pull(
-        jenkins.CONFIG_FILE_PATH, encoding="utf-8"
-    ).read(), "Configuration not found"
+    config_xml = str(
+        harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
+    )
+    assert "<useSecurity>true</useSecurity>" in config_xml
 
 
 def test_get_client(admin_credentials: jenkins.Credentials):

@@ -15,7 +15,7 @@ from playwright.async_api import expect
 from playwright.async_api._generated import Page
 
 
-@pytest.mark.abort_on_fail
+# @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
 async def test_auth_proxy_integration_returns_not_authorized(
     model: Model,
@@ -29,6 +29,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
     """
     status = await model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
+    print(f"https://{address}/{application.model.name}-{application.name}/")
     response = requests.get(  # nosec
         f"https://{address}/{application.model.name}-{application.name}/",
         verify=False,
@@ -39,7 +40,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
 
 
 # pylint: disable=too-many-arguments
-@pytest.mark.abort_on_fail
+# @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
 async def test_auth_proxy_integration_authorized(
     ext_idp_service: str,
@@ -57,6 +58,7 @@ async def test_auth_proxy_integration_authorized(
     status = await application.model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
     jenkins_url = f"https://{address}/{application.model.name}-{application.name}/"
+    print(jenkins_url)
 
     await page.goto(jenkins_url)
 

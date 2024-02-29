@@ -24,6 +24,7 @@ def test_auth_proxy_relation_joined_when_jenkins_storage_not_ready(_):
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.RelationCreatedEvent)
     harness.charm.auth_proxy_observer._auth_proxy_relation_joined(mock_event)
 
@@ -39,15 +40,18 @@ def test_auth_proxy_relation_joined_when_ingress_not_ready(_):
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.RelationCreatedEvent)
     harness.charm.auth_proxy_observer._auth_proxy_relation_joined(mock_event)
 
     assert mock_event.defer.to_be_called_once()
 
 
+@patch("jenkins.safe_restart")
+@patch("jenkins.wait_ready")
 @patch("jenkins.is_storage_ready", return_value=True)
 @patch("jenkins.install_auth_proxy_config")
-def test_auth_proxy_relation_joined(install_auth_proxy_config_mock, _):
+def test_auth_proxy_relation_joined(install_auth_proxy_config_mock, *_):
     """
     arrange: given a charm with ready storage and ingress related.
     act: when auth_proxy relation joined event is fired.
@@ -55,6 +59,7 @@ def test_auth_proxy_relation_joined(install_auth_proxy_config_mock, _):
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.RelationCreatedEvent)
     mock_ingress = MagicMock(spec=IngressPerAppRequirer)
     mock_ingress.url.return_value = "https://example.com"
@@ -77,15 +82,18 @@ def test_auth_proxy_relation_departed_when_jenkins_storage_not_ready(_):
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.RelationCreatedEvent)
     harness.charm.auth_proxy_observer._auth_proxy_relation_departed(mock_event)
 
     assert mock_event.defer.to_be_called_once()
 
 
+@patch("jenkins.safe_restart")
+@patch("jenkins.wait_ready")
 @patch("jenkins.is_storage_ready", return_value=True)
 @patch("jenkins.install_default_config")
-def test_auth_proxy_relation_departed(install_default_config_mock, _):
+def test_auth_proxy_relation_departed(install_default_config_mock, *_):
     """
     arrange: given a charm with ready storage and ingress related.
     act: when auth_proxy relation departed event is fired.
@@ -93,6 +101,7 @@ def test_auth_proxy_relation_departed(install_default_config_mock, _):
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.RelationDepartedEvent)
     harness.charm.auth_proxy_observer._auth_proxy_relation_departed(mock_event)
 

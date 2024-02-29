@@ -130,7 +130,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         try:
             jenkins.wait_ready()
             self.unit.status = ops.MaintenanceStatus("Configuring Jenkins.")
-            jenkins.bootstrap(container, self.state.proxy_config)
+            if self.auth_proxy_observer.has_relation_data():
+                jenkins.bootstrap(
+                    container, jenkins.AUTH_PROXY_JENKINS_CONFIG, self.state.proxy_config
+                )
+            else:
+                jenkins.bootstrap(
+                    container, jenkins.DEFAULT_JENKINS_CONFIG, self.state.proxy_config
+                )
             # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
             container.restart(JENKINS_SERVICE_NAME)
             jenkins.wait_ready()
