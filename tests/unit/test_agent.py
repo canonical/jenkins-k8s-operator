@@ -510,6 +510,32 @@ def test_reconfigure_agent_discovery_url(
     )
 
 
+def test_reconfigure_agent_discovery_url_ingress_revoked(
+    harness: Harness,
+    get_relation_data: Callable[[str], dict[str, str]],
+):
+    """
+    arrange: given a base jenkins charm integrated with the jenkins-agent charm with ingress.
+    act: remove the traefik integration.
+    assert: the discovery url in the integration databag is different from the ingress url.
+    """
+    mock_ingress_url = "http://ingress.test"
+    ingress_relation_id = harness.add_relation(
+        "agent-discovery-ingress",
+        "traefik-k8s",
+        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
+    )
+    relation_id = harness.add_relation(
+        state.AGENT_RELATION, "jenkins-agent", unit_data=get_relation_data(state.AGENT_RELATION)
+    )
+    harness.begin()
+
+    harness.remove_relation(ingress_relation_id)
+    assert (
+        harness.get_relation_data(relation_id, harness.model.unit.name)["url"] != mock_ingress_url
+    )
+
+
 def test_reconfigure_agent_discovery_url_unchanged(
     harness: Harness,
     get_relation_data: Callable[[str], dict[str, str]],
