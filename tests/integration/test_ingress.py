@@ -11,8 +11,8 @@ import typing
 import pytest
 import requests
 from juju.application import Application
-from juju.model import Model
 from juju.controller import Controller
+from juju.model import Model
 
 import jenkins
 import state
