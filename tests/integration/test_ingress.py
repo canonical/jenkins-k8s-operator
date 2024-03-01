@@ -12,6 +12,7 @@ import pytest
 import requests
 from juju.application import Application
 from juju.model import Model
+from juju.controller import Controller
 
 import jenkins
 import state
@@ -58,6 +59,9 @@ async def test_agent_discovery_ingress_integration(
     act: integrate the charms with each other and update the machine agent's dns record.
     assert: All units should be in active status.
     """
+    controller: Controller = await model.get_controller()
+    cloud = await controller.get_cloud()
+    assert cloud == "microk8s", "This test can only be run on microk8s"
     traefik_application, traefik_address = traefik_application_and_unit_ip
     await application.relate(
         AGENT_DISCOVERY_INGRESS_RELATION_NAME, f"{traefik_application.name}:ingress"
