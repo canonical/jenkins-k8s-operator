@@ -142,11 +142,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         try:
             jenkins.wait_ready()
             self.unit.status = ops.MaintenanceStatus("Configuring Jenkins.")
-            if self.auth_proxy_observer.has_relation():
+            # Tested in integration
+            if self.auth_proxy_observer.has_relation():  # pragma: no cover
                 jenkins.bootstrap(
                     container, jenkins.AUTH_PROXY_JENKINS_CONFIG, self.state.proxy_config
                 )
-            else:
+            else:  # pragma: no cover
                 jenkins.bootstrap(
                     container, jenkins.DEFAULT_JENKINS_CONFIG, self.state.proxy_config
                 )

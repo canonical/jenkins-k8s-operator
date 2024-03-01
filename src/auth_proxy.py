@@ -48,9 +48,6 @@ class Observer(ops.Object):
 
         Args:
             event: the event triggering the handler.
-
-        Raises:
-            JenkinsError: if Jenkins fails to restart.
         """
         container = self.charm.unit.get_container(state.JENKINS_SERVICE_NAME)
         if not jenkins.is_storage_ready(container) or not self.ingress.url:
@@ -64,34 +61,22 @@ class Observer(ops.Object):
             headers=AUTH_PROXY_HEADERS,
         )
         self.auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
-        jenkins.install_auth_proxy_config(container)
-        try:
-            jenkins.safe_restart(container)
-            jenkins.wait_ready()
-        except (jenkins.JenkinsError, TimeoutError) as exc:
-            raise jenkins.JenkinsError("Failed to restart after config.xml update.") from exc
+        # Jenkins Needs to be set up from scratch: requires config and env vars updates.
+        self.charm.on.jenkins_pebble_ready.emit(container)
 
     def _auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
         """Unconfigure the auth proxy.
 
         Args:
             event: the event triggering the handler.
-
-        Raises:
-            JenkinsError: if Jenkins fails to restart.
         """
         container = self.charm.unit.get_container(state.JENKINS_SERVICE_NAME)
         if not jenkins.is_storage_ready(container):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
-
-        jenkins.install_default_config(container)
-        try:
-            jenkins.safe_restart(container)
-            jenkins.wait_ready()
-        except (jenkins.JenkinsError, TimeoutError) as exc:
-            raise jenkins.JenkinsError("Failed to restart after config.xml update.") from exc
+        # Jenkins Needs to be set up from scratch: requires config and env vars updates.
+        self.charm.on.jenkins_pebble_ready.emit(container)
 
     def has_relation(self) -> bool:
         """Check if there's a relation with data for auth proxy.
