@@ -3,8 +3,6 @@
 
 """Functions to operate Jenkins."""
 
-# pylint: disable=too-many-lines
-
 import dataclasses
 import functools
 import itertools
@@ -686,8 +684,7 @@ def safe_restart(container: ops.Container) -> None:
     """
     client = _get_client(_get_api_credentials(container))
     try:
-        # Workaround for bug in the jenkinsapi preventing reboot
-        # https://github.com/pycontribs/jenkinsapi/issues/844
+        # Workaround for https://github.com/pycontribs/jenkinsapi/issues/844
         client.safe_restart(wait_for_reboot=False)
         _wait_jenkins_job_shutdown(client)
     except (

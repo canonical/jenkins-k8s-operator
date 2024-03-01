@@ -109,11 +109,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The dictionary mapping of environment variables for the Jenkins service.
         """
-        prefix = "/"
-        if self.auth_proxy_observer.has_relation_data():
-            prefix = f"/{self.model.name}-{self.model.app.name}"
         return jenkins.Environment(
-            JENKINS_HOME=str(state.JENKINS_HOME_PATH), JENKINS_PREFIX=prefix
+            JENKINS_HOME=str(state.JENKINS_HOME_PATH),
+            JENKINS_PREFIX=self.ingress_observer.get_path(),
         )
 
     def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
@@ -144,7 +142,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         try:
             jenkins.wait_ready()
             self.unit.status = ops.MaintenanceStatus("Configuring Jenkins.")
-            if self.auth_proxy_observer.has_relation_data():
+            if self.auth_proxy_observer.has_relation():
                 jenkins.bootstrap(
                     container, jenkins.AUTH_PROXY_JENKINS_CONFIG, self.state.proxy_config
                 )

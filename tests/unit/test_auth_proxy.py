@@ -147,3 +147,28 @@ def test_auth_proxy_relation_departed_raises_exception(*_):
     mock_event = MagicMock(spec=ops.RelationDepartedEvent)
     with pytest.raises(JenkinsError):
         harness.charm.auth_proxy_observer._auth_proxy_relation_departed(mock_event)
+
+
+def test_has_relation_when_no_relation():
+    """
+    arrange: given a charm no auth-proxy relation.
+    act: when has_relation is executed.
+    assert: it returns False.
+    """
+    harness = Harness(JenkinsK8sOperatorCharm)
+    harness.begin()
+
+    assert not harness.charm.auth_proxy_observer.has_relation()
+
+
+def test_has_relation_when_relation_data():
+    """
+    arrange: given a charm with an auth-proxy relation.
+    act: when has_relation is executed.
+    assert: it returns True.
+    """
+    harness = Harness(JenkinsK8sOperatorCharm)
+    harness.begin()
+    harness.add_relation("auth-proxy", harness.charm.app.name)
+
+    assert harness.charm.auth_proxy_observer.has_relation()

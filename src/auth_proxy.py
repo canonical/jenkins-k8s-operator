@@ -3,8 +3,6 @@
 
 """Observer module for Jenkins to auth_proxy integration."""
 
-# pylint: disable=protected-access
-
 import logging
 from typing import List
 
@@ -95,10 +93,9 @@ class Observer(ops.Object):
         except (jenkins.JenkinsError, TimeoutError) as exc:
             raise jenkins.JenkinsError("Failed to restart after config.xml update.") from exc
 
-    def has_relation_data(self) -> bool:
+    def has_relation(self) -> bool:
         """Check if there's a relation with data for auth proxy.
 
-        Returns: True if there's a relation with data.
+        Returns: True if there's a relation.
         """
-        relation = self.auth_proxy.model.get_relation(relation_name="auth-proxy")
-        return relation and bool(relation.data[self.model.app])
+        return bool(self.auth_proxy.model.get_relation(relation_name="auth-proxy"))

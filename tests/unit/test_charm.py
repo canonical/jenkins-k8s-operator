@@ -15,7 +15,7 @@ import ops
 import pytest
 import requests
 
-import auth_proxy
+import ingress
 import jenkins
 import state
 import timerange
@@ -390,36 +390,17 @@ def test__on_jenkins_home_storage_attached_container_not_ready(
     exec_handler.assert_not_called()
 
 
-def test_calculate_env_when_no_auth_proxy(harness: Harness):
+def test_calculate_env(harness: Harness):
     """
     arrange: given a charm.
     act: when calculate_env is called.
     assert: expected environment variable mapping dictionary is returned.
     """
     harness.begin()
-    auth_proxy_observer = MagicMock(spec=auth_proxy.Observer)
-    auth_proxy_observer.has_relation_data.return_value = False
-    harness.charm.auth_proxy_observer = auth_proxy_observer
+    ingress_observer = MagicMock(spec=ingress.Observer)
+    ingress_observer.get_path.return_value = "/"
+    harness.charm.ingress_observer = ingress_observer
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     env = jenkins_charm.calculate_env()
 
     assert env == {"JENKINS_HOME": str(state.JENKINS_HOME_PATH), "JENKINS_PREFIX": "/"}
-
-
-def test_calculate_env_when_auth_proxy(harness: Harness):
-    """
-    arrange: given a charm related configured with auth proxy.
-    act: when calculate_env is called.
-    assert: expected environment variable mapping dictionary is returned.
-    """
-    harness.begin()
-    auth_proxy_observer = MagicMock(spec=auth_proxy.Observer)
-    auth_proxy_observer.has_relation_data.return_value = True
-    harness.charm.auth_proxy_observer = auth_proxy_observer
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    env = jenkins_charm.calculate_env()
-
-    assert env == {
-        "JENKINS_HOME": str(state.JENKINS_HOME_PATH),
-        "JENKINS_PREFIX": f"/{harness.charm.model.name}-{harness.charm.app.name}",
-    }
