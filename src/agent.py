@@ -8,6 +8,7 @@ import socket
 import typing
 
 import ops
+from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRevokedEvent
 
 import ingress
 import jenkins
@@ -65,11 +66,11 @@ class Observer(ops.Object):
         # Event hooks for agent-discovery-ingress
         charm.framework.observe(
             ingress_observer.ingress.on.ready,
-            self.reconfigure_agent_discovery,
+            self._on_ready,
         )
         charm.framework.observe(
             ingress_observer.ingress.on.revoked,
-            self.reconfigure_agent_discovery,
+            self._on_revoked,
         )
 
     @property
@@ -251,6 +252,22 @@ class Observer(ops.Object):
             self.charm.unit.status = ops.ActiveStatus(f"Failed to remove {agent_name}")
             return
         self.charm.unit.status = ops.ActiveStatus()
+
+    def _on_ready(self, event: IngressPerAppReadyEvent) -> None:
+        """Handle ready event for agent-discovery-ingress.
+
+        Args:
+            event: The event fired.
+        """
+        self.reconfigure_agent_discovery(event)
+
+    def _on_revoked(self, event: IngressPerAppRevokedEvent) -> None:
+        """Handle revoked event for agent-discovery-ingress.
+
+        Args:
+            event: The event fired.
+        """
+        self.reconfigure_agent_discovery(event)
 
     def reconfigure_agent_discovery(self, _: ops.EventBase) -> None:
         """Update the agent discovery URL in each of the connected agent's integration data.
