@@ -29,7 +29,6 @@ async def test_auth_proxy_integration_returns_not_authorized(
     """
     status = await model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
-    print(f"https://{address}/{application.model.name}-{application.name}/")
     response = requests.get(  # nosec
         f"https://{address}/{application.model.name}-{application.name}/",
         verify=False,
@@ -58,7 +57,6 @@ async def test_auth_proxy_integration_authorized(
     status = await application.model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
     jenkins_url = f"https://{address}/{application.model.name}-{application.name}/"
-    print(jenkins_url)
 
     await page.goto(jenkins_url)
 

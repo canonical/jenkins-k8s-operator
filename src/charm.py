@@ -16,6 +16,7 @@ import auth_proxy
 import cos
 import ingress
 import jenkins
+import state
 import timerange
 from state import (
     JENKINS_SERVICE_NAME,
@@ -102,6 +103,19 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         }
         return ops.pebble.Layer(layer)
 
+    def calculate_env(self) -> jenkins.Environment:
+        """Return a dictionary for Jenkins Pebble layer.
+
+        Returns:
+            The dictionary mapping of environment variables for the Jenkins service.
+        """
+        prefix = "/"
+        if self.auth_proxy_observer.has_relation_data():
+            prefix = f"/{self.model.name}-{self.model.app.name}"
+        return jenkins.Environment(
+            JENKINS_HOME=str(state.JENKINS_HOME_PATH), JENKINS_PREFIX=prefix
+        )
+
     def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
         """Configure and start Jenkins server.
 
@@ -123,7 +137,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         # First Jenkins server start installs Jenkins server.
         container.add_layer(
             "jenkins",
-            self._get_pebble_layer(jenkins.calculate_env()),
+            self._get_pebble_layer(self.calculate_env()),
             combine=True,
         )
         container.replan()

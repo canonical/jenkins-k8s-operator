@@ -243,18 +243,11 @@ class Environment(typing.TypedDict):
 
     Attributes:
         JENKINS_HOME: The Jenkins home directory.
+        JENKINS_PREFIX: The prefix in which Jenkins will be accessible.
     """
 
     JENKINS_HOME: str
-
-
-def calculate_env() -> Environment:
-    """Return a dictionary for Jenkins Pebble layer.
-
-    Returns:
-        The dictionary mapping of environment variables for the Jenkins service.
-    """
-    return Environment(JENKINS_HOME=str(JENKINS_HOME_PATH))
+    JENKINS_PREFIX: str
 
 
 def get_version() -> str:

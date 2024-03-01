@@ -249,17 +249,6 @@ def test__setup_user_token_raises_exception(monkeypatch: pytest.MonkeyPatch):
         jenkins._setup_user_token(mock_container)
 
 
-def test_calculate_env():
-    """
-    arrange: given bootstrapped boolean state variable.
-    act: when calculate_env is called.
-    assert: expected environment variable mapping dictionary is returned.
-    """
-    env = jenkins.calculate_env()
-
-    assert env == {"JENKINS_HOME": str(state.JENKINS_HOME_PATH)}
-
-
 @pytest.mark.parametrize(
     "exception",
     [

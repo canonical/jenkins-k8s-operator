@@ -100,5 +100,5 @@ class Observer(ops.Object):
 
         Returns: True if there's a relation with data.
         """
-        relation = self.auth_proxy.model.get_relation(relation_name=self.auth_proxy._relation_name)
+        relation = self.auth_proxy.model.get_relation(relation_name="auth-proxy")
         return relation and bool(relation.data[self.model.app])
