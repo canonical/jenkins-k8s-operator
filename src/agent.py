@@ -101,27 +101,16 @@ class Observer(ops.Object):
         # Fallback to pod IP
         if binding := self.charm.model.get_binding("juju-info"):
             unit_ip = str(binding.network.bind_address)
-            if self._is_valid_ip_address(unit_ip):
+            try:
+                ipaddress.ip_address(unit_ip)
                 return f"http://{unit_ip}:{jenkins.WEB_PORT}"
+            except ValueError as exc:
+                logger.error(
+                    "IP from juju-info is not valid: %s, we can still fall back to using fqdn", exc
+                )
 
-        # Fallback to fqdn
+        # Fallback to using socket.fqdn
         return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
-
-    def _is_valid_ip_address(self, address: str) -> bool:
-        """Validate an IP address.
-
-        Args:
-            address: a string representing a unit address
-
-        Returns:
-            Whether the IP address is a valid unit IP address
-        """
-        try:
-            ipaddress.ip_address(address)
-        except ValueError:
-            return False
-
-        return True
 
     def _on_deprecated_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
         """Handle deprecated agent relation joined event.
