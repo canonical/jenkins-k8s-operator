@@ -67,17 +67,16 @@ async def test_agent_discovery_ingress_integration(
         AGENT_DISCOVERY_INGRESS_RELATION_NAME, f"{traefik_application.name}:ingress"
     )
     # Add dns record
-    ingress_hostname = f"{traefik_address} {model.name}-{application.name}.{external_hostname}"
-    command = f"sudo echo '{ingress_hostname}' >> /etc/hosts"
+    ingress_hostname_mapping = (
+        f"{traefik_address} {model.name}-{application.name}.{external_hostname}"
+    )
+    command = f"sudo echo '{ingress_hostname_mapping}' >> /etc/hosts"
     for unit in jenkins_machine_agents.units:
         action = await unit.run(command)
         await action.wait()
 
     model = application.model
     machine_model = jenkins_machine_agents.model
-    # this code is similar to the machine_agent_related_app fixture but shouldn't be using the
-    # fixture since this test tests for teardown of relation as well.
-    # pylint: disable=duplicate-code
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
