@@ -38,6 +38,12 @@ def model_fixture(ops_test: OpsTest) -> Model:
     return ops_test.model
 
 
+@pytest.fixture(scope="module", name="cloud")
+def cloud_fixture(ops_test: OpsTest) -> typing.Optional[str]:
+    """The cloud the k8s model is running on."""
+    return ops_test.cloud_name
+
+
 @pytest.fixture(scope="module", name="jenkins_image")
 def jenkins_image_fixture(request: FixtureRequest) -> str:
     """The OCI image for Jenkins charm."""

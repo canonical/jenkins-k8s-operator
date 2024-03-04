@@ -11,7 +11,6 @@ import typing
 import pytest
 import requests
 from juju.application import Application
-from juju.controller import Controller
 from juju.model import Model
 
 import jenkins
@@ -48,7 +47,7 @@ async def test_ingress_integration(
 # This will only work on microk8s !!
 @pytest.mark.abort_on_fail
 async def test_agent_discovery_ingress_integration(
-    model: Model,
+    cloud: typing.Optional[str],
     application: Application,
     traefik_application_and_unit_ip: typing.Tuple[Application, str],
     external_hostname: str,
@@ -59,8 +58,8 @@ async def test_agent_discovery_ingress_integration(
     act: integrate the charms with each other and update the machine agent's dns record.
     assert: All units should be in active status.
     """
-    controller: Controller = await model.get_controller()
-    cloud = await controller.get_cloud()
+    model = application.model
+    machine_model = jenkins_machine_agents.model
     assert cloud == "microk8s", "This test can only be run on microk8s"
     traefik_application, traefik_address = traefik_application_and_unit_ip
     await application.relate(
@@ -75,8 +74,6 @@ async def test_agent_discovery_ingress_integration(
         action = await unit.run(command)
         await action.wait()
 
-    model = application.model
-    machine_model = jenkins_machine_agents.model
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
