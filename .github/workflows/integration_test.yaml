@@ -9,9 +9,8 @@ jobs:
     secrets: inherit
     with:
       channel: 1.28-strict/stable
-      extra-arguments: >-
+      extra-arguments: |
         --kube-config ${GITHUB_WORKSPACE}/kube-config
-        --cloud microk8s
       modules: '["test_ingress.py", "test_jenkins.py", "test_k8s_agent.py", "test_machine_agent.py", "test_plugins.py", "test_proxy.py", "test_cos.py"]'
       pre-run-script: |
         -c "sudo microk8s config > ${GITHUB_WORKSPACE}/kube-config
