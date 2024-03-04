@@ -17,4 +17,4 @@ juju integrate jenkins-k8s:agent <offer-endpoint>
 The charm assumes that:
 1. There are connectivity between the juju controller of the `jenkins-k8s` charm and the juju controller of the agent charm trying to connect with the `jenkins-k8s` charm.
 2. The agent can resolve the ingress hostname provided by the `jenkins-k8s` charm and the resulting IP address is reachable, and there are firewall rules in place to allow HTTP traffic.
-3. In case a reverse proxy is present, it is also expected that the HTTP connection coming from the agent charm is allowed to be upgraded into a Websocket connection.
+3. In case a reverse proxy is present, it is also expected that the HTTP connection coming from the agent charm is allowed to be upgraded into a Websocket connection. The reverse proxy should also be configured with a suitable idle timeout for websocket connections to avoid intermittent agent disconnection.
