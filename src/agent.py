@@ -66,11 +66,11 @@ class Observer(ops.Object):
         # Event hooks for agent-discovery-ingress
         charm.framework.observe(
             ingress_observer.ingress.on.ready,
-            self._on_ready,
+            self._ingress_on_ready,
         )
         charm.framework.observe(
             ingress_observer.ingress.on.revoked,
-            self._on_revoked,
+            self._ingress_on_revoked,
         )
 
     @property
@@ -242,22 +242,6 @@ class Observer(ops.Object):
             return
         self.charm.unit.status = ops.ActiveStatus()
 
-    def _on_ready(self, event: IngressPerAppReadyEvent) -> None:
-        """Handle ready event for agent-discovery-ingress.
-
-        Args:
-            event: The event fired.
-        """
-        self.reconfigure_agent_discovery(event)
-
-    def _on_revoked(self, event: IngressPerAppRevokedEvent) -> None:
-        """Handle revoked event for agent-discovery-ingress.
-
-        Args:
-            event: The event fired.
-        """
-        self.reconfigure_agent_discovery(event)
-
     def reconfigure_agent_discovery(self, _: ops.EventBase) -> None:
         """Update the agent discovery URL in each of the connected agent's integration data.
 
@@ -268,3 +252,19 @@ class Observer(ops.Object):
             if relation_discovery_url and relation_discovery_url == self.agent_discovery_url:
                 continue
             relation.data[self.model.unit].update({"url": self.agent_discovery_url})
+
+    def _ingress_on_ready(self, event: IngressPerAppReadyEvent) -> None:
+        """Handle ready event for agent-discovery-ingress.
+
+        Args:
+            event: The event fired.
+        """
+        self.reconfigure_agent_discovery(event)
+
+    def _ingress_on_revoked(self, event: IngressPerAppRevokedEvent) -> None:
+        """Handle revoked event for agent-discovery-ingress.
+
+        Args:
+            event: The event fired.
+        """
+        self.reconfigure_agent_discovery(event)
