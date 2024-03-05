@@ -2,11 +2,15 @@
 # See LICENSE file for licensing details.
 
 """The Jenkins agent relation observer."""
+import ipaddress
 import logging
+import socket
 import typing
 
 import ops
+from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRevokedEvent
 
+import ingress
 import jenkins
 from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, JENKINS_SERVICE_NAME, AgentMeta, State
 
@@ -26,18 +30,24 @@ class AgentRelationData(typing.TypedDict):
 
 
 class Observer(ops.Object):
-    """The Jenkins agent relation observer."""
+    """The Jenkins agent relation observer.
 
-    def __init__(self, charm: ops.CharmBase, state: State):
+    Attributes:
+        agent_discovery_url: external hostname to be passed to agents for discovery.
+    """
+
+    def __init__(self, charm: ops.CharmBase, state: State, ingress_observer: ingress.Observer):
         """Initialize the observer and register event handlers.
 
         Args:
             charm: The parent charm to attach the observer to.
             state: The charm state.
+            ingress_observer: The ingress observer responsible for agent discovery.
         """
         super().__init__(charm, "agent-observer")
         self.charm = charm
         self.state = state
+        self.ingress_observer = ingress_observer
 
         charm.framework.observe(
             charm.on[DEPRECATED_AGENT_RELATION].relation_joined,
@@ -53,6 +63,54 @@ class Observer(ops.Object):
         charm.framework.observe(
             charm.on[AGENT_RELATION].relation_departed, self._on_agent_relation_departed
         )
+        # Event hooks for agent-discovery-ingress
+        charm.framework.observe(
+            ingress_observer.ingress.on.ready,
+            self._ingress_on_ready,
+        )
+        charm.framework.observe(
+            ingress_observer.ingress.on.revoked,
+            self._ingress_on_revoked,
+        )
+
+    @property
+    def agent_discovery_url(self) -> str:
+        """Return the external hostname to be passed to agents via the integration.
+
+        If we do not have an ingress, then use the pod ip as hostname.
+        The reason to prefer this over the pod name (which is the actual
+        hostname visible from the pod) or a K8s service, is that those
+        are routable virtually exclusively inside the cluster as they rely
+        on the cluster's DNS service, while the ip address is _sometimes_
+        routable from the outside, e.g., when deploying on MicroK8s on Linux.
+
+        Returns:
+            The charm's agent discovery url.
+        """
+        # Check if an ingress URL is available
+        try:
+            if ingress_url := self.ingress_observer.ingress.url:
+                return ingress_url
+        except ops.ModelError as exc:
+            # We only log the error here as we can fallback to using pod IP
+            # if ingress is not available
+            logger.error(
+                "Failed obtaining agent discovery url: %s, is the charm shutting down?", exc
+            )
+
+        # Fallback to pod IP
+        if binding := self.charm.model.get_binding("juju-info"):
+            unit_ip = str(binding.network.bind_address)
+            try:
+                ipaddress.ip_address(unit_ip)
+                return f"http://{unit_ip}:{jenkins.WEB_PORT}"
+            except ValueError as exc:
+                logger.error(
+                    "IP from juju-info is not valid: %s, we can still fall back to using fqdn", exc
+                )
+
+        # Fallback to using socket.fqdn
+        return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
 
     def _on_deprecated_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
         """Handle deprecated agent relation joined event.
@@ -61,10 +119,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        # This is to avoid the None type, juju-info binding should not be None.
-        assert (binding := self.model.get_binding("juju-info"))  # nosec
-        host = binding.network.bind_address
-        if not container.can_connect() or not jenkins.is_storage_ready(container) or not host:
+        if not container.can_connect() or not jenkins.is_storage_ready(container):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -80,27 +135,15 @@ class Observer(ops.Object):
             event.defer()
             return
 
-        enable_websocket = bool(self.state.remoting_config.enable_websocket)
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
-            jenkins.add_agent_node(
-                agent_meta=agent_meta,
-                container=container,
-                # mypy doesn't understand that host can no longer be None.
-                host=host,
-                enable_websocket=enable_websocket,
-            )
+            jenkins.add_agent_node(agent_meta=agent_meta, container=container)
             secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
-        configured_remoting_external_url = self.state.remoting_config.external_url
-        jenkins_url = (
-            f"http://{host}:{jenkins.WEB_PORT}"
-            if not configured_remoting_external_url
-            else str(configured_remoting_external_url)
-        )
+        jenkins_url = self.agent_discovery_url
         event.relation.data[self.model.unit].update(
             AgentRelationData(url=jenkins_url, secret=secret)
         )
@@ -113,10 +156,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        # This is to avoid the None type, juju-info binding should not be None.
-        assert (binding := self.model.get_binding("juju-info"))  # nosec
-        host = binding.network.bind_address
-        if not container.can_connect() or not jenkins.is_storage_ready(container) or not host:
+        if not container.can_connect() or not jenkins.is_storage_ready(container):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -132,31 +172,17 @@ class Observer(ops.Object):
             event.defer()
             return
 
-        enable_websocket = bool(self.state.remoting_config.enable_websocket)
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
-            jenkins.add_agent_node(
-                agent_meta=agent_meta,
-                container=container,
-                host=host,
-                enable_websocket=enable_websocket,
-            )
+            jenkins.add_agent_node(agent_meta=agent_meta, container=container)
             secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
 
-        configured_remoting_external_url = self.state.remoting_config.external_url
-        jenkins_url = (
-            f"http://{host}:{jenkins.WEB_PORT}"
-            if not configured_remoting_external_url
-            else str(configured_remoting_external_url)
-        )
+        jenkins_url = self.agent_discovery_url
         event.relation.data[self.model.unit].update(
-            {
-                "url": jenkins_url,
-                f"{agent_meta.name}_secret": secret,
-            }
+            {"url": jenkins_url, f"{agent_meta.name}_secret": secret}
         )
         self.charm.unit.status = ops.ActiveStatus()
 
@@ -215,3 +241,30 @@ class Observer(ops.Object):
             self.charm.unit.status = ops.ActiveStatus(f"Failed to remove {agent_name}")
             return
         self.charm.unit.status = ops.ActiveStatus()
+
+    def reconfigure_agent_discovery(self, _: ops.EventBase) -> None:
+        """Update the agent discovery URL in each of the connected agent's integration data.
+
+        Will cause agents to restart!!
+        """
+        for relation in self.model.relations[AGENT_RELATION]:
+            relation_discovery_url = relation.data[self.model.unit].get("url")
+            if relation_discovery_url and relation_discovery_url == self.agent_discovery_url:
+                continue
+            relation.data[self.model.unit].update({"url": self.agent_discovery_url})
+
+    def _ingress_on_ready(self, event: IngressPerAppReadyEvent) -> None:
+        """Handle ready event for agent-discovery-ingress.
+
+        Args:
+            event: The event fired.
+        """
+        self.reconfigure_agent_discovery(event)
+
+    def _ingress_on_revoked(self, event: IngressPerAppRevokedEvent) -> None:
+        """Handle revoked event for agent-discovery-ingress.
+
+        Args:
+            event: The event fired.
+        """
+        self.reconfigure_agent_discovery(event)

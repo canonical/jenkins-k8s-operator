@@ -15,7 +15,6 @@ import textwrap
 import typing
 import unittest.mock
 from functools import partial
-from ipaddress import IPv4Address
 from unittest.mock import MagicMock
 
 import jenkinsapi.jenkins
@@ -585,9 +584,7 @@ def test_get_node_secret(container: ops.Container, mock_client: MagicMock):
 
 
 @pytest.mark.usefixtures("patch_jenkins_node")
-def test_add_agent_node_fail(
-    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
-):
+def test_add_agent_node_fail(container: ops.Container, mock_client: MagicMock):
     """
     arrange: given a mocked jenkins client that raises an API exception.
     act: when add_agent is called
@@ -601,15 +598,11 @@ def test_add_agent_node_fail(
         jenkins.add_agent_node(
             state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
             container,
-            host=mock_ip_addr,
-            enable_websocket=False,
         )
 
 
 @pytest.mark.usefixtures("patch_jenkins_node")
-def test_add_agent_node_already_exists(
-    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
-):
+def test_add_agent_node_already_exists(container: ops.Container, mock_client: MagicMock):
     """
     arrange: given a mocked jenkins client that raises an Already exists exception.
     act: when add_agent is called.
@@ -620,15 +613,11 @@ def test_add_agent_node_already_exists(
     jenkins.add_agent_node(
         state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
         container,
-        host=mock_ip_addr,
-        enable_websocket=False,
     )
 
 
 @pytest.mark.usefixtures("patch_jenkins_node")
-def test_add_agent_node(
-    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
-):
+def test_add_agent_node(container: ops.Container, mock_client: MagicMock):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
@@ -639,15 +628,11 @@ def test_add_agent_node(
     jenkins.add_agent_node(
         state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
         container,
-        host=mock_ip_addr,
-        enable_websocket=False,
     )
 
 
 @pytest.mark.usefixtures("patch_jenkins_node")
-def test_add_agent_node_websocket(
-    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
-):
+def test_add_agent_node_websocket(container: ops.Container, mock_client: MagicMock):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
@@ -658,8 +643,6 @@ def test_add_agent_node_websocket(
     jenkins.add_agent_node(
         state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
         container,
-        host=mock_ip_addr,
-        enable_websocket=True,
     )
 
 
