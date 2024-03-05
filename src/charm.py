@@ -74,6 +74,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The pebble layer defining Jenkins service layer.
         """
+        env_dict = typing.cast(typing.Dict[str, str], jenkins_env)
         layer: LayerDict = {
             "summary": "jenkins layer",
             "description": "pebble config layer for jenkins",
@@ -83,10 +84,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     "summary": "jenkins",
                     "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
                     f"-D{jenkins.SYSTEM_PROPERTY_LOGGING} "
-                    f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war",
+                    f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war "
+                    f"--prefix={env_dict['JENKINS_PREFIX']}",
                     "startup": "enabled",
-                    # TypedDict and Dict[str,str] are not compatible.
-                    "environment": typing.cast(typing.Dict[str, str], jenkins_env),
+                    "environment": env_dict,
                     "user": jenkins.USER,
                     "group": jenkins.GROUP,
                 },
