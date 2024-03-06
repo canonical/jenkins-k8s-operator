@@ -42,4 +42,18 @@ Shortcut for more simple access the model.
 
 
 
+---
+
+<a href="../src/auth_proxy.py#L81"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `has_relation`
+
+```python
+has_relation() → bool
+```
+
+Check if there's a relation with data for auth proxy. 
+
+Returns: True if there's a relation. 
+
 

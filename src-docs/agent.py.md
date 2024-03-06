@@ -38,7 +38,7 @@ The Jenkins agent relation observer.
 ### <kbd>function</kbd> `__init__`
 
 ```python
-__init__(charm: CharmBase, state: State)
+__init__(charm: CharmBase, state: State, jenkins_wrapper: Jenkins)
 ```
 
 Initialize the observer and register event handlers. 
@@ -49,6 +49,7 @@ Initialize the observer and register event handlers.
  
  - <b>`charm`</b>:  The parent charm to attach the observer to. 
  - <b>`state`</b>:  The charm state. 
+ - <b>`jenkins_wrapper`</b>:  The Jenkins wrapper. 
 
 
 ---
