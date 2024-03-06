@@ -63,6 +63,10 @@ requires:
     interface: ingress
     optional: true
     limit: 1
+  agent-discovery-ingress:
+    interface: ingress
+    optional: true
+    limit: 1
   logging:
     interface: loki_push_api
 provides:

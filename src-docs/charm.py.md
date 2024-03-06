@@ -8,14 +8,16 @@ Charm Jenkins.
 **Global Variables**
 ---------------
 - **JENKINS_SERVICE_NAME**
+- **AGENT_DISCOVERY_INGRESS_RELATION_NAME**
+- **INGRESS_RELATION_NAME**
 
 
 ---
 
 ## <kbd>class</kbd> `JenkinsK8sOperatorCharm`
-Charm Jenkins. 
+Charmed Jenkins. 
 
-<a href="../src/charm.py#L39"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/charm.py#L40"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -78,7 +80,7 @@ Unit that this execution is responsible for.
 
 ---
 
-<a href="../src/charm.py#L105"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/charm.py#L112"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `calculate_env`
 

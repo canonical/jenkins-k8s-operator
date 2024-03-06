@@ -31,7 +31,7 @@ Metadata for registering Jenkins Agent.
 
 ---
 
-<a href="../src/state.py#L132"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L123"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_agent_relation`
 
@@ -56,7 +56,7 @@ Instantiate AgentMeta from charm relation databag.
 
 ---
 
-<a href="../src/state.py#L113"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L104"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_deprecated_agent_relation`
 
@@ -81,7 +81,7 @@ Instantiate AgentMeta from charm relation databag.
 
 ---
 
-<a href="../src/state.py#L100"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L91"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `numeric_executors`
 
@@ -114,7 +114,7 @@ Exception raised when a charm configuration is found to be invalid.
  
  - <b>`msg`</b>:  Explanation of the error. 
 
-<a href="../src/state.py#L46"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L37"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -145,7 +145,7 @@ Represents an error with invalid number of units deployed.
  
  - <b>`msg`</b>:  Explanation of the error. 
 
-<a href="../src/state.py#L78"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L69"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -176,7 +176,7 @@ Represents an error with invalid data in relation data.
  
  - <b>`msg`</b>:  Explanation of the error. 
 
-<a href="../src/state.py#L62"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L53"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -223,7 +223,7 @@ Configuration for accessing Jenkins through proxy.
 
 ---
 
-<a href="../src/state.py#L212"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L203"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_env`
 
@@ -241,45 +241,6 @@ Instantiate ProxyConfig from juju charm environment.
 
 ---
 
-## <kbd>class</kbd> `RemotingConfig`
-Configuration for inbound agent connections. 
-
-
-
-**Attributes:**
- 
- - <b>`external_url`</b>:  External URL for inbound agent connections. 
- - <b>`enable_websocket`</b>:  Use websocket for inbound agent connections. 
-
-
-
-
----
-
-<a href="../src/state.py#L241"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-### <kbd>classmethod</kbd> `from_config`
-
-```python
-from_config(config: ConfigData) → RemotingConfig
-```
-
-Instantiate RemotingConfig from juju charm config data. 
-
-
-
-**Args:**
- 
- - <b>`config`</b>:  the charm's config data 
-
-
-
-**Returns:**
- RemotingConfig with validated attributes. 
-
-
----
-
 ## <kbd>class</kbd> `State`
 The Jenkins k8s operator charm state. 
 
@@ -292,14 +253,13 @@ The Jenkins k8s operator charm state.
  - <b>`deprecated_agent_relation_meta`</b>:  Metadata of all agents from units related through  deprecated agent relation. 
  - <b>`proxy_config`</b>:  Proxy configuration to access Jenkins upstream through. 
  - <b>`plugins`</b>:  The list of allowed plugins to install. 
- - <b>`remoting_config`</b>:  Configuration for inbound agents. 
 
 
 
 
 ---
 
-<a href="../src/state.py#L288"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/state.py#L243"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>classmethod</kbd> `from_charm`
 

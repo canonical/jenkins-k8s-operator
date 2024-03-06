@@ -14,7 +14,7 @@ from ops.testing import Harness
 
 import auth_proxy
 import ingress
-from charm import JenkinsK8sOperatorCharm
+from charm import INGRESS_RELATION_NAME, JenkinsK8sOperatorCharm
 
 CHARM_METADATA = """
 name: test-charm
@@ -40,7 +40,7 @@ class TestCharm(ops.CharmBase):
         """
         super().__init__(*args)
         self.events = []
-        self.ingress_observer = ingress.Observer(self)
+        self.ingress_observer = ingress.Observer(self, "ingress-observer", INGRESS_RELATION_NAME)
         self.auth_proxy_observer = auth_proxy.Observer(self, self.ingress_observer.ingress)
         self.framework.observe(self.on.jenkins_pebble_ready, self._record_event)
 

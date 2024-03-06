@@ -15,7 +15,6 @@ import secrets
 import textwrap
 import typing
 from datetime import datetime, timedelta
-from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from time import sleep
 
@@ -366,16 +365,12 @@ class Jenkins:
         self,
         agent_meta: state.AgentMeta,
         container: ops.Container,
-        host: typing.Union[IPv4Address, IPv6Address, str],
-        enable_websocket: bool,
     ) -> dict[str, typing.Any]:
         """Get agent node configuration dictionary values.
 
         Args:
             agent_meta: The Jenkins agent metadata to create the node from.
             container: The Jenkins workload container.
-            host: The Jenkins server ip address for direct agent tunnel connection.
-            enable_websocket: Whether to use websocket for inbound agent connections.
 
         Returns:
             A dictionary mapping of agent configuration values.
@@ -395,41 +390,24 @@ class Jenkins:
         )
         attribs = node.get_node_attributes()
         meta = json.loads(attribs["json"])
-        # Websocket is mutually exclusive with tunnel connect through
-        if enable_websocket:
-            meta["launcher"]["webSocket"] = enable_websocket
-        else:
-            # the field can either take "HOST:PORT", ":PORT", or "HOST:"
-            meta["launcher"]["tunnel"] = f"{host}:"
+
+        meta["launcher"]["webSocket"] = True
         attribs["json"] = json.dumps(meta)
         return attribs
 
-    def add_agent_node(
-        self,
-        agent_meta: state.AgentMeta,
-        container: ops.Container,
-        host: typing.Union[IPv4Address, IPv6Address, str],
-        enable_websocket: bool,
-    ) -> None:
+    def add_agent_node(self, agent_meta: state.AgentMeta, container: ops.Container) -> None:
         """Add a Jenkins agent node.
 
         Args:
             agent_meta: The Jenkins agent metadata to create the node from.
             container: The Jenkins workload container.
-            host: The Jenkins server ip address for direct agent tunnel connection.
-            enable_websocket: Whether to use websocket for inbound agent connections.
 
         Raises:
             JenkinsError: if an error occurred running groovy script creating the node.
         """
         client = self._get_client(_get_api_credentials(container))
         try:
-            config = self._get_node_config(
-                agent_meta=agent_meta,
-                container=container,
-                host=host,
-                enable_websocket=enable_websocket,
-            )
+            config = self._get_node_config(agent_meta=agent_meta, container=container)
             client.create_node_with_config(name=agent_meta.name, config=config)
         except jenkinsapi.custom_exceptions.AlreadyExists:
             pass

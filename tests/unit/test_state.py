@@ -169,18 +169,3 @@ def test_invalid_num_units(mock_charm: MagicMock):
 
     with pytest.raises(state.CharmIllegalNumUnitsError):
         state.State.from_charm(mock_charm)
-
-
-def test_remotingconfig_invalid(mock_charm: MagicMock):
-    """
-    arrange: given a mock charm with invalid remoting configuration.
-    act: when charm state is initialized.
-    assert: CharmConfigInvalidError is raised.
-    """
-    mock_charm.config = {
-        "remoting-external-url": "invalid",
-        "remoting-enable-websocket": "invalid",
-    }
-
-    with pytest.raises(state.CharmConfigInvalidError):
-        state.State.from_charm(mock_charm)

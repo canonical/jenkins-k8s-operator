@@ -17,7 +17,7 @@ The Jenkins Ingress integration observer.
 ### <kbd>function</kbd> `__init__`
 
 ```python
-__init__(charm: CharmBase)
+__init__(charm: CharmBase, key: str, relation_name: str)
 ```
 
 Initialize the observer and register event handlers. 
@@ -27,6 +27,8 @@ Initialize the observer and register event handlers.
 **Args:**
  
  - <b>`charm`</b>:  The parent charm to attach the observer to. 
+ - <b>`key`</b>:  The ops's Object identifier, to have a unique path for event handling. 
+ - <b>`relation_name`</b>:  The ingress relation that this observer is managing. 
 
 
 ---
@@ -39,7 +41,7 @@ Shortcut for more simple access the model.
 
 ---
 
-<a href="../src/ingress.py#L27"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/ingress.py#L34"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `get_path`
 

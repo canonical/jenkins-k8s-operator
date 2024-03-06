@@ -14,15 +14,22 @@ import jenkins
 class Observer(ops.Object):
     """The Jenkins Ingress integration observer."""
 
-    def __init__(self, charm: ops.CharmBase):
+    def __init__(self, charm: ops.CharmBase, key: str, relation_name: str):
         """Initialize the observer and register event handlers.
 
         Args:
             charm: The parent charm to attach the observer to.
+            key: The ops's Object identifier, to have a unique path for event handling.
+            relation_name: The ingress relation that this observer is managing.
         """
-        super().__init__(charm, "ingress-observer")
+        super().__init__(charm, key)
         self.charm = charm
-        self.ingress = IngressPerAppRequirer(self.charm, port=jenkins.WEB_PORT, strip_prefix=True)
+        self.ingress = IngressPerAppRequirer(
+            self.charm,
+            relation_name=relation_name,
+            port=jenkins.WEB_PORT,
+            strip_prefix=True,
+        )
 
     def get_path(self) -> str:
         """Return the path in whick Jenkins is expected to be listening.
@@ -36,4 +43,3 @@ class Observer(ops.Object):
         if path == "/":
             return ""
         return path
-

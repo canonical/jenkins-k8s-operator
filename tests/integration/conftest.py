@@ -7,7 +7,7 @@ import os
 import random
 import secrets
 import string
-from typing import Any, AsyncGenerator, Callable, Coroutine, Generator, Iterable
+from typing import Any, AsyncGenerator, Callable, Coroutine, Generator, Iterable, Optional
 
 import jenkinsapi.jenkins
 import kubernetes.config
@@ -50,6 +50,12 @@ def model_fixture(ops_test: OpsTest) -> Model:
     """The testing model."""
     assert ops_test.model
     return ops_test.model
+
+
+@pytest.fixture(scope="module", name="cloud")
+def cloud_fixture(ops_test: OpsTest) -> Optional[str]:
+    """The cloud the k8s model is running on."""
+    return ops_test.cloud_name
 
 
 @pytest.fixture(scope="module", name="jenkins_image")
@@ -190,7 +196,7 @@ async def jenkins_k8s_agents_fixture(
         "jenkins-agent-k8s",
         config={"jenkins_agent_labels": "k8s"},
         channel="latest/edge",
-        application_name=f"jenkins-agentk8s-{app_suffix}",
+        application_name=f"jenkins-agent-k8s-{app_suffix}",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
     yield agent_app
@@ -221,7 +227,7 @@ async def extra_jenkins_k8s_agents_fixture(
         "jenkins-agent-k8s",
         config={"jenkins_agent_labels": "k8s-extra"},
         channel="latest/edge",
-        application_name="jenkins-agentk8s-extra",
+        application_name="jenkins-agent-k8s-extra",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
     yield agent_app
@@ -258,6 +264,10 @@ async def machine_model_fixture(
     model = await machine_controller.add_model(machine_model_name)
     await model.connect(f"localhost:admin/{model.name}")
     yield model
+
+    await machine_controller.destroy_models(
+        model.name, destroy_storage=True, force=True, max_wait=10 * 60
+    )
     await model.disconnect()
 
 
@@ -776,10 +786,10 @@ def external_hostname_fixture() -> str:
     return "juju.test"
 
 
-@pytest_asyncio.fixture(scope="module", name="ingress_related")
-async def ingress_application_related_fixture(application: Application, external_hostname: str):
+@pytest_asyncio.fixture(scope="module", name="traefik_application_and_unit_ip")
+async def traefik_application_fixture(model: Model, external_hostname: str):
     """The application related to Jenkins via ingress v2 relation."""
-    traefik = await application.model.deploy(
+    traefik = await model.deploy(
         "traefik-k8s",
         channel="edge",
         trust=True,
@@ -789,18 +799,19 @@ async def ingress_application_related_fixture(application: Application, external
             "enable_experimental_forward_auth": True,
         },
     )
-    await application.model.wait_for_idle(
-        status="active", apps=[traefik.name], raise_on_error=False, timeout=30 * 60
-    )
-    await application.model.add_relation(f"{application.name}:ingress", traefik.name)
-    await application.model.wait_for_idle(
+
+    await model.wait_for_idle(
         status="active",
-        apps=[traefik.name, application.name],
+        apps=[traefik.name],
         timeout=20 * 60,
         idle_period=30,
         raise_on_error=False,
     )
-    return traefik
+    status = await model.get_status(filters=[traefik.name])
+    unit = next(iter(status.applications[traefik.name].units))
+    traefik_address = status["applications"][traefik.name]["units"][unit]["address"]
+
+    return (traefik, traefik_address)
 
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
