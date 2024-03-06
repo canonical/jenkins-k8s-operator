@@ -28,16 +28,18 @@ class AgentRelationData(typing.TypedDict):
 class Observer(ops.Object):
     """The Jenkins agent relation observer."""
 
-    def __init__(self, charm: ops.CharmBase, state: State):
+    def __init__(self, charm: ops.CharmBase, state: State, jenkins_wrapper: jenkins.Jenkins):
         """Initialize the observer and register event handlers.
 
         Args:
             charm: The parent charm to attach the observer to.
             state: The charm state.
+            jenkins_wrapper: The Jenkins wrapper.
         """
         super().__init__(charm, "agent-observer")
         self.charm = charm
         self.state = state
+        self.jenkins = jenkins_wrapper
 
         charm.framework.observe(
             charm.on[DEPRECATED_AGENT_RELATION].relation_joined,
@@ -83,14 +85,14 @@ class Observer(ops.Object):
         enable_websocket = bool(self.state.remoting_config.enable_websocket)
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
-            jenkins.add_agent_node(
+            self.jenkins.add_agent_node(
                 agent_meta=agent_meta,
                 container=container,
                 # mypy doesn't understand that host can no longer be None.
                 host=host,
                 enable_websocket=enable_websocket,
             )
-            secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
+            secret = self.jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
@@ -135,13 +137,13 @@ class Observer(ops.Object):
         enable_websocket = bool(self.state.remoting_config.enable_websocket)
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
-            jenkins.add_agent_node(
+            self.jenkins.add_agent_node(
                 agent_meta=agent_meta,
                 container=container,
                 host=host,
                 enable_websocket=enable_websocket,
             )
-            secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
+            secret = self.jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
@@ -179,7 +181,7 @@ class Observer(ops.Object):
         agent_name = jenkins.get_agent_name(typing.cast(ops.Unit, event.unit).name)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:
-            jenkins.remove_agent_node(agent_name=agent_name, container=container)
+            self.jenkins.remove_agent_node(agent_name=agent_name, container=container)
         except jenkins.JenkinsError as exc:
             logger.error("Failed to remove agent %s, %s", agent_name, exc)
             # There is no support for degraded status yet, however, this will not impact Jenkins
@@ -207,7 +209,7 @@ class Observer(ops.Object):
         agent_name = jenkins.get_agent_name(typing.cast(ops.Unit, event.unit).name)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:
-            jenkins.remove_agent_node(agent_name=agent_name, container=container)
+            self.jenkins.remove_agent_node(agent_name=agent_name, container=container)
         except jenkins.JenkinsError as exc:
             logger.error("Failed to remove agent %s, %s", agent_name, exc)
             # There is no support for degraded status yet, however, this will not impact Jenkins

@@ -25,6 +25,6 @@ def test_get_path():
     ingress_per_app.url = "https://host:8080/path"
     assert harness.charm.ingress_observer.get_path() == "/path"
     ingress_per_app.url = "https://host:8080/"
-    assert harness.charm.ingress_observer.get_path() == "/"
+    assert harness.charm.ingress_observer.get_path() == ""
     ingress_per_app.url = None
-    assert harness.charm.ingress_observer.get_path() == "/"
+    assert harness.charm.ingress_observer.get_path() == ""

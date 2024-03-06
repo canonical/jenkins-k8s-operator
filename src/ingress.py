@@ -31,5 +31,9 @@ class Observer(ops.Object):
             the path for the ingress URL.
         """
         if not self.ingress.url:
-            return "/"
-        return urlparse(self.ingress.url).path
+            return ""
+        path = urlparse(self.ingress.url).path
+        if path == "/":
+            return ""
+        return path
+
