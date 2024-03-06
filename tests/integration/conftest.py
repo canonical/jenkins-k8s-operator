@@ -3,6 +3,8 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+# pylint: disable=too-many-lines
+
 import os
 import random
 import secrets

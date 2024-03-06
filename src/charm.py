@@ -5,6 +5,8 @@
 
 """Charm Jenkins."""
 
+# pylint: disable=too-many-instance-attributes
+
 import logging
 import typing
 
