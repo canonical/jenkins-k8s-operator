@@ -9,6 +9,7 @@ Functions to operate Jenkins.
 ---------------
 - **WEB_PORT**
 - **WEB_URL**
+- **LOGIN_PATH**
 - **LOGIN_URL**
 - **REQUIRED_PLUGINS**
 - **USER**
@@ -206,16 +207,12 @@ Get node secret from jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L548"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L546"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `add_agent_node`
 
 ```python
-add_agent_node(
-    agent_meta: AgentMeta,
-    container: Container,
-    host: Union[IPv4Address, IPv6Address, str]
-) → None
+add_agent_node(agent_meta: AgentMeta, container: Container) → None
 ```
 
 Add a Jenkins agent node. 
@@ -226,7 +223,6 @@ Add a Jenkins agent node.
  
  - <b>`agent_meta`</b>:  The Jenkins agent metadata to create the node from. 
  - <b>`container`</b>:  The Jenkins workload container. 
- - <b>`host`</b>:  The Jenkins server ip address for direct agent tunnel connection. 
 
 
 
@@ -237,7 +233,7 @@ Add a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L574"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L567"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_agent_node`
 
@@ -263,7 +259,7 @@ Remove a Jenkins agent node.
 
 ---
 
-<a href="../src/jenkins.py#L627"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L620"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `safe_restart`
 
@@ -288,7 +284,7 @@ Safely restart Jenkins server after all jobs are done executing.
 
 ---
 
-<a href="../src/jenkins.py#L652"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L645"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
@@ -312,7 +308,7 @@ Infer agent name from unit name.
 
 ---
 
-<a href="../src/jenkins.py#L832"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L825"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `remove_unlisted_plugins`
 
@@ -343,7 +339,7 @@ Remove plugins that are not in the list of desired plugins.
 
 ---
 
-<a href="../src/jenkins.py#L928"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L921"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `rotate_credentials`
 

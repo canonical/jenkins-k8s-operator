@@ -8,14 +8,16 @@ Charm Jenkins.
 **Global Variables**
 ---------------
 - **JENKINS_SERVICE_NAME**
+- **AGENT_DISCOVERY_INGRESS_RELATION_NAME**
+- **INGRESS_RELATION_NAME**
 
 
 ---
 
 ## <kbd>class</kbd> `JenkinsK8sOperatorCharm`
-Charm Jenkins. 
+Charmed Jenkins. 
 
-<a href="../src/charm.py#L37"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/charm.py#L38"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 

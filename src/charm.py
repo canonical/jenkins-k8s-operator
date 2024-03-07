@@ -27,12 +27,13 @@ from state import (
 if typing.TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
 
-
+AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
+INGRESS_RELATION_NAME = "ingress"
 logger = logging.getLogger(__name__)
 
 
 class JenkinsK8sOperatorCharm(ops.CharmBase):
-    """Charm Jenkins."""
+    """Charmed Jenkins."""
 
     def __init__(self, *args: typing.Any):
         """Initialize the charm and register event handlers.
@@ -52,10 +53,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
 
+        # Ingress dedicated to agent discovery
+        self.agent_discovery_ingress_observer = ingress.Observer(
+            self, "agent-discovery-ingress-observer", AGENT_DISCOVERY_INGRESS_RELATION_NAME
+        )
         self.actions_observer = actions.Observer(self, self.state)
-        self.agent_observer = agent.Observer(self, self.state)
+        self.agent_observer = agent.Observer(
+            self, self.state, self.agent_discovery_ingress_observer
+        )
         self.cos_observer = cos.Observer(self)
-        self.ingress_observer = ingress.Observer(self)
+        self.ingress_observer = ingress.Observer(self, "ingress-observer", INGRESS_RELATION_NAME)
         self.framework.observe(
             self.on.jenkins_home_storage_attached, self._on_jenkins_home_storage_attached
         )
