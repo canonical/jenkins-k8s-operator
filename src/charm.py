@@ -14,7 +14,6 @@ import ops
 
 import actions
 import agent
-import auth_proxy
 import cos
 import ingress
 import jenkins
@@ -68,7 +67,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self, self.state, self.agent_discovery_ingress_observer, self.jenkins
         )
         self.cos_observer = cos.Observer(self)
-        self.auth_proxy_observer = auth_proxy.Observer(self, self.ingress_observer.ingress)
         self.framework.observe(
             self.on.jenkins_home_storage_attached, self._on_jenkins_home_storage_attached
         )
@@ -150,15 +148,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         try:
             self.jenkins.wait_ready()
             self.unit.status = ops.MaintenanceStatus("Configuring Jenkins.")
-            # Tested in integration
-            if self.auth_proxy_observer.has_relation():  # pragma: no cover
-                self.jenkins.bootstrap(
-                    container, jenkins.AUTH_PROXY_JENKINS_CONFIG, self.state.proxy_config
-                )
-            else:  # pragma: no cover
-                self.jenkins.bootstrap(
-                    container, jenkins.DEFAULT_JENKINS_CONFIG, self.state.proxy_config
-                )
+            self.jenkins.bootstrap(
+                container, jenkins.DEFAULT_JENKINS_CONFIG, self.state.proxy_config
+            )
             # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
             container.restart(JENKINS_SERVICE_NAME)
             self.jenkins.wait_ready()

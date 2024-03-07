@@ -55,10 +55,6 @@ requires:
     interface: jenkins_agent_v0
     optional: true
     limit: 2
-  auth-proxy:
-    interface: auth_proxy
-    optional: true
-    limit: 1
   ingress:
     interface: ingress
     optional: true

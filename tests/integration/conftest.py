@@ -9,7 +9,7 @@ import os
 import random
 import secrets
 import string
-from typing import Any, AsyncGenerator, Callable, Coroutine, Generator, Iterable, Optional
+from typing import AsyncGenerator, Iterable, Optional
 
 import jenkinsapi.jenkins
 import kubernetes.config
@@ -22,11 +22,6 @@ from juju.client._definitions import FullStatus, UnitStatus
 from juju.model import Controller, Model
 from juju.unit import Unit
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
-from lightkube import Client, KubeConfig
-from lightkube.core.exceptions import ApiError
-from playwright.async_api import async_playwright
-from playwright.async_api._generated import Browser, BrowserContext, BrowserType, Page
-from playwright.async_api._generated import Playwright as AsyncPlaywright
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
@@ -34,13 +29,6 @@ import jenkins
 import state
 
 from .constants import ALLOWED_PLUGINS
-from .dex import (
-    apply_dex_resources,
-    create_dex_resources,
-    get_dex_manifest,
-    get_dex_service_url,
-    update_redirect_uri,
-)
 from .helpers import get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
@@ -814,194 +802,3 @@ async def traefik_application_fixture(model: Model, external_hostname: str):
     traefik_address = status["applications"][traefik.name]["units"][unit]["address"]
 
     return (traefik, traefik_address)
-
-
-@pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
-async def oathkeeper_application_related_fixture(
-    application: Application, client: Client, ext_idp_service: str
-):
-    """The application related to Jenkins via auth_proxy v0 relation."""
-    oathkeeper = await application.model.deploy(
-        "oathkeeper",
-        channel="edge",
-        trust=True,
-    )
-    identity_platform = await application.model.deploy(
-        "identity-platform",
-        channel="edge",
-        trust=True,
-    )
-    await application.model.add_relation(f"{application.name}:auth-proxy", oathkeeper.name)
-    await application.model.add_relation(f"{application.name}:ingress", "traefik-public")
-    await application.model.add_relation(
-        f"{oathkeeper.name}:certificates", "self-signed-certificates"
-    )
-    await application.model.add_relation(
-        "traefik-public:experimental-forward-auth", oathkeeper.name
-    )
-    await application.model.add_relation(
-        "traefik-public:receive-ca-cert", "self-signed-certificates"
-    )
-    await application.model.add_relation(f"{oathkeeper.name}:kratos-info", "kratos")
-    await application.model.applications["kratos-external-idp-integrator"].set_config(
-        {
-            "client_id": "client_id",
-            "client_secret": "client_secret",
-            "provider": "generic",
-            "issuer_url": ext_idp_service,
-            "scope": "profile email",
-        }
-    )
-    # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
-    await application.model.applications["kratos"].set_config({"dev": "True"})
-    await application.model.wait_for_idle(
-        status="active",
-        apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
-        raise_on_error=False,
-        timeout=30 * 60,
-        idle_period=5,
-    )
-    get_redirect_uri_action = (
-        await application.model.applications["kratos-external-idp-integrator"]
-        .units[0]
-        .run_action("get-redirect-uri")
-    )
-    action_output = await get_redirect_uri_action.wait()
-    update_redirect_uri(client, action_output.results["redirect-uri"])
-    return oathkeeper
-
-
-@pytest.fixture(scope="session", name="client")
-def client_fixture() -> Client:
-    """k8s client."""
-    return Client(config=KubeConfig.from_file(KUBECONFIG), field_manager="dex-test")
-
-
-@pytest.fixture(scope="module", name="ext_idp_service")
-def ext_idp_service_fixture(ops_test: OpsTest, client: Client) -> Generator[str, None, None]:
-    """Deploy a DEX service on top of k8s for authentication."""
-    # Use ops-lib-manifests?
-    try:
-        create_dex_resources(client)
-        # We need to set the dex issuer_url to be the IP that was assigned to
-        # the dex service by metallb. We can't know that before hand, so we
-        # reapply the dex manifests.
-        apply_dex_resources(client)
-        yield get_dex_service_url(client)
-    finally:
-        if not ops_test.keep_model:
-            for obj in get_dex_manifest():
-                try:
-                    # mypy doesn't work well with lightkube
-                    client.delete(
-                        type(obj),
-                        obj.metadata.name,  # type: ignore
-                        namespace=obj.metadata.namespace,  # type: ignore
-                    )
-                except ApiError:
-                    pass
-
-
-@pytest.fixture()
-def external_user_email() -> str:
-    """Username for testing proxy authentication."""
-    return "admin@example.com"
-
-
-@pytest.fixture()
-def external_user_password() -> str:
-    """Password for testing proxy authentication."""
-    return secrets.token_hex()
-
-
-# The playwright fixtures are taken from:
-# https://github.com/microsoft/playwright-python/blob/main/tests/async/conftest.py
-@pytest_asyncio.fixture(scope="module", name="playwright")
-async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
-    """Playwright object."""
-    async with async_playwright() as playwright_object:
-        yield playwright_object
-
-
-@pytest_asyncio.fixture(scope="module", name="browser_type")
-async def browser_type_fixture(playwright: AsyncPlaywright) -> AsyncGenerator[BrowserType, None]:
-    """Browser type for playwright."""
-    yield playwright.firefox
-
-
-@pytest_asyncio.fixture(scope="module", name="browser_factory")
-async def browser_factory_fixture(
-    browser_type: BrowserType,
-) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, Browser]], None]:
-    """Browser factory."""
-    browsers = []
-
-    async def launch(**kwargs: Any) -> Browser:
-        """Launch browser.
-
-        Args:
-            kwargs: kwargs.
-
-        Returns:
-            a browser instance.
-        """
-        browser = await browser_type.launch(**kwargs)
-        browsers.append(browser)
-        return browser
-
-    yield launch
-    for browser in browsers:
-        await browser.close()
-
-
-@pytest_asyncio.fixture(scope="module", name="browser")
-async def browser_fixture(
-    browser_factory: Callable[..., Coroutine[Any, Any, Browser]]
-) -> AsyncGenerator[Browser, None]:
-    """Browser."""
-    browser = await browser_factory()
-    yield browser
-    await browser.close()
-
-
-@pytest_asyncio.fixture(name="context_factory")
-async def context_factory_fixture(
-    browser: Browser,
-) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, BrowserContext]], None]:
-    """Playwright context factory."""
-    contexts = []
-
-    async def launch(**kwargs: Any) -> BrowserContext:
-        """Launch browser.
-
-        Args:
-            kwargs: kwargs.
-
-        Returns:
-            the browser context.
-        """
-        context = await browser.new_context(**kwargs)
-        contexts.append(context)
-        return context
-
-    yield launch
-    for context in contexts:
-        await context.close()
-
-
-@pytest_asyncio.fixture(name="context")
-async def context_fixture(
-    context_factory: Callable[..., Coroutine[Any, Any, BrowserContext]]
-) -> AsyncGenerator[BrowserContext, None]:
-    """Playwright context."""
-    context = await context_factory(ignore_https_errors=True)
-    yield context
-    await context.close()
-
-
-@pytest_asyncio.fixture
-async def page(context: BrowserContext) -> AsyncGenerator[Page, None]:
-    """Playwright page."""
-    new_page = await context.new_page()
-    yield new_page
-    await new_page.close()

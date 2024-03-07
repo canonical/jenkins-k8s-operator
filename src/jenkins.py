@@ -67,7 +67,6 @@ WAR_DOWNLOAD_URL = "https://updates.jenkins.io/download/war"
 SYSTEM_PROPERTY_HEADLESS = "java.awt.headless=true"
 # Java system property to load logging configuration from file
 SYSTEM_PROPERTY_LOGGING = f"java.util.logging.config.file={LOGGING_CONFIG_PATH}"
-AUTH_PROXY_JENKINS_CONFIG = "templates/jenkins-auth-proxy-config.xml"
 DEFAULT_JENKINS_CONFIG = "templates/jenkins-config.xml"
 JENKINS_LOGGING_CONFIG = "templates/logging.properties"
 
@@ -712,15 +711,6 @@ def install_default_config(container: ops.Container) -> None:
         container: The Jenkins workload container.
     """
     _install_config(container, DEFAULT_JENKINS_CONFIG, CONFIG_FILE_PATH)
-
-
-def install_auth_proxy_config(container: ops.Container) -> None:
-    """Install jenkins-config.xml for auth_proxy.
-
-    Args:
-        container: The Jenkins workload container.
-    """
-    _install_config(container, AUTH_PROXY_JENKINS_CONFIG, CONFIG_FILE_PATH)
 
 
 def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
