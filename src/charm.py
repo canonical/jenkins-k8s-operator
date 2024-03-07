@@ -183,7 +183,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         2. Update Jenkins patch version if available and is within restart-time-range config value.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container):
             self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             return
 
