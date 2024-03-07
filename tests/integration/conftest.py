@@ -797,7 +797,7 @@ async def traefik_application_fixture(model: Model, external_hostname: str):
         trust=True,
         config={
             "external_hostname": external_hostname,
-            "routing_mode": "subdomain",
+            "routing_mode": "path",
             "enable_experimental_forward_auth": True,
         },
     )
