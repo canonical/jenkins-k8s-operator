@@ -10,13 +10,12 @@ import ipaddress
 import json
 import secrets
 import socket
-import unittest.mock
 from typing import Callable, cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from ops import Model, ModelError, Network
+from ops import Model, Network
 from ops.charm import PebbleReadyEvent
 
 import jenkins
@@ -367,8 +366,8 @@ def test_agent_discovery_url_fqdn_fallback(harness: Harness, monkeypatch: pytest
     """
     harness.begin()
     mock_fqdn = "test"
-    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
-    monkeypatch.setattr(ipaddress, "ip_address", unittest.mock.MagicMock(side_effect=ValueError))
+    monkeypatch.setattr(socket, "getfqdn", MagicMock(return_value=mock_fqdn))
+    monkeypatch.setattr(ipaddress, "ip_address", MagicMock(side_effect=ValueError))
 
     assert (
         harness.charm.agent_observer.agent_discovery_url
@@ -380,16 +379,14 @@ def test_agent_discovery_url_model_error_null_binding(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ):
     """
-    arrange: given a base jenkins charm and mocked ingress requirer to raise ModelError.
+    arrange: given a base jenkins charm and mocked ingress requirer to return None.
     act: start the charm and add an ingress integration with traefik.
     assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
     """
     mock_fqdn = "test"
-    monkeypatch.setattr(
-        IngressPerAppRequirer, "url", unittest.mock.PropertyMock(side_effect=ModelError)
-    )
-    monkeypatch.setattr(Model, "get_binding", unittest.mock.MagicMock(return_value=None))
-    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
+    monkeypatch.setattr(IngressPerAppRequirer, "url", PropertyMock(return_value=None))
+    monkeypatch.setattr(Model, "get_binding", MagicMock(return_value=None))
+    monkeypatch.setattr(socket, "getfqdn", MagicMock(return_value=mock_fqdn))
 
     harness.begin()
     harness.add_relation(
@@ -408,16 +405,14 @@ def test_agent_discovery_url_with_ingress_ip_validation_error(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ):
     """
-    arrange: given a base jenkins charm and mocked ingress requirer to raise ModelError.
+    arrange: given a base jenkins charm and mocked ingress requirer to return None.
     act: start the charm and add an ingress integration with traefik.
     assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
     """
-    monkeypatch.setattr(
-        IngressPerAppRequirer, "url", unittest.mock.PropertyMock(side_effect=ModelError)
-    )
-    monkeypatch.setattr(ipaddress, "ip_address", unittest.mock.MagicMock(side_effect=ValueError))
+    monkeypatch.setattr(IngressPerAppRequirer, "url", PropertyMock(return_value=None))
+    monkeypatch.setattr(ipaddress, "ip_address", MagicMock(side_effect=ValueError))
     mock_fqdn = "test"
-    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
+    monkeypatch.setattr(socket, "getfqdn", MagicMock(return_value=mock_fqdn))
 
     harness.begin()
     harness.add_relation(
@@ -434,17 +429,13 @@ def test_agent_discovery_url_with_ingress_ip_validation_error(
 
 def test_agent_discovery_url_pod_ip(harness: Harness, monkeypatch: pytest.MonkeyPatch):
     """
-    arrange: given a base jenkins charm and mocked ingress requirer to raise ModelError.
+    arrange: given a base jenkins charm and mocked ingress requirer to return None.
     act: start the charm and add an ingress integration with traefik.
     assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
     """
     mock_pod_ip = "10.10.10.10"
-    monkeypatch.setattr(
-        IngressPerAppRequirer, "url", unittest.mock.PropertyMock(side_effect=ModelError)
-    )
-    monkeypatch.setattr(
-        Network, "bind_address", unittest.mock.PropertyMock(return_value=mock_pod_ip)
-    )
+    monkeypatch.setattr(IngressPerAppRequirer, "url", PropertyMock(return_value=None))
+    monkeypatch.setattr(Network, "bind_address", PropertyMock(return_value=mock_pod_ip))
 
     harness.begin()
     harness.add_relation(

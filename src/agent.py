@@ -95,16 +95,8 @@ class Observer(ops.Object):
         Returns:
             The charm's agent discovery url.
         """
-        # Check if an ingress URL is available
-        try:
-            if ingress_url := self.ingress_observer.ingress.url:
-                return ingress_url
-        except ops.ModelError as exc:
-            # We only log the error here as we can fallback to using pod IP
-            # if ingress is not available
-            logger.error(
-                "Failed obtaining agent discovery url: %s, is the charm shutting down?", exc
-            )
+        if ingress_url := self.ingress_observer.ingress.url:
+            return ingress_url
 
         # Fallback to pod IP
         if binding := self.charm.model.get_binding("juju-info"):
