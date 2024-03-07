@@ -95,6 +95,7 @@ class Observer(ops.Object):
         Returns:
             The charm's agent discovery url.
         """
+        # Check if an ingress URL is available
         if ingress_url := self.ingress_observer.ingress.url:
             return ingress_url
 
