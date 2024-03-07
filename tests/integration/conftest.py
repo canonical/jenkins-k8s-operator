@@ -789,7 +789,7 @@ def external_hostname_fixture() -> str:
 
 
 @pytest_asyncio.fixture(scope="module", name="traefik_application_subdomain")
-async def traefik_application_subdomain_fixture(model: Model, external_hostname: str):
+async def traefik_application_related_fixture(model: Model, external_hostname: str):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
         "traefik-k8s",
@@ -817,7 +817,7 @@ async def traefik_application_subdomain_fixture(model: Model, external_hostname:
 
 
 @pytest_asyncio.fixture(scope="module", name="traefik_application_path")
-async def traefik_application_path_fixture(model: Model, external_hostname: str):
+async def traefik_application_related_fixture(model: Model, external_hostname: str):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
         "traefik-k8s",
