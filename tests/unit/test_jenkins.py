@@ -13,9 +13,8 @@ import re
 import secrets
 import textwrap
 import typing
-import unittest.mock
 from functools import partial
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import jenkinsapi.jenkins
 import ops
@@ -395,13 +394,13 @@ def test__configure_proxy_fail(
     """
     arrange: given a test proxy config and a monkeypatched jenkins client that raises an exception.
     act: when _configure_proxy is called.
-    assert: JenkinsProxyError is raised.
+    assert: JenkinsBootstrapError is raised.
     """
     mock_client.run_groovy_script = MagicMock(
         side_effect=jenkinsapi.custom_exceptions.JenkinsAPIException
     )
 
-    with pytest.raises(jenkins.JenkinsProxyError) as exc:
+    with pytest.raises(jenkins.JenkinsBootstrapError) as exc:
         jenkins._configure_proxy(harness_container.container, proxy_config)
 
     assert exc.value.args[0] == "Proxy configuration failed."
@@ -544,7 +543,7 @@ def test_get_client(admin_credentials: jenkins.Credentials):
     """
     expected_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
-    with unittest.mock.patch("jenkinsapi.jenkins.Jenkins", return_value=expected_client):
+    with patch("jenkinsapi.jenkins.Jenkins", return_value=expected_client):
         client = jenkins._get_client(admin_credentials)
 
         assert client == expected_client

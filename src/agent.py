@@ -112,7 +112,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -149,7 +149,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -187,7 +187,7 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container):
             logger.warning("Relation departed before service ready.")
             return
 
@@ -215,7 +215,7 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container):
             logger.warning("Relation departed before service ready.")
             return
 

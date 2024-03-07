@@ -9,7 +9,7 @@
 import datetime
 import functools
 import typing
-import unittest.mock
+from unittest.mock import MagicMock
 
 import ops
 import pytest
@@ -58,8 +58,8 @@ def test_workload_not_ready(harness: Harness, event_handler: str):
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     handler_func = getattr(jenkins_charm, event_handler)
-    mock_event = unittest.mock.MagicMock(spec=ops.WorkloadEvent)
-    mock_event.workload = unittest.mock.MagicMock(spec=ops.model.Container)
+    mock_event = MagicMock(spec=ops.WorkloadEvent)
+    mock_event.workload = MagicMock(spec=ops.model.Container)
     mock_event.workload.can_connect.return_value = False
 
     handler_func(mock_event)
@@ -84,8 +84,8 @@ def test_storage_not_ready(harness: Harness, event_handler: str):
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     handler_func = getattr(jenkins_charm, event_handler)
-    mock_event = unittest.mock.MagicMock(spec=ops.WorkloadEvent)
-    mock_event.workload = unittest.mock.MagicMock(spec=ops.model.Container)
+    mock_event = MagicMock(spec=ops.WorkloadEvent)
+    mock_event.workload = MagicMock(spec=ops.model.Container)
     mock_event.workload.can_connect.return_value = True
 
     handler_func(mock_event)
@@ -109,14 +109,14 @@ def test__on_jenkins_pebble_ready_error(
     monkeypatch.setattr(
         jenkins,
         "bootstrap",
-        unittest.mock.MagicMock(side_effect=jenkins.JenkinsBootstrapError),
+        MagicMock(side_effect=jenkins.JenkinsBootstrapError),
     )
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     with pytest.raises(jenkins.JenkinsBootstrapError):
-        jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
+        jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
 
 
 def test__on_jenkins_pebble_ready_get_version_error(
@@ -131,9 +131,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     """
     harness = harness_container.harness
     # speed up waiting by changing default argument values
-    monkeypatch.setattr(
-        jenkins, "get_version", unittest.mock.MagicMock(side_effect=jenkins.JenkinsError)
-    )
+    monkeypatch.setattr(jenkins, "get_version", MagicMock(side_effect=jenkins.JenkinsError))
     monkeypatch.setattr(jenkins.wait_ready, "__defaults__", (1, 1))
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args: None)
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
@@ -142,7 +140,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
 
     with pytest.raises(jenkins.JenkinsError):
-        jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
+        jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
 
 
 @pytest.mark.usefixtures("patch_os_environ")
@@ -155,9 +153,7 @@ def test__on_jenkins_pebble_jenkins_not_ready(
     assert: the charm raises an error.
     """
     harness = harness_container.harness
-    monkeypatch.setattr(
-        jenkins, "wait_ready", unittest.mock.MagicMock(side_effect=[None, TimeoutError])
-    )
+    monkeypatch.setattr(jenkins, "wait_ready", MagicMock(side_effect=[None, TimeoutError]))
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "get_version", lambda *_args, **_kwargs: "1")
     harness.begin()
@@ -165,7 +161,7 @@ def test__on_jenkins_pebble_jenkins_not_ready(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
 
     with pytest.raises(TimeoutError):
-        jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
+        jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
 
 
 @pytest.mark.usefixtures("patch_os_environ")
@@ -178,13 +174,13 @@ def test__on_jenkins_pebble_ready(
     assert: the unit status should show expected status and the jenkins port should be open.
     """
     harness = harness_container.harness
-    monkeypatch.setattr(jenkins, "wait_ready", unittest.mock.MagicMock(return_value=None))
+    monkeypatch.setattr(jenkins, "wait_ready", MagicMock(return_value=None))
     monkeypatch.setattr(jenkins, "bootstrap", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(jenkins, "get_version", lambda *_args, **_kwargs: "1")
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    jenkins_charm._on_jenkins_pebble_ready(unittest.mock.MagicMock(spec=ops.PebbleReadyEvent))
+    jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     assert (
@@ -226,7 +222,7 @@ def test__remove_unlisted_plugins_error(
     monkeypatch.setattr(
         jenkins,
         "remove_unlisted_plugins",
-        unittest.mock.MagicMock(side_effect=exception),
+        MagicMock(side_effect=exception),
     )
     harness_container.harness.begin()
 
@@ -263,9 +259,9 @@ def test__on_update_status_not_in_time_range(
     act: when update_status action is triggered.
     assert: no further functions are called.
     """
-    mock_datetime = unittest.mock.MagicMock(spec=datetime.datetime)
+    mock_datetime = MagicMock(spec=datetime.datetime)
     mock_datetime.utcnow.return_value = datetime.datetime(2023, 1, 1, 23)
-    mock_remove_unlisted_plugins_func = unittest.mock.MagicMock(
+    mock_remove_unlisted_plugins_func = MagicMock(
         spec=JenkinsK8sOperatorCharm._remove_unlisted_plugins
     )
     monkeypatch.setattr(timerange, "datetime", mock_datetime)
@@ -278,7 +274,7 @@ def test__on_update_status_not_in_time_range(
     monkeypatch.setattr(
         jenkins_charm, "_remove_unlisted_plugins", mock_remove_unlisted_plugins_func
     )
-    jenkins_charm._on_update_status(unittest.mock.MagicMock(spec=ops.UpdateStatusEvent))
+    jenkins_charm._on_update_status(MagicMock(spec=ops.UpdateStatusEvent))
 
     assert jenkins_charm.unit.status.name == original_status
     mock_remove_unlisted_plugins_func.assert_not_called()
@@ -340,7 +336,7 @@ def test__on_update_status(
     harness_container.harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    jenkins_charm._on_update_status(unittest.mock.MagicMock(spec=ops.UpdateStatusEvent))
+    jenkins_charm._on_update_status(MagicMock(spec=ops.UpdateStatusEvent))
 
     assert jenkins_charm.unit.status == expected_status
 
@@ -357,10 +353,10 @@ def test__on_jenkins_home_storage_attached(harness: Harness, monkeypatch: pytest
     harness.set_can_connect(container, True)
     # We don't use harness.handle_exec here because we want to assert
     # the parameters passed to exec()
-    exec_handler = unittest.mock.MagicMock()
+    exec_handler = MagicMock()
     monkeypatch.setattr(container, "exec", exec_handler)
 
-    event = unittest.mock.MagicMock()
+    event = MagicMock()
     mock_jenkins_home_path = "/var/lib/jenkins"
     event.storage.location.resolve = lambda: mock_jenkins_home_path
     jenkins_charm._on_jenkins_home_storage_attached(event)
@@ -384,9 +380,9 @@ def test__on_jenkins_home_storage_attached_container_not_ready(
     harness.set_can_connect(container, False)
     # We don't use harness.handle_exec here because we want to assert
     # whether exec() was called
-    exec_handler = unittest.mock.MagicMock()
+    exec_handler = MagicMock()
     monkeypatch.setattr(container, "exec", exec_handler)
 
-    jenkins_charm._on_jenkins_home_storage_attached(unittest.mock.MagicMock())
+    jenkins_charm._on_jenkins_home_storage_attached(MagicMock())
 
     exec_handler.assert_not_called()

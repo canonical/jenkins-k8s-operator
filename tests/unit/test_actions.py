@@ -7,7 +7,7 @@ import secrets
 
 # Need access to protected functions for testing
 import typing
-import unittest.mock
+from unittest.mock import MagicMock
 
 import ops
 import pytest
@@ -36,8 +36,8 @@ def test_workload_not_ready(harness: Harness, event_handler: str):
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     handler_func = getattr(jenkins_charm.actions_observer, event_handler)
-    mock_event = unittest.mock.MagicMock(spec=ops.ActionEvent)
-    mock_event.workload = unittest.mock.MagicMock(spec=ops.model.Container)
+    mock_event = MagicMock(spec=ops.ActionEvent)
+    mock_event.workload = MagicMock(spec=ops.model.Container)
     mock_event.workload.can_connect.return_value = False
 
     handler_func(mock_event)
@@ -53,7 +53,7 @@ def test_on_get_admin_password_action(
     act: when get-admin-password action is run.
     assert: the correct admin password is returned.
     """
-    mock_event = unittest.mock.MagicMock(spec=ops.ActionEvent)
+    mock_event = MagicMock(spec=ops.ActionEvent)
     harness_container.harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
@@ -76,15 +76,14 @@ def test_on_rotate_credentials_action_api_error(
     monkeypatch.setattr(
         charm.actions.jenkins,
         "rotate_credentials",
-        unittest.mock.MagicMock(side_effect=jenkins.JenkinsError),
+        MagicMock(side_effect=jenkins.JenkinsError),
     )
-    harness_container.harness.set_can_connect(
-        harness_container.harness.model.unit.containers["jenkins"], True
-    )
-    mock_event = unittest.mock.MagicMock(spec=ops.ActionEvent)
-    harness_container.harness.begin()
+    harness = harness_container.harness
+    harness.set_can_connect(harness_container.harness.model.unit.containers["jenkins"], True)
+    mock_event = MagicMock(spec=ops.ActionEvent)
+    harness.begin()
 
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     jenkins_charm.actions_observer.on_rotate_credentials(mock_event)
 
     mock_event.fail.assert_called_once()
@@ -104,13 +103,12 @@ def test_on_rotate_credentials_action(
         "rotate_credentials",
         lambda *_args, **_kwargs: password,
     )
-    harness_container.harness.set_can_connect(
-        harness_container.harness.model.unit.containers["jenkins"], True
-    )
-    mock_event = unittest.mock.MagicMock(spec=ops.ActionEvent)
-    harness_container.harness.begin()
+    harness = harness_container.harness
+    harness.set_can_connect(harness_container.harness.model.unit.containers["jenkins"], True)
+    mock_event = MagicMock(spec=ops.ActionEvent)
+    harness.begin()
 
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     jenkins_charm.actions_observer.on_rotate_credentials(mock_event)
 
     mock_event.set_results.assert_called_once_with({"password": password})

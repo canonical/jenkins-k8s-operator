@@ -15,6 +15,7 @@ import typing
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
+from typing import Optional
 
 import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
@@ -49,35 +50,29 @@ PLUGINS_PATH = JENKINS_HOME_PATH / "plugins"
 LOGGING_CONFIG_PATH = JENKINS_HOME_PATH / "logging.properties"
 # The Jenkins logging path as defined in templates/logging.properties file
 LOGGING_PATH = JENKINS_HOME_PATH / "jenkins.log"
-
 # The plugins that are required for Jenkins to work
 REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
     "prometheus",  # required for COS integration
     "monitoring",  # required for session invalidation
 ]
-
 USER = "jenkins"
 GROUP = "jenkins"
-
 BUILT_IN_NODE_NAME = "Built-In Node"
 # The Jenkins stable version RSS feed URL
 RSS_FEED_URL = "https://www.jenkins.io/changelog-stable/rss.xml"
 # The Jenkins WAR downloads page
 WAR_DOWNLOAD_URL = "https://updates.jenkins.io/download/war"
-
 # Java system property to run Jenkins in headless mode
 SYSTEM_PROPERTY_HEADLESS = "java.awt.headless=true"
 # Java system property to load logging configuration from file
 SYSTEM_PROPERTY_LOGGING = f"java.util.logging.config.file={LOGGING_CONFIG_PATH}"
+DEFAULT_JENKINS_CONFIG = "templates/jenkins-config.xml"
+JENKINS_LOGGING_CONFIG = "templates/logging.properties"
 
 
 class JenkinsError(Exception):
     """Base exception for Jenkins errors."""
-
-
-class JenkinsProxyError(JenkinsError):
-    """An error occurred configuring Jenkins proxy."""
 
 
 class JenkinsPluginError(JenkinsError):
@@ -92,16 +87,61 @@ class ValidationError(Exception):
     """An unexpected data is encountered."""
 
 
-class JenkinsNetworkError(JenkinsError):
-    """An error occurred communicating with the upstream Jenkins server."""
+class Environment(typing.TypedDict):
+    """Dictionary mapping of Jenkins environment variables.
+
+    Attributes:
+        JENKINS_HOME: The Jenkins home directory.
+    """
+
+    JENKINS_HOME: str
 
 
-class JenkinsUpdateError(JenkinsError):
-    """An error occurred trying to update Jenkins."""
+@dataclasses.dataclass(frozen=True)
+class Credentials:
+    """Information needed to log into Jenkins.
+
+    Attributes:
+        username: The Jenkins account username used to log into Jenkins.
+        password_or_token: The Jenkins API token or account password used to log into Jenkins.
+    """
+
+    username: str
+    password_or_token: str
 
 
-class JenkinsRestartError(JenkinsError):
-    """An error occurred trying to restart Jenkins."""
+def get_admin_credentials(container: ops.Container) -> Credentials:
+    """Retrieve admin credentials.
+
+    Args:
+        container: The Jenkins workload container to interact with filesystem.
+
+    Returns:
+        The Jenkins admin account credentials.
+    """
+    user = "admin"
+    password_file_contents = str(container.pull(PASSWORD_FILE_PATH, encoding="utf-8").read())
+    return Credentials(username=user, password_or_token=password_file_contents.strip())
+
+
+def _get_api_credentials(container: ops.Container) -> Credentials:
+    """Retrieve admin API credentials.
+
+    Args:
+        container: The Jenkins workload container.
+
+    Returns:
+        Credentials: The Jenkins API Credentials.
+
+    Raises:
+        JenkinsBootstrapError: if no API credential has been setup yet.
+    """
+    try:
+        token = str(container.pull(API_TOKEN_PATH, encoding="utf-8").read())
+        return Credentials(username="admin", password_or_token=token.strip())
+    except ops.pebble.PathError as exc:
+        logger.debug("Admin API token not yet setup.")
+        raise JenkinsBootstrapError("Admin API credentials not yet setup.") from exc
 
 
 def _wait_for(
@@ -174,7 +214,7 @@ class StorageMountError(JenkinsBootstrapError):
         self.msg = msg
 
 
-def is_storage_ready(container: ops.Container) -> bool:
+def is_storage_ready(container: Optional[ops.Container]) -> bool:
     """Return whether the Jenkins home directory is mounted and owned by jenkins.
 
     Args:
@@ -186,6 +226,8 @@ def is_storage_ready(container: ops.Container) -> bool:
     Returns:
         True if home directory is mounted and owned by jenkins, False otherwise.
     """
+    if not container or not container.can_connect():
+        return False
     mount_info: str = container.pull("/proc/mounts").read()
     if str(JENKINS_HOME_PATH) not in mount_info:
         return False
@@ -195,63 +237,6 @@ def is_storage_ready(container: ops.Container) -> bool:
     except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
         raise StorageMountError("Error fetching storage ownership info.") from exc
     return "jenkins" in stdout
-
-
-@dataclasses.dataclass(frozen=True)
-class Credentials:
-    """Information needed to log into Jenkins.
-
-    Attributes:
-        username: The Jenkins account username used to log into Jenkins.
-        password_or_token: The Jenkins API token or account password used to log into Jenkins.
-    """
-
-    username: str
-    password_or_token: str
-
-
-def get_admin_credentials(container: ops.Container) -> Credentials:
-    """Retrieve admin credentials.
-
-    Args:
-        container: The Jenkins workload container to interact with filesystem.
-
-    Returns:
-        The Jenkins admin account credentials.
-    """
-    user = "admin"
-    password_file_contents = str(container.pull(PASSWORD_FILE_PATH, encoding="utf-8").read())
-    return Credentials(username=user, password_or_token=password_file_contents.strip())
-
-
-def _get_api_credentials(container: ops.Container) -> Credentials:
-    """Retrieve admin API credentials.
-
-    Args:
-        container: The Jenkins workload container.
-
-    Returns:
-        Credentials: The Jenkins API Credentials.
-
-    Raises:
-        JenkinsBootstrapError: if no API credential has been setup yet.
-    """
-    try:
-        token = str(container.pull(API_TOKEN_PATH, encoding="utf-8").read())
-        return Credentials(username="admin", password_or_token=token.strip())
-    except ops.pebble.PathError as exc:
-        logger.debug("Admin API token not yet setup.")
-        raise JenkinsBootstrapError("Admin API credentials not yet setup.") from exc
-
-
-class Environment(typing.TypedDict):
-    """Dictionary mapping of Jenkins environment variables.
-
-    Attributes:
-        JENKINS_HOME: The Jenkins home directory.
-    """
-
-    JENKINS_HOME: str
 
 
 def calculate_env() -> Environment:
@@ -313,9 +298,9 @@ def _install_configs(container: ops.Container) -> None:
     Args:
         container: The Jenkins workload container.
     """
-    with open("templates/jenkins-config.xml", encoding="utf-8") as jenkins_config_file:
+    with open(DEFAULT_JENKINS_CONFIG, encoding="utf-8") as jenkins_config_file:
         container.push(CONFIG_FILE_PATH, jenkins_config_file, user=USER, group=GROUP)
-    with open("templates/logging.properties", encoding="utf-8") as jenkins_logging_config_file:
+    with open(JENKINS_LOGGING_CONFIG, encoding="utf-8") as jenkins_logging_config_file:
         container.push(LOGGING_CONFIG_PATH, jenkins_logging_config_file, user=USER, group=GROUP)
 
 
@@ -366,7 +351,7 @@ def _configure_proxy(
         proxy_config: The proxy settings to apply.
 
     Raises:
-        JenkinsProxyError: if an error occurred running proxy configuration script.
+        JenkinsBootstrapError: if an error occurred running proxy configuration script.
     """
     if not proxy_config:
         return
@@ -377,7 +362,7 @@ def _configure_proxy(
         client.run_groovy_script(f"proxy = new ProxyConfiguration({parsed_args})\nproxy.save()")
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to configure proxy, %s", exc)
-        raise JenkinsProxyError("Proxy configuration failed.") from exc
+        raise JenkinsBootstrapError("Proxy configuration failed.") from exc
 
 
 def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
@@ -464,7 +449,7 @@ def bootstrap(container: ops.Container, proxy_config: state.ProxyConfig | None =
     try:
         _configure_proxy(container, proxy_config)
         _install_plugins(container, proxy_config)
-    except (JenkinsProxyError, JenkinsPluginError) as exc:
+    except (JenkinsBootstrapError, JenkinsPluginError) as exc:
         raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
 
 
