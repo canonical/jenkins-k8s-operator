@@ -10,13 +10,13 @@ import ipaddress
 import json
 import secrets
 import socket
-import unittest.mock
 from typing import Callable, cast
+from unittest.mock import MagicMock, PropertyMock
 
 import jenkinsapi
 import pytest
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from ops import Model, ModelError, Network
+from ops import Model, Network
 from ops.charm import PebbleReadyEvent
 
 import charm
@@ -48,7 +48,7 @@ def test__on_agent_relation_joined_no_container(
     )
     harness_container.harness.begin()
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    mock_event = unittest.mock.MagicMock(spec=PebbleReadyEvent)
+    mock_event = MagicMock(spec=PebbleReadyEvent)
 
     if relation == state.AGENT_RELATION:
         jenkins_charm.agent_observer._on_agent_relation_joined(mock_event)
@@ -170,12 +170,12 @@ def test__on_agent_relation_joined_client_error(
     monkeypatch.setattr(
         charm.jenkins,
         "_get_client",
-        lambda *_args, **_kwargs: unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins),
+        lambda *_args, **_kwargs: MagicMock(spec=jenkinsapi.jenkins.Jenkins),
     )
     monkeypatch.setattr(
         charm.jenkins,
         "add_agent_node",
-        unittest.mock.MagicMock(side_effect=jenkins.JenkinsError()),
+        MagicMock(side_effect=jenkins.JenkinsError()),
     )
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
@@ -220,7 +220,7 @@ def test__on_agent_relation_joined(
     monkeypatch.setattr(
         charm.jenkins,
         "_get_client",
-        lambda *_args, **_kwargs: unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins),
+        lambda *_args, **_kwargs: MagicMock(spec=jenkinsapi.jenkins.Jenkins),
     )
     monkeypatch.setattr(
         charm.jenkins,
@@ -264,7 +264,7 @@ def test__on_agent_relation_departed_no_container(
     act: when an agent relation departed event is fired.
     assert: nothing happens since the workload doesn't exist.
     """
-    mocked_remove_agent = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mocked_remove_agent = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
     monkeypatch.setattr(charm.jenkins, "remove_agent_node", mocked_remove_agent)
     harness_container.harness.set_can_connect("jenkins", False)
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
@@ -302,7 +302,7 @@ def test__on_agent_relation_departed_remove_agent_node_error(
     monkeypatch.setattr(
         charm.jenkins,
         "remove_agent_node",
-        unittest.mock.MagicMock(side_effect=jenkins.JenkinsError),
+        MagicMock(side_effect=jenkins.JenkinsError),
     )
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
@@ -341,7 +341,7 @@ def test__on_agent_relation_departed(
     act: when an agent relation departed event is fired.
     assert: the remove_agent_node is called and unit falls into ActiveStatus.
     """
-    mocked_remove_agent = unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mocked_remove_agent = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
     monkeypatch.setattr(charm.jenkins, "remove_agent_node", mocked_remove_agent)
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
@@ -390,8 +390,8 @@ def test_agent_discovery_url_fqdn_fallback(harness: Harness, monkeypatch: pytest
     """
     harness.begin()
     mock_fqdn = "test"
-    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
-    monkeypatch.setattr(ipaddress, "ip_address", unittest.mock.MagicMock(side_effect=ValueError))
+    monkeypatch.setattr(socket, "getfqdn", MagicMock(return_value=mock_fqdn))
+    monkeypatch.setattr(ipaddress, "ip_address", MagicMock(side_effect=ValueError))
 
     assert (
         harness.charm.agent_observer.agent_discovery_url
@@ -403,16 +403,14 @@ def test_agent_discovery_url_model_error_null_binding(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ):
     """
-    arrange: given a base jenkins charm and mocked ingress requirer to raise ModelError.
+    arrange: given a base jenkins charm and mocked ingress requirer to return None.
     act: start the charm and add an ingress integration with traefik.
     assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
     """
     mock_fqdn = "test"
-    monkeypatch.setattr(
-        IngressPerAppRequirer, "url", unittest.mock.PropertyMock(side_effect=ModelError)
-    )
-    monkeypatch.setattr(Model, "get_binding", unittest.mock.MagicMock(return_value=None))
-    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
+    monkeypatch.setattr(IngressPerAppRequirer, "url", PropertyMock(return_value=None))
+    monkeypatch.setattr(Model, "get_binding", MagicMock(return_value=None))
+    monkeypatch.setattr(socket, "getfqdn", MagicMock(return_value=mock_fqdn))
 
     harness.begin()
     harness.add_relation(
@@ -431,16 +429,14 @@ def test_agent_discovery_url_with_ingress_ip_validation_error(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ):
     """
-    arrange: given a base jenkins charm and mocked ingress requirer to raise ModelError.
+    arrange: given a base jenkins charm and mocked ingress requirer to return None.
     act: start the charm and add an ingress integration with traefik.
     assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
     """
-    monkeypatch.setattr(
-        IngressPerAppRequirer, "url", unittest.mock.PropertyMock(side_effect=ModelError)
-    )
-    monkeypatch.setattr(ipaddress, "ip_address", unittest.mock.MagicMock(side_effect=ValueError))
+    monkeypatch.setattr(IngressPerAppRequirer, "url", PropertyMock(return_value=None))
+    monkeypatch.setattr(ipaddress, "ip_address", MagicMock(side_effect=ValueError))
     mock_fqdn = "test"
-    monkeypatch.setattr(socket, "getfqdn", unittest.mock.MagicMock(return_value=mock_fqdn))
+    monkeypatch.setattr(socket, "getfqdn", MagicMock(return_value=mock_fqdn))
 
     harness.begin()
     harness.add_relation(
@@ -457,17 +453,13 @@ def test_agent_discovery_url_with_ingress_ip_validation_error(
 
 def test_agent_discovery_url_pod_ip(harness: Harness, monkeypatch: pytest.MonkeyPatch):
     """
-    arrange: given a base jenkins charm and mocked ingress requirer to raise ModelError.
+    arrange: given a base jenkins charm and mocked ingress requirer to return None.
     act: start the charm and add an ingress integration with traefik.
     assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
     """
     mock_pod_ip = "10.10.10.10"
-    monkeypatch.setattr(
-        IngressPerAppRequirer, "url", unittest.mock.PropertyMock(side_effect=ModelError)
-    )
-    monkeypatch.setattr(
-        Network, "bind_address", unittest.mock.PropertyMock(return_value=mock_pod_ip)
-    )
+    monkeypatch.setattr(IngressPerAppRequirer, "url", PropertyMock(return_value=None))
+    monkeypatch.setattr(Network, "bind_address", PropertyMock(return_value=mock_pod_ip))
 
     harness.begin()
     harness.add_relation(

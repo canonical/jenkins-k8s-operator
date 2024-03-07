@@ -39,7 +39,7 @@ The Jenkins agent relation observer.
  
  - <b>`agent_discovery_url`</b>:  external hostname to be passed to agents for discovery. 
 
-<a href="../src/agent.py#L38"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/agent.py#L39"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -64,7 +64,7 @@ Initialize the observer and register event handlers.
 
 Return the external hostname to be passed to agents via the integration. 
 
-If we do not have an ingress, then use the pod ip as hostname. The reason to prefer this over the pod name (which is the actual hostname visible from the pod) or a K8s service, is that those are routable virtually exclusively inside the cluster (as they rely) on the cluster's DNS service, while the ip address is _sometimes_ routable from the outside, e.g., when deploying on MicroK8s on Linux. 
+If we do not have an ingress, then use the pod ip as hostname. The reason to prefer this over the pod name (which is the actual hostname visible from the pod) or a K8s service, is that those are routable virtually exclusively inside the cluster as they rely on the cluster's DNS service, while the ip address is _sometimes_ routable from the outside, e.g., when deploying on MicroK8s on Linux. 
 
 
 
@@ -81,7 +81,7 @@ Shortcut for more simple access the model.
 
 ---
 
-<a href="../src/agent.py#L255"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/agent.py#L238"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `reconfigure_agent_discovery`
 
