@@ -788,8 +788,8 @@ def external_hostname_fixture() -> str:
     return "juju.test"
 
 
-@pytest_asyncio.fixture(scope="module", name="traefik_application_and_unit_ip")
-async def traefik_application_fixture(model: Model, external_hostname: str):
+@pytest_asyncio.fixture(scope="module", name="traefik_application_subdomain")
+async def traefik_application_related_fixture(model: Model, external_hostname: str):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
         "traefik-k8s",
@@ -798,6 +798,34 @@ async def traefik_application_fixture(model: Model, external_hostname: str):
         config={
             "external_hostname": external_hostname,
             "routing_mode": "subdomain",
+            "enable_experimental_forward_auth": True,
+        },
+    )
+
+    await model.wait_for_idle(
+        status="active",
+        apps=[traefik.name],
+        timeout=20 * 60,
+        idle_period=30,
+        raise_on_error=False,
+    )
+    status = await model.get_status(filters=[traefik.name])
+    unit = next(iter(status.applications[traefik.name].units))
+    traefik_address = status["applications"][traefik.name]["units"][unit]["address"]
+
+    return (traefik, traefik_address)
+
+
+@pytest_asyncio.fixture(scope="module", name="traefik_application_path")
+async def traefik_application_related_fixture(model: Model, external_hostname: str):
+    """The application related to Jenkins via ingress v2 relation."""
+    traefik = await model.deploy(
+        "traefik-k8s",
+        channel="edge",
+        trust=True,
+        config={
+            "external_hostname": external_hostname,
+            "routing_mode": "path",
             "enable_experimental_forward_auth": True,
         },
     )
