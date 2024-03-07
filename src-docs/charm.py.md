@@ -9,6 +9,7 @@ Charm Jenkins.
 ---------------
 - **JENKINS_SERVICE_NAME**
 - **AGENT_DISCOVERY_INGRESS_RELATION_NAME**
+- **INGRESS_RELATION_NAME**
 
 
 ---

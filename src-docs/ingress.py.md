@@ -12,12 +12,12 @@ Observer module for Jenkins to ingress integration.
 ## <kbd>class</kbd> `Observer`
 The Jenkins Ingress integration observer. 
 
-<a href="../src/ingress.py#L17"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/ingress.py#L15"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
 ```python
-__init__(charm: CharmBase, key: str, relation_name: Optional[str] = None)
+__init__(charm: CharmBase, key: str, relation_name: str)
 ```
 
 Initialize the observer and register event handlers. 
