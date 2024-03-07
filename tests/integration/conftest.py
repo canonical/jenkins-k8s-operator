@@ -270,7 +270,7 @@ async def jenkins_machine_agents_fixture(
     # stable.
     app: Application = await machine_model.deploy(
         "jenkins-agent",
-        channel="latest/edge",
+        channel="latest/stable",
         config={"jenkins_agent_labels": "machine"},
         application_name=f"jenkins-agent-{app_suffix}",
         num_units=num_units,

@@ -13,7 +13,6 @@ import re
 import secrets
 import textwrap
 import typing
-import unittest.mock
 from functools import partial
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -671,7 +670,7 @@ def test_get_client(admin_credentials: jenkins.Credentials, mock_env: jenkins.En
     """
     expected_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
-    with unittest.mock.patch("jenkinsapi.jenkins.Jenkins", return_value=expected_client):
+    with patch("jenkinsapi.jenkins.Jenkins", return_value=expected_client):
         jenkins_wrapper = jenkins.Jenkins(mock_env)
         client = jenkins_wrapper._get_client(admin_credentials)
 
