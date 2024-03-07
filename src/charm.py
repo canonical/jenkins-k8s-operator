@@ -61,8 +61,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.agent_observer = agent.Observer(
             self, self.state, self.agent_discovery_ingress_observer
         )
-        self.cos_observer = cos.Observer(self)
         self.ingress_observer = ingress.Observer(self, "ingress-observer", INGRESS_RELATION_NAME)
+        self.cos_observer = cos.Observer(self)
         self.framework.observe(
             self.on.jenkins_home_storage_attached, self._on_jenkins_home_storage_attached
         )
@@ -78,6 +78,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The pebble layer defining Jenkins service layer.
         """
+        env_dict = typing.cast(typing.Dict[str, str], jenkins_env)
         layer: LayerDict = {
             "summary": "jenkins layer",
             "description": "pebble config layer for jenkins",
@@ -89,8 +90,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     f"-D{jenkins.SYSTEM_PROPERTY_LOGGING} "
                     f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war",
                     "startup": "enabled",
-                    # TypedDict and Dict[str,str] are not compatible.
-                    "environment": typing.cast(typing.Dict[str, str], jenkins_env),
+                    "environment": env_dict,
                     "user": jenkins.USER,
                     "group": jenkins.GROUP,
                 },
