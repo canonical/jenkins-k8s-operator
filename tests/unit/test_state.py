@@ -45,7 +45,7 @@ def test_no_time_range_config(time_range: str, mock_charm: MagicMock):
     ), "Restart time range should not be instantiated."
 
 
-class AgentMeta(typing.TypedDict):
+class TestAgentMeta(typing.TypedDict):
     """Metadata wrapper for testing.
 
     Attrs:
@@ -63,14 +63,14 @@ class AgentMeta(typing.TypedDict):
     "invalid_meta",
     [
         pytest.param(
-            AgentMeta(executors="", labels="abc", name="http://sample-host:8080"),
+            TestAgentMeta(executors="", labels="abc", name="http://sample-host:8080"),
         ),
         pytest.param(
-            AgentMeta(executors="abc", labels="abc", name="http://sample-host:8080"),
+            TestAgentMeta(executors="abc", labels="abc", name="http://sample-host:8080"),
         ),
     ],
 )
-def test_agent_meta__validate(invalid_meta: AgentMeta):
+def test_agent_meta__validate(invalid_meta: TestAgentMeta):
     """
     arrange: given an invalid agent metadata tuple.
     act: when validate is called.
