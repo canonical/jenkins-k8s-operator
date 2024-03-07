@@ -17,7 +17,7 @@ Charm Jenkins.
 ## <kbd>class</kbd> `JenkinsK8sOperatorCharm`
 Charmed Jenkins. 
 
-<a href="../src/charm.py#L42"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/charm.py#L41"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -80,7 +80,7 @@ Unit that this execution is responsible for.
 
 ---
 
-<a href="../src/charm.py#L114"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/charm.py#L112"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `calculate_env`
 
