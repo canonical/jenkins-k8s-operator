@@ -78,6 +78,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The pebble layer defining Jenkins service layer.
         """
+        # TypedDict and Dict[str,str] are not compatible.
         env_dict = typing.cast(typing.Dict[str, str], self.jenkins.environment)
         layer: LayerDict = {
             "summary": "jenkins layer",

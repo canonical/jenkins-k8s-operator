@@ -3,8 +3,6 @@
 
 """Functions to operate Jenkins."""
 
-# pylint: disable=too-many-lines
-
 import dataclasses
 import functools
 import itertools
