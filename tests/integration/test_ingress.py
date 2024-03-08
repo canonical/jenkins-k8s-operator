@@ -58,11 +58,15 @@ async def test_agent_discovery_ingress_integration(
     model = application.model
     machine_model = jenkins_machine_agents.model
     traefik_application, traefik_address = traefik_application_and_unit_ip
+    # The jenkins prefix will be fetch from the main ingress, with is not related for this test
+    traefik_application.setConfig({"routing_mode":"subdomain"})
     await application.relate(
         AGENT_DISCOVERY_INGRESS_RELATION_NAME, f"{traefik_application.name}:ingress"
     )
     # Add dns record
-    ingress_hostname_mapping = f"{traefik_address} {external_hostname}"
+    ingress_hostname_mapping = (
+        f"{traefik_address} {model.name}-{application.name}.{external_hostname}"
+    )
     command = f"sudo echo '{ingress_hostname_mapping}' >> /etc/hosts"
     for unit in jenkins_machine_agents.units:
         action = await unit.run(command)
