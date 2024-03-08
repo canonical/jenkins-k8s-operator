@@ -12,7 +12,6 @@ import requests
 from juju.application import Application
 from juju.model import Model
 
-import jenkins
 import state
 from charm import AGENT_DISCOVERY_INGRESS_RELATION_NAME
 
@@ -35,7 +34,7 @@ async def test_ingress_integration(
         apps=[application.name, traefik_application.name], wait_for_active=True, timeout=20 * 60
     )
     response = requests.get(
-        f"http://{traefik_address}/{model.name}-{application.name}{jenkins.LOGIN_PATH}",
+        f"http://{traefik_address}/{model.name}-{application.name}",
         headers={"Host": f"{external_hostname}"},
         timeout=5,
     )
