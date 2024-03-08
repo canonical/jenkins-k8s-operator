@@ -7,7 +7,6 @@ import functools
 import logging
 import os
 import typing
-from pathlib import Path
 
 import ops
 from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
@@ -20,7 +19,6 @@ AGENT_RELATION = "agent"
 DEPRECATED_AGENT_RELATION = "agent-deprecated"
 JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
-JENKINS_HOME_PATH = Path("/var/lib/jenkins")
 
 
 class CharmStateBaseError(Exception):

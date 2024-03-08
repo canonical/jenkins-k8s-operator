@@ -181,7 +181,7 @@ def container_fixture(
     jenkins_root = harness.get_filesystem_root("jenkins")
     storage_mount_proc_path = combine_root_paths(jenkins_root, Path("/proc/mounts"))
     storage_mount_proc_path.parent.mkdir(parents=True, exist_ok=True)
-    storage_mount_proc_path.write_text(str(state.JENKINS_HOME_PATH), "utf-8")
+    storage_mount_proc_path.write_text(str(jenkins.JENKINS_HOME_PATH), "utf-8")
     password_file_path = combine_root_paths(jenkins_root, jenkins.PASSWORD_FILE_PATH)
     password_file_path.parent.mkdir(parents=True, exist_ok=True)
     password_file_path.write_text(admin_credentials.password_or_token, encoding="utf-8")
@@ -247,7 +247,7 @@ def container_fixture(
                 "--latest",
             ] == argv:
                 return (0, "Done", "")
-            case _ if ["stat", "-c", "%U", str(state.JENKINS_HOME_PATH)] == argv:
+            case _ if ["stat", "-c", "%U", str(jenkins.JENKINS_HOME_PATH)] == argv:
                 return (0, jenkins.USER, "")
             # pylint: enable=R0801
             case _:

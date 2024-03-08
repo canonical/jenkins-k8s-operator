@@ -165,7 +165,7 @@ def test_is_storage_ready_proc_error():
     assert: StorageMountError is raised.
     """
     mock_container = MagicMock(ops.Container)
-    mock_container.pull.return_value = io.StringIO(str((state.JENKINS_HOME_PATH)))
+    mock_container.pull.return_value = io.StringIO(str((jenkins.JENKINS_HOME_PATH)))
     mock_proc = MagicMock(ops.pebble.ExecProcess)
     mock_proc.wait_output.side_effect = [ops.pebble.ChangeError(err="", change=MagicMock())]
     mock_container.exec.return_value = mock_proc

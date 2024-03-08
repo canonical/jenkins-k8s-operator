@@ -17,7 +17,6 @@ import agent
 import cos
 import ingress
 import jenkins
-import state
 import timerange
 from state import (
     JENKINS_SERVICE_NAME,
@@ -116,7 +115,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             The dictionary mapping of environment variables for the Jenkins service.
         """
         return jenkins.Environment(
-            JENKINS_HOME=str(state.JENKINS_HOME_PATH),
+            JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
             JENKINS_PREFIX=self.ingress_observer.get_path(),
         )
 
