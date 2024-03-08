@@ -671,13 +671,13 @@ def test_get_client(admin_credentials: jenkins.Credentials, mock_env: jenkins.En
     expected_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
     with patch("jenkinsapi.jenkins.Jenkins", return_value=expected_client):
-        jenkins_wrapper = jenkins.Jenkins(mock_env)
-        client = jenkins_wrapper._get_client(admin_credentials)
+        jenkins_instance = jenkins.Jenkins(mock_env)
+        client = jenkins_instance._get_client(admin_credentials)
 
         assert client == expected_client
         # pylint doesn't understand that this is a patched implementation.
         jenkinsapi.jenkins.Jenkins.assert_called_with(  # pylint: disable=no-member
-            baseurl=jenkins_wrapper.web_url,
+            baseurl=jenkins_instance.web_url,
             username=admin_credentials.username,
             password=admin_credentials.password_or_token,
             timeout=60,
