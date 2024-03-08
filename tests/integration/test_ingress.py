@@ -59,7 +59,7 @@ async def test_agent_discovery_ingress_integration(
     machine_model = jenkins_machine_agents.model
     traefik_application, traefik_address = traefik_application_and_unit_ip
     # The jenkins prefix will be fetch from the main ingress, which is not related for this test
-    traefik_application.set_config({"routing_mode": "subdomain"})
+    await traefik_application.set_config({"routing_mode": "subdomain"})
     await application.relate(
         AGENT_DISCOVERY_INGRESS_RELATION_NAME, f"{traefik_application.name}:ingress"
     )
