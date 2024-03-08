@@ -4,11 +4,11 @@
 """Fixtures for Jenkins-k8s-operator charm unit tests."""
 
 import textwrap
-import typing
-import unittest.mock
 from ipaddress import IPv4Address
 from pathlib import Path
 from secrets import token_hex
+from typing import Any, Callable, Tuple, cast
+from unittest.mock import MagicMock
 
 import jenkinsapi.jenkins
 import pytest
@@ -50,7 +50,7 @@ def jenkins_version_fixture():
 def mocked_get_request_fixture(jenkins_version: str):
     """Mock get request with given status code."""
 
-    def mocked_get(_: str, status_code: int = 200, **_kwargs: typing.Any):
+    def mocked_get(_: str, status_code: int = 200, **_kwargs: Any):
         """Mock get request with predefined status code.
 
         Args:
@@ -76,13 +76,13 @@ def admin_credentials_fixture() -> jenkins.Credentials:
 @pytest.fixture(scope="function", name="mock_env")
 def mock_env_fixture():
     """Mock environment."""
-    return unittest.mock.MagicMock(spec=jenkins.Environment)
+    return MagicMock(spec=jenkins.Environment)
 
 
 @pytest.fixture(scope="function", name="mock_client")
-def mock_client_fixture() -> unittest.mock.MagicMock:
+def mock_client_fixture() -> MagicMock:
     """Mock Jenkins API client."""
-    return unittest.mock.MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    return MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
 
 def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Harness):
@@ -92,7 +92,7 @@ def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Ha
         monkeypatch: The pytest monkeypatch object.
         harness: The testing harness.
     """
-    handler_table: dict[str, typing.Callable[[list[str]], tuple[int, str, str]]] = {}
+    handler_table: dict[str, Callable[[list[str]], tuple[int, str, str]]] = {}
 
     # This is a stub implementation only.
     class ExecProcessStub:  # pylint: disable=too-few-public-methods
@@ -130,7 +130,7 @@ def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Ha
                 stderr=self._stderr,
             )
 
-    def exec_stub(command: list[str], **_kwargs: typing.Any):
+    def exec_stub(command: list[str], **_kwargs: Any):
         """A mock implementation of the `exec` method of the container object.
 
         Args:
@@ -147,7 +147,7 @@ def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Ha
     def register_command_handler(
         container: Container | str,
         executable: str,
-        handler=typing.Callable[[list[str]], typing.Tuple[int, str, str]],
+        handler=Callable[[list[str]], Tuple[int, str, str]],
     ):
         """Registers a handler for a specific executable command.
 
@@ -181,7 +181,7 @@ def container_fixture(
     jenkins_root = harness.get_filesystem_root("jenkins")
     storage_mount_proc_path = combine_root_paths(jenkins_root, Path("/proc/mounts"))
     storage_mount_proc_path.parent.mkdir(parents=True, exist_ok=True)
-    storage_mount_proc_path.write_text(str(state.JENKINS_HOME_PATH), "utf-8")
+    storage_mount_proc_path.write_text(str(jenkins.JENKINS_HOME_PATH), "utf-8")
     password_file_path = combine_root_paths(jenkins_root, jenkins.PASSWORD_FILE_PATH)
     password_file_path.parent.mkdir(parents=True, exist_ok=True)
     password_file_path.write_text(admin_credentials.password_or_token, encoding="utf-8")
@@ -204,7 +204,7 @@ def container_fixture(
         """
         required_plugins = " ".join(set(jenkins.REQUIRED_PLUGINS))
         # type cast since the fixture contains no_proxy values
-        no_proxy_hosts = "|".join(typing.cast(str, proxy_config.no_proxy).split(","))
+        no_proxy_hosts = "|".join(cast(str, proxy_config.no_proxy).split(","))
         # assert for types that cannot be None.
         assert proxy_config.http_proxy, "Http proxy fixture should not be None."
         assert proxy_config.https_proxy, "Https proxy fixture should not be None."
@@ -247,7 +247,7 @@ def container_fixture(
                 "--latest",
             ] == argv:
                 return (0, "Done", "")
-            case _ if ["stat", "-c", "%U", str(state.JENKINS_HOME_PATH)] == argv:
+            case _ if ["stat", "-c", "%U", str(jenkins.JENKINS_HOME_PATH)] == argv:
                 return (0, jenkins.USER, "")
             # pylint: enable=R0801
             case _:
@@ -443,7 +443,7 @@ def plugin_groovy_script_result_fixture():
 @pytest.fixture(scope="module", name="mock_charm")
 def mock_charm_fixture():
     """A valid mock charm."""
-    mock_charm = unittest.mock.MagicMock(spec=CharmBase)
+    mock_charm = MagicMock(spec=CharmBase)
     mock_charm.app.planned_units.return_value = 1
     return mock_charm
 
@@ -459,7 +459,7 @@ def patch_os_environ_fixture(monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture(scope="function", name="patch_jenkins_node")
 def patch_jenkins_node_fixture(monkeypatch: pytest.MonkeyPatch):
     """Monkeypatch jenkinsapi Node to enable node creation."""
-    mock_node = unittest.mock.MagicMock(spec=jenkinsapi.node.Node)
+    mock_node = MagicMock(spec=jenkinsapi.node.Node)
     mock_node.return_value.get_node_attributes.return_value = {
         "json": '{"launcher": {"tunnel": ""}}'
     }
@@ -469,4 +469,4 @@ def patch_jenkins_node_fixture(monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture(scope="function", name="mock_ip_addr")
 def mock_ip_addr_fixture():
     """Mock IPV4 fixture."""
-    return unittest.mock.MagicMock(spec=IPv4Address)
+    return MagicMock(spec=IPv4Address)

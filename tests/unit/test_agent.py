@@ -174,7 +174,10 @@ def test__on_agent_relation_joined_client_error(
     harness_container.harness.begin()
 
     model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
-    with patch.object(jenkins.Jenkins, "add_agent_node") as add_agent_node_mock:
+    with (
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins.Jenkins, "add_agent_node") as add_agent_node_mock,
+    ):
         add_agent_node_mock.side_effect = jenkins.JenkinsError()
 
         harness_container.harness.charm.on[relation].relation_joined.emit(
@@ -213,6 +216,7 @@ def test__on_agent_relation_joined(
         get_relation_data(relation),
     )
     with (
+        patch.object(jenkins.Jenkins, "wait_ready"),
         patch.object(jenkins.Jenkins, "add_agent_node"),
         patch.object(jenkins.Jenkins, "get_node_secret") as get_node_secret_mock,
     ):

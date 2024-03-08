@@ -41,20 +41,20 @@ class Observer(ops.Object):
         charm: ops.CharmBase,
         state: State,
         ingress_observer: ingress.Observer,
-        jenkins_wrapper: jenkins.Jenkins,
+        jenkins_instance: jenkins.Jenkins,
     ):
         """Initialize the observer and register event handlers.
 
         Args:
             charm: The parent charm to attach the observer to.
             state: The charm state.
-            jenkins_wrapper: The Jenkins wrapper.
+            jenkins_instance: The Jenkins instance.
             ingress_observer: The ingress observer responsible for agent discovery.
         """
         super().__init__(charm, "agent-observer")
         self.charm = charm
         self.state = state
-        self.jenkins = jenkins_wrapper
+        self.jenkins = jenkins_instance
         self.ingress_observer = ingress_observer
 
         charm.framework.observe(
@@ -175,6 +175,7 @@ class Observer(ops.Object):
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
+            self.jenkins.wait_ready()
             self.jenkins.add_agent_node(agent_meta=agent_meta, container=container)
             secret = self.jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:

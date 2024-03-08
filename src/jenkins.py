@@ -26,13 +26,13 @@ from jenkinsapi.node import Node
 from pydantic import HttpUrl
 
 import state
-from state import JENKINS_HOME_PATH
 
 logger = logging.getLogger(__name__)
 
 WEB_PORT = 8080
 LOGIN_PATH = "/login?from=%2F"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
+JENKINS_HOME_PATH = Path("/var/lib/jenkins")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
 # Path to Jenkins admin API token

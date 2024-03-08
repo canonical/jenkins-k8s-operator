@@ -12,18 +12,18 @@ from state import JENKINS_SERVICE_NAME, State
 class Observer(ops.Object):
     """Jenkins-k8s charm actions observer."""
 
-    def __init__(self, charm: ops.CharmBase, state: State, jenkins_wrapper: jenkins.Jenkins):
+    def __init__(self, charm: ops.CharmBase, state: State, jenkins_instance: jenkins.Jenkins):
         """Initialize the observer and register actions handlers.
 
         Args:
             charm: The parent charm to attach the observer to.
             state: The Jenkins charm state.
-            jenkins_wrapper: The Jenkins wrapper.
+            jenkins_instance: The Jenkins instance.
         """
         super().__init__(charm, "actions-observer")
         self.charm = charm
         self.state = state
-        self.jenkins = jenkins_wrapper
+        self.jenkins = jenkins_instance
 
         charm.framework.observe(charm.on.get_admin_password_action, self.on_get_admin_password)
         charm.framework.observe(

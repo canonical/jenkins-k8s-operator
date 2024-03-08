@@ -18,7 +18,6 @@ import auth_proxy
 import cos
 import ingress
 import jenkins
-import state
 import timerange
 from state import (
     JENKINS_SERVICE_NAME,
@@ -81,6 +80,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The pebble layer defining Jenkins service layer.
         """
+        # TypedDict and Dict[str,str] are not compatible.
         env_dict = typing.cast(typing.Dict[str, str], self.jenkins.environment)
         layer: LayerDict = {
             "summary": "jenkins layer",
@@ -118,7 +118,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             The dictionary mapping of environment variables for the Jenkins service.
         """
         return jenkins.Environment(
-            JENKINS_HOME=str(state.JENKINS_HOME_PATH),
+            JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
             JENKINS_PREFIX=self.ingress_observer.get_path(),
         )
 

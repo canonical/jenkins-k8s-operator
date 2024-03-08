@@ -17,7 +17,6 @@ import requests
 
 import ingress
 import jenkins
-import state
 import timerange
 from charm import JenkinsK8sOperatorCharm
 
@@ -126,7 +125,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """
-    arrange: given a patched jenkins.version function that raises an exception.
+    arrange: given a patched jenkins.version property that raises an exception.
     act: when the jenkins_pebble_ready event is fired.
     assert: the charm raises an error.
     """
@@ -389,4 +388,4 @@ def test_calculate_env(harness: Harness):
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     env = jenkins_charm.calculate_env()
 
-    assert env == {"JENKINS_HOME": str(state.JENKINS_HOME_PATH), "JENKINS_PREFIX": ""}
+    assert env == {"JENKINS_HOME": str(jenkins.JENKINS_HOME_PATH), "JENKINS_PREFIX": ""}

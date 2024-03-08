@@ -13,7 +13,6 @@ import re
 import secrets
 import textwrap
 import typing
-import unittest.mock
 from functools import partial
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -166,7 +165,7 @@ def test_is_storage_ready_proc_error():
     assert: StorageMountError is raised.
     """
     mock_container = MagicMock(ops.Container)
-    mock_container.pull.return_value = io.StringIO(str((state.JENKINS_HOME_PATH)))
+    mock_container.pull.return_value = io.StringIO(str((jenkins.JENKINS_HOME_PATH)))
     mock_proc = MagicMock(ops.pebble.ExecProcess)
     mock_proc.wait_output.side_effect = [ops.pebble.ChangeError(err="", change=MagicMock())]
     mock_container.exec.return_value = mock_proc
@@ -701,14 +700,14 @@ def test_get_client(admin_credentials: jenkins.Credentials, mock_env: jenkins.En
     """
     expected_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
-    with unittest.mock.patch("jenkinsapi.jenkins.Jenkins", return_value=expected_client):
-        jenkins_wrapper = jenkins.Jenkins(mock_env)
-        client = jenkins_wrapper._get_client(admin_credentials)
+    with patch("jenkinsapi.jenkins.Jenkins", return_value=expected_client):
+        jenkins_instance = jenkins.Jenkins(mock_env)
+        client = jenkins_instance._get_client(admin_credentials)
 
         assert client == expected_client
         # pylint doesn't understand that this is a patched implementation.
         jenkinsapi.jenkins.Jenkins.assert_called_with(  # pylint: disable=no-member
-            baseurl=jenkins_wrapper.web_url,
+            baseurl=jenkins_instance.web_url,
             username=admin_credentials.username,
             password=admin_credentials.password_or_token,
             timeout=60,
