@@ -175,6 +175,7 @@ class Observer(ops.Object):
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
+            self.jenkins.wait_ready()
             self.jenkins.add_agent_node(agent_meta=agent_meta, container=container)
             secret = self.jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
