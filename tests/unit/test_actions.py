@@ -13,7 +13,6 @@ import ops
 import pytest
 from ops.testing import Harness
 
-import charm
 import jenkins
 from charm import JenkinsK8sOperatorCharm
 
@@ -64,49 +63,36 @@ def test_on_get_admin_password_action(
     )
 
 
-def test_on_rotate_credentials_action_api_error(
-    harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
-):
+def test_on_rotate_credentials_action_api_error(harness_container: HarnessWithContainer):
     """
-    arrange: given a monkeypatched rotate_credentials that raises a JenkinsError.
+    arrange: given a mocked rotate_credentials that raises a JenkinsError.
     act: when rotate_credentials action is run.
     assert: the event is failed.
     """
-    monkeypatch.setattr(
-        charm.actions.jenkins,
-        "rotate_credentials",
-        MagicMock(side_effect=jenkins.JenkinsError),
-    )
     harness = harness_container.harness
-    harness.set_can_connect(harness_container.harness.model.unit.containers["jenkins"], True)
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.ActionEvent)
     harness.begin()
-
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    harness.charm.jenkins.rotate_credentials = MagicMock(side_effect=jenkins.JenkinsError)
+
     jenkins_charm.actions_observer.on_rotate_credentials(mock_event)
 
     mock_event.fail.assert_called_once()
 
 
-def test_on_rotate_credentials_action(
-    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
-):
+def test_on_rotate_credentials_action(harness_container: HarnessWithContainer):
     """
-    arrange: given a monkeypatched rotate_credentials that returns a password.
+    arrange: given a mocked rotate_credentials that returns a password.
     act: when rotate_credentials action is run.
     assert: the event returns a newly generated password.
     """
     password = secrets.token_hex(16)
-    monkeypatch.setattr(
-        charm.actions.jenkins,
-        "rotate_credentials",
-        lambda *_args, **_kwargs: password,
-    )
     harness = harness_container.harness
     harness.set_can_connect(harness_container.harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.ActionEvent)
     harness.begin()
+    harness.charm.jenkins.rotate_credentials = MagicMock(return_value=password)
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     jenkins_charm.actions_observer.on_rotate_credentials(mock_event)

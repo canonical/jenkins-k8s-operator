@@ -12,16 +12,18 @@ from state import JENKINS_SERVICE_NAME, State
 class Observer(ops.Object):
     """Jenkins-k8s charm actions observer."""
 
-    def __init__(self, charm: ops.CharmBase, state: State):
+    def __init__(self, charm: ops.CharmBase, state: State, jenkins_instance: jenkins.Jenkins):
         """Initialize the observer and register actions handlers.
 
         Args:
             charm: The parent charm to attach the observer to.
             state: The Jenkins charm state.
+            jenkins_instance: The Jenkins wrapper.
         """
         super().__init__(charm, "actions-observer")
         self.charm = charm
         self.state = state
+        self.jenkins = jenkins_instance
 
         charm.framework.observe(charm.on.get_admin_password_action, self.on_get_admin_password)
         charm.framework.observe(
@@ -53,7 +55,7 @@ class Observer(ops.Object):
             event.fail("Service not yet ready.")
             return
         try:
-            password = jenkins.rotate_credentials(container)
+            password = self.jenkins.rotate_credentials(container)
         except jenkins.JenkinsError:
             event.fail("Error invalidating user sessions. See logs.")
             return

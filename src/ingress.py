@@ -3,6 +3,8 @@
 
 """Observer module for Jenkins to ingress integration."""
 
+from urllib.parse import urlparse
+
 import ops
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
@@ -28,3 +30,16 @@ class Observer(ops.Object):
             port=jenkins.WEB_PORT,
             strip_prefix=True,
         )
+
+    def get_path(self) -> str:
+        """Return the path in whick Jenkins is expected to be listening.
+
+        Returns:
+            the path for the ingress URL.
+        """
+        if not self.ingress.url:
+            return ""
+        path = urlparse(self.ingress.url).path
+        if path == "/":
+            return ""
+        return path

@@ -78,4 +78,21 @@ Unit that this execution is responsible for.
 
 
 
+---
+
+<a href="../src/charm.py#L110"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `calculate_env`
+
+```python
+calculate_env() → Environment
+```
+
+Return a dictionary for Jenkins Pebble layer. 
+
+
+
+**Returns:**
+  The dictionary mapping of environment variables for the Jenkins service. 
+
 

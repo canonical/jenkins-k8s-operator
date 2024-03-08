@@ -73,12 +73,16 @@ def admin_credentials_fixture() -> jenkins.Credentials:
     return jenkins.Credentials(username="admin", password_or_token=token_hex(16))
 
 
+@pytest.fixture(scope="function", name="mock_env")
+def mock_env_fixture():
+    """Mock environment."""
+    return MagicMock(spec=jenkins.Environment)
+
+
 @pytest.fixture(scope="function", name="mock_client")
-def mock_client_fixture(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+def mock_client_fixture() -> MagicMock:
     """Mock Jenkins API client."""
-    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
-    return mock_client
+    return MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
 
 def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Harness):
@@ -177,7 +181,7 @@ def container_fixture(
     jenkins_root = harness.get_filesystem_root("jenkins")
     storage_mount_proc_path = combine_root_paths(jenkins_root, Path("/proc/mounts"))
     storage_mount_proc_path.parent.mkdir(parents=True, exist_ok=True)
-    storage_mount_proc_path.write_text(str(state.JENKINS_HOME_PATH), "utf-8")
+    storage_mount_proc_path.write_text(str(jenkins.JENKINS_HOME_PATH), "utf-8")
     password_file_path = combine_root_paths(jenkins_root, jenkins.PASSWORD_FILE_PATH)
     password_file_path.parent.mkdir(parents=True, exist_ok=True)
     password_file_path.write_text(admin_credentials.password_or_token, encoding="utf-8")
@@ -243,7 +247,7 @@ def container_fixture(
                 "--latest",
             ] == argv:
                 return (0, "Done", "")
-            case _ if ["stat", "-c", "%U", str(state.JENKINS_HOME_PATH)] == argv:
+            case _ if ["stat", "-c", "%U", str(jenkins.JENKINS_HOME_PATH)] == argv:
                 return (0, jenkins.USER, "")
             # pylint: enable=R0801
             case _:
