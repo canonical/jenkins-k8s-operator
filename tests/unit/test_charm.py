@@ -126,7 +126,7 @@ def test__on_jenkins_pebble_ready_get_version_error(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """
-    arrange: given a patched jenkins.version function that raises an exception.
+    arrange: given a patched jenkins.version property that raises an exception.
     act: when the jenkins_pebble_ready event is fired.
     assert: the charm raises an error.
     """
