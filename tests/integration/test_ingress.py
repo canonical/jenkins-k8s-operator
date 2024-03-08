@@ -35,8 +35,8 @@ async def test_ingress_integration(
         apps=[application.name, traefik_application.name], wait_for_active=True, timeout=20 * 60
     )
     response = requests.get(
-        f"http://{traefik_address}/{jenkins.LOGIN_PATH}",
-        headers={"Host": f"{model.name}-{application.name}.{external_hostname}"},
+        f"http://{traefik_address}/{model.name}-{application.name}{jenkins.LOGIN_PATH}",
+        headers={"Host": f"{external_hostname}"},
         timeout=5,
     )
 
