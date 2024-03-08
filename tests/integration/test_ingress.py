@@ -63,7 +63,7 @@ async def test_agent_discovery_ingress_integration(
     )
     # Add dns record
     ingress_hostname_mapping = (
-        f"{traefik_address} {model.name}-{application.name}.{external_hostname}"
+        f"{traefik_address} {external_hostname}"
     )
     command = f"sudo echo '{ingress_hostname_mapping}' >> /etc/hosts"
     for unit in jenkins_machine_agents.units:
