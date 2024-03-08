@@ -3,8 +3,6 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
-# pylint: disable=too-many-lines
-
 import os
 import random
 import secrets
@@ -84,7 +82,6 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
         charm = await ops_test.build_charm(".")
     else:
         charm = f"./{charm}"
-
     return charm
 
 
@@ -266,7 +263,6 @@ async def machine_model_fixture(
     model = await machine_controller.add_model(machine_model_name)
     await model.connect(f"localhost:admin/{model.name}")
     yield model
-
     await machine_controller.destroy_models(
         model.name, destroy_storage=True, force=True, max_wait=10 * 60
     )
@@ -472,7 +468,6 @@ async def jenkins_with_proxy_fixture(
 ) -> AsyncGenerator[Application, None]:
     """Jenkins server charm deployed under model with proxy configuration."""
     resources = {"jenkins-image": jenkins_image}
-
     # Deploy the charm and wait for active/idle status
     application = await model_with_proxy.deploy(
         charm,
@@ -487,11 +482,9 @@ async def jenkins_with_proxy_fixture(
         timeout=20 * 60,
         idle_period=30,
     )
-
     # slow down update-status so that it doesn't intervene currently running tests
     async with ops_test.fast_forward(fast_interval="5h"):
         yield application
-
     await model_with_proxy.remove_application(application.name, block_until_done=True)
 
 
