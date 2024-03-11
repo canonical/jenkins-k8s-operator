@@ -783,11 +783,7 @@ async def traefik_application_fixture(model: Model, external_hostname: str):
         "traefik-k8s",
         channel="edge",
         trust=True,
-        config={
-            "external_hostname": external_hostname,
-            "routing_mode": "path",
-            "enable_experimental_forward_auth": True,
-        },
+        config={"routing_mode": "path"},
     )
 
     await model.wait_for_idle(
