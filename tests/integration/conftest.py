@@ -848,6 +848,19 @@ async def oathkeeper_application_related_fixture(
         timeout=30 * 60,
         idle_period=5,
     )
+    await application.model.applications["kratos-external-idp-integrator"].set_config(
+        {
+            "issuer_url": ext_idp_service,
+            "provider_id": "Dex",
+        }
+    )
+    await application.model.wait_for_idle(
+        status="active",
+        apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
+        raise_on_error=False,
+        timeout=30 * 60,
+        idle_period=5,
+    )
     get_redirect_uri_action = (
         await application.model.applications["kratos-external-idp-integrator"]
         .units[0]

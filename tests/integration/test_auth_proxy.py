@@ -15,7 +15,7 @@ from playwright.async_api import expect
 from playwright.async_api._generated import Page
 
 
-# @pytest.mark.abort_on_fail
+@pytest.mark.abort_on_fail
 @pytest.mark.asyncio
 async def test_auth_proxy_integration_returns_not_authorized(
     model: Model,
@@ -39,7 +39,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
 
 
 # pylint: disable=too-many-arguments
-# @pytest.mark.abort_on_fail
+@pytest.mark.abort_on_fail
 @pytest.mark.asyncio
 async def test_auth_proxy_integration_authorized(
     ext_idp_service: str,
