@@ -364,11 +364,11 @@ def test_upgrade_charm(harness: Harness, monkeypatch: pytest.MonkeyPatch):
     harness.set_can_connect(container, True)
     # We don't use harness.handle_exec here because we want to assert
     # the parameters passed to exec()
-    exec_handler = unittest.mock.MagicMock()
+    exec_handler = MagicMock()
     monkeypatch.setattr(container, "exec", exec_handler)
     monkeypatch.setattr(jenkins, "is_storage_ready", lambda x: False)
 
-    event = unittest.mock.MagicMock()
+    event = MagicMock()
     mock_jenkins_home_path = "/var/lib/jenkins"
     jenkins_charm._upgrade_charm(event)
 
@@ -389,11 +389,11 @@ def test_upgrade_charm_storage_ready(harness: Harness, monkeypatch: pytest.Monke
     harness.set_can_connect(container, True)
     # We don't use harness.handle_exec here because we want to assert
     # the parameters passed to exec()
-    exec_handler = unittest.mock.MagicMock()
+    exec_handler = MagicMock()
     monkeypatch.setattr(container, "exec", exec_handler)
     monkeypatch.setattr(jenkins, "is_storage_ready", lambda x: True)
 
-    event = unittest.mock.MagicMock()
+    event = MagicMock()
     jenkins_charm._upgrade_charm(event)
 
     exec_handler.assert_not_called()
