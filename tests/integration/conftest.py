@@ -775,12 +775,6 @@ async def keycloak_oidc_meta_fixture(
     )
 
 
-@pytest_asyncio.fixture(scope="module", name="external_hostname")
-def external_hostname_fixture() -> str:
-    """Return the external hostname for ingress-related tests."""
-    return "juju.test"
-
-
 @pytest_asyncio.fixture(scope="module", name="traefik_application_and_unit_ip")
 async def traefik_application_fixture(model: Model):
     """The application related to Jenkins via ingress v2 relation."""
@@ -788,10 +782,7 @@ async def traefik_application_fixture(model: Model):
         "traefik-k8s",
         channel="edge",
         trust=True,
-        config={
-            "routing_mode": "path",
-            "enable_experimental_forward_auth": True,
-        },
+        config={"routing_mode": "path"},
     )
 
     await model.wait_for_idle(
@@ -846,6 +837,9 @@ async def oathkeeper_application_related_fixture(
     )
     # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
     await application.model.applications["kratos"].set_config({"dev": "True"})
+    await application.model.applications["traefik-public"].set_config(
+        {"enable_experimental_forward_auth": "True"}
+    )
     await application.model.wait_for_idle(
         status="active",
         apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
