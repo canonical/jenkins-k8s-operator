@@ -48,7 +48,7 @@ class Observer(ops.Object):
         Args:
             charm: The parent charm to attach the observer to.
             state: The charm state.
-            jenkins_instance: The Jenkins wrapper.
+            jenkins_instance: The Jenkins instance.
             ingress_observer: The ingress observer responsible for agent discovery.
         """
         super().__init__(charm, "agent-observer")

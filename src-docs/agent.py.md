@@ -60,7 +60,7 @@ Initialize the observer and register event handlers.
  
  - <b>`charm`</b>:  The parent charm to attach the observer to. 
  - <b>`state`</b>:  The charm state. 
- - <b>`jenkins_instance`</b>:  The Jenkins wrapper. 
+ - <b>`jenkins_instance`</b>:  The Jenkins instance. 
  - <b>`ingress_observer`</b>:  The ingress observer responsible for agent discovery. 
 
 

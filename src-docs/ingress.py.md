@@ -41,7 +41,7 @@ Shortcut for more simple access the model.
 
 ---
 
-<a href="../src/ingress.py#L34"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/ingress.py#L33"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `get_path`
 
