@@ -224,8 +224,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The event fired when the permission change is needed.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        container_meta = self.framework.meta.containers['jenkins']
-        storage_path = container_meta.mounts['jenkins-home'].location
+        container_meta = self.framework.meta.containers["jenkins"]
+        storage_path = container_meta.mounts["jenkins-home"].location
         if not container.can_connect():
             self.unit.status = ops.WaitingStatus("Waiting for pebble.")
             # This event should be handled again once the container becomes available.
