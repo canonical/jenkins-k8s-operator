@@ -266,10 +266,10 @@ def test_version_error(
     assert: JenkinsError exception is raised.
     """
     monkeypatch.setattr(jenkins.requests, "get", MagicMock(side_effect=exception))
-    jenking_wrapper = jenkins.Jenkins(mock_env)
+    jenking_instance = jenkins.Jenkins(mock_env)
 
     with pytest.raises(jenkins.JenkinsError):
-        jenking_wrapper.version  # pylint: disable=pointless-statement
+        jenking_instance.version  # pylint: disable=pointless-statement
 
 
 def test_version(
