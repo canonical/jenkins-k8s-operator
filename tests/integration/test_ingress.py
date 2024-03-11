@@ -21,7 +21,6 @@ async def test_ingress_integration(
     model: Model,
     application: Application,
     traefik_application_and_unit_ip: typing.Tuple[Application, str],
-    external_hostname: str,
 ):
     """
     arrange: deploy the Jenkins charm and establish relations via ingress.
@@ -35,7 +34,6 @@ async def test_ingress_integration(
     )
     response = requests.get(
         f"http://{traefik_address}/{model.name}-{application.name}",
-        headers={"Host": f"{external_hostname}"},
         timeout=5,
     )
 
