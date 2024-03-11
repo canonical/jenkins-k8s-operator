@@ -28,7 +28,6 @@ class Observer(ops.Object):
             self.charm,
             relation_name=relation_name,
             port=jenkins.WEB_PORT,
-            strip_prefix=True,
         )
 
     def get_path(self) -> str:
