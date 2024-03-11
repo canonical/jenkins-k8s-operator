@@ -35,7 +35,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
         timeout=5,
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 # pylint: disable=too-many-arguments
