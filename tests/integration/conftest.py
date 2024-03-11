@@ -833,6 +833,7 @@ async def oathkeeper_application_related_fixture(
             "provider": "generic",
             "issuer_url": ext_idp_service,
             "scope": "profile email",
+            "provider_id": "Dex",
         }
     )
     # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
