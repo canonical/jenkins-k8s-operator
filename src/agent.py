@@ -36,17 +36,25 @@ class Observer(ops.Object):
         agent_discovery_url: external hostname to be passed to agents for discovery.
     """
 
-    def __init__(self, charm: ops.CharmBase, state: State, ingress_observer: ingress.Observer):
+    def __init__(
+        self,
+        charm: ops.CharmBase,
+        state: State,
+        ingress_observer: ingress.Observer,
+        jenkins_instance: jenkins.Jenkins,
+    ):
         """Initialize the observer and register event handlers.
 
         Args:
             charm: The parent charm to attach the observer to.
             state: The charm state.
+            jenkins_instance: The Jenkins wrapper.
             ingress_observer: The ingress observer responsible for agent discovery.
         """
         super().__init__(charm, "agent-observer")
         self.charm = charm
         self.state = state
+        self.jenkins = jenkins_instance
         self.ingress_observer = ingress_observer
 
         charm.framework.observe(
@@ -112,7 +120,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -130,8 +138,8 @@ class Observer(ops.Object):
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
-            jenkins.add_agent_node(agent_meta=agent_meta, container=container)
-            secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
+            self.jenkins.add_agent_node(agent_meta=agent_meta, container=container)
+            secret = self.jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
@@ -149,7 +157,7 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()  # The event needs to be handled after Jenkins has started(pebble ready).
             return
@@ -167,8 +175,9 @@ class Observer(ops.Object):
 
         self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
         try:
-            jenkins.add_agent_node(agent_meta=agent_meta, container=container)
-            secret = jenkins.get_node_secret(container=container, node_name=agent_meta.name)
+            self.jenkins.wait_ready()
+            self.jenkins.add_agent_node(agent_meta=agent_meta, container=container)
+            secret = self.jenkins.get_node_secret(container=container, node_name=agent_meta.name)
         except jenkins.JenkinsError as exc:
             self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
             return
@@ -187,7 +196,7 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container):
             logger.warning("Relation departed before service ready.")
             return
 
@@ -198,7 +207,7 @@ class Observer(ops.Object):
         agent_name = jenkins.get_agent_name(typing.cast(ops.Unit, event.unit).name)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:
-            jenkins.remove_agent_node(agent_name=agent_name, container=container)
+            self.jenkins.remove_agent_node(agent_name=agent_name, container=container)
         except jenkins.JenkinsError as exc:
             logger.error("Failed to remove agent %s, %s", agent_name, exc)
             # There is no support for degraded status yet, however, this will not impact Jenkins
@@ -215,7 +224,7 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect() or not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container):
             logger.warning("Relation departed before service ready.")
             return
 
@@ -226,7 +235,7 @@ class Observer(ops.Object):
         agent_name = jenkins.get_agent_name(typing.cast(ops.Unit, event.unit).name)
         self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
         try:
-            jenkins.remove_agent_node(agent_name=agent_name, container=container)
+            self.jenkins.remove_agent_node(agent_name=agent_name, container=container)
         except jenkins.JenkinsError as exc:
             logger.error("Failed to remove agent %s, %s", agent_name, exc)
             # There is no support for degraded status yet, however, this will not impact Jenkins

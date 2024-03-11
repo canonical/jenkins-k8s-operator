@@ -44,7 +44,12 @@ The Jenkins agent relation observer.
 ### <kbd>function</kbd> `__init__`
 
 ```python
-__init__(charm: CharmBase, state: State, ingress_observer: Observer)
+__init__(
+    charm: CharmBase,
+    state: State,
+    ingress_observer: Observer,
+    jenkins_instance: Jenkins
+)
 ```
 
 Initialize the observer and register event handlers. 
@@ -55,6 +60,7 @@ Initialize the observer and register event handlers.
  
  - <b>`charm`</b>:  The parent charm to attach the observer to. 
  - <b>`state`</b>:  The charm state. 
+ - <b>`jenkins_instance`</b>:  The Jenkins wrapper. 
  - <b>`ingress_observer`</b>:  The ingress observer responsible for agent discovery. 
 
 
@@ -81,7 +87,7 @@ Shortcut for more simple access the model.
 
 ---
 
-<a href="../src/agent.py#L238"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/agent.py#L247"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `reconfigure_agent_discovery`
 

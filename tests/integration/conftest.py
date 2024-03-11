@@ -3,13 +3,15 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+# pylint: disable=too-many-lines
+
+import os
 import random
 import secrets
 import string
-import typing
+from typing import AsyncGenerator, Iterable, Optional
 
 import jenkinsapi.jenkins
-import kubernetes.client
 import kubernetes.config
 import kubernetes.stream
 import pytest
@@ -29,6 +31,8 @@ from .constants import ALLOWED_PLUGINS
 from .helpers import generate_jenkins_client_from_application, get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
+KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
+
 
 @pytest.fixture(scope="module", name="model")
 def model_fixture(ops_test: OpsTest) -> Model:
@@ -38,7 +42,7 @@ def model_fixture(ops_test: OpsTest) -> Model:
 
 
 @pytest.fixture(scope="module", name="cloud")
-def cloud_fixture(ops_test: OpsTest) -> typing.Optional[str]:
+def cloud_fixture(ops_test: OpsTest) -> Optional[str]:
     """The cloud the k8s model is running on."""
     return ops_test.cloud_name
 
@@ -74,10 +78,9 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
 @pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
     ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """Deploy the charm."""
     resources = {"jenkins-image": jenkins_image}
-
     # Deploy the charm and wait for active/idle status
     application = await model.deploy(charm, resources=resources, series="jammy")
     await model.wait_for_idle(
@@ -163,14 +166,13 @@ def app_suffix_fixture():
     """Get random 4 char length application suffix."""
     # secrets random hex cannot be used because it has chances to generate numeric only suffix
     # which will return "<application-name> is not a valid application tag"
-    app_suffix = "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
-    return app_suffix
+    return "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agents")
 async def jenkins_k8s_agents_fixture(
     model: Model, app_suffix: str
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
@@ -179,9 +181,7 @@ async def jenkins_k8s_agents_fixture(
         application_name=f"jenkins-agent-k8s-{app_suffix}",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
-
     yield agent_app
-
     await model.remove_application(agent_app.name, block_until_done=True)
 
 
@@ -197,23 +197,21 @@ async def k8s_agent_related_app_fixture(
     await application.model.wait_for_idle(
         apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
     )
-
     yield application
 
 
 @pytest_asyncio.fixture(scope="function", name="extra_jenkins_k8s_agents")
 async def extra_jenkins_k8s_agents_fixture(
     model: Model,
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
         config={"jenkins_agent_labels": "k8s-extra"},
         channel="latest/edge",
-        application_name="jenkins-agentk8s-extra",
+        application_name="jenkins-agent-k8s-extra",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
-
     yield agent_app
 
 
@@ -227,30 +225,26 @@ async def k8s_deprecated_agent_related_app_fixture(
     await application.model.wait_for_idle(
         apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
     )
-
     yield application
 
 
 @pytest_asyncio.fixture(scope="module", name="machine_controller")
-async def machine_controller_fixture() -> typing.AsyncGenerator[Controller, None]:
+async def machine_controller_fixture() -> AsyncGenerator[Controller, None]:
     """The lxd controller."""
     controller = Controller()
     await controller.connect_controller("localhost")
-
     yield controller
-
     await controller.disconnect()
 
 
 @pytest_asyncio.fixture(scope="module", name="machine_model")
 async def machine_model_fixture(
     machine_controller: Controller,
-) -> typing.AsyncGenerator[Model, None]:
+) -> AsyncGenerator[Model, None]:
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
     model = await machine_controller.add_model(machine_model_name)
     await model.connect(f"localhost:admin/{model.name}")
-
     yield model
 
     await machine_controller.destroy_models(
@@ -262,13 +256,13 @@ async def machine_model_fixture(
 @pytest_asyncio.fixture(scope="function", name="jenkins_machine_agents")
 async def jenkins_machine_agents_fixture(
     machine_model: Model, num_units: int, app_suffix: str
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """The jenkins machine agent with 3 units to be used for new agent relation."""
     # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
     # stable.
     app: Application = await machine_model.deploy(
         "jenkins-agent",
-        channel="latest/edge",
+        channel="latest/stable",
         config={"jenkins_agent_labels": "machine"},
         application_name=f"jenkins-agent-{app_suffix}",
         num_units=num_units,
@@ -277,7 +271,6 @@ async def jenkins_machine_agents_fixture(
     await machine_model.wait_for_idle(
         apps=[app.name], status="blocked", idle_period=30, timeout=1200, check_freq=5
     )
-
     yield app
 
 
@@ -300,7 +293,6 @@ async def machine_agent_related_app_fixture(
         apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5
     )
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
-
     yield application
 
 
@@ -318,7 +310,6 @@ async def machine_deprecated_agent_related_app_fixture(
     )
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
-
     yield application
 
 
@@ -332,9 +323,7 @@ def freeze_time_fixture() -> str:
 async def app_with_restart_time_range_fixture(application: Application):
     """Application with restart-time-range configured."""
     await application.set_config({"restart-time-range": "03-05"})
-
     yield application
-
     await application.reset_config(["restart-time-range"])
 
 
@@ -349,7 +338,7 @@ async def libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit) -> Unit:
 
 
 @pytest.fixture(scope="function", name="libfaketime_env")
-def libfaketime_env_fixture(freeze_time: str) -> typing.Iterable[str]:
+def libfaketime_env_fixture(freeze_time: str) -> Iterable[str]:
     """The environment variables for using libfaketime."""
     return (
         'LD_PRELOAD="/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1"',
@@ -358,7 +347,7 @@ def libfaketime_env_fixture(freeze_time: str) -> typing.Iterable[str]:
 
 
 @pytest.fixture(scope="function", name="update_status_env")
-def update_status_env_fixture(model: Model, unit: Unit) -> typing.Iterable[str]:
+def update_status_env_fixture(model: Model, unit: Unit) -> Iterable[str]:
     """The environment variables for executing Juju hooks."""
     return (
         "JUJU_DISPATCH_PATH=hooks/update-status",
@@ -443,27 +432,24 @@ async def tinyproxy_ip_fixture(
     spec: kubernetes.client.V1DaemonSetSpec = tiny_proxy_daemonset.spec
     template: kubernetes.client.V1PodTemplateSpec = spec.template
     metadata: kubernetes.client.V1ObjectMeta = template.metadata
-
     return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
 
 
 @pytest_asyncio.fixture(scope="module", name="model_with_proxy")
 async def model_with_proxy_fixture(
     model: Model, tinyproxy_ip: str, tinyproxy_port: int
-) -> typing.AsyncGenerator[Model, None]:
+) -> AsyncGenerator[Model, None]:
     """Model with proxy configuration values."""
     tinyproxy_url = f"http://{tinyproxy_ip}:{tinyproxy_port}"
     await model.set_config({"juju-http-proxy": tinyproxy_url, "juju-https-proxy": tinyproxy_url})
-
     yield model
-
     await model.set_config({"juju-http-proxy": "", "juju-https-proxy": ""})
 
 
 @pytest_asyncio.fixture(scope="module", name="jenkins_with_proxy")
 async def jenkins_with_proxy_fixture(
     model_with_proxy: Model, charm: str, ops_test: OpsTest, jenkins_image: str
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """Jenkins server charm deployed under model with proxy configuration."""
     resources = {"jenkins-image": jenkins_image}
 
@@ -519,7 +505,6 @@ async def jenkins_with_proxy_client_fixture(
     action: Action = await jenkins_unit.run_action("get-admin-password")
     await action.wait()
     password = action.results["password"]
-
     # Initialization of the jenkins client will raise an exception if unable to connect to the
     # server.
     return jenkinsapi.jenkins.Jenkins(
@@ -530,12 +515,10 @@ async def jenkins_with_proxy_client_fixture(
 @pytest_asyncio.fixture(scope="function", name="app_with_allowed_plugins")
 async def app_with_allowed_plugins_fixture(
     application: Application,
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """Jenkins charm with plugins configured."""
     await application.set_config({"allowed-plugins": ",".join(ALLOWED_PLUGINS)})
-
     yield application
-
     await application.reset_config(to_default=["allowed-plugins"])
 
 
@@ -596,7 +579,6 @@ async def ldap_server_ip_fixture(
     spec: kubernetes.client.V1DeploymentSpec = ldap_server.spec
     template: kubernetes.client.V1PodTemplateSpec = spec.template
     metadata: kubernetes.client.V1ObjectMeta = template.metadata
-
     return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
 
 
@@ -791,11 +773,12 @@ async def traefik_application_fixture(model: Model, external_hostname: str):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
         "traefik-k8s",
-        channel="1.0/stable",
+        channel="edge",
         trust=True,
         config={
             "external_hostname": external_hostname,
-            "routing_mode": "subdomain",
+            "routing_mode": "path",
+            "enable_experimental_forward_auth": True,
         },
     )
 
@@ -806,7 +789,6 @@ async def traefik_application_fixture(model: Model, external_hostname: str):
         idle_period=30,
         raise_on_error=False,
     )
-
     status = await model.get_status(filters=[traefik.name])
     unit = next(iter(status.applications[traefik.name].units))
     traefik_address = status["applications"][traefik.name]["units"][unit]["address"]
