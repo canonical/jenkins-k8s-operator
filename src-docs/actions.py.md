@@ -31,7 +31,7 @@ Initialize the observer and register actions handlers.
  
  - <b>`charm`</b>:  The parent charm to attach the observer to. 
  - <b>`state`</b>:  The Jenkins charm state. 
- - <b>`jenkins_instance`</b>:  The Jenkins wrapper. 
+ - <b>`jenkins_instance`</b>:  The Jenkins instance. 
 
 
 ---
