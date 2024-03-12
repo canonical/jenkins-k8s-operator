@@ -4,7 +4,6 @@ The default size of the jenkins-home storage volume for a fresh installation is 
 A low disk-space on the built-in node will cause the node to go offline, blocking jenkins from running jobs.
 
 ## Create a backup
-### Backup script
 From [Backing-up/Restoring Jenkins](https://www.jenkins.io/doc/book/system-administration/backing-up/), This script backs up the most essential files as mentioned in the article:
 * The `master.key` file.
 * Job-related files in the `./jobs`, `./builds` and `./workspace` folders.
@@ -29,7 +28,6 @@ cp -r $JENKINS_HOME/plugins/*.jpi $JENKINS_BACKUP/plugins
 chown -R 2000:2000 $JENKINS_BACKUP
 tar zcvf jenkins_backup.tar.gz --directory=/mnt backup
 ```
-### Procedure
 1. Transfer the backup script above to the running unit of the Jenkins-k8s charm and run it
 ```bash
 juju scp --container jenkins ./backup.sh jenkins-k8s/0:/backup.sh
