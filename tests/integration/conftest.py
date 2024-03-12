@@ -777,17 +777,13 @@ def external_hostname_fixture() -> str:
 
 
 @pytest_asyncio.fixture(scope="module", name="traefik_application_and_unit_ip")
-async def traefik_application_fixture(model: Model, external_hostname: str):
+async def traefik_application_fixture(model: Model):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
         "traefik-k8s",
         channel="edge",
         trust=True,
-        config={
-            "external_hostname": external_hostname,
-            "routing_mode": "path",
-            "enable_experimental_forward_auth": True,
-        },
+        config={"routing_mode": "path"},
     )
 
     await model.wait_for_idle(
