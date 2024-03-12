@@ -581,6 +581,7 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
     assert build.get_status() == "SUCCESS"
 
 
+@pytest.mark.usefixtures("k8s_agent_related_app")
 async def test_pipeline_model_definition_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with declarative pipeline plugin installed.
