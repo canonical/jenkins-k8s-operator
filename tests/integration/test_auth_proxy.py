@@ -19,7 +19,6 @@ from playwright.async_api._generated import Page
 @pytest.mark.asyncio
 async def test_auth_proxy_integration_returns_not_authorized(
     model: Model,
-    application: Application,
     oathkeeper_related: Application,
 ) -> None:
     """
@@ -30,7 +29,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
     status = await model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
     response = requests.get(  # nosec
-        f"https://{address}/{application.model.name}-{application.name}/",
+        f"https://{address}/{oathkeeper_related.model.name}-{oathkeeper_related.name}/",
         verify=False,
         timeout=5,
     )
@@ -46,7 +45,6 @@ async def test_auth_proxy_integration_authorized(
     external_user_email: str,
     external_user_password: str,
     page: Page,
-    application: Application,
     oathkeeper_related: Application,
 ) -> None:
     """
@@ -54,14 +52,14 @@ async def test_auth_proxy_integration_authorized(
     act: log into via DEX
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
-    status = await application.model.get_status()
+    status = await oathkeeper_related.model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
-    jenkins_url = f"https://{address}/{application.model.name}-{application.name}/"
+    jenkins_url = f"https://{address}/{oathkeeper_related.model.name}-{oathkeeper_related.name}/"
 
     await page.goto(jenkins_url)
 
     expected_url = (
-        f"https://{address}/{application.model.name}"
+        f"https://{address}/{oathkeeper_related.model.name}"
         f"-identity-platform-login-ui-operator/ui/login"
     )
     await expect(page).to_have_url(re.compile(rf"{expected_url}*"))

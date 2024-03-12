@@ -3,6 +3,7 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+import asyncio
 import os
 import random
 import secrets
@@ -147,12 +148,7 @@ async def jenkins_client_fixture(
     """The Jenkins API client."""
     jenkins_unit: Unit = application.units[0]
     ret, api_token, stderr = await ops_test.juju(
-        "ssh",
-        "--container",
-        "jenkins",
-        jenkins_unit.name,
-        "cat",
-        str(jenkins.API_TOKEN_PATH),
+        "ssh", "--container", "jenkins", jenkins_unit.name, "cat", str(jenkins.API_TOKEN_PATH)
     )
     assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
     return jenkinsapi.jenkins.Jenkins(web_address, "admin", api_token, timeout=60)
@@ -778,7 +774,7 @@ def external_hostname_fixture() -> str:
 async def traefik_application_fixture(model: Model):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
-        "traefik-k8s", channel="edge", trust=True, config={"routing_mode": "path"}
+        "traefik-k8s", channel="stable", trust=True, config={"routing_mode": "path"}
     )
     await model.wait_for_idle(
         status="active", apps=[traefik.name], timeout=20 * 60, idle_period=30, raise_on_error=False
@@ -794,40 +790,63 @@ async def oathkeeper_application_related_fixture(
     application: Application, client: Client, ext_idp_service: str
 ):
     """The application related to Jenkins via auth_proxy v0 relation."""
-    oathkeeper = await application.model.deploy("oathkeeper", channel="edge", trust=True)
-    identity_platform = await application.model.deploy(
-        "identity-platform", channel="edge", trust=True
+    identity_platform = await asyncio.gather(
+        application.model.deploy("oathkeeper", channel="edge", trust=True),
+        application.model.deploy("hydra", channel="edge", trust=True),
+        application.model.deploy(
+            "identity-platform-login-ui-operator", channel="edge", trust=True
+        ),
+        application.model.deploy("kratos", channel="edge", trust=True),
+        application.model.deploy("kratos-external-idp-integrator", channel="edge", trust=True),
+        application.model.deploy("postgresql-k8s", channel="14/stable", trust=True),
+        application.model.deploy("self-signed-certificates", channel="edge", trust=True),
+        application.model.deploy("traefik-admin", channel="latest/stable", trust=True),
+        application.model.deploy("traefik-public", channel="latest/stable", trust=True),
     )
-    await application.model.add_relation(f"{application.name}:auth-proxy", oathkeeper.name)
-    await application.model.add_relation(f"{application.name}:ingress", "traefik-public")
-    await application.model.add_relation(
-        f"{oathkeeper.name}:certificates", "self-signed-certificates"
-    )
-    await application.model.add_relation(
-        "traefik-public:experimental-forward-auth", oathkeeper.name
-    )
-    await application.model.add_relation(
-        "traefik-public:receive-ca-cert", "self-signed-certificates"
-    )
-    await application.model.add_relation(f"{oathkeeper.name}:kratos-info", "kratos")
-    await application.model.applications["kratos-external-idp-integrator"].set_config(
-        {
-            "client_id": "client_id",
-            "client_secret": "client_secret",
-            "provider": "generic",
-            "issuer_url": ext_idp_service,
-            "scope": "profile email",
-            "provider_id": "Dex",
-        }
-    )
-    # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
-    await application.model.applications["kratos"].set_config({"dev": "True"})
-    await application.model.applications["traefik-public"].set_config(
-        {"enable_experimental_forward_auth": "True"}
+    await asyncio.gather(
+        application.model.add_relation(
+            "hydra:hydra-endpoint-info", "identity-platform-login-ui-operator"
+        ),
+        application.model.add_relation("hydra:hydra-endpoint-info", "kratos"),
+        application.model.add_relation(
+            "identity-platform-login-ui-operator:ui-endpoint-info", "hydra"
+        ),
+        application.model.add_relation(
+            "identity-platform-login-ui-operator:ui-endpoint-info", "kratos"
+        ),
+        application.model.add_relation("kratos-external-idp-integrator", "kratos"),
+        application.model.add_relation(
+            "kratos:kratos-endpoint-inf", "identity-platform-login-ui-operator"
+        ),
+        application.model.add_relation("postgresql-k8s", "hydra"),
+        application.model.add_relation("postgresql-k8s", "kratos"),
+        application.model.add_relation(f"{application.name}:auth-proxy", "oathkeeper"),
+        application.model.add_relation(f"{application.name}:ingress", "traefik-public"),
+        application.model.add_relation("oathkeeper:certificates", "self-signed-certificates"),
+        application.model.add_relation("traefik-public:experimental-forward-auth", "oathkeeper"),
+        application.model.add_relation(
+            "traefik-public:receive-ca-cert", "self-signed-certificates"
+        ),
+        application.model.add_relation("oathkeeper:kratos-info", "kratos"),
+        application.model.applications["kratos-external-idp-integrator"].set_config(
+            {
+                "client_id": "client_id",
+                "client_secret": "client_secret",
+                "provider": "generic",
+                "issuer_url": ext_idp_service,
+                "scope": "profile email",
+                "provider_id": "Dex",
+            }
+        ),
+        application.model.applications["kratos"].set_config({"dev": "True"}),
+        # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
+        application.model.applications["traefik-public"].set_config(
+            {"enable_experimental_forward_auth": "True"}
+        ),
     )
     await application.model.wait_for_idle(
         status="active",
-        apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
+        apps=[application.name] + [app.name for app in identity_platform],
         raise_on_error=False,
         timeout=30 * 60,
         idle_period=5,
@@ -839,7 +858,7 @@ async def oathkeeper_application_related_fixture(
     )
     action_output = await get_redirect_uri_action.wait()
     update_redirect_uri(client, action_output.results["redirect-uri"])
-    return oathkeeper
+    return application
 
 
 @pytest.fixture(scope="session", name="client")
