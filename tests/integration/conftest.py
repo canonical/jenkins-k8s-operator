@@ -470,10 +470,7 @@ async def jenkins_with_proxy_fixture(
     resources = {"jenkins-image": jenkins_image}
     # Deploy the charm and wait for active/idle status
     application = await model_with_proxy.deploy(
-        charm,
-        resources=resources,
-        series="jammy",
-        application_name="jenkins-proxy-k8s",
+        charm, resources=resources, series="jammy", application_name="jenkins-proxy-k8s"
     )
     await model_with_proxy.wait_for_idle(
         apps=[application.name],
@@ -538,11 +535,7 @@ async def app_with_allowed_plugins_fixture(
 @pytest.fixture(scope="module", name="ldap_settings")
 def ldap_settings_fixture() -> LDAPSettings:
     """LDAP user for testing."""
-    return LDAPSettings(
-        container_port=1389,
-        username="customuser",
-        password=secrets.token_hex(16),
-    )
+    return LDAPSettings(container_port=1389, username="customuser", password=secrets.token_hex(16))
 
 
 @pytest_asyncio.fixture(scope="module", name="ldap_server")
@@ -775,27 +768,24 @@ async def keycloak_oidc_meta_fixture(
     )
 
 
+@pytest_asyncio.fixture(scope="module", name="external_hostname")
+def external_hostname_fixture() -> str:
+    """Return the external hostname for ingress-related tests."""
+    return "juju.test"
+
+
 @pytest_asyncio.fixture(scope="module", name="traefik_application_and_unit_ip")
 async def traefik_application_fixture(model: Model):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
-        "traefik-k8s",
-        channel="edge",
-        trust=True,
-        config={"routing_mode": "path"},
+        "traefik-k8s", channel="edge", trust=True, config={"routing_mode": "path"}
     )
-
     await model.wait_for_idle(
-        status="active",
-        apps=[traefik.name],
-        timeout=20 * 60,
-        idle_period=30,
-        raise_on_error=False,
+        status="active", apps=[traefik.name], timeout=20 * 60, idle_period=30, raise_on_error=False
     )
     status = await model.get_status(filters=[traefik.name])
     unit = next(iter(status.applications[traefik.name].units))
     traefik_address = status["applications"][traefik.name]["units"][unit]["address"]
-
     return (traefik, traefik_address)
 
 
@@ -804,15 +794,9 @@ async def oathkeeper_application_related_fixture(
     application: Application, client: Client, ext_idp_service: str
 ):
     """The application related to Jenkins via auth_proxy v0 relation."""
-    oathkeeper = await application.model.deploy(
-        "oathkeeper",
-        channel="edge",
-        trust=True,
-    )
+    oathkeeper = await application.model.deploy("oathkeeper", channel="edge", trust=True)
     identity_platform = await application.model.deploy(
-        "identity-platform",
-        channel="edge",
-        trust=True,
+        "identity-platform", channel="edge", trust=True
     )
     await application.model.add_relation(f"{application.name}:auth-proxy", oathkeeper.name)
     await application.model.add_relation(f"{application.name}:ingress", "traefik-public")
