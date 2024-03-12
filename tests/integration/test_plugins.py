@@ -587,7 +587,7 @@ async def test_pipeline_model_definition_plugin(unit_web_client: UnitWebClient):
     act: Run a job using a declarative pipeline script.
     assert: Job succeeds.
     """
-    await install_plugins(unit_web_client, ("pipeline-model-definition"))
+    await install_plugins(unit_web_client, ("pipeline-model-definition",))
 
     job = unit_web_client.client.create_job(
         "pipeline_model_definition_plugin_test",
