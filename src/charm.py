@@ -202,7 +202,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         if not jenkins.is_storage_ready(container):
             self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
-            event.defer()
             return
 
         if self.state.restart_time_range and not timerange.check_now_within_bound_hours(
