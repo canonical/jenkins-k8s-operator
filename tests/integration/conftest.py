@@ -819,7 +819,7 @@ async def oathkeeper_application_related_fixture(
         ),
         application.model.add_relation("kratos-external-idp-integrator", "kratos"),
         application.model.add_relation(
-            "kratos:kratos-endpoint-info", "identity-platform-login-ui-operator"
+            "kratos:kratos-endpoint-inf", "identity-platform-login-ui-operator"
         ),
         application.model.add_relation("postgresql-k8s", "hydra"),
         application.model.add_relation("postgresql-k8s", "kratos"),
