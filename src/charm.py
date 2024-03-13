@@ -189,15 +189,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ops.BlockedStatus("Failed to remove plugins.")
         return ops.ActiveStatus()
 
-    def _on_update_status(self, event: ops.UpdateStatusEvent) -> None:
+    def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
         """Handle update status event.
 
         On Update status:
         1. Remove plugins that are installed but are not allowed by plugins config value.
         2. Update Jenkins patch version if available and is within restart-time-range config value.
-
-        Args:
-            event: The update status event.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         if not jenkins.is_storage_ready(container):
