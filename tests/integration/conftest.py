@@ -511,7 +511,8 @@ async def jenkins_with_proxy_client_fixture(
     action: Action = await jenkins_unit.run_action("get-admin-password")
     await action.wait()
     password = action.results["password"]
-    # Initialization of the jenkins client raises an exception if unable to connect to the server.
+    # Initialization of the jenkins client will raise an exception if unable to connect to the
+    # server.
     return jenkinsapi.jenkins.Jenkins(
         baseurl=proxy_jenkins_web_address, username="admin", password=password, timeout=60
     )
@@ -799,12 +800,8 @@ async def oathkeeper_application_related_fixture(
         application.model.deploy("kratos-external-idp-integrator", channel="edge", trust=True),
         application.model.deploy("postgresql-k8s", channel="14/stable", trust=True),
         application.model.deploy("self-signed-certificates", channel="edge", trust=True),
-        application.model.deploy(
-            "traefik-k8s", "traefik-admin", channel="latest/stable", trust=True
-        ),
-        application.model.deploy(
-            "traefik-k8s", "traefik-public", channel="latest/stable", trust=True
-        ),
+        application.model.deploy("traefik-admin", channel="latest/stable", trust=True),
+        application.model.deploy("traefik-public", channel="latest/stable", trust=True),
     )
     await asyncio.gather(
         application.model.add_relation(
