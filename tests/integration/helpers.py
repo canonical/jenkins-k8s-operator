@@ -292,7 +292,7 @@ async def generate_jenkins_client_from_application(
         str(jenkins.API_TOKEN_PATH),
     )
     assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
-    return jenkinsapi.jenkins.Jenkins(f"{address}", "admin", api_token, timeout=60)
+    return jenkinsapi.jenkins.Jenkins(address, "admin", api_token, timeout=60)
 
 
 async def generate_unit_web_client_from_application(

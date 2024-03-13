@@ -39,7 +39,7 @@ async def jenkins_upgrade_depl(ops_test: OpsTest, model: Model):
         application_name=JENKINS_APP_NAME,
         channel="stable",
     )
-    await model.wait_for_idle(status="active", timeout=30 * 60)
+    await model.wait_for_idle(status="active", timeout=10 * 60)
     unit_web_client = await generate_unit_web_client_from_application(ops_test, model, application)
     unit_web_client.client.create_job(JOB_NAME, gen_git_test_job_xml("k8s"))
 
@@ -61,7 +61,7 @@ async def test_jenkins_upgrade_check_job(
     response = requests.get(address, timeout=60)
     old_version = response.headers["X-Jenkins"]
     await application.refresh(path=charm, resources={"jenkins-image": jenkins_image})
-    await model.wait_for_idle(status="active", timeout=30 * 60)
+    await model.wait_for_idle(status="active", timeout=10 * 60)
     unit_ip = await get_model_jenkins_unit_address(model, JENKINS_APP_NAME)
     address = f"http://{unit_ip}:8080"
     response = requests.get(address, timeout=60)
