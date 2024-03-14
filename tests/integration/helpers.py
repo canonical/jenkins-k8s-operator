@@ -333,6 +333,30 @@ def kubernetes_test_pipeline_script() -> str:
     )
 
 
+def declarative_pipeline_script() -> str:
+    """Generate a declarative pipeline script.
+
+    Return:
+        The pipeline script
+    """
+    return textwrap.dedent(
+        """
+        pipeline {
+            agent any
+
+            stages {
+                stage('Integration Test') {
+                    steps {
+                        sh'''#!/bin/bash
+                            echo "$(hostname) $(date) : Running in $(pwd)"
+                        '''
+                    }
+                }
+            }
+        }"""
+    )
+
+
 def create_secret_file_credentials(
     unit_web_client: UnitWebClient, kube_config: str
 ) -> typing.Optional[str]:
