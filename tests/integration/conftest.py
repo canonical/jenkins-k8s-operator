@@ -798,18 +798,6 @@ async def oathkeeper_application_related_fixture(
     identity_platform = await application.model.deploy(
         "identity-platform", channel="edge", trust=True
     )
-    await application.model.add_relation(f"{application.name}:auth-proxy", oathkeeper.name)
-    await application.model.add_relation(f"{application.name}:ingress", "traefik-public")
-    await application.model.add_relation(
-        f"{oathkeeper.name}:certificates", "self-signed-certificates"
-    )
-    await application.model.add_relation(
-        "traefik-public:experimental-forward-auth", oathkeeper.name
-    )
-    await application.model.add_relation(
-        "traefik-public:receive-ca-cert", "self-signed-certificates"
-    )
-    await application.model.add_relation(f"{oathkeeper.name}:kratos-info", "kratos")
     await application.model.applications["kratos-external-idp-integrator"].set_config(
         {
             "client_id": "client_id",
@@ -820,11 +808,7 @@ async def oathkeeper_application_related_fixture(
             "provider_id": "Dex",
         }
     )
-    # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
-    await application.model.applications["kratos"].set_config({"dev": "True"})
-    await application.model.applications["traefik-public"].set_config(
-        {"enable_experimental_forward_auth": "True"}
-    )
+
     await application.model.wait_for_idle(
         status="active",
         apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
@@ -832,6 +816,33 @@ async def oathkeeper_application_related_fixture(
         timeout=30 * 60,
         idle_period=5,
     )
+    
+    await application.model.add_relation(
+        f"{oathkeeper.name}:certificates", "self-signed-certificates"
+    )
+    await application.model.add_relation(
+        "traefik-public:receive-ca-cert", "self-signed-certificates"
+    )
+    await application.model.applications["traefik-public"].set_config(
+        {"enable_experimental_forward_auth": "True"}
+    )
+    await application.model.add_relation(
+        f"{oathkeeper.name}", "traefik-public:experimental-forward-auth"
+    )
+    await application.model.add_relation(f"{oathkeeper.name}:kratos-info", "kratos")
+    # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
+    await application.model.applications["kratos"].set_config({"dev": "True"})
+    await application.model.add_relation(f"{application.name}:ingress", "traefik-public")
+    await application.model.add_relation(f"{application.name}:auth-proxy", oathkeeper.name)
+
+    await application.model.wait_for_idle(
+        status="active",
+        apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
+        raise_on_error=False,
+        timeout=30 * 60,
+        idle_period=5,
+    )
+    
     get_redirect_uri_action = (
         await application.model.applications["kratos-external-idp-integrator"]
         .units[0]
