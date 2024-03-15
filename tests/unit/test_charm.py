@@ -266,7 +266,7 @@ def test__on_jenkins_pebble_ready_ingress_routing_mode_mismatch(
         ), f"unit should be in {WAITING_STATUS_NAME}"
         assert (
             jenkins_charm.unit.status.message
-            == "ingress and agent-discovery-ingress must have the same prefix"
+            == "ingress and agent-discovery-ingress must have the same path"
         )
 
 

@@ -127,7 +127,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if not self.ingress_observer.is_ingress_ready():
             return (False, "Missing ingress relation")
         if self.ingress_observer.get_path() != self.agent_discovery_ingress_observer.get_path():
-            return (False, "ingress and agent-discovery-ingress must have the same prefix")
+            return (False, "ingress and agent-discovery-ingress must have the same path")
         return (True, "")
 
     def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
