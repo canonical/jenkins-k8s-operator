@@ -816,7 +816,7 @@ async def oathkeeper_application_related_fixture(
         timeout=30 * 60,
         idle_period=5,
     )
-    
+
     await application.model.add_relation(
         f"{oathkeeper.name}:certificates", "self-signed-certificates"
     )
@@ -842,7 +842,7 @@ async def oathkeeper_application_related_fixture(
         timeout=30 * 60,
         idle_period=5,
     )
-    
+
     get_redirect_uri_action = (
         await application.model.applications["kratos-external-idp-integrator"]
         .units[0]
