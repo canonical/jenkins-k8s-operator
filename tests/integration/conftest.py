@@ -809,6 +809,7 @@ async def oathkeeper_application_related_fixture(
         }
     )
 
+    # See https://github.com/canonical/kratos-operator/issues/182
     await application.model.wait_for_idle(
         status="active",
         apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
