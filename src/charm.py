@@ -118,6 +118,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             JENKINS_PREFIX=self.ingress_observer.get_path(),
         )
 
+    def _is_ingress_correctly_configured(self) -> typing.Tuple[bool, str]:
+        """Indicate whether ingress is properly configured.
+
+        Returns:
+            A tuple of a bool indicating whether ingress is configured and the reason if not.
+        """
+        if not self.ingress_observer.is_ingress_ready():
+            return (False, "Missing ingress relation")
+        if self.ingress_observer.get_path() != self.agent_discovery_ingress_observer.get_path():
+            return (False, "ingress and agent-discovery-ingress must have the same prefix")
+        return (True, "")
+
     def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
         """Configure and start Jenkins server.
 
@@ -133,6 +145,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if not jenkins.is_storage_ready(container):
             self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             event.defer()  # Jenkins installation should be retried until preconditions are met.
+            return
+
+        is_ingress_configured, reason = self._is_ingress_correctly_configured()
+        if not is_ingress_configured:
+            self.unit.status = ops.WaitingStatus(reason)
+            event.defer()
             return
 
         self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
@@ -200,6 +218,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
             return
 
+        is_ingress_configured, reason = self._is_ingress_correctly_configured()
+        if not is_ingress_configured:
+            self.unit.status = ops.WaitingStatus(reason)
+            return
+
         if self.state.restart_time_range and not timerange.check_now_within_bound_hours(
             self.state.restart_time_range.start, self.state.restart_time_range.end
         ):
@@ -217,6 +240,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if not container.can_connect():
             self.unit.status = ops.WaitingStatus("Waiting for pebble.")
             # This event should be handled again once the container becomes available.
+            event.defer()
+            return
+
+        is_ingress_configured, reason = self._is_ingress_correctly_configured()
+        if not is_ingress_configured:
+            self.unit.status = ops.WaitingStatus(reason)
             event.defer()
             return
 

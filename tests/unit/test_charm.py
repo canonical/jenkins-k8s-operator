@@ -8,6 +8,7 @@
 
 import datetime
 import functools
+import json
 import typing
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -106,12 +107,16 @@ def test__on_jenkins_pebble_ready_error(
     """
     # speed up waiting by changing default argument values
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
+
     with (
         patch.object(jenkins.Jenkins, "wait_ready"),
         patch.object(jenkins.Jenkins, "bootstrap") as bootstrap_mock,
     ):
         bootstrap_mock.side_effect = jenkins.JenkinsBootstrapError
         harness = harness_container.harness
+        harness.add_relation(
+            "ingress", "traefik-k8s", app_data={"ingress": json.dumps({"url": "http://test"})}
+        )
         harness.begin()
 
         jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
@@ -131,6 +136,9 @@ def test__on_jenkins_pebble_ready_get_version_error(
     """
     monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
     harness = harness_container.harness
+    harness.add_relation(
+        "ingress", "traefik-k8s", app_data={"ingress": json.dumps({"url": "http://test"})}
+    )
     harness.begin()
 
     with (
@@ -153,6 +161,9 @@ def test__on_jenkins_pebble_jenkins_not_ready(harness_container: HarnessWithCont
     assert: the charm raises an error.
     """
     harness = harness_container.harness
+    harness.add_relation(
+        "ingress", "traefik-k8s", app_data={"ingress": json.dumps({"url": "http://test"})}
+    )
     harness.begin()
     with patch.object(jenkins.Jenkins, "wait_ready") as wait_ready_mock:
         wait_ready_mock.side_effect = TimeoutError
@@ -177,6 +188,9 @@ def test__on_jenkins_pebble_ready(harness_container: HarnessWithContainer):
         patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
     ):
         version_mock.return_value = "1"
+        harness.add_relation(
+            "ingress", "traefik-k8s", app_data={"ingress": json.dumps({"url": "http://test"})}
+        )
         harness.begin()
 
         jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
@@ -185,6 +199,75 @@ def test__on_jenkins_pebble_ready(harness_container: HarnessWithContainer):
         assert (
             jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
         ), f"unit should be in {ACTIVE_STATUS_NAME}"
+
+
+@pytest.mark.usefixtures("patch_os_environ")
+def test__on_jenkins_pebble_ready_ingress_not_present(harness_container: HarnessWithContainer):
+    """
+    arrange: given a charm without an ingress relation.
+    act: when the charm starts.
+    assert: The charm is set to waiting status with the correct message.
+    """
+    harness = harness_container.harness
+    with (
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins.Jenkins, "bootstrap"),
+        patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
+    ):
+        version_mock.return_value = "1"
+        harness.begin()
+
+        jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+        jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
+
+        assert (
+            jenkins_charm.unit.status.name == WAITING_STATUS_NAME
+        ), f"unit should be in {WAITING_STATUS_NAME}"
+        assert jenkins_charm.unit.status.message == "Missing ingress relation"
+
+
+@pytest.mark.usefixtures("patch_os_environ")
+def test__on_jenkins_pebble_ready_ingress_routing_mode_mismatch(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given a charm with ingress and agent-discovery-ingress having different routing modes.
+    act: when the charm starts.
+    assert: The charm is set to waiting status with the correct message.
+    """
+    harness = harness_container.harness
+    with (
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins.Jenkins, "bootstrap"),
+        patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
+    ):
+        version_mock.return_value = "1"
+        harness.add_relation(
+            "ingress",
+            "traefik-k8s-ingress-1",
+            app_data={"ingress": json.dumps({"url": "http://traefik1.ingress.internal"})},
+        )
+        harness.add_relation(
+            "agent-discovery-ingress",
+            "traefik-k8s-ingress-2",
+            app_data={"ingress": json.dumps({"url": "http://ingress.internal/traefik2"})},
+        )
+        harness.begin()
+
+        jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+        jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
+
+        assert (
+            jenkins_charm.agent_discovery_ingress_observer.get_path()
+            != jenkins_charm.ingress_observer.get_path()
+        )
+        assert (
+            jenkins_charm.unit.status.name == WAITING_STATUS_NAME
+        ), f"unit should be in {WAITING_STATUS_NAME}"
+        assert (
+            jenkins_charm.unit.status.message
+            == "ingress and agent-discovery-ingress must have the same prefix"
+        )
 
 
 @pytest.mark.parametrize(
@@ -255,6 +338,9 @@ def test__on_update_status_not_in_time_range(
     mock_datetime.utcnow.return_value = datetime.datetime(2023, 1, 1, 23)
     monkeypatch.setattr(timerange, "datetime", mock_datetime)
     harness_container.harness.update_config({"restart-time-range": "00-23"})
+    harness_container.harness.add_relation(
+        "ingress", "traefik-k8s", app_data={"ingress": json.dumps({"url": "http://test"})}
+    )
     harness_container.harness.begin()
     harness = harness_container.harness
     original_status = harness.charm.unit.status.name
@@ -320,6 +406,9 @@ def test__on_update_status(
         "_remove_unlisted_plugins",
         lambda *_args, **_kwargs: remove_plugin_status,
     )
+    harness_container.harness.add_relation(
+        "ingress", "traefik-k8s", app_data={"ingress": json.dumps({"url": "http://test"})}
+    )
     harness_container.harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
@@ -328,12 +417,38 @@ def test__on_update_status(
     assert jenkins_charm.unit.status == expected_status
 
 
+def test__on_update_status_ingress_missing(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """
+    arrange: Given a jenkins charm with ingress missing.
+    act: when _on_update_status is called.
+    assert: Unit should be in waiting status with the correct message.
+    """
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm,
+        "_remove_unlisted_plugins",
+        MagicMock(),
+    )
+    harness_container.harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    jenkins_charm._on_update_status(MagicMock(spec=ops.UpdateStatusEvent))
+
+    assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
+    assert jenkins_charm.unit.status.message == "Missing ingress relation"
+
+
 def test__on_jenkins_home_storage_attached(harness: Harness, monkeypatch: pytest.MonkeyPatch):
     """
     arrange: given a base jenkins charm.
     act: when _on_jenkins_home_storage_attached is called.
     assert: The chown command was ran on the jenkins container with correct parameters.
     """
+    harness.add_relation(
+        "ingress", "traefik-k8s", app_data={"ingress": json.dumps({"url": "http://test"})}
+    )
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     container = jenkins_charm.unit.containers["jenkins"]
@@ -351,6 +466,23 @@ def test__on_jenkins_home_storage_attached(harness: Harness, monkeypatch: pytest
     exec_handler.assert_called_once_with(
         ["chown", "-R", "jenkins:jenkins", mock_jenkins_home_path], timeout=120
     )
+
+
+def test__on_jenkins_home_storage_attached_ingress_missing(harness: Harness):
+    """
+    arrange: given a base jenkins charm with missing ingress relation.
+    act: when _on_jenkins_home_storage_attached is called.
+    assert: The charm is set to waiting status with the correct message.
+    """
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    container = jenkins_charm.unit.containers["jenkins"]
+    harness.set_can_connect(container, True)
+
+    jenkins_charm._on_jenkins_home_storage_attached(MagicMock(spec=ops.StorageAttachedEvent))
+
+    assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
+    assert jenkins_charm.unit.status.message == "Missing ingress relation"
 
 
 def test__on_jenkins_home_storage_attached_container_not_ready(
