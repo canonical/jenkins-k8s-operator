@@ -36,4 +36,4 @@ juju integrate jenkins-k8s:ingress traefik-public
 juju integrate oathkeeper jenkins-k8s:auth-proxy
 ```
 
-Now Jenkins will be reacheable at https://[public_ip]/[model_name]-jenkins-k8s, where `public_ip`is the load balancer IP assigned to the traefik charm and `model_name`, the model where Jenkins is deployed.
+Now Jenkins will be reachable at https://[public_ip]/[model_name]-jenkins-k8s, where `public_ip`is the load balancer IP assigned to the traefik charm and `model_name`, the model where Jenkins is deployed.
