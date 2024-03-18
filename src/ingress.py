@@ -42,3 +42,11 @@ class Observer(ops.Object):
         if path == "/":
             return ""
         return path
+
+    def is_ingress_ready(self) -> str:
+        """Indicate if the ingress relation is ready.
+
+        Returns:
+            True if ingress is ready
+        """
+        return self.ingress.is_ready()
