@@ -6,6 +6,7 @@
 # pylint: disable=unused-argument
 
 import re
+import time
 
 import pytest
 import requests
@@ -64,6 +65,8 @@ async def test_auth_proxy_integration_authorized(
         f"https://{address}/{application.model.name}"
         f"-identity-platform-login-ui-operator/ui/login"
     )
+    # Dex might take a bit to be ready
+    time.sleep(5)
     await expect(page).to_have_url(re.compile(rf"{expected_url}*"))
 
     # Choose provider
