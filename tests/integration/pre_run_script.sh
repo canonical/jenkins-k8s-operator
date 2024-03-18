@@ -18,7 +18,3 @@ sg snap_microk8s -c "juju bootstrap localhost localhost"
 
 echo "Switching to testing model"
 sg snap_microk8s -c "juju switch $TESTING_MODEL"
-
-# Install playwright dependencies
-playwright install
-playwright install-deps
