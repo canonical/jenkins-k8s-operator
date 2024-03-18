@@ -863,7 +863,6 @@ def client_fixture() -> Client:
 @pytest.fixture(scope="module", name="ext_idp_service")
 def ext_idp_service_fixture(ops_test: OpsTest, client: Client) -> Generator[str, None, None]:
     """Deploy a DEX service on top of k8s for authentication."""
-    # Use ops-lib-manifests?
     try:
         create_dex_resources(client)
         # We need to set the dex issuer_url to be the IP that was assigned to
@@ -894,7 +893,7 @@ def external_user_email() -> str:
 @pytest.fixture()
 def external_user_password() -> str:
     """Password for testing proxy authentication."""
-    return secrets.token_hex()
+    return "password"
 
 
 # The playwright fixtures are taken from:
