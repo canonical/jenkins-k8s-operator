@@ -8,7 +8,7 @@ jobs:
     name: Get workflow version
     uses: ./.github/workflows/_get_workflow_version.yaml
     with:
-      repository-name: canonical/data-platform-workflows
+      repository-name: canonical/jenkins-k8s-operator
       file-name: integration_test.yaml
   collect-integration-tests:
     # In nested CI calls (e.g. release.yaml calls ci.yaml calls this workflow) the job name in
