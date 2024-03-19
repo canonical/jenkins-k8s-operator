@@ -45,7 +45,7 @@ jobs:
           import os
 
           CLOUD = "microk8s"
-          self_hosted = true
+          self_hosted = True
           assert isinstance(self_hosted, bool)
           if CLOUD == "lxd":
               group = "lxd"
