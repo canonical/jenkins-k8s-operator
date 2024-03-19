@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     name: Build charm
-    uses: yanksyoon/data-platform-workflows/.github/workflows/build_charm.yaml@v12.6.2
+    uses: yanksyoon/data-platform-workflows/.github/workflows/build_charm.yaml@main
     with:
       cache: true
     needs:
@@ -21,7 +21,7 @@ jobs:
             allure: false
           - agent: 3.1.7
             allure: true
-    uses: yanksyoon/data-platform-workflows/.github/workflows/integration_test_charm.yaml@self-hosted-k8s
+    uses: yanksyoon/data-platform-workflows/.github/workflows/integration_test_charm.yaml@main
     with:
       artifact-prefix: ${{ needs.build.outputs.artifact-prefix }}
       cloud: microk8s
