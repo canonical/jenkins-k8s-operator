@@ -28,32 +28,8 @@ jobs:
         run: |
           pipx install tox
           pipx install poetry
-      - name: Select test stability level
-        id: select-test-stability
-        shell: python
-        run: |
-          import os
-
-          if "${{ github.event_name }}" == "schedule":
-              print("Running unstable and stable tests")
-              output = "mark_expression="
-          else:
-              print("Skipping unstable tests")
-              output = "mark_expression=not unstable"
-
-          with open(os.environ["GITHUB_OUTPUT"], "a") as file:
-              file.write(output)
-      - name: Collect test groups
-        id: collect-groups
-        run: tox run -e integration -- tests/integration -m '${{ steps.select-test-stability.outputs.mark_expression }}' --collect-groups
-    outputs:
-      groups: ${{ steps.collect-groups.outputs.groups }}
   integration-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        groups: ${{ fromJSON(needs.collect-integration-tests.outputs.groups) }}
-    name: ${{ matrix.groups.job_name }}
+    name: job job
     needs:
       - get-workflow-version
       - collect-integration-tests
@@ -82,7 +58,7 @@ jobs:
           import os
 
           CLOUD = "microk8s"
-          self_hosted = json.loads("${{ matrix.groups.self_hosted }}")
+          self_hosted = json.loads("snap_microk8s")
           assert isinstance(self_hosted, bool)
           if CLOUD == "lxd":
               group = "lxd"
@@ -133,13 +109,14 @@ jobs:
       - name: Set up environment
         run: |
           # `--classic` applies to juju 2 snap; ignored for juju 3 snap
-          sudo snap install juju --classic --channel='${{ steps.parse-versions.outputs.snap_channel }}'
+          sudo snap install juju --classic --channel='2.9/stable'
       - name: Set up microk8s
+        if: ${{ 'microk8s' == 'microk8s' }}
         run: |
           sudo apt-get update
           sudo apt-get install retry -y
           sudo snap install microk8s --channel='1.28-strict/stable'
-          sudo adduser "$USER" '${{ steps.parse-cloud.outputs.group }}'
+          sudo adduser "$USER" 'snap_microk8s'
           echo 'foo'
           echo $DOCKERHUB_MIRROR
           echo 'bar'
@@ -151,24 +128,24 @@ jobs:
           [host."$DOCKERHUB_MIRROR"]
           capabilities = ["pull", "resolve"]
           EOF
-          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s stop"
-          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s start"
+          sg 'snap_microk8s' -c "microk8s stop"
+          sg 'snap_microk8s' -c "microk8s start"
           
           # `newgrp` does not work in GitHub Actions; use `sg` instead
-          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s status --wait-ready"
-          sg '${{ steps.parse-cloud.outputs.group }}' -c "retry --times 3 --delay 5 -- sudo microk8s enable dns"
-          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s status --wait-ready"
-          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/coredns"
-          sg '${{ steps.parse-cloud.outputs.group }}' -c "retry --times 3 --delay 5 -- sudo microk8s enable hostpath-storage"
-          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/hostpath-provisioner"
+          sg 'snap_microk8s' -c "microk8s status --wait-ready"
+          sg 'snap_microk8s' -c "retry --times 3 --delay 5 -- sudo microk8s enable dns"
+          sg 'snap_microk8s' -c "microk8s status --wait-ready"
+          sg 'snap_microk8s' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/coredns"
+          sg 'snap_microk8s' -c "retry --times 3 --delay 5 -- sudo microk8s enable hostpath-storage"
+          sg 'snap_microk8s' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/hostpath-provisioner"
           mkdir ~/.kube
           # Used by lightkube and kubernetes (Python package)
-          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s config > ~/.kube/config"
+          sg 'snap_microk8s' -c "microk8s config > ~/.kube/config"
       - run: snap list
       - name: Set up environment
         run: |
           mkdir -p ~/.local/share/juju  # Workaround for juju 3 strict snap
-          sg '${{ steps.parse-cloud.outputs.group }}' -c "juju bootstrap microk8s '${{ steps.parse-versions.outputs.agent_bootstrap_option }}'"
+          sg 'snap_microk8s' -c "juju bootstrap 'microk8s' '--agent-version=2.9.46'""
       - name: (self-hosted) Set up Juju proxy config
         if: ${{ matrix.groups.self_hosted }}
         # `https-proxy` sets `HTTPS_PROXY` environment variable inside Juju machines
@@ -181,18 +158,6 @@ jobs:
           juju add-model test
           pipx install tox
           pipx install poetry
-      - name: Select test stability level
-        id: select-test-stability
-        shell: python
-        run: |
-          import os
-
-          if "${{ github.event_name }}" == "schedule":
-              print("Running unstable and stable tests")
-              output = "mark_expression="
-          else:
-              print("Skipping unstable tests")
-              output = "mark_expression=not unstable"
-
-          with open(os.environ["GITHUB_OUTPUT"], "a") as file:
-              file.write(output)
+      - name: Update python-libjuju version
+        if: '^2'
+        run: poetry add --lock --group integration juju@'^2'
