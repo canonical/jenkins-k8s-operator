@@ -4,28 +4,195 @@ on:
   pull_request:
 
 jobs:
-  build:
-    name: Build charm
-    uses: yanksyoon/data-platform-workflows/.github/workflows/build_charm.yaml@main
+  get-workflow-version:
+    name: Get workflow version
+    uses: ./.github/workflows/_get_workflow_version.yaml
     with:
-      cache: true
-    needs:
-      - build
-  integration-tests:
+      repository-name: canonical/data-platform-workflows
+      file-name: integration_test_charm.yaml
+  collect-integration-tests:
+    # In nested CI calls (e.g. release.yaml calls ci.yaml calls this workflow) the job name in
+    # ci.yaml will not show up on the GitHub Actions sidebar.
+    # If this workflow is called with a matrix (e.g. to test multiple juju versions), the ci.yaml
+    # job name containing the Juju version will be lost.
+    # So, we add the Juju version to one of the first jobs in this workflow.
+    # (In the UI, when this workflow is called with a matrix, GitHub will separate each matrix
+    # combination and preserve job ordering within a matrix combination.)
+    name: 2.9/stable | Collect integration test groups
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install tox & poetry
+        run: |
+          pipx install tox
+          pipx install poetry
+      - name: Select test stability level
+        id: select-test-stability
+        shell: python
+        run: |
+          import os
+
+          if "${{ github.event_name }}" == "schedule":
+              print("Running unstable and stable tests")
+              output = "mark_expression="
+          else:
+              print("Skipping unstable tests")
+              output = "mark_expression=not unstable"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as file:
+              file.write(output)
+      - name: Collect test groups
+        id: collect-groups
+        run: tox run -e integration -- tests/integration -m '${{ steps.select-test-stability.outputs.mark_expression }}' --collect-groups
+    outputs:
+      groups: ${{ steps.collect-groups.outputs.groups }}
+  integration-test:
     strategy:
       fail-fast: false
       matrix:
-        juju:
-          - agent: 2.9.46
-            libjuju: ^2
-            allure: false
-          - agent: 3.1.7
-            allure: true
-    uses: yanksyoon/data-platform-workflows/.github/workflows/integration_test_charm.yaml@main
-    with:
-      artifact-prefix: ${{ needs.build.outputs.artifact-prefix }}
-      cloud: microk8s
-      microk8s-snap-channel: 1.28-strict/stable
-      juju-agent-version: ${{ matrix.juju.agent }}
-      libjuju-version-constraint: ${{ matrix.juju.libjuju }}
-      _beta_allure_report: ${{ matrix.juju.allure }}
+        groups: ${{ fromJSON(needs.collect-integration-tests.outputs.groups) }}
+    name: ${{ matrix.groups.job_name }}
+    needs:
+      - get-workflow-version
+      - collect-integration-tests
+    runs-on: [self-hosted, linux, X64, jammy, large]
+    timeout-minutes: 120
+    steps:
+      - name: (self-hosted) Disk usage
+        run: df --human-readable
+      - name: (self-hosted) Install pipx
+        run: |
+          sudo apt-get update
+          sudo apt-get install python3-pip python3-venv -y
+          python3 -m pip install --user pipx
+          python3 -m pipx ensurepath
+      - name: Install CLI
+        run: pipx install git+https://github.com/canonical/data-platform-workflows@'${{ needs.get-workflow-version.outputs.version }}'#subdirectory=python/cli
+      - name: Redact secrets from log
+        run: redact-secrets
+        env:
+          SECRETS: ${{ secrets.integration-test }}
+      - name: Parse cloud input
+        id: parse-cloud
+        shell: python
+        run: |
+          import json
+          import os
+
+          CLOUD = "microk8s"
+          self_hosted = json.loads("${{ matrix.groups.self_hosted }}")
+          assert isinstance(self_hosted, bool)
+          if CLOUD == "lxd":
+              group = "lxd"
+          elif CLOUD == "microk8s":
+              if self_hosted:
+                  raise ValueError("microk8s not supported on self-hosted runners")
+              SNAP_CHANNEL = "1.28-strict/stable"
+              assert (
+                  SNAP_CHANNEL != ""
+              ), '`microk8s-snap-channel` input required if `cloud` is "microk8s"'
+              assert "strict" in SNAP_CHANNEL.lower(), "Only strict microk8s snap supported"
+              group = "snap_microk8s"
+          else:
+              raise ValueError(f"`cloud` input not recognized: {CLOUD}")
+          output = f"group={group}"
+          print(output)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as file:
+              file.write(output)
+      - name: Parse Juju agent version & snap channel
+        id: parse-versions
+        shell: python
+        run: |
+          import os
+
+          AGENT_VERSION = "2.9.46"
+          snap_channel = "2.9/stable"
+          if not snap_channel:
+              if AGENT_VERSION:
+                  major, minor, patch = AGENT_VERSION.split(".")
+                  snap_channel = f"{major}.{minor}/stable"
+              else:
+                  raise Exception(
+                      "`juju-snap-channel` required if `juju-agent-version` is not passed"
+                  )
+
+          output = "agent_bootstrap_option="
+          if AGENT_VERSION:
+              output += f"--agent-version={AGENT_VERSION}"
+          output += f"\nsnap_channel={snap_channel}"
+          # GitHub artifact name cannot contain "/"
+          output += f'\nsnap_channel_for_artifact={snap_channel.replace("/", "-")}'
+
+          print(output)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as file:
+              file.write(output)
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up environment
+        run: |
+          # `--classic` applies to juju 2 snap; ignored for juju 3 snap
+          sudo snap install juju --classic --channel='${{ steps.parse-versions.outputs.snap_channel }}'
+      - name: Set up microk8s
+        run: |
+          sudo apt-get update
+          sudo apt-get install retry -y
+          sudo snap install microk8s --channel='1.28-strict/stable'
+          sudo adduser "$USER" '${{ steps.parse-cloud.outputs.group }}'
+          echo 'foo'
+          echo $DOCKERHUB_MIRROR
+          echo 'bar'
+          
+          # Use Docker Hub mirror to avoid rate limit
+          # (https://docs.docker.com/docker-hub/download-rate-limit/)
+          sudo cat > /var/snap/microk8s/current/args/certs.d/docker.io/hosts.toml << EOF
+          server = "$DOCKERHUB_MIRROR"
+          [host."$DOCKERHUB_MIRROR"]
+          capabilities = ["pull", "resolve"]
+          EOF
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s stop"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s start"
+          
+          # `newgrp` does not work in GitHub Actions; use `sg` instead
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s status --wait-ready"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "retry --times 3 --delay 5 -- sudo microk8s enable dns"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s status --wait-ready"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/coredns"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "retry --times 3 --delay 5 -- sudo microk8s enable hostpath-storage"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/hostpath-provisioner"
+          mkdir ~/.kube
+          # Used by lightkube and kubernetes (Python package)
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s config > ~/.kube/config"
+      - run: snap list
+      - name: Set up environment
+        run: |
+          mkdir -p ~/.local/share/juju  # Workaround for juju 3 strict snap
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "juju bootstrap microk8s '${{ steps.parse-versions.outputs.agent_bootstrap_option }}'"
+      - name: (self-hosted) Set up Juju proxy config
+        if: ${{ matrix.groups.self_hosted }}
+        # `https-proxy` sets `HTTPS_PROXY` environment variable inside Juju machines
+        # (same for `http-proxy` -> `HTTP_PROXY` and `no-proxy` -> `NO_PROXY`)
+        # Self-hosted runners require proxy
+        run: juju model-defaults http-proxy="$HTTP_PROXY" https-proxy="$HTTPS_PROXY" no-proxy="$NO_PROXY"
+      - name: Set up environment
+        run: |
+          juju model-defaults logging-config='<root>=INFO; unit=DEBUG'
+          juju add-model test
+          pipx install tox
+          pipx install poetry
+      - name: Select test stability level
+        id: select-test-stability
+        shell: python
+        run: |
+          import os
+
+          if "${{ github.event_name }}" == "schedule":
+              print("Running unstable and stable tests")
+              output = "mark_expression="
+          else:
+              print("Skipping unstable tests")
+              output = "mark_expression=not unstable"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as file:
+              file.write(output)
