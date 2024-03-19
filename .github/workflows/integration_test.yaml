@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     name: Build charm
-    uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v12.6.2
+    uses: yanksyoon/data-platform-workflows/.github/workflows/build_charm.yaml@v12.6.2
     with:
       cache: true
     needs:
