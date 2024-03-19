@@ -4,12 +4,6 @@ on:
   pull_request:
 
 jobs:
-  get-workflow-version:
-    name: Get workflow version
-    uses: ./.github/workflows/_get_workflow_version.yaml
-    with:
-      repository-name: canonical/jenkins-k8s-operator
-      file-name: integration_test.yaml
   collect-integration-tests:
     # In nested CI calls (e.g. release.yaml calls ci.yaml calls this workflow) the job name in
     # ci.yaml will not show up on the GitHub Actions sidebar.
@@ -31,7 +25,6 @@ jobs:
   integration-test:
     name: job job
     needs:
-      - get-workflow-version
       - collect-integration-tests
     runs-on: [self-hosted, linux, X64, jammy, large]
     timeout-minutes: 120
@@ -44,8 +37,6 @@ jobs:
           sudo apt-get install python3-pip python3-venv -y
           python3 -m pip install --user pipx
           python3 -m pipx ensurepath
-      - name: Install CLI
-        run: pipx install git+https://github.com/canonical/data-platform-workflows@'${{ needs.get-workflow-version.outputs.version }}'#subdirectory=python/cli
       - name: Redact secrets from log
         run: redact-secrets
         env:
