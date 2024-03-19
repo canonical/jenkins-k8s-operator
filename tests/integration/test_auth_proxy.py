@@ -3,8 +3,6 @@
 
 """Integration tests for jenkins-k8s-operator with auth_proxy."""
 
-# pylint: disable=unused-argument
-
 import re
 import time
 
@@ -18,10 +16,10 @@ from playwright.async_api._generated import Page
 
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("oathkeeper_related")
 async def test_auth_proxy_integration_returns_not_authorized(
     model: Model,
     application: Application,
-    oathkeeper_related: Application,
 ) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
@@ -40,16 +38,15 @@ async def test_auth_proxy_integration_returns_not_authorized(
     assert response.status_code == 401
 
 
-# pylint: disable=too-many-arguments
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("oathkeeper_related")
 async def test_auth_proxy_integration_authorized(
     ext_idp_service: str,
     external_user_email: str,
     external_user_password: str,
     page: Page,
     application: Application,
-    oathkeeper_related: Application,
 ) -> None:
     """
     arrange: Deploy jenkins, the authentication bundle and DEX.
