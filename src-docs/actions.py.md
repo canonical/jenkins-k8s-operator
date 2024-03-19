@@ -20,7 +20,7 @@ Jenkins-k8s charm actions observer.
 ### <kbd>function</kbd> `__init__`
 
 ```python
-__init__(charm: CharmBase, state: State)
+__init__(charm: CharmBase, state: State, jenkins_instance: Jenkins)
 ```
 
 Initialize the observer and register actions handlers. 
@@ -31,6 +31,7 @@ Initialize the observer and register actions handlers.
  
  - <b>`charm`</b>:  The parent charm to attach the observer to. 
  - <b>`state`</b>:  The Jenkins charm state. 
+ - <b>`jenkins_instance`</b>:  The Jenkins instance. 
 
 
 ---
@@ -43,7 +44,7 @@ Shortcut for more simple access the model.
 
 ---
 
-<a href="../src/actions.py#L32"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/actions.py#L34"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `on_get_admin_password`
 
@@ -61,7 +62,7 @@ Handle get-admin-password event.
 
 ---
 
-<a href="../src/actions.py#L45"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/actions.py#L47"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `on_rotate_credentials`
 

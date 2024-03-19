@@ -18,6 +18,7 @@ from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
 from .helpers import (
     create_kubernetes_cloud,
     create_secret_file_credentials,
+    declarative_pipeline_script,
     gen_git_test_job_xml,
     gen_test_job_xml,
     gen_test_pipeline_with_custom_script_xml,
@@ -577,4 +578,25 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
     log_stream = build.stream_logs()
     logs = "".join(log_stream)
     logger.debug("build logs: %s", logs)
+    assert build.get_status() == "SUCCESS"
+
+
+@pytest.mark.usefixtures("k8s_agent_related_app")
+async def test_pipeline_model_definition_plugin(unit_web_client: UnitWebClient):
+    """
+    arrange: given a Jenkins charm with declarative pipeline plugin installed.
+    act: Run a job using a declarative pipeline script.
+    assert: Job succeeds.
+    """
+    await install_plugins(unit_web_client, ("pipeline-model-definition",))
+
+    job = unit_web_client.client.create_job(
+        "pipeline_model_definition_plugin_test",
+        gen_test_pipeline_with_custom_script_xml(declarative_pipeline_script()),
+    )
+
+    queue_item = job.invoke()
+    queue_item.block_until_complete()
+
+    build: jenkinsapi.build.Build = queue_item.get_build()
     assert build.get_status() == "SUCCESS"

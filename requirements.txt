@@ -1,5 +1,6 @@
-cosl
-jenkinsapi>=0.3,<1
-ops>=2,<3
-pydantic>=1,<2
-requests>=2,<3
+cosl==0.0.10
+jenkinsapi==0.3.13
+jsonschema==4.21.1
+ops==2.11.0
+pydantic==1.10.14
+requests==2.31.0

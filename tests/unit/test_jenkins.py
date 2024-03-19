@@ -13,12 +13,10 @@ import re
 import secrets
 import textwrap
 import typing
-import unittest.mock
 from functools import partial
-from ipaddress import IPv4Address
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
-import jenkinsapi.jenkins
+import jenkinsapi
 import ops
 import pytest
 import requests
@@ -31,7 +29,9 @@ from .helpers import ConnectionExceptionPatch
 from .types_ import HarnessWithContainer
 
 
-def test__is_ready_connection_exception(monkeypatch: pytest.MonkeyPatch):
+def test__is_ready_connection_exception(
+    monkeypatch: pytest.MonkeyPatch, mock_env: jenkins.Environment
+):
     """
     arrange: given mocked requests that raises a connection exception.
     act: send a request to Jenkins login page.
@@ -39,9 +39,7 @@ def test__is_ready_connection_exception(monkeypatch: pytest.MonkeyPatch):
     """
     monkeypatch.setattr(requests, "get", ConnectionExceptionPatch)
 
-    ready = jenkins._is_ready()
-
-    assert not ready
+    assert not jenkins.Jenkins(mock_env)._is_ready()
 
 
 @pytest.mark.parametrize(
@@ -53,6 +51,7 @@ def test__is_ready(
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
     status_code: int,
     expected_ready: bool,
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given mocked requests that return a response with status_code.
@@ -61,14 +60,13 @@ def test__is_ready(
     """
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=status_code))
 
-    ready = jenkins._is_ready()
-
-    assert ready == expected_ready
+    assert jenkins.Jenkins(mock_env)._is_ready() == expected_ready
 
 
 def test_wait_ready_timeout(
     monkeypatch: pytest.MonkeyPatch,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given mocked requests that returns a 503 response.
@@ -78,10 +76,12 @@ def test_wait_ready_timeout(
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=503))
 
     with pytest.raises(TimeoutError):
-        jenkins.wait_ready(1, 1)
+        jenkins.Jenkins(mock_env).wait_ready(1, 1)
 
 
-def test_wait_ready_last_successful_check(monkeypatch: pytest.MonkeyPatch, jenkins_version: str):
+def test_wait_ready_last_successful_check(
+    monkeypatch: pytest.MonkeyPatch, jenkins_version: str, mock_env: jenkins.Environment
+):
     """
     arrange: given mocked requests that returns a 200 response the third time it's called.
     act: wait for jenkins to become ready for 1 second with 1 second interval.
@@ -107,12 +107,13 @@ def test_wait_ready_last_successful_check(monkeypatch: pytest.MonkeyPatch, jenki
 
     monkeypatch.setattr(requests, "get", MockedResponse)
 
-    jenkins.wait_ready(1, 1)
+    jenkins.Jenkins(mock_env).wait_ready(1, 1)
 
 
 def test_wait_ready(
     monkeypatch: pytest.MonkeyPatch,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given mocked requests that returns a 200 response.
@@ -121,7 +122,28 @@ def test_wait_ready(
     """
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=200))
 
-    jenkins.wait_ready(1, 1)
+    jenkins.Jenkins(mock_env).wait_ready(1, 1)
+
+
+def test_is_storage_ready_no_container():
+    """
+    arrange: nothing.
+    act: when is_storage_ready is called without passing a container.
+    assert: Falsy value is returned.
+    """
+    assert not jenkins.is_storage_ready(container=None)
+
+
+def test_is_storage_ready_cant_connect():
+    """
+    arrange: given a mocked container to which connection is not possible.
+    act: when is_storage_ready is called.
+    assert: Falsy value is returned.
+    """
+    mock_container = MagicMock(ops.Container)
+    mock_container.can_connect.return_value = False
+
+    assert not jenkins.is_storage_ready(container=mock_container)
 
 
 def test_is_storage_ready_not_ready():
@@ -143,7 +165,7 @@ def test_is_storage_ready_proc_error():
     assert: StorageMountError is raised.
     """
     mock_container = MagicMock(ops.Container)
-    mock_container.pull.return_value = io.StringIO(str((state.JENKINS_HOME_PATH)))
+    mock_container.pull.return_value = io.StringIO(str((jenkins.JENKINS_HOME_PATH)))
     mock_proc = MagicMock(ops.pebble.ExecProcess)
     mock_proc.wait_output.side_effect = [ops.pebble.ChangeError(err="", change=MagicMock())]
     mock_container.exec.return_value = mock_proc
@@ -165,9 +187,9 @@ def test_get_admin_credentials(
 
 def test__get_api_credentials_error():
     """
-    arrange: given a mocked container that returns the admin api token file content.
+    arrange: set up a container raising an exception.
     act: admin credentials are fetched over pebble.
-    assert: correct admin credentials from the filesystem are returned.
+    assert: a JenkinsBootstrapError is raised..
     """
     mock_container = MagicMock(ops.Container)
     mock_container.pull = MagicMock(
@@ -188,9 +210,7 @@ def test__get_api_credentials(
     assert jenkins._get_api_credentials(harness_container.container) == admin_credentials
 
 
-def test__setup_user_token(
-    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
-):
+def test__setup_user_token(harness_container: HarnessWithContainer, mock_env: jenkins.Environment):
     """
     arrange: given a mocked container and a monkeypatched mocked jenkinsapi client.
     act: when _setup_user_token is called.
@@ -199,25 +219,35 @@ def test__setup_user_token(
     test_api_token = secrets.token_hex(16)
     mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
     mock_client.generate_new_api_token.return_value = test_api_token
-    monkeypatch.setattr(jenkins, "_get_client", lambda *_args, **_kwargs: mock_client)
 
-    jenkins._setup_user_token(harness_container.container)
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
+        jenkins.Jenkins(mock_env)._setup_user_token(harness_container.container)
 
-    assert (
-        harness_container.container.pull(jenkins.API_TOKEN_PATH, encoding="utf-8").read()
-        == test_api_token
+        assert (
+            harness_container.container.pull(jenkins.API_TOKEN_PATH, encoding="utf-8").read()
+            == test_api_token
+        )
+
+
+def test__setup_user_token_raises_exception(mock_env: jenkins.Environment):
+    """
+    arrange: given a container raising an exception and a monkeypatched mocked jenkinsapi client.
+    act: when _setup_user_token is called.
+    assert: a JenkinsBootstrapError is raised.
+    """
+    test_api_token = secrets.token_hex(16)
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.generate_new_api_token.return_value = test_api_token
+    mock_container = MagicMock(ops.Container)
+    mock_container.pull = MagicMock(
+        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
     )
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-
-def test_calculate_env():
-    """
-    arrange: given bootstrapped boolean state variable.
-    act: when calculate_env is called.
-    assert: expected environment variable mapping dictionary is returned.
-    """
-    env = jenkins.calculate_env()
-
-    assert env == {"JENKINS_HOME": str(state.JENKINS_HOME_PATH)}
+        with pytest.raises(jenkins.JenkinsBootstrapError):
+            jenkins.Jenkins(mock_env)._setup_user_token(mock_container)
 
 
 @pytest.mark.parametrize(
@@ -227,22 +257,26 @@ def test_calculate_env():
         pytest.param(requests.exceptions.ConnectionError, id="Connection"),
     ],
 )
-def test_get_version_error(monkeypatch: pytest.MonkeyPatch, exception: Exception):
+def test_version_error(
+    monkeypatch: pytest.MonkeyPatch, exception: Exception, mock_env: jenkins.Environment
+):
     """
     arrange: given a monkeypatched request that raises exceptions.
     act: when a request is sent to Jenkins server.
     assert: JenkinsError exception is raised.
     """
     monkeypatch.setattr(jenkins.requests, "get", MagicMock(side_effect=exception))
+    jenking_instance = jenkins.Jenkins(mock_env)
 
     with pytest.raises(jenkins.JenkinsError):
-        jenkins.get_version()
+        jenking_instance.version  # pylint: disable=pointless-statement
 
 
-def test_get_version(
+def test_version(
     monkeypatch: pytest.MonkeyPatch,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
     jenkins_version: str,
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given a monkeypatched request that returns Jenkins version in headers.
@@ -251,7 +285,7 @@ def test_get_version(
     """
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=200))
 
-    assert jenkins.get_version() == jenkins_version
+    assert jenkins.Jenkins(mock_env).version == jenkins_version
 
 
 def test__unlock_wizard(
@@ -259,6 +293,7 @@ def test__unlock_wizard(
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
     monkeypatch: pytest.MonkeyPatch,
     jenkins_version: str,
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given a mocked container and a monkeypatched Jenkins client.
@@ -267,7 +302,7 @@ def test__unlock_wizard(
     """
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=403))
 
-    jenkins._unlock_wizard(harness_container.container)
+    jenkins.Jenkins(mock_env)._unlock_wizard(harness_container.container)
 
     assert (
         harness_container.container.pull(jenkins.LAST_EXEC_VERSION_PATH, encoding="utf-8").read()
@@ -279,13 +314,33 @@ def test__unlock_wizard(
     )
 
 
-def test__install_config(harness_container: HarnessWithContainer):
+def test__unlock_wizard_raises_exception(
+    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    monkeypatch: pytest.MonkeyPatch,
+    mock_env: jenkins.Environment,
+):
+    """
+    arrange: given a container raising an exception and a monkeypatched Jenkins client.
+    act: unlock_jenkins is called.
+    assert: a JenkinsBootstrapError is raised.
+    """
+    monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=403))
+    mock_container = MagicMock(ops.Container)
+    mock_container.push = MagicMock(
+        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
+    )
+
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins.Jenkins(mock_env)._unlock_wizard(mock_container)
+
+
+def test_install_config(harness_container: HarnessWithContainer):
     """
     arrange: given a mocked uninitialized container.
     act: when _install_config is called.
     assert: jenkins configuration file is generated.
     """
-    jenkins._install_configs(harness_container.container)
+    jenkins._install_configs(harness_container.container, jenkins.DEFAULT_JENKINS_CONFIG)
 
     config_xml = str(
         harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
@@ -294,6 +349,51 @@ def test__install_config(harness_container: HarnessWithContainer):
     jnlp_match = re.search(r"<slaveAgentPort>(\d+)</slaveAgentPort>", config_xml)
     assert jnlp_match, "Configuration for jnlp port not found."
     assert jnlp_match.group(1) == "50000", "jnlp not set as default port."
+
+
+def test_install_config_raises_exception():
+    """
+    arrange: set up a container raising an exception.
+    act: when _install_config is called.
+    assert: a JenkinsBootstrapError is raised.
+    """
+    mock_container = MagicMock(ops.Container)
+    mock_container.push = MagicMock(
+        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
+    )
+
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins._install_configs(mock_container, jenkins.DEFAULT_JENKINS_CONFIG)
+
+
+def test_install_defalt_config(harness_container: HarnessWithContainer):
+    """
+    arrange: given a mocked uninitialized container.
+    act: when install_default_config is called.
+    assert: jenkins configuration file is generated.
+    """
+    jenkins.install_default_config(harness_container.container)
+
+    config_xml = str(
+        harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
+    )
+
+    assert "<useSecurity>true</useSecurity>" in config_xml
+
+
+def test_install_default_config_raises_exception():
+    """
+    arrange: set up a container raising an exception.
+    act: when install_default_config is called.
+    assert: a JenkinsBootstrapError is raised.
+    """
+    mock_container = MagicMock(ops.Container)
+    mock_container.push = MagicMock(
+        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
+    )
+
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins.install_default_config(mock_container)
 
 
 @pytest.mark.parametrize(
@@ -364,7 +464,7 @@ def test__install_plugins_fail():
     """
     arrange: given a mocked container with a mocked failing process.
     act: when _install_plugins is called.
-    assert: JenkinsPluginError is raised.
+    assert: JenkinsBootstrapError is raised.
     """
     mock_proc = MagicMock(spec=ExecProcess)
     mock_proc.wait_output = MagicMock(
@@ -373,7 +473,7 @@ def test__install_plugins_fail():
     mock_container = MagicMock(spec=ops.Container)
     mock_container.exec.return_value = mock_proc
 
-    with pytest.raises(jenkins.JenkinsPluginError):
+    with pytest.raises(jenkins.JenkinsBootstrapError):
         jenkins._install_plugins(mock_container)
 
 
@@ -392,26 +492,30 @@ def test__configure_proxy_fail(
     harness_container: HarnessWithContainer,
     proxy_config: state.ProxyConfig,
     mock_client: MagicMock,
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given a test proxy config and a monkeypatched jenkins client that raises an exception.
     act: when _configure_proxy is called.
-    assert: JenkinsProxyError is raised.
+    assert: JenkinsBootstrapError is raised.
     """
     mock_client.run_groovy_script = MagicMock(
         side_effect=jenkinsapi.custom_exceptions.JenkinsAPIException
     )
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    with pytest.raises(jenkins.JenkinsProxyError) as exc:
-        jenkins._configure_proxy(harness_container.container, proxy_config)
+        with pytest.raises(jenkins.JenkinsBootstrapError) as exc:
+            jenkins.Jenkins(mock_env)._configure_proxy(harness_container.container, proxy_config)
 
-    assert exc.value.args[0] == "Proxy configuration failed."
+        assert exc.value.args[0] == "Proxy configuration failed."
 
 
 def test__configure_proxy_partial(
     harness_container: HarnessWithContainer,
     partial_proxy_config: state.ProxyConfig,
     mock_client: MagicMock,
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given a test partial proxy config and a mock jenkins client.
@@ -420,21 +524,28 @@ def test__configure_proxy_partial(
     """
     mock_run_groovy_script = MagicMock()
     mock_client.run_groovy_script = mock_run_groovy_script
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    jenkins._configure_proxy(harness_container.container, partial_proxy_config)
+        jenkins.Jenkins(mock_env)._configure_proxy(
+            harness_container.container, partial_proxy_config
+        )
 
-    assert partial_proxy_config.https_proxy, "Https value for proxy config fixture cannot be None."
-    mock_run_groovy_script.assert_called_once_with(
-        f"proxy = new ProxyConfiguration('{partial_proxy_config.https_proxy.host}', "
-        f"{partial_proxy_config.https_proxy.port}, '', '')\n"
-        "proxy.save()"
-    )
+        assert (
+            partial_proxy_config.https_proxy
+        ), "Https value for proxy config fixture cannot be None."
+        mock_run_groovy_script.assert_called_once_with(
+            f"proxy = new ProxyConfiguration('{partial_proxy_config.https_proxy.host}', "
+            f"{partial_proxy_config.https_proxy.port}, '', '')\n"
+            "proxy.save()"
+        )
 
 
 def test__configure_proxy_http(
     harness_container: HarnessWithContainer,
     http_partial_proxy_config: state.ProxyConfig,
     mock_client: MagicMock,
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given a test partial http proxy config and a mock jenkins client.
@@ -443,23 +554,28 @@ def test__configure_proxy_http(
     """
     mock_run_groovy_script = MagicMock()
     mock_client.run_groovy_script = mock_run_groovy_script
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    jenkins._configure_proxy(harness_container.container, http_partial_proxy_config)
+        jenkins.Jenkins(mock_env)._configure_proxy(
+            harness_container.container, http_partial_proxy_config
+        )
 
-    assert (
-        http_partial_proxy_config.http_proxy
-    ), "Http value for proxy config fixture cannot be None."
-    mock_run_groovy_script.assert_called_once_with(
-        f"proxy = new ProxyConfiguration('{http_partial_proxy_config.http_proxy.host}', "
-        f"{http_partial_proxy_config.http_proxy.port}, '', '')\n"
-        "proxy.save()"
-    )
+        assert (
+            http_partial_proxy_config.http_proxy
+        ), "Http value for proxy config fixture cannot be None."
+        mock_run_groovy_script.assert_called_once_with(
+            f"proxy = new ProxyConfiguration('{http_partial_proxy_config.http_proxy.host}', "
+            f"{http_partial_proxy_config.http_proxy.port}, '', '')\n"
+            "proxy.save()"
+        )
 
 
 def test__configure_proxy(
     harness_container: HarnessWithContainer,
     proxy_config: state.ProxyConfig,
     mock_client: MagicMock,
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given a test proxy config and a mock jenkins client.
@@ -468,76 +584,85 @@ def test__configure_proxy(
     """
     mock_run_groovy_script = MagicMock()
     mock_client.run_groovy_script = mock_run_groovy_script
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    jenkins._configure_proxy(harness_container.container, proxy_config)
+        jenkins.Jenkins(mock_env)._configure_proxy(harness_container.container, proxy_config)
 
-    # Assert for type not being None.
-    assert proxy_config.https_proxy, "https proxy should not be None."
-    mock_run_groovy_script.assert_called_once_with(
-        f"proxy = new ProxyConfiguration('{proxy_config.https_proxy.host}', "
-        f"{proxy_config.https_proxy.port}, "
-        f"'{proxy_config.https_proxy.user}', '{proxy_config.https_proxy.password}', "
-        f"'{proxy_config.no_proxy}')\n"
-        "proxy.save()"
-    )
+        # Assert for type not being None.
+        assert proxy_config.https_proxy, "https proxy should not be None."
+        mock_run_groovy_script.assert_called_once_with(
+            f"proxy = new ProxyConfiguration('{proxy_config.https_proxy.host}', "
+            f"{proxy_config.https_proxy.port}, "
+            f"'{proxy_config.https_proxy.user}', '{proxy_config.https_proxy.password}', "
+            f"'{proxy_config.no_proxy}')\n"
+            "proxy.save()"
+        )
 
 
 def test_bootstrap_fail(
-    harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
+    harness_container: HarnessWithContainer,
     jenkins_version: str,
+    mock_env: jenkins.Environment,
 ):
     """
-    arrange: given mocked container, monkeypatched get_version function and invalid plugins to \
+    arrange: given mocked container, patched version and invalid plugins to \
         install.
     act: when bootstrap is called.
-    assert: JenkinsPluginError is raised.
+    assert: JenkinsBootstrapError is raised.
     """
-    monkeypatch.setattr(jenkins, "get_version", lambda: jenkins_version)
-    monkeypatch.setattr(
-        jenkins,
-        "_setup_user_token",
-        lambda *_args, **kwargs: None,
-    )
     monkeypatch.setattr(
         jenkins,
         "_install_plugins",
-        MagicMock(side_effect=jenkins.JenkinsPluginError),
+        MagicMock(side_effect=jenkins.JenkinsBootstrapError),
     )
 
-    with pytest.raises(jenkins.JenkinsBootstrapError):
-        jenkins.bootstrap(container=harness_container.container)
+    with (
+        patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
+        patch.object(jenkins.Jenkins, "_setup_user_token"),
+    ):
+        version_mock.return_value = jenkins_version
+
+        with pytest.raises(jenkins.JenkinsBootstrapError):
+            jenkins.Jenkins(mock_env).bootstrap(
+                harness_container.container, jenkins.DEFAULT_JENKINS_CONFIG
+            )
 
 
 def test_bootstrap(
     harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
     jenkins_version: str,
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given mocked container, monkeypatched get_version function and invalid plugins.
     act: when bootstrap is called.
     assert: files to unlock wizard are installed and necessary configs and plugins are installed.
     """
-    monkeypatch.setattr(jenkins, "get_version", lambda: jenkins_version)
-    monkeypatch.setattr(
-        jenkins,
-        "_setup_user_token",
-        lambda *_args, **kwargs: None,
-    )
+    with (
+        patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
+        patch.object(jenkins.Jenkins, "_setup_user_token"),
+    ):
+        version_mock.return_value = jenkins_version
 
-    jenkins.bootstrap(container=harness_container.container)
+        jenkins.Jenkins(mock_env).bootstrap(
+            harness_container.container, jenkins.DEFAULT_JENKINS_CONFIG
+        )
 
-    assert harness_container.container.pull(
-        jenkins.LAST_EXEC_VERSION_PATH, encoding="utf-8"
-    ).read()
-    assert harness_container.container.pull(jenkins.WIZARD_VERSION_PATH, encoding="utf-8").read()
-    assert harness_container.container.pull(
-        jenkins.CONFIG_FILE_PATH, encoding="utf-8"
-    ).read(), "Configuration not found"
+        assert harness_container.container.pull(
+            jenkins.LAST_EXEC_VERSION_PATH, encoding="utf-8"
+        ).read()
+        assert harness_container.container.pull(
+            jenkins.WIZARD_VERSION_PATH, encoding="utf-8"
+        ).read()
+        config_xml = str(
+            harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
+        )
+        assert "<useSecurity>true</useSecurity>" in config_xml
 
 
-def test_get_client(admin_credentials: jenkins.Credentials):
+def test_get_client(admin_credentials: jenkins.Credentials, mock_env: jenkins.Environment):
     """
     arrange: .
     act: when get_client is called with credentials.
@@ -545,32 +670,38 @@ def test_get_client(admin_credentials: jenkins.Credentials):
     """
     expected_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
 
-    with unittest.mock.patch("jenkinsapi.jenkins.Jenkins", return_value=expected_client):
-        client = jenkins._get_client(admin_credentials)
+    with patch("jenkinsapi.jenkins.Jenkins", return_value=expected_client):
+        jenkins_instance = jenkins.Jenkins(mock_env)
+        client = jenkins_instance._get_client(admin_credentials)
 
         assert client == expected_client
         # pylint doesn't understand that this is a patched implementation.
         jenkinsapi.jenkins.Jenkins.assert_called_with(  # pylint: disable=no-member
-            baseurl=jenkins.WEB_URL,
+            baseurl=jenkins_instance.web_url,
             username=admin_credentials.username,
             password=admin_credentials.password_or_token,
             timeout=60,
         )
 
 
-def test_get_node_secret_api_error(container: ops.Container, mock_client: MagicMock):
+def test_get_node_secret_api_error(
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
+):
     """
     arrange: given a mocked Jenkins client that raises an error.
     act: when a groovy script is executed through the client.
     assert: a Jenkins API exception is raised.
     """
     mock_client.run_groovy_script.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
+        with pytest.raises(jenkins.JenkinsError):
+            jenkins.Jenkins(mock_env).get_node_secret("jenkins-agent", container)
 
-    with pytest.raises(jenkins.JenkinsError):
-        jenkins.get_node_secret("jenkins-agent", container)
 
-
-def test_get_node_secret(container: ops.Container, mock_client: MagicMock):
+def test_get_node_secret(
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
+):
     """
     arrange: given a mocked Jenkins client.
     act: when a groovy script getting a node secret is executed.
@@ -578,15 +709,17 @@ def test_get_node_secret(container: ops.Container, mock_client: MagicMock):
     """
     secret = secrets.token_hex()
     mock_client.run_groovy_script.return_value = secret
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    node_secret = jenkins.get_node_secret("jenkins-agent", container)
+        node_secret = jenkins.Jenkins(mock_env).get_node_secret("jenkins-agent", container)
 
-    assert secret == node_secret, "Secret value mismatch."
+        assert secret == node_secret, "Secret value mismatch."
 
 
 @pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node_fail(
-    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
 ):
     """
     arrange: given a mocked jenkins client that raises an API exception.
@@ -596,19 +729,19 @@ def test_add_agent_node_fail(
     mock_client.create_node_with_config.side_effect = (
         jenkinsapi.custom_exceptions.JenkinsAPIException
     )
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    with pytest.raises(jenkins.JenkinsError):
-        jenkins.add_agent_node(
-            state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
-            container,
-            host=mock_ip_addr,
-            enable_websocket=False,
-        )
+        with pytest.raises(jenkins.JenkinsError):
+            jenkins.Jenkins(mock_env).add_agent_node(
+                state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+                container,
+            )
 
 
 @pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node_already_exists(
-    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
 ):
     """
     arrange: given a mocked jenkins client that raises an Already exists exception.
@@ -616,18 +749,18 @@ def test_add_agent_node_already_exists(
     assert: no exception is raised.
     """
     mock_client.create_node_with_config.side_effect = jenkinsapi.custom_exceptions.AlreadyExists
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    jenkins.add_agent_node(
-        state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
-        container,
-        host=mock_ip_addr,
-        enable_websocket=False,
-    )
+        jenkins.Jenkins(mock_env).add_agent_node(
+            state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+            container,
+        )
 
 
 @pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node(
-    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
 ):
     """
     arrange: given a mocked jenkins client.
@@ -635,18 +768,18 @@ def test_add_agent_node(
     assert: no exception is raised.
     """
     mock_client.create_node_with_config.return_value = MagicMock(spec=jenkins.Node)
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    jenkins.add_agent_node(
-        state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
-        container,
-        host=mock_ip_addr,
-        enable_websocket=False,
-    )
+        jenkins.Jenkins(mock_env).add_agent_node(
+            state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+            container,
+        )
 
 
 @pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node_websocket(
-    container: ops.Container, mock_client: MagicMock, mock_ip_addr: IPv4Address
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
 ):
     """
     arrange: given a mocked jenkins client.
@@ -654,29 +787,35 @@ def test_add_agent_node_websocket(
     assert: no exception is raised.
     """
     mock_client.create_node_with_config.return_value = MagicMock(spec=jenkins.Node)
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    jenkins.add_agent_node(
-        state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
-        container,
-        host=mock_ip_addr,
-        enable_websocket=True,
-    )
+        jenkins.Jenkins(mock_env).add_agent_node(
+            state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0"),
+            container,
+        )
 
 
 @pytest.mark.usefixtures("patch_jenkins_node")
-def test_remove_agent_node_fail(container: ops.Container, mock_client: MagicMock):
+def test_remove_agent_node_fail(
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
+):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
     assert: no exception is raised.
     """
     mock_client.delete_node.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    with pytest.raises(jenkins.JenkinsError):
-        jenkins.remove_agent_node("jekins-agent-0", container)
+        with pytest.raises(jenkins.JenkinsError):
+            jenkins.Jenkins(mock_env).remove_agent_node("jekins-agent-0", container)
 
 
-def test_remove_agent_node(container: ops.Container, mock_client: MagicMock):
+def test_remove_agent_node(
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
+):
     """
     arrange: given a mocked jenkins client.
     act: when add_agent is called.
@@ -684,10 +823,12 @@ def test_remove_agent_node(container: ops.Container, mock_client: MagicMock):
     """
     mock_delete = MagicMock(spec=jenkinsapi.jenkins.Jenkins.delete_node)
     mock_client.delete_node = mock_delete
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    jenkins.remove_agent_node("jekins-agent-0", container)
+        jenkins.Jenkins(mock_env).remove_agent_node("jekins-agent-0", container)
 
-    mock_delete.assert_called_once()
+        mock_delete.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -697,7 +838,9 @@ def test_remove_agent_node(container: ops.Container, mock_client: MagicMock):
         pytest.param(404, id="Not found response"),
     ],
 )
-def test__wait_jenkins_job_shutdown_false(response_status: int, mock_client: MagicMock):
+def test__wait_jenkins_job_shutdown_false(
+    response_status: int, mock_client: MagicMock, mock_env: jenkins.Environment
+):
     """
     arrange: given a mocked Jenkins client that returns any other status code apart from 503.
     act: when _is_shutdown is called.
@@ -709,10 +852,10 @@ def test__wait_jenkins_job_shutdown_false(response_status: int, mock_client: Mag
     mock_requester.get_url.return_value = mock_response
     mock_response.status_code = response_status
 
-    assert not jenkins._is_shutdown(mock_client)
+    assert not jenkins.Jenkins(mock_env)._is_shutdown(mock_client)
 
 
-def test__is_shutdown_connection_error(mock_client: MagicMock):
+def test__is_shutdown_connection_error(mock_client: MagicMock, mock_env: jenkins.Environment):
     """
     arrange: given a mocked Jenkins client that raises a ConnectionError.
     act: when _is_shutdown is called.
@@ -722,10 +865,10 @@ def test__is_shutdown_connection_error(mock_client: MagicMock):
     mock_client.requester = mock_requester
     mock_requester.get_url.side_effect = requests.ConnectionError
 
-    assert jenkins._is_shutdown(mock_client)
+    assert jenkins.Jenkins(mock_env)._is_shutdown(mock_client)
 
 
-def test__is_shutdown_service_unavailable(mock_client: MagicMock):
+def test__is_shutdown_service_unavailable(mock_client: MagicMock, mock_env: jenkins.Environment):
     """
     arrange: given a mocked Jenkins client that raises a service unavailable status.
     act: when _is_shutdown is called.
@@ -737,61 +880,69 @@ def test__is_shutdown_service_unavailable(mock_client: MagicMock):
     mock_requester.get_url.return_value = mock_response
     mock_response.status_code = 503
 
-    assert jenkins._is_shutdown(mock_client)
+    assert jenkins.Jenkins(mock_env)._is_shutdown(mock_client)
 
 
-def test__wait_jenkins_job_shutdown_timeout(monkeypatch: pytest.MonkeyPatch):
+def test__wait_jenkins_job_shutdown_timeout(mock_env: jenkins.Environment):
     """
     arrange: given a patched _is_shutdown request that raises a TimeoutError.
     act: when _wait_jenkins_job_shutdown is called.
     assert: TimeoutError is raised.
     """
-    monkeypatch.setattr(jenkins, "_is_shutdown", MagicMock(side_effect=TimeoutError))
     mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    with patch.object(jenkins.Jenkins, "_is_shutdown") as is_shutdown_mock:
+        is_shutdown_mock.side_effect = TimeoutError
 
-    with pytest.raises(TimeoutError):
-        jenkins._wait_jenkins_job_shutdown(mock_client)
+        with pytest.raises(TimeoutError):
+            jenkins.Jenkins(mock_env)._wait_jenkins_job_shutdown(mock_client)
 
 
-def test__wait_jenkins_job_shutdown(monkeypatch: pytest.MonkeyPatch):
+def test__wait_jenkins_job_shutdown(mock_env: jenkins.Environment):
     """
     arrange: given a patched _is_shutdown request that returns True.
     act: when _wait_jenkins_job_shutdown is called.
     assert: No exceptions are raised.
     """
-    monkeypatch.setattr(jenkins, "_is_shutdown", lambda *_args, **kwargs: True)
     mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    with patch.object(jenkins.Jenkins, "_is_shutdown"):
 
-    jenkins._wait_jenkins_job_shutdown(mock_client)
+        jenkins.Jenkins(mock_env)._wait_jenkins_job_shutdown(mock_client)
 
 
-def test_safe_restart_failure(harness_container: HarnessWithContainer, mock_client: MagicMock):
+def test_safe_restart_failure(
+    harness_container: HarnessWithContainer, mock_client: MagicMock, mock_env: jenkins.Environment
+):
     """
     arrange: given a mocked Jenkins API client that raises JenkinsAPIException.
     act: when safe_restart is called.
     assert: JenkinsError is raised.
     """
     mock_client.safe_restart.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
 
-    with pytest.raises(jenkins.JenkinsError):
-        jenkins.safe_restart(harness_container.container)
+        with pytest.raises(jenkins.JenkinsError):
+            jenkins.Jenkins(mock_env).safe_restart(harness_container.container)
 
 
 def test_safe_restart(
     harness_container: HarnessWithContainer,
-    monkeypatch: pytest.MonkeyPatch,
     mock_client: MagicMock,
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given a mocked Jenkins API client that does not raise an exception.
     act: when safe_restart is called.
     assert: No exception is raised.
     """
-    monkeypatch.setattr(jenkins, "_wait_jenkins_job_shutdown", lambda *_args, **_kwargs: None)
+    with (
+        patch.object(jenkins.Jenkins, "_wait_jenkins_job_shutdown"),
+        patch.object(jenkins.Jenkins, "_get_client") as get_client_mock,
+    ):
+        get_client_mock.return_value = mock_client
+        jenkins.Jenkins(mock_env).safe_restart(harness_container.container)
 
-    jenkins.safe_restart(harness_container.container)
-
-    mock_client.safe_restart.assert_called_once_with(wait_for_reboot=False)
+        mock_client.safe_restart.assert_called_once_with(wait_for_reboot=False)
 
 
 @pytest.mark.parametrize(
@@ -1088,6 +1239,7 @@ def test__plugin_temporary_files_exist():
 def test_remove_unlisted_plugins_wait_plugins_install_timeout(
     monkeypatch: pytest.MonkeyPatch,
     container: ops.Container,
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given a mocked _wait_plugins_install that raises a timeout error.
@@ -1097,14 +1249,14 @@ def test_remove_unlisted_plugins_wait_plugins_install_timeout(
     monkeypatch.setattr(jenkins, "_wait_plugins_install", MagicMock(side_effect=TimeoutError))
 
     with pytest.raises(jenkins.JenkinsPluginError):
-        jenkins.remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
+        jenkins.Jenkins(mock_env).remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
 
 
 def test_remove_unlisted_plugins_delete_error(
-    monkeypatch: pytest.MonkeyPatch,
     mock_client: MagicMock,
     container: ops.Container,
     plugin_groovy_script_result: str,
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given a mocked client that raises an exception on delete_plugins call.
@@ -1116,11 +1268,15 @@ def test_remove_unlisted_plugins_delete_error(
     )
     mock_groovy_script.return_value = plugin_groovy_script_result
     mock_client.delete_plugins.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
-    monkeypatch.setattr(jenkins, "safe_restart", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(jenkins, "wait_ready", lambda *_args, **_kwargs: None)
+    with (
+        patch.object(jenkins.Jenkins, "safe_restart"),
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins.Jenkins, "_get_client") as get_client_mock,
+    ):
+        get_client_mock.return_value = mock_client
 
-    with pytest.raises(jenkins.JenkinsPluginError):
-        jenkins.remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
+        with pytest.raises(jenkins.JenkinsPluginError):
+            jenkins.Jenkins(mock_env).remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
 
 
 @pytest.mark.parametrize(
@@ -1132,10 +1288,10 @@ def test_remove_unlisted_plugins_delete_error(
 )
 # all arguments below are required
 def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-arguments
-    monkeypatch: pytest.MonkeyPatch,
     mock_client: MagicMock,
     container: ops.Container,
     plugin_groovy_script_result: str,
+    mock_env: jenkins.Environment,
     expected_exception: Exception,
 ):
     """
@@ -1147,11 +1303,15 @@ def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-argu
         mock_groovy_script := MagicMock(spec=jenkinsapi.jenkins.Jenkins.run_groovy_script)
     )
     mock_groovy_script.return_value = plugin_groovy_script_result
-    monkeypatch.setattr(jenkins, "safe_restart", MagicMock(side_effect=expected_exception))
-
-    # mypy doesn't understand that Exception type can match TypeVar("E", bound=BaseException)
-    with pytest.raises(expected_exception):  # type: ignore
-        jenkins.remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
+    with (
+        patch.object(jenkins.Jenkins, "safe_restart") as safe_restart_mock,
+        patch.object(jenkins.Jenkins, "_get_client") as get_client_mock,
+    ):
+        get_client_mock.return_value = mock_client
+        safe_restart_mock.side_effect = expected_exception
+        # mypy doesn't understand that Exception type can match TypeVar("E", bound=BaseException)
+        with pytest.raises(expected_exception):  # type: ignore
+            jenkins.Jenkins(mock_env).remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
 
 
 @pytest.mark.parametrize(
@@ -1209,12 +1369,12 @@ def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-argu
 )
 # all arguments below are required
 def test_remove_unlisted_plugins(  # pylint: disable=too-many-arguments
-    monkeypatch: pytest.MonkeyPatch,
     mock_client: MagicMock,
     container: ops.Container,
     desired_plugins: tuple[str],
     groovy_script_output: str,
     expected_delete_plugins: set[str],
+    mock_env: jenkins.Environment,
 ):
     """
     arrange: given a mocked client that returns a groovy script output of plugins and dependencies.
@@ -1225,47 +1385,48 @@ def test_remove_unlisted_plugins(  # pylint: disable=too-many-arguments
         mock_groovy_script := MagicMock(spec=jenkinsapi.jenkins.Jenkins.run_groovy_script)
     )
     mock_groovy_script.return_value = groovy_script_output
-    monkeypatch.setattr(jenkins, "safe_restart", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(jenkins, "wait_ready", lambda *_args, **_kwargs: None)
+    with (
+        patch.object(jenkins.Jenkins, "safe_restart"),
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins.Jenkins, "_get_client") as get_client_mock,
+    ):
+        get_client_mock.return_value = mock_client
+        jenkins.Jenkins(mock_env).remove_unlisted_plugins(desired_plugins, container)
 
-    jenkins.remove_unlisted_plugins(desired_plugins, container)
-
-    if expected_delete_plugins:
-        mock_client.delete_plugins.assert_called_once_with(
-            plugin_list=expected_delete_plugins, restart=False
-        )
-    else:
-        mock_client.delete_plugins.assert_not_called()
+        if expected_delete_plugins:
+            mock_client.delete_plugins.assert_called_once_with(
+                plugin_list=expected_delete_plugins, restart=False
+            )
+        else:
+            mock_client.delete_plugins.assert_not_called()
 
 
-def test_rotate_credentials_error(
-    monkeypatch: pytest.MonkeyPatch,
-    container: ops.Container,
-):
+def test_rotate_credentials_error(container: ops.Container, mock_env: jenkins.Environment):
     """
     arrange: given a monkeypatched _invalidate_sessions that raises JenkinsAPIException.
     act: when rotate_credentials is called.
     assert: JenkinsError is raised.
     """
-    monkeypatch.setattr(
-        jenkins,
-        "_invalidate_sessions",
-        MagicMock(side_effect=jenkinsapi.custom_exceptions.JenkinsAPIException),
-    )
+    with patch.object(jenkins.Jenkins, "_invalidate_sessions") as invalidate_sessions_mock:
+        invalidate_sessions_mock.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
 
-    with pytest.raises(jenkins.JenkinsError):
-        jenkins.rotate_credentials(container)
+        with pytest.raises(jenkins.JenkinsError):
+            jenkins.Jenkins(mock_env).rotate_credentials(container)
 
 
-def test_rotate_credentials(monkeypatch: pytest.MonkeyPatch, container: ops.Container):
+def test_rotate_credentials(container: ops.Container, mock_env: jenkins.Environment):
     """
     arrange: given a monkeypatched _invalidate_sessions that returns no errors.
     act: when rotate_credentials is called.
     assert: password file is updated and newly generated password is returned.
     """
-    monkeypatch.setattr(jenkins, "_invalidate_sessions", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(jenkins, "_set_new_password", lambda *_args, **_kwargs: None)
+    with (
+        patch.object(jenkins.Jenkins, "_invalidate_sessions"),
+        patch.object(jenkins.Jenkins, "_set_new_password"),
+    ):
 
-    old_password = container.pull(jenkins.PASSWORD_FILE_PATH, encoding="utf-8").read()
-    assert old_password != jenkins.rotate_credentials(container), "Password not newly generated"
-    assert old_password != container.pull(jenkins.PASSWORD_FILE_PATH, encoding="utf-8").read()
+        old_password = container.pull(jenkins.PASSWORD_FILE_PATH, encoding="utf-8").read()
+        assert old_password != jenkins.Jenkins(mock_env).rotate_credentials(
+            container
+        ), "Password not newly generated"
+        assert old_password != container.pull(jenkins.PASSWORD_FILE_PATH, encoding="utf-8").read()
