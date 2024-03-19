@@ -54,7 +54,7 @@ class TestCharm(ops.CharmBase):
 
 
 @patch("jenkins.is_storage_ready", return_value=False)
-def test_auth_proxy_relation_joined_when_jenkins_storage_not_ready(_):
+def test_on_auth_proxy_relation_joined_when_jenkins_storage_not_ready(_):
     """
     arrange: given a charm with no connectable container.
     act: when auth_proxy relation joined event is fired.
@@ -64,13 +64,13 @@ def test_auth_proxy_relation_joined_when_jenkins_storage_not_ready(_):
     harness.begin()
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    harness.charm.auth_proxy_observer._auth_proxy_relation_joined(mock_event)
+    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
 
     assert mock_event.defer.to_be_called_once()
 
 
 @patch("jenkins.is_storage_ready", return_value=False)
-def test_auth_proxy_relation_joined_when_ingress_not_ready(_):
+def test_on_auth_proxy_relation_joined_when_ingress_not_ready(_):
     """
     arrange: given a charm with ready storage but no ingress related.
     act: when auth_proxy relation joined event is fired.
@@ -80,13 +80,13 @@ def test_auth_proxy_relation_joined_when_ingress_not_ready(_):
     harness.begin()
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    harness.charm.auth_proxy_observer._auth_proxy_relation_joined(mock_event)
+    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
 
     assert mock_event.defer.to_be_called_once()
 
 
 @patch("jenkins.is_storage_ready", return_value=True)
-def test_auth_proxy_relation_joined(_):
+def test_on_auth_proxy_relation_joined(_):
     """
     arrange: given a charm with ready storage and ingress related.
     act: when auth_proxy relation joined event is fired.
@@ -100,7 +100,7 @@ def test_auth_proxy_relation_joined(_):
     mock_ingress.url.return_value = "https://example.com"
     harness.charm.auth_proxy_observer.ingress = mock_ingress
     harness.charm.auth_proxy_observer.auth_proxy = MagicMock(spec=AuthProxyRequirer)
-    harness.charm.auth_proxy_observer._auth_proxy_relation_joined(mock_event)
+    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
 
     harness.charm.auth_proxy_observer.auth_proxy.update_auth_proxy_config.assert_called_once_with(
         auth_proxy_config=ANY

@@ -30,6 +30,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
     """
     status = await model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
+    # The certificate is self signed, so verification is disabled.
     response = requests.get(  # nosec
         f"https://{address}/{application.model.name}-{application.name}/",
         verify=False,

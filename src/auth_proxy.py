@@ -37,13 +37,13 @@ class Observer(ops.Object):
         self.auth_proxy = AuthProxyRequirer(self.charm)
 
         self.charm.framework.observe(
-            self.charm.on["auth-proxy"].relation_joined, self._auth_proxy_relation_joined
+            self.charm.on["auth-proxy"].relation_joined, self._on_auth_proxy_relation_joined
         )
         self.charm.framework.observe(
             self.charm.on["auth-proxy"].relation_departed, self._auth_proxy_relation_departed
         )
 
-    def _auth_proxy_relation_joined(self, event: ops.RelationCreatedEvent) -> None:
+    def _on_auth_proxy_relation_joined(self, event: ops.RelationCreatedEvent) -> None:
         """Configure the auth proxy.
 
         Args:
