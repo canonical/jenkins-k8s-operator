@@ -111,7 +111,7 @@ jobs:
           # Use Docker Hub mirror to avoid rate limit
           # (https://docs.docker.com/docker-hub/download-rate-limit/)
           sudo ls -la /var/snap/microk8s/current/args/certs.d/docker.io/
-          sudo cat > /var/snap/microk8s/current/args/certs.d/docker.io/hosts.toml << EOF
+          sudo tee /var/snap/microk8s/current/args/certs.d/docker.io/hosts.toml << EOF
           server = "$DOCKERHUB_MIRROR"
           [host."$DOCKERHUB_MIRROR"]
           capabilities = ["pull", "resolve"]
