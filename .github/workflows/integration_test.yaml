@@ -45,7 +45,7 @@ jobs:
           import os
 
           CLOUD = "microk8s"
-          self_hosted = json.loads("snap_microk8s")
+          self_hosted = true
           assert isinstance(self_hosted, bool)
           if CLOUD == "lxd":
               group = "lxd"
