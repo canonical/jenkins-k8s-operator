@@ -140,3 +140,6 @@ jobs:
         # (same for `http-proxy` -> `HTTP_PROXY` and `no-proxy` -> `NO_PROXY`)
         # Self-hosted runners require proxy
         run: juju model-defaults http-proxy="$HTTP_PROXY" https-proxy="$HTTPS_PROXY" no-proxy="$NO_PROXY"
+      - name: tmate
+        if: ${{ failure() }}
+        uses: canonical/action-tmate@main
