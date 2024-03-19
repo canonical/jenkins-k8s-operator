@@ -116,35 +116,27 @@ jobs:
           [host."$DOCKERHUB_MIRROR"]
           capabilities = ["pull", "resolve"]
           EOF
-          sg 'snap_microk8s' -c "microk8s stop"
-          sg 'snap_microk8s' -c "microk8s start"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "sudo microk8s stop"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "sudo microk8s start"
           
           # `newgrp` does not work in GitHub Actions; use `sg` instead
-          sg 'snap_microk8s' -c "microk8s status --wait-ready"
-          sg 'snap_microk8s' -c "retry --times 3 --delay 5 -- sudo microk8s enable dns"
-          sg 'snap_microk8s' -c "microk8s status --wait-ready"
-          sg 'snap_microk8s' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/coredns"
-          sg 'snap_microk8s' -c "retry --times 3 --delay 5 -- sudo microk8s enable hostpath-storage"
-          sg 'snap_microk8s' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/hostpath-provisioner"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s status --wait-ready"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "retry --times 3 --delay 5 -- sudo microk8s enable dns"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s status --wait-ready"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/coredns"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "retry --times 3 --delay 5 -- sudo microk8s enable hostpath-storage"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/hostpath-provisioner"
           mkdir ~/.kube
           # Used by lightkube and kubernetes (Python package)
-          sg 'snap_microk8s' -c "microk8s config > ~/.kube/config"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s config > ~/.kube/config"
       - run: snap list
       - name: Set up environment
         run: |
           mkdir -p ~/.local/share/juju  # Workaround for juju 3 strict snap
-          sg 'snap_microk8s' -c "juju bootstrap 'microk8s' '--agent-version=2.9.46'""
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "juju bootstrap '${{ inputs.cloud }}' '${{ steps.parse-versions.outputs.agent_bootstrap_option }}'"
       - name: (self-hosted) Set up Juju proxy config
         if: ${{ matrix.groups.self_hosted }}
         # `https-proxy` sets `HTTPS_PROXY` environment variable inside Juju machines
         # (same for `http-proxy` -> `HTTP_PROXY` and `no-proxy` -> `NO_PROXY`)
         # Self-hosted runners require proxy
         run: juju model-defaults http-proxy="$HTTP_PROXY" https-proxy="$HTTPS_PROXY" no-proxy="$NO_PROXY"
-      - name: Set up environment
-        run: |
-          juju model-defaults logging-config='<root>=INFO; unit=DEBUG'
-          juju add-model test
-          pipx install tox
-          pipx install poetry
-      - name: Update python-libjuju version
-        run: poetry add --lock --group integration juju@^2
