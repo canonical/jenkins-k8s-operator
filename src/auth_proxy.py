@@ -81,6 +81,7 @@ class Observer(ops.Object):
     def has_relation(self) -> bool:
         """Check if there's a relation with data for auth proxy.
 
-        Returns: True if there's a relation.
+        Returns: True if there's a relation with relation data.
         """
-        return bool(self.auth_proxy.model.get_relation(relation_name="auth-proxy"))
+        relation = self.auth_proxy.model.get_relation(relation_name="auth-proxy")
+        return bool(relation and relation.app and relation.data[relation.app])

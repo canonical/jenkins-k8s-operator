@@ -160,6 +160,6 @@ def test_has_relation_when_relation_data():
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
-    harness.add_relation("auth-proxy", harness.charm.app.name)
+    harness.add_relation("auth-proxy", harness.charm.app.name, app_data={"key": "value"})
 
     assert harness.charm.auth_proxy_observer.has_relation()
