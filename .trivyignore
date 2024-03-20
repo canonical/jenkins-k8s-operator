@@ -1,5 +1,7 @@
 # Jenkins CVEs
 CVE-2016-1000027
+CVE-2024-22259
+CVE-2024-22257
 # Jenkins Plugin Manager CVEs
 CVE-2023-5072
 GHSA-4jq9-2xhw-jpx7
