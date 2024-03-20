@@ -61,7 +61,7 @@ async def test_auth_proxy_integration_authorized(
 
     expected_url = (
         f"https://{address}/{application.model.name}"
-        f"-identity-platform-login-ui-operator/ui/login"
+        "-identity-platform-login-ui-operator/ui/login"
     )
     # Dex might take a bit to be ready
     time.sleep(5)
