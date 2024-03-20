@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 AGENT_RELATION = "agent"
 DEPRECATED_AGENT_RELATION = "agent-deprecated"
+AUTH_PROXY_RELATION = "auth-proxy"
 JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
 
@@ -185,6 +186,18 @@ def _get_agent_meta_map_from_relation(
     return unit_metadata_mapping
 
 
+def _is_auth_proxy_integrated(relation: typing.Optional[ops.Relation]) -> bool:
+    """Check if there is an auth proxy integration..
+
+    Args:
+        relation: The auth-proxy relation.
+
+    Returns:
+        True if an integration for atuh proxy exists.
+    """
+    return bool(relation and relation.app and relation.data[relation.app])
+
+
 class ProxyConfig(BaseModel):
     """Configuration for accessing Jenkins through proxy.
 
@@ -227,6 +240,7 @@ class State:
             deprecated agent relation.
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
+        auth_proxy_integrated: if an auth proxy integrated has been set.
 
     """
 
@@ -237,6 +251,7 @@ class State:
     ]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
+    auth_proxy_integrated: bool
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -270,6 +285,9 @@ class State:
             deprecated_agent_meta_map = _get_agent_meta_map_from_relation(
                 charm.model.relations[DEPRECATED_AGENT_RELATION], charm.app.name
             )
+            is_auth_proxy_integrated = _is_auth_proxy_integrated(
+                charm.model.get_relation(AUTH_PROXY_RELATION)
+            )
         except ValidationError as exc:
             logger.error("Invalid agent relation data received, %s", exc)
             raise CharmRelationDataInvalidError(
@@ -296,4 +314,5 @@ class State:
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
             plugins=plugins,
             proxy_config=proxy_config,
+            auth_proxy_integrated=is_auth_proxy_integrated,
         )

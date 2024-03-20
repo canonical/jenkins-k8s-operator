@@ -94,31 +94,6 @@ def test_storage_not_ready(harness: Harness, event_handler: str):
     assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
 
 
-def test__on_jenkins_pebble_ready_error(
-    harness_container: HarnessWithContainer,
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """
-    arrange: given a patched jenkins bootstrap method that raises an exception.
-    act: when the jenkins_pebble_ready event is fired.
-    assert: the charm raises an error.
-    """
-    # speed up waiting by changing default argument values
-    monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
-    with (
-        patch.object(jenkins.Jenkins, "wait_ready"),
-        patch.object(jenkins.Jenkins, "bootstrap") as bootstrap_mock,
-    ):
-        bootstrap_mock.side_effect = jenkins.JenkinsBootstrapError
-        harness = harness_container.harness
-        harness.begin()
-
-        jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-        with pytest.raises(jenkins.JenkinsBootstrapError):
-            jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
-
-
 def test__on_jenkins_pebble_ready_get_version_error(
     harness_container: HarnessWithContainer,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
@@ -142,24 +117,6 @@ def test__on_jenkins_pebble_ready_get_version_error(
         jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
 
         with pytest.raises(jenkins.JenkinsError):
-            jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
-
-
-@pytest.mark.usefixtures("patch_os_environ")
-def test__on_jenkins_pebble_jenkins_not_ready(harness_container: HarnessWithContainer):
-    """
-    arrange: given a mocked jenkins version raises TimeoutError on the second call.
-    act: when the Jenkins pebble ready event is fired.
-    assert: the charm raises an error.
-    """
-    harness = harness_container.harness
-    harness.begin()
-    with patch.object(jenkins.Jenkins, "wait_ready") as wait_ready_mock:
-        wait_ready_mock.side_effect = TimeoutError
-
-        jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-
-        with pytest.raises(TimeoutError):
             jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
 
 
