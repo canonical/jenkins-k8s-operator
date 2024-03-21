@@ -25,11 +25,10 @@ from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
-import jenkins
 import state
 
 from .constants import ALLOWED_PLUGINS
-from .helpers import get_pod_ip
+from .helpers import generate_jenkins_client_from_application, get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
@@ -136,17 +135,10 @@ async def jenkins_client_fixture(
     web_address: str,
 ) -> jenkinsapi.jenkins.Jenkins:
     """The Jenkins API client."""
-    jenkins_unit: Unit = application.units[0]
-    ret, api_token, stderr = await ops_test.juju(
-        "ssh",
-        "--container",
-        "jenkins",
-        jenkins_unit.name,
-        "cat",
-        str(jenkins.API_TOKEN_PATH),
+    jenkins_client = await generate_jenkins_client_from_application(
+        ops_test, application, web_address
     )
-    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
-    return jenkinsapi.jenkins.Jenkins(web_address, "admin", api_token, timeout=60)
+    return jenkins_client
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_user_client")
@@ -184,6 +176,7 @@ async def jenkins_k8s_agents_fixture(
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
+        base="ubuntu@22.04",
         config={"jenkins_agent_labels": "k8s"},
         channel="latest/edge",
         application_name=f"jenkins-agent-k8s-{app_suffix}",
@@ -215,6 +208,7 @@ async def extra_jenkins_k8s_agents_fixture(
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
+        base="ubuntu@22.04",
         config={"jenkins_agent_labels": "k8s-extra"},
         channel="latest/edge",
         application_name="jenkins-agent-k8s-extra",
