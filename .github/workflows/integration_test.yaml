@@ -5,7 +5,7 @@ on: [pull_request, workflow_dispatch]
 jobs:
   integration-test:
     name: job job
-    runs-on: [self-hosted, linux, X64, jammy, large]
+    runs-on: [self-hosted, linux, X64, jammy, xlarge]
     # timeout-minutes: 120
     steps:
       - name: tmate
