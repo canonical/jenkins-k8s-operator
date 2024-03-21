@@ -84,7 +84,7 @@ jobs:
       - name: Set up microk8s
         if: ${{ 'microk8s' == 'microk8s' }}
         run: |
-          sudo ps -aux
+          sudo ps -efj
           sudo apt-get update
           sudo apt-get install retry -y
           sudo snap install microk8s --channel='1.28-strict/stable'
