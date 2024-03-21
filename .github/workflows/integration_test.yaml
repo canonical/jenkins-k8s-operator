@@ -4,24 +4,6 @@ on:
   pull_request:
 
 jobs:
-  collect-integration-tests:
-    # In nested CI calls (e.g. release.yaml calls ci.yaml calls this workflow) the job name in
-    # ci.yaml will not show up on the GitHub Actions sidebar.
-    # If this workflow is called with a matrix (e.g. to test multiple juju versions), the ci.yaml
-    # job name containing the Juju version will be lost.
-    # So, we add the Juju version to one of the first jobs in this workflow.
-    # (In the UI, when this workflow is called with a matrix, GitHub will separate each matrix
-    # combination and preserve job ordering within a matrix combination.)
-    name: 2.9/stable | Collect integration test groups
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install tox & poetry
-        run: |
-          pipx install tox
-          pipx install poetry
   integration-test:
     name: job job
     needs:
@@ -29,106 +11,111 @@ jobs:
     runs-on: [self-hosted, linux, X64, jammy, large]
     # timeout-minutes: 120
     steps:
-      # - name: (self-hosted) Disk usage
-      #   run: df --human-readable
-      # - name: (self-hosted) Install pipx
-      #   run: |
-      #     sudo apt-get update
-      #     sudo apt-get install python3-pip python3-venv -y
-      #     python3 -m pip install --user pipx
-      #     python3 -m pipx ensurepath
-      # - name: Parse cloud input
-      #   id: parse-cloud
-      #   shell: python
-      #   run: |
-      #     import json
-      #     import os
-
-      #     CLOUD = "microk8s"
-      #     self_hosted = False
-      #     assert isinstance(self_hosted, bool)
-      #     if CLOUD == "lxd":
-      #         group = "lxd"
-      #     elif CLOUD == "microk8s":
-      #         if self_hosted:
-      #             raise ValueError("microk8s not supported on self-hosted runners")
-      #         SNAP_CHANNEL = "1.28-strict/stable"
-      #         assert (
-      #             SNAP_CHANNEL != ""
-      #         ), '`microk8s-snap-channel` input required if `cloud` is "microk8s"'
-      #         assert "strict" in SNAP_CHANNEL.lower(), "Only strict microk8s snap supported"
-      #         group = "snap_microk8s"
-      #     else:
-      #         raise ValueError(f"`cloud` input not recognized: {CLOUD}")
-      #     output = f"group={group}"
-      #     print(output)
-      #     with open(os.environ["GITHUB_OUTPUT"], "a") as file:
-      #         file.write(output)
-      # - name: Parse Juju agent version & snap channel
-      #   id: parse-versions
-      #   shell: python
-      #   run: |
-      #     import os
-
-      #     AGENT_VERSION = "2.9.46"
-      #     snap_channel = "2.9/stable"
-      #     if not snap_channel:
-      #         if AGENT_VERSION:
-      #             major, minor, patch = AGENT_VERSION.split(".")
-      #             snap_channel = f"{major}.{minor}/stable"
-      #         else:
-      #             raise Exception(
-      #                 "`juju-snap-channel` required if `juju-agent-version` is not passed"
-      #             )
-
-      #     output = "agent_bootstrap_option="
-      #     if AGENT_VERSION:
-      #         output += f"--agent-version={AGENT_VERSION}"
-      #     output += f"\nsnap_channel={snap_channel}"
-      #     # GitHub artifact name cannot contain "/"
-      #     output += f'\nsnap_channel_for_artifact={snap_channel.replace("/", "-")}'
-
-      #     print(output)
-      #     with open(os.environ["GITHUB_OUTPUT"], "a") as file:
-      #         file.write(output)
-      # - name: Checkout
-      #   uses: actions/checkout@v4
-      # - name: Set up environment
-      #   run: |
-      #     # `--classic` applies to juju 2 snap; ignored for juju 3 snap
-      #     sudo snap install juju --classic --channel='2.9/stable'
-      # - name: Set up microk8s
-      #   if: ${{ 'microk8s' == 'microk8s' }}
-      #   run: |
-      #     sudo apt-get update
-      #     sudo apt-get install retry -y
-      #     sudo snap install microk8s --channel='1.28-strict/stable'
-      #     sudo adduser "$USER" 'snap_microk8s'
-      #     echo 'foo'
-      #     echo $DOCKERHUB_MIRROR
-      #     echo 'bar'
+      - name: Install tox & poetry
+        run: |
+          pipx install tox
+          pipx install poetry
+      - name: (self-hosted) Disk usage
+        run: df --human-readable
+      - name: (self-hosted) Install pipx
+        run: |
+          sudo apt-get update
+          sudo apt-get install python3-pip python3-venv -y
+          python3 -m pip install --user pipx
+          python3 -m pipx ensurepath
+      - name: Install CLI
+        run: |
+          pipx install git+https://github.com/canonical/data-platform-workflows@'self-hosted-k8s'#subdirectory=python/cli
+      - name: Parse cloud input
+        id: parse-cloud
+        shell: python
+        run: |
+          import json
+          import os
           
-      #     # Use Docker Hub mirror to avoid rate limit
-      #     # (https://docs.docker.com/docker-hub/download-rate-limit/)
-      #     sudo ls -la /var/snap/microk8s/current/args/certs.d/docker.io/
-      #     sudo tee /var/snap/microk8s/current/args/certs.d/docker.io/hosts.toml << EOF
-      #     server = "$DOCKERHUB_MIRROR"
-      #     [host."$DOCKERHUB_MIRROR"]
-      #     capabilities = ["pull", "resolve"]
-      #     EOF
-      #     sg '${{ steps.parse-cloud.outputs.group }}' -c "sudo microk8s stop"
-      #     sg '${{ steps.parse-cloud.outputs.group }}' -c "sudo microk8s start"
+          CLOUD = "microk8s"
+          self_hosted = json.loads("false")
+          assert isinstance(self_hosted, bool)
+          if CLOUD == "lxd":
+            group = "lxd"
+          elif CLOUD == "microk8s":
+            if self_hosted:
+              raise ValueError("microk8s not supported on self-hosted runners")
+            SNAP_CHANNEL = "1.28-strict/stable"
+            assert (
+              SNAP_CHANNEL != ""
+            ), '`microk8s-snap-channel` input required if `cloud` is "microk8s"'
+            assert "strict" in SNAP_CHANNEL.lower(), "Only strict microk8s snap supported"
+            group = "snap_microk8s"
+          else:
+            raise ValueError(f"`cloud` input not recognized: ***CLOUD***")
+          output = "group=snap_microk8s"
+          print(output)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as file:
+            file.write(output)
+      - name: Parse Juju agent version & snap channel
+        id: parse-versions
+        shell: python
+        run: |
+          import os
+  
+          AGENT_VERSION = "2.9.46"
+          snap_channel = ""
+          if not snap_channel:
+              if AGENT_VERSION:
+                  major, minor, patch = AGENT_VERSION.split(".")
+                  snap_channel = f"2.9/stable"
+              else:
+                  raise Exception(
+                      "`juju-snap-channel` required if `juju-agent-version` is not passed"
+                  )
           
-      #     # `newgrp` does not work in GitHub Actions; use `sg` instead
-      #     sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s status --wait-ready"
-      #     sg '${{ steps.parse-cloud.outputs.group }}' -c "retry --times 3 --delay 5 -- sudo microk8s enable dns"
-      #     sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s status --wait-ready"
-      #     sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/coredns"
-      #     sg '${{ steps.parse-cloud.outputs.group }}' -c "retry --times 3 --delay 5 -- sudo microk8s enable hostpath-storage"
-      #     sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/hostpath-provisioner"
-      #     mkdir ~/.kube
-      #     # Used by lightkube and kubernetes (Python package)
-      #     sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s config > ~/.kube/config"
+          output = "agent_bootstrap_option="
+          if AGENT_VERSION:
+              output += f"--agent-version=2.9.46"
+          output += f"\nsnap_channel=2.9/stable"
+          # GitHub artifact name cannot contain "/"
+          output += f'\nsnap_channel_for_artifact=2.9-stable'
+          
+          print(output)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as file:
+              file.write(output)
+      - name: Set up environment
+        run: |
+          # `--classic` applies to juju 2 snap; ignored for juju 3 snap
+          sudo snap install juju --classic --channel='2.9/stable'
+      - name: Set up microk8s
+        if: ${{ 'microk8s' == 'microk8s' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install retry -y
+          sudo snap install microk8s --channel='1.28-strict/stable'
+          sudo adduser "$USER" 'snap_microk8s'
+          echo 'foo'
+          echo $DOCKERHUB_MIRROR
+          echo 'bar'
+          
+          # Use Docker Hub mirror to avoid rate limit
+          # (https://docs.docker.com/docker-hub/download-rate-limit/)
+          sudo ls -la /var/snap/microk8s/current/args/certs.d/docker.io/
+          sudo tee /var/snap/microk8s/current/args/certs.d/docker.io/hosts.toml << EOF
+          server = "$DOCKERHUB_MIRROR"
+          [host."$DOCKERHUB_MIRROR"]
+          capabilities = ["pull", "resolve"]
+          EOF
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "sudo microk8s stop"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "sudo microk8s start"
+          
+          # `newgrp` does not work in GitHub Actions; use `sg` instead
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s status --wait-ready"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "retry --times 3 --delay 5 -- sudo microk8s enable dns"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s status --wait-ready"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/coredns"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "retry --times 3 --delay 5 -- sudo microk8s enable hostpath-storage"
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/hostpath-provisioner"
+          mkdir ~/.kube
+          # Used by lightkube and kubernetes (Python package)
+          sg '${{ steps.parse-cloud.outputs.group }}' -c "microk8s config > ~/.kube/config"
       # - run: snap list
       # - name: Set up environment
       #   run: |
