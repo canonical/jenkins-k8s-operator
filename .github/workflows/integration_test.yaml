@@ -9,18 +9,18 @@ jobs:
     runs-on: [self-hosted, linux, X64, jammy, large]
     # timeout-minutes: 120
     steps:
-      - name: Install tox & poetry
-        run: |
-          pipx install tox
-          pipx install poetry
-      - name: (self-hosted) Disk usage
-        run: df --human-readable
       - name: (self-hosted) Install pipx
         run: |
           sudo apt-get update
           sudo apt-get install python3-pip python3-venv -y
           python3 -m pip install --user pipx
           python3 -m pipx ensurepath
+      - name: Install tox & poetry
+        run: |
+          pipx install tox
+          pipx install poetry
+      - name: (self-hosted) Disk usage
+        run: df --human-readable
       - name: Install CLI
         run: |
           pipx install git+https://github.com/canonical/data-platform-workflows@'self-hosted-k8s'#subdirectory=python/cli
