@@ -125,6 +125,13 @@ jobs:
       #   # (same for `http-proxy` -> `HTTP_PROXY` and `no-proxy` -> `NO_PROXY`)
       #   # Self-hosted runners require proxy
       #   run: juju model-defaults http-proxy="$HTTP_PROXY" https-proxy="$HTTPS_PROXY" no-proxy="$NO_PROXY"
+      - name: Create the Mattermost Message
+        if: ${{ failure() }}
+        uses: mattermost/action-mattermost-notify@master
+        run: |
+          echo "{\"text\":\"@yanks test failed!\"}" > mattermost.json
+        env:
+          MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_NOTIFICATION_URL }}
       - name: tmate
         if: ${{ failure() }}
         uses: canonical/action-tmate@main
