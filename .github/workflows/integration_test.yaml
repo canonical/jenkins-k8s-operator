@@ -6,8 +6,6 @@ on:
 jobs:
   integration-test:
     name: job job
-    needs:
-      - collect-integration-tests
     runs-on: [self-hosted, linux, X64, jammy, large]
     # timeout-minutes: 120
     steps:
