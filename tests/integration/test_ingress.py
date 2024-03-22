@@ -3,8 +3,6 @@
 
 """Integration tests for jenkins-k8s-operator with ingress."""
 
-# pylint: disable=unused-argument
-
 import typing
 
 import pytest
