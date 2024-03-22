@@ -73,6 +73,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         )
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.update_status, self._on_update_status)
+        self.framework.observe(self.on.upgrade_charm, self._upgrade_charm)
 
     def calculate_env(self) -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
@@ -159,7 +160,27 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The event fired when the storage is attached.
         """
+        self.jenkins_set_storage_config(event)
+
+    def _upgrade_charm(self, event: ops.UpgradeCharmEvent) -> None:
+        """Correctly set permissions when charm is upgraded.
+
+        Args:
+            event: The event fired when the charm is upgraded.
+        """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        if not jenkins.is_storage_ready(container):
+            self.jenkins_set_storage_config(event)
+
+    def jenkins_set_storage_config(self, event: ops.framework.EventBase) -> None:
+        """Correctly set permissions when storage is attached.
+
+        Args:
+            event: The event fired when the permission change is needed.
+        """
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        container_meta = self.framework.meta.containers["jenkins"]
+        storage_path = container_meta.mounts["jenkins-home"].location
         if not container.can_connect():
             self.unit.status = ops.WaitingStatus("Waiting for pebble.")
             # This event should be handled again once the container becomes available.
@@ -170,7 +191,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             "chown",
             "-R",
             f"{jenkins.USER}:{jenkins.GROUP}",
-            str(event.storage.location.resolve()),
+            str(storage_path),
         ]
 
         container.exec(
