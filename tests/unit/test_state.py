@@ -159,6 +159,31 @@ def test_plugins_config(mock_charm: MagicMock):
     assert tuple(config.plugins) == ("hello", "world")
 
 
+def test_auth_proxy_integrated_false(mock_charm: MagicMock):
+    """
+    arrange: given a charm with no auth proxy integration.
+    act: when state is initialized from charm.
+    assert: auth_proxy_integrated is False.
+    """
+    mock_charm.config = {}
+    mock_charm.model.get_relation.return_value = {}
+
+    config = state.State.from_charm(mock_charm)
+    assert not config.auth_proxy_integrated
+
+
+def test_auth_proxy_integrated_true(mock_charm: MagicMock):
+    """
+    arrange: given a charm with auth proxy integration.
+    act: when state is initialized from charm.
+    assert: auth_proxy_integrated is True.
+    """
+    mock_charm.config = {}
+
+    config = state.State.from_charm(mock_charm)
+    assert not config.auth_proxy_integrated
+
+
 def test_invalid_num_units(mock_charm: MagicMock):
     """
     arrange: given a mock charm with more than 1 unit of deployment.

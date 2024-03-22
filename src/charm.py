@@ -5,6 +5,8 @@
 
 """Charm Jenkins."""
 
+# pylint: disable=too-many-instance-attributes
+
 import logging
 import typing
 
@@ -12,9 +14,11 @@ import ops
 
 import actions
 import agent
+import auth_proxy
 import cos
 import ingress
 import jenkins
+import pebble
 import timerange
 from state import (
     JENKINS_SERVICE_NAME,
@@ -23,9 +27,6 @@ from state import (
     CharmRelationDataInvalidError,
     State,
 )
-
-if typing.TYPE_CHECKING:
-    from ops.pebble import LayerDict  # pragma: no cover
 
 AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
 INGRESS_RELATION_NAME = "ingress"
@@ -64,48 +65,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self, self.state, self.agent_discovery_ingress_observer, self.jenkins
         )
         self.cos_observer = cos.Observer(self)
+        self.auth_proxy_observer = auth_proxy.Observer(
+            self, self.ingress_observer.ingress, self.jenkins, self.state
+        )
         self.framework.observe(
             self.on.jenkins_home_storage_attached, self._on_jenkins_home_storage_attached
         )
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.update_status, self._on_update_status)
-
-    def _get_pebble_layer(self) -> ops.pebble.Layer:
-        """Return a dictionary representing a Pebble layer.
-
-        Returns:
-            The pebble layer defining Jenkins service layer.
-        """
-        # TypedDict and Dict[str,str] are not compatible.
-        env_dict = typing.cast(typing.Dict[str, str], self.jenkins.environment)
-        layer: LayerDict = {
-            "summary": "jenkins layer",
-            "description": "pebble config layer for jenkins",
-            "services": {
-                JENKINS_SERVICE_NAME: {
-                    "override": "replace",
-                    "summary": "jenkins",
-                    "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
-                    f"-D{jenkins.SYSTEM_PROPERTY_LOGGING} "
-                    f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war "
-                    f"--prefix={env_dict['JENKINS_PREFIX']}",
-                    "startup": "enabled",
-                    "environment": env_dict,
-                    "user": jenkins.USER,
-                    "group": jenkins.GROUP,
-                },
-            },
-            "checks": {
-                "online": {
-                    "override": "replace",
-                    "level": "ready",
-                    "http": {"url": self.jenkins.login_url},
-                    "period": "30s",
-                    "threshold": 5,
-                }
-            },
-        }
-        return ops.pebble.Layer(layer)
+        self.framework.observe(self.on.upgrade_charm, self._upgrade_charm)
 
     def calculate_env(self) -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
@@ -137,28 +105,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
         # First Jenkins server start installs Jenkins server.
-        container.add_layer(
-            "jenkins",
-            self._get_pebble_layer(),
-            combine=True,
-        )
-        container.replan()
-        try:
-            self.jenkins.wait_ready()
-            self.unit.status = ops.MaintenanceStatus("Configuring Jenkins.")
-            self.jenkins.bootstrap(
-                container, jenkins.DEFAULT_JENKINS_CONFIG, self.state.proxy_config
-            )
-            # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
-            container.restart(JENKINS_SERVICE_NAME)
-            self.jenkins.wait_ready()
-        except TimeoutError as exc:
-            logger.error("Timed out waiting for Jenkins, %s", exc)
-            raise
-        except jenkins.JenkinsBootstrapError as exc:
-            logger.error("Error installing plugins, %s", exc)
-            raise
-
+        pebble.replan_jenkins(container, self.jenkins, self.state)
         try:
             version = self.jenkins.version
         except jenkins.JenkinsError as exc:
@@ -213,7 +160,27 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The event fired when the storage is attached.
         """
+        self.jenkins_set_storage_config(event)
+
+    def _upgrade_charm(self, event: ops.UpgradeCharmEvent) -> None:
+        """Correctly set permissions when charm is upgraded.
+
+        Args:
+            event: The event fired when the charm is upgraded.
+        """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        if not jenkins.is_storage_ready(container):
+            self.jenkins_set_storage_config(event)
+
+    def jenkins_set_storage_config(self, event: ops.framework.EventBase) -> None:
+        """Correctly set permissions when storage is attached.
+
+        Args:
+            event: The event fired when the permission change is needed.
+        """
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        container_meta = self.framework.meta.containers["jenkins"]
+        storage_path = container_meta.mounts["jenkins-home"].location
         if not container.can_connect():
             self.unit.status = ops.WaitingStatus("Waiting for pebble.")
             # This event should be handled again once the container becomes available.
@@ -224,7 +191,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             "chown",
             "-R",
             f"{jenkins.USER}:{jenkins.GROUP}",
-            str(event.storage.location.resolve()),
+            str(storage_path),
         ]
 
         container.exec(
