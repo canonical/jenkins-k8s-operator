@@ -11,7 +11,7 @@ jobs:
       channel: 1.28-strict/stable
       extra-arguments: |
         --kube-config ${GITHUB_WORKSPACE}/kube-config
-      modules: '["test_ingress.py", "test_jenkins.py", "test_k8s_agent.py", "test_machine_agent.py", "test_plugins.py", "test_proxy.py", "test_cos.py", "test_upgrade.py"]'
+      modules: '["test_auth_proxy.py", "test_cos.py", "test_ingress.py", "test_jenkins.py", "test_k8s_agent.py", "test_machine_agent.py", "test_plugins.py", "test_proxy.py", "test_upgrade.py"]'
       pre-run-script: |
         -c "sudo microk8s config > ${GITHUB_WORKSPACE}/kube-config
         chmod +x tests/integration/pre_run_script.sh
