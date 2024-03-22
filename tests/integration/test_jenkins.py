@@ -13,7 +13,6 @@ from juju.application import Application
 from juju.unit import Unit
 
 from .helpers import gen_test_job_xml, install_plugins
-from .substrings import assert_substrings_not_in_string
 from .types_ import UnitWebClient
 
 JENKINS_UID = "2000"
