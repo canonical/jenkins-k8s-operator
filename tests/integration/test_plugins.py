@@ -7,12 +7,13 @@ import json
 import logging
 import typing
 
-import jenkinsapi.plugin
+import jenkinsapi
 import pytest
 import requests
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
+
 from state import AGENT_RELATION
 
 from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
@@ -128,20 +129,31 @@ async def test_jenkins_plugins_config(
     assert all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
 
 
-@pytest.mark.usefixtures("k8s_agent_related_app")
-async def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
+async def test_git_plugin_k8s_agent(
+    application: Application,
+    jenkins_k8s_agents: Application,
+    web_address: str,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+):
     """
     arrange: given a jenkins charm with git plugin installed.
     act: when a job is dispatched with a git workflow.
     assert: job completes successfully.
     """
-    await install_plugins(unit_web_client, INSTALLED_PLUGINS)
+    await install_plugins(
+        UnitWebClient(application.units[0], web_address, jenkins_client), INSTALLED_PLUGINS
+    )
+
+    application.relate(AGENT_RELATION, f"{jenkins_k8s_agents.name}:{AGENT_RELATION}")
+    await application.model.wait_for_idle(
+        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
+    )
 
     job_name = "git-plugin-test-k8s"
-    unit_web_client.client.create_job(job_name, gen_git_test_job_xml("k8s"))
+    jenkins_client.create_job(job_name, gen_git_test_job_xml("k8s"))
     # check that git plugin git repository validation works on Jenkins server
-    check_url_res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.client.baseurl}/job/{job_name}/descriptorByName/"
+    check_url_res = jenkins_client.requester.post_url(
+        f"{jenkins_client.baseurl}/job/{job_name}/descriptorByName/"
         "hudson.plugins.git.UserRemoteConfig/checkUrl",
         data={
             "value": "https://github.com/canonical/jenkins-k8s-operator",
@@ -255,9 +267,11 @@ async def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClie
     ), f"Configuration matrix table not found, {test_page}"
 
 
-@pytest.mark.usefixtures("k8s_agent_related_app")
 async def test_postbuildscript_plugin(
-    ops_test: OpsTest, unit_web_client: UnitWebClient, jenkins_k8s_agents: Application
+    ops_test: OpsTest,
+    application: Application,
+    jenkins_k8s_agents: Application,
+    unit_web_client: UnitWebClient,
 ):
     """
     arrange: given a jenkins charm with postbuildscript plugin installed and related to an agent.
@@ -268,6 +282,12 @@ async def test_postbuildscript_plugin(
     postbuildscript_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
         "postbuildscript"
     ]
+
+    application.relate(AGENT_RELATION, f"{jenkins_k8s_agents.name}:{AGENT_RELATION}")
+    await application.model.wait_for_idle(
+        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
+    )
+
     environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
     template = environment.get_template("postbuildscript_plugin_job_xml.j2")
     # tmp directory is fine to use for testing purposes since TemporaryFile cannot be used here.
@@ -446,22 +466,31 @@ async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
     ), f"Groovy libs configuration option not found. {config_page}"
 
 
-@pytest.mark.usefixtures("k8s_agent_related_app")
-async def test_rebuilder_plugin(unit_web_client: UnitWebClient):
+async def test_rebuilder_plugin(
+    application: Application,
+    jenkins_k8s_agents: Application,
+    web_address: str,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+):
     """
     arrange: given a Jenkins charm with rebuilder plugin installed.
     act: when a job is built and a rebuild is triggered.
     assert: last job is rebuilt.
     """
-    await install_plugins(unit_web_client, ("rebuild",))
+    await install_plugins(
+        UnitWebClient(application.units[0], web_address, jenkins_client), ("rebuild",)
+    )
+
+    application.relate(AGENT_RELATION, f"{jenkins_k8s_agents.name}:{AGENT_RELATION}")
+    await application.model.wait_for_idle(
+        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
+    )
 
     job_name = "rebuild_test"
-    job = unit_web_client.client.create_job(job_name, gen_test_job_xml("k8s"))
+    job = jenkins_client.create_job(job_name, gen_test_job_xml("k8s"))
     job.invoke().block_until_complete()
 
-    unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/job/{job_name}/lastCompletedBuild/rebuild/"
-    )
+    jenkins_client.requester.post_url(f"{web_address}/job/{job_name}/lastCompletedBuild/rebuild/")
     job.get_last_build().block_until_complete()
 
     assert job.get_last_buildnumber() == 2, "Rebuild not triggered."
