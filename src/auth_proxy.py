@@ -8,7 +8,11 @@ from typing import List
 
 import ops
 from charms.oathkeeper.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
-from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
+from charms.traefik_k8s.v2.ingress import (
+    IngressPerAppReadyEvent,
+    IngressPerAppRequirer,
+    IngressPerAppRevokedEvent,
+)
 
 import jenkins
 import pebble
@@ -56,6 +60,16 @@ class Observer(ops.Object):
             self._auth_proxy_relation_departed,
         )
 
+        # Event hooks for agent-discovery-ingress
+        charm.framework.observe(
+            self.ingress.on.ready,
+            self._ingress_on_ready,
+        )
+        charm.framework.observe(
+            self.ingress.on.revoked,
+            self._ingress_on_revoked,
+        )
+
     def _on_auth_proxy_relation_joined(self, event: ops.RelationCreatedEvent) -> None:
         """Configure the auth proxy.
 
@@ -76,12 +90,11 @@ class Observer(ops.Object):
         self.auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
         pebble.replan_jenkins(container, self.jenkins, self.state)
 
-    # pylint: disable=duplicate-code
-    def _auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
-        """Unconfigure the auth proxy.
+    def _replan_jenkins(self, event: ops.EventBase) -> None:
+        """Replan the jenkins service to account for prefix changes.
 
         Args:
-            event: the event triggering the handler.
+            event: the event fired.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         if not jenkins.is_storage_ready(container):
@@ -89,3 +102,28 @@ class Observer(ops.Object):
             event.defer()
             return
         pebble.replan_jenkins(container, self.jenkins, self.state)
+
+    # pylint: disable=duplicate-code
+    def _auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+        """Unconfigure the auth proxy.
+
+        Args:
+            event: the event fired.
+        """
+        self._replan_jenkins(event)
+
+    def _ingress_on_ready(self, event: IngressPerAppReadyEvent) -> None:
+        """Handle ready event.
+
+        Args:
+            event: The event fired.
+        """
+        self._replan_jenkins(event)
+
+    def _ingress_on_revoked(self, event: IngressPerAppRevokedEvent) -> None:
+        """Handle revoked event.
+
+        Args:
+            event: The event fired.
+        """
+        self._replan_jenkins(event)
