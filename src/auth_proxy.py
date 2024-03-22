@@ -90,6 +90,7 @@ class Observer(ops.Object):
         self.auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
         pebble.replan_jenkins(container, self.jenkins, self.state)
 
+    # pylint: disable=duplicate-code
     def _replan_jenkins(self, event: ops.EventBase) -> None:
         """Replan the jenkins service to account for prefix changes.
 
@@ -103,7 +104,6 @@ class Observer(ops.Object):
             return
         pebble.replan_jenkins(container, self.jenkins, self.state)
 
-    # pylint: disable=duplicate-code
     def _auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
         """Unconfigure the auth proxy.
 
