@@ -195,7 +195,8 @@ def _is_auth_proxy_integrated(relation: typing.Optional[ops.Relation]) -> bool:
     Returns:
         True if an integration for atuh proxy exists.
     """
-    return bool(relation and relation.app and relation.data[relation.app])
+    # No relation data is written by the provider, so checking the existence suffices.
+    return bool(relation)
 
 
 class ProxyConfig(BaseModel):
