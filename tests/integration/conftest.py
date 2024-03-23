@@ -178,24 +178,20 @@ def app_suffix_fixture():
     return "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agents")
-async def jenkins_k8s_agents_fixture(
-    model: Model, app_suffix: str
-) -> AsyncGenerator[Application, None]:
+@pytest_asyncio.fixture(scope="module", name="jenkins_k8s_agents")
+async def jenkins_k8s_agents_fixture(model: Model):
     """The Jenkins k8s agent."""
-    agent_app: Application = await model.deploy(
+    agent: Application = await model.deploy(
         "jenkins-agent-k8s",
         base="ubuntu@22.04",
         config={"jenkins_agent_labels": "k8s"},
         channel="latest/edge",
-        application_name=f"jenkins-agent-k8s-{app_suffix}",
     )
-    await model.wait_for_idle(apps=[agent_app.name], status="blocked")
-    yield agent_app
-    await model.remove_application(agent_app.name, block_until_done=True)
+    await model.wait_for_idle(apps=[agent.name], status="blocked")
+    return agent
 
 
-@pytest_asyncio.fixture(scope="function", name="k8s_agent_related_app")
+@pytest_asyncio.fixture(scope="module", name="k8s_agent_related_app")
 async def k8s_agent_related_app_fixture(
     jenkins_k8s_agents: Application,
     application: Application,
@@ -207,7 +203,7 @@ async def k8s_agent_related_app_fixture(
     await application.model.wait_for_idle(
         apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
     )
-    yield application
+    return application
 
 
 @pytest_asyncio.fixture(scope="function", name="extra_jenkins_k8s_agents")
