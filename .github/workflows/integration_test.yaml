@@ -5,8 +5,19 @@ on: [pull_request, workflow_dispatch]
 jobs:
   integration-test:
     name: job job
-    runs-on: [self-hosted, linux, X64, jammy, xlarge]
+    runs-on: [self-hosted, linux, X64, jammy, two-xlarge]
     # timeout-minutes: 120
     steps:
       - name: tmate
-        uses: canonical/action-tmate@main
+        uses: charmed-kubernetes/actions-operator@main
+        with: 
+          provider: microk8s
+          channel: 1.28/stable
+          microk8s-addons: storage dns rbac registry
+          juju-channel: 2.9/stable
+          bootstrap-constraints: cores=2 mem=4G
+          charm-channel: latest/stable
+          charmcraft-channel: latest/stable
+          juju-bundle-channel: latest/stable
+          lxd-channel: latest/stable
+          juju-crashdump-channel: latest/stable
