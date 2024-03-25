@@ -15,6 +15,7 @@ jobs:
           python3 -m pip install --user pipx
           python3 -m pipx ensurepath
       - name: install cli
+        run: |
           pipx install git+https://github.com/canonical/data-platform-workflows@'self-hosted-k8s'#subdirectory=python/cli
       - name: setup environment
         run: |
