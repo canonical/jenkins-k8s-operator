@@ -18,7 +18,7 @@ async def test_jenkins_ui_proxy_config(
     assert: proxy server host and port exists in configuration value.
     """
     res = jenkins_with_proxy_client.requester.get_url(
-        f"{proxy_jenkins_web_address}/manage/pluginManager/advanced"
+        f"{proxy_jenkins_web_address}/manage/configure"
     )
 
     page_content = str(res.content, encoding="utf-8")
