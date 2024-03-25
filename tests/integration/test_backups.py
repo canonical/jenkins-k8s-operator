@@ -8,25 +8,9 @@ import logging
 import os
 import socket
 import subprocess
-import uuid
-from pathlib import Path
 
 import boto3
 import pytest
-from pytest_operator.plugin import OpsTest
-
-from . import juju_
-from .helpers import (
-    execute_queries_on_unit,
-    get_server_config_credentials,
-    get_unit_address,
-    rotate_credentials,
-    scale_application,
-)
-from .high_availability.high_availability_helpers import (
-    deploy_and_scale_mysql,
-    insert_data_into_mysql_and_validate_replication,
-)
 
 logger = logging.getLogger(__name__)
 
