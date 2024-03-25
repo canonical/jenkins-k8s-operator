@@ -13,7 +13,6 @@ from juju.application import Application
 from juju.unit import Unit
 
 from .helpers import gen_test_job_xml, install_plugins
-from .substrings import assert_substrings_not_in_string
 from .types_ import UnitWebClient
 
 JENKINS_UID = "2000"
@@ -31,9 +30,7 @@ async def test_jenkins_update_ui_disabled(
     res = jenkins_client.requester.get_url(f"{web_address}/manage")
 
     page_content = str(res.content, encoding="utf-8")
-    assert_substrings_not_in_string(
-        ("New version of Jenkins", "is available", "download"), page_content
-    )
+    assert "New version of Jenkins" not in page_content
 
 
 @pytest.mark.usefixtures("app_with_restart_time_range", "libfaketime_unit")

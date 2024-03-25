@@ -3,8 +3,9 @@
 
 """Integration tests for jenkins-k8s-operator with auth_proxy."""
 
+import logging
 import re
-import time
+from typing import Match
 
 import pytest
 import requests
@@ -12,6 +13,10 @@ from juju.application import Application
 from juju.model import Model
 from playwright.async_api import expect
 from playwright.async_api._generated import Page
+
+from .helpers import wait_for
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.abort_on_fail
@@ -56,16 +61,25 @@ async def test_auth_proxy_integration_authorized(
     status = await application.model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
     jenkins_url = f"https://{address}/{application.model.name}-{application.name}/"
-
-    await page.goto(jenkins_url)
-
     expected_url = (
         f"https://{address}/{application.model.name}"
         "-identity-platform-login-ui-operator/ui/login"
     )
+    expected_url_regex = re.compile(rf"{expected_url}*")
+
+    async def is_redirected_to_dex() -> Match[str] | None:
+        """Wait until dex properly redirects to correct URL.
+
+        Returns:
+            A match if found, None otherwise.
+        """
+        await page.goto(jenkins_url)
+        logger.info("Page URL: %s", page.url)
+        return expected_url_regex.match(page.url)
+
     # Dex might take a bit to be ready
-    time.sleep(5)
-    await expect(page).to_have_url(re.compile(rf"{expected_url}*"))
+    await wait_for(is_redirected_to_dex)
+    await expect(page).to_have_url(expected_url_regex)
 
     # Choose provider
     async with page.expect_navigation():
