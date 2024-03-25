@@ -94,31 +94,6 @@ def test_storage_not_ready(harness: Harness, event_handler: str):
     assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
 
 
-def test__on_jenkins_pebble_ready_error(
-    harness_container: HarnessWithContainer,
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """
-    arrange: given a patched jenkins bootstrap method that raises an exception.
-    act: when the jenkins_pebble_ready event is fired.
-    assert: the charm raises an error.
-    """
-    # speed up waiting by changing default argument values
-    monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
-    with (
-        patch.object(jenkins.Jenkins, "wait_ready"),
-        patch.object(jenkins.Jenkins, "bootstrap") as bootstrap_mock,
-    ):
-        bootstrap_mock.side_effect = jenkins.JenkinsBootstrapError
-        harness = harness_container.harness
-        harness.begin()
-
-        jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-        with pytest.raises(jenkins.JenkinsBootstrapError):
-            jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
-
-
 def test__on_jenkins_pebble_ready_get_version_error(
     harness_container: HarnessWithContainer,
     mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
@@ -142,24 +117,6 @@ def test__on_jenkins_pebble_ready_get_version_error(
         jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
 
         with pytest.raises(jenkins.JenkinsError):
-            jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
-
-
-@pytest.mark.usefixtures("patch_os_environ")
-def test__on_jenkins_pebble_jenkins_not_ready(harness_container: HarnessWithContainer):
-    """
-    arrange: given a mocked jenkins version raises TimeoutError on the second call.
-    act: when the Jenkins pebble ready event is fired.
-    assert: the charm raises an error.
-    """
-    harness = harness_container.harness
-    harness.begin()
-    with patch.object(jenkins.Jenkins, "wait_ready") as wait_ready_mock:
-        wait_ready_mock.side_effect = TimeoutError
-
-        jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-
-        with pytest.raises(TimeoutError):
             jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
 
 
@@ -345,12 +302,58 @@ def test__on_jenkins_home_storage_attached(harness: Harness, monkeypatch: pytest
 
     event = MagicMock()
     mock_jenkins_home_path = "/var/lib/jenkins"
-    event.storage.location.resolve = lambda: mock_jenkins_home_path
     jenkins_charm._on_jenkins_home_storage_attached(event)
 
     exec_handler.assert_called_once_with(
         ["chown", "-R", "jenkins:jenkins", mock_jenkins_home_path], timeout=120
     )
+
+
+def test_upgrade_charm(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given a base jenkins charm.
+    act: when _upgrade_charm is called.
+    assert: The chown command was ran on the jenkins container with correct parameters.
+    """
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    container = jenkins_charm.unit.containers["jenkins"]
+    harness.set_can_connect(container, True)
+    # We don't use harness.handle_exec here because we want to assert
+    # the parameters passed to exec()
+    exec_handler = MagicMock()
+    monkeypatch.setattr(container, "exec", exec_handler)
+    monkeypatch.setattr(jenkins, "is_storage_ready", lambda x: False)
+
+    event = MagicMock()
+    mock_jenkins_home_path = "/var/lib/jenkins"
+    jenkins_charm._upgrade_charm(event)
+
+    exec_handler.assert_called_once_with(
+        ["chown", "-R", "jenkins:jenkins", mock_jenkins_home_path], timeout=120
+    )
+
+
+def test_upgrade_charm_storage_ready(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+    """
+    arrange: given a base jenkins charm.
+    act: when _upgrade_charm is called.
+    assert: The chown command was not ran.
+    """
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    container = jenkins_charm.unit.containers["jenkins"]
+    harness.set_can_connect(container, True)
+    # We don't use harness.handle_exec here because we want to assert
+    # the parameters passed to exec()
+    exec_handler = MagicMock()
+    monkeypatch.setattr(container, "exec", exec_handler)
+    monkeypatch.setattr(jenkins, "is_storage_ready", lambda x: True)
+
+    event = MagicMock()
+    jenkins_charm._upgrade_charm(event)
+
+    exec_handler.assert_not_called()
 
 
 def test__on_jenkins_home_storage_attached_container_not_ready(

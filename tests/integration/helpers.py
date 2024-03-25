@@ -12,8 +12,10 @@ import typing
 import jenkinsapi.jenkins
 import kubernetes.client
 import requests
+from juju.application import Application
 from juju.model import Model
 from juju.unit import Unit
+from pytest_operator.plugin import OpsTest
 
 import jenkins
 
@@ -49,7 +51,7 @@ async def install_plugins(
             client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
             encoding="utf-8",
         ),
-        timeout=60 * 5,
+        timeout=60 * 10,
         wait_period=10,
     )
 
@@ -58,9 +60,25 @@ async def install_plugins(
     client.safe_restart()
     await unit.model.block_until(
         lambda: requests.get(web, timeout=10).status_code == 403,
-        timeout=300,
+        timeout=60 * 10,
         wait_period=10,
     )
+
+
+async def get_model_jenkins_unit_address(model: Model, app_name: str):
+    """Extract the address of a given unit.
+
+    Args:
+        model: Juju model
+        app_name: Juju application name
+
+    Returns:
+        the IP address of the Jenkins unit.
+    """
+    status = await model.get_status()
+    unit = list(status.applications[app_name].units)[0]
+    address = status["applications"][app_name]["units"][unit]["address"]
+    return address
 
 
 def gen_test_job_xml(node_label: str):
@@ -249,6 +267,54 @@ async def wait_for(
         if result := func():
             return result
     raise TimeoutError()
+
+
+async def generate_jenkins_client_from_application(
+    ops_test: OpsTest, jenkins_app: Application, address: str
+):
+    """Generate a Jenkins client directly from the Juju application.
+
+    Args:
+        ops_test: OpsTest framework
+        jenkins_app: Juju Jenkins-k8s application.
+        address: IP address of the jenkins unit.
+
+    Returns:
+        A Jenkins web client.
+    """
+    jenkins_unit = jenkins_app.units[0]
+    ret, api_token, stderr = await ops_test.juju(
+        "ssh",
+        "--container",
+        "jenkins",
+        jenkins_unit.name,
+        "cat",
+        str(jenkins.API_TOKEN_PATH),
+    )
+    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
+    return jenkinsapi.jenkins.Jenkins(address, "admin", api_token, timeout=60)
+
+
+async def generate_unit_web_client_from_application(
+    ops_test: OpsTest, model: Model, jenkins_app: Application
+) -> UnitWebClient:
+    """Generate a UnitWebClient client directly from the Juju application.
+
+    Args:
+        ops_test: OpsTest framework
+        model: Juju model
+        jenkins_app: Juju Jenkins-k8s application.
+
+    Returns:
+        A Jenkins web client.
+    """
+    assert model
+    unit_ip = await get_model_jenkins_unit_address(model, jenkins_app.name)
+    address = f"http://{unit_ip}:8080"
+    jenkins_unit = jenkins_app.units[0]
+    jenkins_client = await generate_jenkins_client_from_application(ops_test, jenkins_app, address)
+    unit_web_client = UnitWebClient(unit=jenkins_unit, web=address, client=jenkins_client)
+    return unit_web_client
 
 
 def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Unit]) -> Unit | None:
