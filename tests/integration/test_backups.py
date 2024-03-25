@@ -40,25 +40,29 @@ def microceph():
     if not os.environ.get("CI") == "true":
         raise Exception("Not running on CI. Skipping microceph installation")
     logger.info("Setting up microceph")
-    subprocess.run(["sudo", "snap", "install", "microceph"], check=True)
-    subprocess.run(["sudo", "microceph", "cluster", "bootstrap"], check=True)
-    subprocess.run(["sudo", "microceph", "disk", "add", "loop,4G,3"], check=True)
-    subprocess.run(["sudo", "microceph", "enable", "rgw"], check=True)
-    output = subprocess.run(
-        [
-            "sudo",
-            "microceph.radosgw-admin",
-            "user",
-            "create",
-            "--uid",
-            "test",
-            "--display-name",
-            "test",
-        ],
-        capture_output=True,
-        check=True,
-        encoding="utf-8",
-    ).stdout
+    try:
+        subprocess.run(["sudo", "snap", "install", "microceph"], check=True)
+        subprocess.run(["sudo", "microceph", "cluster", "bootstrap"], check=True)
+        subprocess.run(["sudo", "microceph", "disk", "add", "loop,4G,3"], check=True)
+        subprocess.run(["sudo", "microceph", "enable", "rgw"], check=True)
+        output = subprocess.run(
+            [
+                "sudo",
+                "microceph.radosgw-admin",
+                "user",
+                "create",
+                "--uid",
+                "test",
+                "--display-name",
+                "test",
+            ],
+            capture_output=True,
+            check=True,
+            encoding="utf-8",
+        ).stdout
+    except subprocess.CalledProcessError as exc:
+        logger.error("PROCESS ERROR: %s", exc)
+        raise
     key = json.loads(output)["keys"][0]
     key_id = key["access_key"]
     secret_key = key["secret_key"]
