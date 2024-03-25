@@ -24,7 +24,7 @@ jobs:
       - name: Create the Mattermost Message
         if: ${{ failure() }}
         run: |
-          echo "{\"text\":\"@yanks test failed!\"}" > mattermost.json
+          echo "{\"text\":\"@charlie4284 test failed!\"}" > mattermost.json
       - name: Send mattermost message
         if: ${{ failure() }}
         uses: mattermost/action-mattermost-notify@master
