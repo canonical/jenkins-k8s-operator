@@ -25,7 +25,7 @@ jobs:
           pipx install poetry
       - name: run integration tests
         run: |
-          tox run -e integration -- 'tests/integration/test_backups.py' --group='1' -m 'not unstable' --model test
+          tox run -e integration -- 'tests/integration/test_backups.py'
       - name: Create the Mattermost Message
         if: ${{ failure() }}
         run: |
