@@ -21,3 +21,15 @@ jobs:
           juju-bundle-channel: latest/stable
           lxd-channel: latest/stable
           juju-crashdump-channel: latest/stable
+      - name: Create the Mattermost Message
+        if: ${{ failure() }}
+        run: |
+          echo "{\"text\":\"@yanks test failed!\"}" > mattermost.json
+      - name: Send mattermost message
+        if: ${{ failure() }}
+        uses: mattermost/action-mattermost-notify@master
+        env:
+          MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_NOTIFICATION_URL }}
+      - name: tmate
+        if: ${{ failure() }}
+        uses: canonical/action-tmate@main
