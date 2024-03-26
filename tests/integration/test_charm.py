@@ -59,7 +59,7 @@ async def test_build_and_deploy(ops_test: OpsTest) -> None:
             num_units=3,
             series="jammy",
             trust=True,
-            channel="latest/edge",
+            channel="8.0/edge",
             revision=132,
         )
 
