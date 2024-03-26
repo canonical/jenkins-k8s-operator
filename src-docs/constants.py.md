@@ -1,0 +1,56 @@
+<!-- markdownlint-disable -->
+
+<a href="../src/constants.py#L0"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+# <kbd>module</kbd> `constants.py`
+File containing constants to be used in the charm. 
+
+**Global Variables**
+---------------
+- **PASSWORD_LENGTH**
+- **PEER**
+- **CONTAINER_NAME**
+- **MYSQLD_LOCATION**
+- **MYSQLD_SAFE_SERVICE**
+- **ROOT_USERNAME**
+- **CLUSTER_ADMIN_USERNAME**
+- **SERVER_CONFIG_USERNAME**
+- **MONITORING_USERNAME**
+- **BACKUPS_USERNAME**
+- **DB_RELATION_NAME**
+- **LEGACY_MYSQL**
+- **LEGACY_MYSQL_ROOT**
+- **ROOT_PASSWORD_KEY**
+- **SERVER_CONFIG_PASSWORD_KEY**
+- **CLUSTER_ADMIN_PASSWORD_KEY**
+- **MONITORING_PASSWORD_KEY**
+- **BACKUPS_PASSWORD_KEY**
+- **CONTAINER_RESTARTS**
+- **UNIT_ENDPOINTS_KEY**
+- **TLS_RELATION**
+- **TLS_SSL_CA_FILE**
+- **TLS_SSL_KEY_FILE**
+- **TLS_SSL_CERT_FILE**
+- **MYSQL_CLI_LOCATION**
+- **MYSQLSH_LOCATION**
+- **MYSQL_DATA_DIR**
+- **MYSQLD_SOCK_FILE**
+- **MYSQLSH_SCRIPT_FILE**
+- **MYSQLD_CONFIG_FILE**
+- **MYSQL_LOG_FILES**
+- **MYSQL_SYSTEM_USER**
+- **MYSQL_SYSTEM_GROUP**
+- **S3_INTEGRATOR_RELATION_NAME**
+- **CHARMED_MYSQL_XTRABACKUP_LOCATION**
+- **CHARMED_MYSQL_XBCLOUD_LOCATION**
+- **CHARMED_MYSQL_XBSTREAM_LOCATION**
+- **XTRABACKUP_PLUGIN_DIR**
+- **MYSQLD_DEFAULTS_CONFIG_FILE**
+- **MYSQLD_EXPORTER_PORT**
+- **MYSQLD_EXPORTER_SERVICE**
+- **GR_MAX_MEMBERS**
+- **COS_AGENT_RELATION_NAME**
+- **LOG_ROTATE_CONFIG_FILE**
+- **ROOT_SYSTEM_USER**
+
+

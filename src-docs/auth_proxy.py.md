@@ -7,6 +7,8 @@ Observer module for Jenkins to auth_proxy integration.
 
 **Global Variables**
 ---------------
+- **AUTH_PROXY_RELATION**
+- **JENKINS_SERVICE_NAME**
 - **AUTH_PROXY_ALLOWED_ENDPOINTS**
 - **AUTH_PROXY_HEADERS**
 
@@ -16,12 +18,17 @@ Observer module for Jenkins to auth_proxy integration.
 ## <kbd>class</kbd> `Observer`
 The Jenkins Auth Proxy integration observer. 
 
-<a href="../src/auth_proxy.py#L26"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/auth_proxy.py#L27"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
 ```python
-__init__(charm: CharmBase, ingress: IngressPerAppRequirer)
+__init__(
+    charm: CharmBase,
+    ingress: IngressPerAppRequirer,
+    jenkins_instance: Jenkins,
+    state: State
+)
 ```
 
 Initialize the observer and register event handlers. 
@@ -32,6 +39,8 @@ Initialize the observer and register event handlers.
  
  - <b>`charm`</b>:  the parent charm to attach the observer to. 
  - <b>`ingress`</b>:  the ingress object from which to extract the necessary settings. 
+ - <b>`jenkins_instance`</b>:  the Jenkins instance. 
+ - <b>`state`</b>:  the charm state. 
 
 
 ---
@@ -41,19 +50,5 @@ Initialize the observer and register event handlers.
 Shortcut for more simple access the model. 
 
 
-
----
-
-<a href="../src/auth_proxy.py#L81"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-### <kbd>function</kbd> `has_relation`
-
-```python
-has_relation() → bool
-```
-
-Check if there's a relation with data for auth proxy. 
-
-Returns: True if there's a relation. 
 
 

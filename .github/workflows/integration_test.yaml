@@ -5,22 +5,76 @@ on: [pull_request, workflow_dispatch]
 jobs:
   integration-test:
     name: job job
-    runs-on: [self-hosted, linux, X64, jammy, two-xlarge]
+    runs-on: [self-hosted, linux, X64, jammy, large]
     # timeout-minutes: 120
     steps:
-      - name: tmate
-        uses: charmed-kubernetes/actions-operator@main
-        with: 
-          provider: microk8s
-          channel: 1.28/stable
-          microk8s-addons: storage dns rbac registry
-          juju-channel: 2.9/stable
-          bootstrap-constraints: cores=2 mem=4G
-          charm-channel: latest/stable
-          charmcraft-channel: latest/stable
-          juju-bundle-channel: latest/stable
-          lxd-channel: latest/stable
-          juju-crashdump-channel: latest/stable
+      - name: Install pipx
+        run: |
+          sudo apt-get update
+          sudo apt-get install python3-pip python3-venv -y
+          python3 -m pip install --user pipx
+          python3 -m pipx ensurepath
+      - name: Install CLI
+        run: |
+          pipx install git+https://github.com/canonical/data-platform-workflows@'self-hosted-k8s'#subdirectory=python/cli
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up environment
+        run: |
+          sudo snap install juju --classic --channel='3.1/stable'
+      - name: Setup microk8s
+        run: |
+          sudo apt-get update
+          sudo apt-get install retry -y
+          sudo snap install microk8s --channel='1.28-strict/stable'
+          sudo adduser "$USER" 'snap_microk8s'
+          echo 'foo'
+          echo $DOCKERHUB_MIRROR
+          echo 'bar'
+          
+          # Use Docker Hub mirror to avoid rate limit
+          # (https://docs.docker.com/docker-hub/download-rate-limit/)
+          sudo tee /var/snap/microk8s/current/args/certs.d/docker.io/hosts.toml << EOF
+          server = "$DOCKERHUB_MIRROR"
+          [host."$DOCKERHUB_MIRROR"]
+          capabilities = ["pull", "resolve"]
+          EOF
+          sg 'snap_microk8s' -c "sudo microk8s stop"
+          sg 'snap_microk8s' -c "sudo microk8s start"
+          
+          # `newgrp` does not work in GitHub Actions; use `sg` instead
+          sg 'snap_microk8s' -c "microk8s status --wait-ready"
+          sg 'snap_microk8s' -c "retry --times 3 --delay 5 -- sudo microk8s enable dns"
+          sg 'snap_microk8s' -c "microk8s status --wait-ready"
+          sg 'snap_microk8s' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/coredns"
+          sg 'snap_microk8s' -c "retry --times 3 --delay 5 -- sudo microk8s enable hostpath-storage"
+          sg 'snap_microk8s' -c "microk8s.kubectl rollout status --namespace kube-system --watch --timeout=5m deployments/hostpath-provisioner"
+          mkdir ~/.kube
+          # Used by lightkube and kubernetes (Python package)
+          sg 'snap_microk8s' -c "microk8s config > ~/.kube/config"
+      - name: Run snap list
+        run: |
+          snap list
+      - name: Setup environment
+        run: |
+          mkdir -p ~/.local/share/juju  # Workaround for juju 3 strict snap
+          sg 'snap_microk8s' -c "juju bootstrap 'microk8s' '--agent-version=3.1.7'"
+      - name: Setup environment
+        run: |
+          juju model-defaults logging-config='<root>=INFO; unit=DEBUG'
+          juju add-model test
+          pipx install tox
+          pipx install poetry
+      - name: Download charms
+        uses: actions/download-artifact@v4
+        with:
+          pattern: packed-charm-cache-true-.-*
+          merge-multiple: true
+          repository: canonical/mysql-k8s-operator
+          run-id: 8340479201
+      - name: Run integration tetss
+        run: |
+          sg 'snap_microk8s' -c "tox run -e integration -- 'tests/integration/test_charm.py' --group='1' -m 'not unstable' --model test --alluredir=allure-results"
       - name: Create the Mattermost Message
         if: ${{ failure() }}
         run: |
