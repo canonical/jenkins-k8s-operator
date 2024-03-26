@@ -126,4 +126,7 @@ class Observer(ops.Object):
         Args:
             event: The event fired.
         """
+        # call to update_prefix is needed here since the charm is not aware
+        # That the prefix has changed during charm-init
+        self.jenkins.update_prefix("")
         self._replan_jenkins(event)

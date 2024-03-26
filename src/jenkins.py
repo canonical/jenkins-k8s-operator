@@ -1,3 +1,4 @@
+# pylint: disable=C0302
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
@@ -197,6 +198,14 @@ class Jenkins:
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
             logger.error("Failed to get Jenkins version, %s", exc)
             raise JenkinsError("Failed to get Jenkins version.") from exc
+
+    def update_prefix(self, prefix: str) -> None:
+        """Update jenkins prefix.
+
+        Args:
+            prefix: the new prefix.
+        """
+        self.environment.update({"JENKINS_PREFIX": prefix})
 
     def _is_ready(self) -> bool:
         """Check if Jenkins webserver is ready.
