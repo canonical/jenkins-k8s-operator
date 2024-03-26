@@ -1,4 +1,0 @@
-Jinja2>=3,<4
-lightkube==0.15.1
-pytest-playwright==0.4.4
-python-keycloak>=3,<4
