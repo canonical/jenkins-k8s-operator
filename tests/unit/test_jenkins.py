@@ -5,7 +5,7 @@
 
 # Need access to protected functions for testing
 # All tests belong to single jenkins module
-# pylint:disable=protected-access, too-many-lines
+# pylint:disable=protected-access, C0302
 
 
 import io
