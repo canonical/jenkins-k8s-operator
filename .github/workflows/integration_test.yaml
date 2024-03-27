@@ -5,36 +5,8 @@ on: [pull_request, workflow_dispatch]
 jobs:
   integration-test:
     name: job job
-    runs-on: [self-hosted, linux, X64, jammy, large]
+    runs-on: [self-hosted, linux, X64, jammy, xlarge]
     # timeout-minutes: 120
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: install pipx
-        run: |
-          sudo apt-get update
-          sudo apt-get install python3-pip python3-venv -y
-          python3 -m pip install --user pipx
-          python3 -m pipx ensurepath
-      - name: run snap list
-        run: |
-          snap list
-      - name: setup environment (juju)
-        run: |
-          pipx install tox
-          pipx install poetry
-      - name: run integration tests
-        run: |
-          tox run -e integration -- 'tests/integration/test_backups.py'
-      - name: Create the Mattermost Message
-        if: ${{ failure() }}
-        run: |
-          echo "{\"text\":\"@charlie4284 test failed!\"}" > mattermost.json
-      - name: Send mattermost message
-        if: ${{ failure() }}
-        uses: mattermost/action-mattermost-notify@master
-        env:
-          MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_NOTIFICATION_URL }}
       - name: tmate
-        if: ${{ failure() }}
         uses: canonical/action-tmate@main
