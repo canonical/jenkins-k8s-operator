@@ -40,8 +40,8 @@ jobs:
       - name: Charmcraft pack speed
         run: |
           sudo snap install charmcraft --classic
-          git clone https://github.com/canonical/postgresql-operator.git
-          cd postgresql-operator
+          git clone https://github.com/canonical/mysql-operator.git
+          cd mysql-operator
           # First launch
           echo "First launch"
           time charmcraft pack
