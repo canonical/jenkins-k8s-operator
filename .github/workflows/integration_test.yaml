@@ -40,6 +40,7 @@ jobs:
       - name: Charmcraft pack speed
         run: |
           sudo snap install charmcraft --classic
+          sudo usermod -aG lxd $USER
           time sudo lxd init --auto
           git clone https://github.com/canonical/github-runner-operator.git
           cd github-runner-operator
