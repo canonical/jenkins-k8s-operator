@@ -1,22 +1,88 @@
 name: Integration tests
 
-on:
-  pull_request:
+on: [pull_request, workflow_dispatch]
 
 jobs:
-  integration-tests:
-    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
-    secrets: inherit
-    with:
-      channel: 1.28-strict/stable
-      extra-arguments: |
-        --kube-config ${GITHUB_WORKSPACE}/kube-config
-      modules: '["test_auth_proxy.py", "test_cos.py", "test_ingress.py", "test_jenkins.py", "test_k8s_agent.py", "test_machine_agent.py", "test_plugins.py", "test_proxy.py", "test_upgrade.py"]'
-      pre-run-script: |
-        -c "sudo microk8s config > ${GITHUB_WORKSPACE}/kube-config
-        chmod +x tests/integration/pre_run_script.sh
-        ./tests/integration/pre_run_script.sh"
-      juju-channel: 3.1/stable
-      self-hosted-runner: true
-      self-hosted-runner-label: "xlarge"
-      microk8s-addons: "dns ingress rbac storage metallb:10.15.119.2-10.15.119.4"
+  integration-test:
+    name: job job
+    runs-on: [self-hosted, xlarge, linux, X64, jammy]
+    # timeout-minutes: 120
+    steps:
+      ### Network tests
+      - name: Network speed test
+        run: |
+          wget https://github.com/librespeed/speedtest-cli/releases/download/v1.0.10/librespeed-cli_1.0.10_linux_amd64.tar.gz
+          tar -xvzf librespeed-cli_1.0.10_linux_amd64.tar.gz
+          ./librespeed-cli
+      - name: Docker image pull speed (pull through cache)
+        run: |
+          for ((i=0; i<10; i++)); do
+            time docker pull busybox --quiet
+            docker system prune --all -f
+          done
+      - name: Docker image pull speed (no pull through cache)
+        run: |
+          for ((i=0; i<10; i++)); do
+            time docker pull registry.hub.docker.com/library/busybox --quiet
+            docker system prune --all -f
+          done
+      - name: Docker image pull speed (mysql)
+        run: |
+          for ((i=0; i<10; i++)); do
+            time docker pull ghcr.io/canonical/charmed-mysql@sha256:5082c99baa7a77c82d73247674e270838dc0a8165c02f7619cf5642d1427cba7 --quiet
+            docker system prune --all -f
+          done
+      ### CPU TESTS
+      - name: CPU benchmarks
+        run: |
+          sudo apt-get install sysbench -y
+          sysbench cpu run
+      - uses: canonical/setup-lxd@v0.1.1
+      - name: Charmcraft pack speed
+        run: |
+          sudo snap install charmcraft --classic
+          git clone https://github.com/canonical/github-runner-operator.git
+          cd github-runner-operator
+          # First launch
+          echo "First launch"
+          time sudo charmcraft pack
+          # Subsequent launches with cache
+          echo "Pack with cache"
+          for ((i=0; i<10; i++)); do
+            time sudo charmcraft pack
+          done
+          # Subsequent launches without cache
+          echo "Pack with reset cache"
+          for ((i=0; i<10; i++)); do
+            sudo charmcraft clean
+            time sudo charmcraft pack
+          done
+      - name: Postgresql charm deploy speed
+        run: |
+          time sudo snap install juju
+          mkdir -p ~/.local/share/juju
+          time juju bootstrap localhost localhost
+          for ((i=0; i<10; i++)); do
+            time juju add-model test
+            juju deploy postgresql --channel 14/stable
+            time juju wait-for unit postgresql/0 --timeout=15m0s
+            time juju destroy-model test --no-prompt --destroy-storage
+          done
+        ### DISK TESTS
+      - run: sudo apt-get update  
+      - run: sudo apt install -y fio
+      - name: seq write
+        run: sudo fio --name=write_throughput --directory=/ --numjobs=4 --size=3G --time_based --runtime=60s --ramp_time=2s --ioengine=libaio --direct=1 --verify=0 --bs=1M --iodepth=64 --rw=write --group_reporting=1 --iodepth_batch_submit=64 --iodepth_batch_complete_max=64
+      - run: sudo rm -f /write* /read*
+      - name: rand write
+        run: sudo fio --name=write_iops --directory=/ --numjobs=4 --size=3G --time_based --runtime=60s --ramp_time=2s --ioengine=libaio --direct=1 --verify=0 --bs=4k --iodepth=256 --rw=randwrite --group_reporting=1 --iodepth_batch_submit=256 --iodepth_batch_complete_max=256
+      - run: sudo rm -f /write* /read*
+      - name: seq read
+        run: sudo fio --name=write_throughput --directory=/ --numjobs=4 --size=3G --time_based --runtime=60s --ramp_time=2s --ioengine=libaio --direct=1 --verify=0 --bs=1M --iodepth=64 --rw=read --group_reporting=1 --iodepth_batch_submit=64 --iodepth_batch_complete_max=64
+      - run: sudo rm -f /write* /read*
+      - name: rand read
+        run: sudo fio --name=write_iops --directory=/ --numjobs=4 --size=3G --time_based --runtime=60s --ramp_time=2s --ioengine=libaio --direct=1 --verify=0 --bs=4k --iodepth=256 --rw=randread --group_reporting=1 --iodepth_batch_submit=256 --iodepth_batch_complete_max=256
+      - run: sudo rm -f /write* /read*
+      - name: tmate
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
