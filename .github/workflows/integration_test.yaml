@@ -14,13 +14,13 @@ jobs:
           wget https://github.com/librespeed/speedtest-cli/releases/download/v1.0.10/librespeed-cli_1.0.10_linux_amd64.tar.gz
           tar -xvzf librespeed-cli_1.0.10_linux_amd64.tar.gz
           ./librespeed-cli
-      - name: Docker image pull speed (no pull through cache)
+      - name: Docker image pull speed (pull through cache)
         run: |
           for ((i=0; i<10; i++)); do
             time docker pull busybox --quiet
             docker system prune --all -f
           done
-      - name: Docker image pull speed (pull through cache)
+      - name: Docker image pull speed (no pull through cache)
         run: |
           for ((i=0; i<10; i++)); do
             time docker pull registry.hub.docker.com/library/busybox --quiet
