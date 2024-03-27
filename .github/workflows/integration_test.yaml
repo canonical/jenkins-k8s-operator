@@ -8,5 +8,78 @@ jobs:
     runs-on: [self-hosted, linux, X64, jammy, xlarge]
     # timeout-minutes: 120
     steps:
-      - name: tmate
-        uses: canonical/action-tmate@main
+      ### Network tests
+      - name: Network speed test
+        run: |
+          wget https://github.com/librespeed/speedtest-cli/releases/download/v1.0.10/librespeed-cli_1.0.10_linux_amd64.tar.gz
+          tar -xvzf librespeed-cli_1.0.10_linux_amd64.tar.gz
+          ./librespeed-cli
+      - name: Docker image pull speed (no pull through cache)
+        run: |
+          for ((i=0; i<10; i++)); do
+            time docker pull registry.hub.docker.com/library/busybox --quiet
+            docker system prune --all -f
+          done
+      - name: Docker image pull speed (pull through cache)
+        run: |
+          for ((i=0; i<10; i++)); do
+            time docker pull registry.hub.docker.com/library/busybox --quiet
+            docker system prune --all -f
+          done
+      - name: Docker image pull speed (mysql)
+        run: |
+          for ((i=0; i<10; i++)); do
+            time docker pull ghcr.io/canonical/charmed-mysql@sha256:5082c99baa7a77c82d73247674e270838dc0a8165c02f7619cf5642d1427cba7 --quiet
+            docker system prune --all -f
+          done
+      ### CPU TESTS
+      - name: CPU benchmarks
+        run: |
+          sudo apt-get install sysbench -y
+          sysbench cpu run
+      - name: Charmcraft pack speed
+        run: |
+          sudo snap install charmcraft --classic
+          git clone https://github.com/canonical/postgresql-operator.git
+          cd postgresql-operator
+          # First launch
+          echo "First launch"
+          time charmcraft pack
+          # Subsequent launches with cache
+          echo "Pack with cache"
+          for ((i=0; i<10; i++)); do
+            time charmcraft pack
+          done
+          # Subsequent launches without cache
+          echo "Pack with reset cache"
+          for ((i=0; i<10; i++)); do
+            charmcraft clean
+            time charmcraft pack
+          done
+      - name: Postgresql charm deploy speed
+        run: |
+          time sudo snap install juju
+          time sudo lxd init --auto
+          mkdir -p ~/.local/share/juju
+          time juju bootstrap localhost localhost
+          for ((i=0; i<10; i++)); do
+            time juju add-model test
+            juju deploy postgresql --channel 14/stable
+            time juju wait-for unit postgresql/0
+            time juju destroy-model test
+          done
+        ### DISK TESTS
+      - run: sudo apt-get update  
+      - run: sudo apt install -y fio
+      - name: seq write
+        run: sudo fio --name=write_throughput --directory=/ --numjobs=4 --size=3G --time_based --runtime=60s --ramp_time=2s --ioengine=libaio --direct=1 --verify=0 --bs=1M --iodepth=64 --rw=write --group_reporting=1 --iodepth_batch_submit=64 --iodepth_batch_complete_max=64
+      - run: sudo rm -f /write* /read*
+      - name: rand write
+        run: sudo fio --name=write_iops --directory=/ --numjobs=4 --size=3G --time_based --runtime=60s --ramp_time=2s --ioengine=libaio --direct=1 --verify=0 --bs=4k --iodepth=256 --rw=randwrite --group_reporting=1 --iodepth_batch_submit=256 --iodepth_batch_complete_max=256
+      - run: sudo rm -f /write* /read*
+      - name: seq read
+        run: sudo fio --name=write_throughput --directory=/ --numjobs=4 --size=3G --time_based --runtime=60s --ramp_time=2s --ioengine=libaio --direct=1 --verify=0 --bs=1M --iodepth=64 --rw=read --group_reporting=1 --iodepth_batch_submit=64 --iodepth_batch_complete_max=64
+      - run: sudo rm -f /write* /read*
+      - name: rand read
+        run: sudo fio --name=write_iops --directory=/ --numjobs=4 --size=3G --time_based --runtime=60s --ramp_time=2s --ioengine=libaio --direct=1 --verify=0 --bs=4k --iodepth=256 --rw=randread --group_reporting=1 --iodepth_batch_submit=256 --iodepth_batch_complete_max=256
+      - run: sudo rm -f /write* /read*
