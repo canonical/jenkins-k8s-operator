@@ -65,7 +65,7 @@ jobs:
           for ((i=0; i<10; i++)); do
             time juju add-model test
             juju deploy postgresql --channel 14/stable
-            time juju wait-for unit postgresql/0
+            time juju wait-for unit postgresql/0 --timeout=15m0s
             time juju destroy-model test --no-prompt --destroy-storage
           done
         ### DISK TESTS
