@@ -40,8 +40,9 @@ jobs:
       - name: Charmcraft pack speed
         run: |
           sudo snap install charmcraft --classic
-          git clone https://github.com/canonical/mysql-operator.git
-          cd mysql-operator
+          time sudo lxd init --auto
+          git clone https://github.com/canonical/github-runner-operator.git
+          cd github-runner-operator
           # First launch
           echo "First launch"
           time charmcraft pack
@@ -59,7 +60,6 @@ jobs:
       - name: Postgresql charm deploy speed
         run: |
           time sudo snap install juju
-          time sudo lxd init --auto
           mkdir -p ~/.local/share/juju
           time juju bootstrap localhost localhost
           for ((i=0; i<10; i++)); do
