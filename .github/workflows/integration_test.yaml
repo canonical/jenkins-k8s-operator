@@ -46,17 +46,17 @@ jobs:
           cd github-runner-operator
           # First launch
           echo "First launch"
-          time charmcraft pack
+          time sudo charmcraft pack
           # Subsequent launches with cache
           echo "Pack with cache"
           for ((i=0; i<10; i++)); do
-            time charmcraft pack
+            time sudo charmcraft pack
           done
           # Subsequent launches without cache
           echo "Pack with reset cache"
           for ((i=0; i<10; i++)); do
-            charmcraft clean
-            time charmcraft pack
+            sudo charmcraft clean
+            time sudo charmcraft pack
           done
       - name: Postgresql charm deploy speed
         run: |
@@ -84,3 +84,6 @@ jobs:
       - name: rand read
         run: sudo fio --name=write_iops --directory=/ --numjobs=4 --size=3G --time_based --runtime=60s --ramp_time=2s --ioengine=libaio --direct=1 --verify=0 --bs=4k --iodepth=256 --rw=randread --group_reporting=1 --iodepth_batch_submit=256 --iodepth_batch_complete_max=256
       - run: sudo rm -f /write* /read*
+      - name: tmate
+        if: ${{ failure() }}
+        uses: canonical/action-tmate@main
