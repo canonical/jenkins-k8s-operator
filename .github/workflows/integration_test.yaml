@@ -5,7 +5,7 @@ on: [pull_request, workflow_dispatch]
 jobs:
   integration-test:
     name: job job
-    runs-on: [ubuntu-latest] # self-hosted, xlarge, linux, X64, jammy
+    runs-on: [self-hosted, xlarge, linux, X64, jammy]
     # timeout-minutes: 120
     steps:
       ### Network tests
