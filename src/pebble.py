@@ -36,10 +36,12 @@ def replan_jenkins(
         jenkins_instance.wait_ready()
         # Tested in integration
         if state.auth_proxy_integrated:  # pragma: no cover
+            logger.info("Replanning jenkins with no security")
             jenkins_instance.bootstrap(
                 container, jenkins.AUTH_PROXY_JENKINS_CONFIG, state.proxy_config
             )
         else:  # pragma: no cover
+            logger.info("Replanning jenkins with security")
             jenkins_instance.bootstrap(
                 container, jenkins.DEFAULT_JENKINS_CONFIG, state.proxy_config
             )
