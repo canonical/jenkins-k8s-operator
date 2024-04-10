@@ -83,30 +83,22 @@ class Observer(ops.Object):
             return
 
         self._update_auth_proxy_config()
-        logger.info("auth_proxy relation joined, replanning pebble")
         self._replan_jenkins(event)
 
     # pylint: disable=duplicate-code
-    def _replan_jenkins(self, event: ops.EventBase) -> None:
+    def _replan_jenkins(self, event: ops.EventBase, disable_security: bool = False) -> None:
         """Replan the jenkins service to account for prefix changes.
 
         Args:
             event: the event fired.
+            disable_security: Whether or not to replan with security disabled.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         if not jenkins.is_storage_ready(container):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()
             return
-        relation = self.model.get_relation(relation_name=AUTH_PROXY_RELATION)
-        if relation:
-            logger.info("Auth_proxy integrated: %s", self.state.auth_proxy_integrated)
-            logger.info(
-                "Replaning jenkins, protected urls: %s (should be the same as ingress url)",
-                relation.data[self.model.app],
-            )
-        logger.info("Ingress url: %s", self.ingress.url)
-        pebble.replan_jenkins(container, self.jenkins, self.state)
+        pebble.replan_jenkins(container, self.jenkins, self.state, disable_security)
 
     def _update_auth_proxy_config(self) -> None:
         """Update auth_proxy configuration with the correct jenkins url."""
@@ -123,7 +115,9 @@ class Observer(ops.Object):
         Args:
             event: the event fired.
         """
-        self._replan_jenkins(event)
+        # The charm still sees the relation when this hook is fired
+        # We then force pebble to replan with security
+        self._replan_jenkins(event, False)
 
     def _ingress_on_ready(self, event: IngressPerAppReadyEvent) -> None:
         """Handle ready event.
@@ -131,10 +125,9 @@ class Observer(ops.Object):
         Args:
             event: The event fired.
         """
-        logger.info("ingress ready, replanning pebble")
         if self.state.auth_proxy_integrated:
             self._update_auth_proxy_config()
-        self._replan_jenkins(event)
+        self._replan_jenkins(event, self.state.auth_proxy_integrated)
 
     def _ingress_on_revoked(self, event: IngressPerAppRevokedEvent) -> None:
         """Handle revoked event.
@@ -147,4 +140,4 @@ class Observer(ops.Object):
         self.jenkins.update_prefix("")
         if self.state.auth_proxy_integrated:
             self._update_auth_proxy_config()
-        self._replan_jenkins(event)
+        self._replan_jenkins(event, self.state.auth_proxy_integrated)

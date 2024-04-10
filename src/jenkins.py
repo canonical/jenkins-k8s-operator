@@ -19,6 +19,7 @@ from time import sleep
 
 import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
+import jenkinsapi.utils.requester
 import ops
 import requests
 from jenkinsapi.node import Node
@@ -294,6 +295,28 @@ class Jenkins:
             container.push(API_TOKEN_PATH, token, user=USER, group=GROUP)
         except ops.pebble.PathError as exc:
             raise JenkinsBootstrapError("Failed to setup user token.") from exc
+        except jenkinsapi.utils.requester.JenkinsAPIException as e:
+            # Jenkins api exception when generating user token
+            # We check if security is disabled
+            logger.info("Generate token failed, checking if security is disabled")
+            response = client.requester.get_url(
+                f"{client.base_server_url()}/manage/api/json?tree=useSecurity"
+            )
+            try:
+                if response.status_code == 200 and not response.json()["useSecurity"]:
+                    # !! Write a random string to the api token as a temporary workaround,
+                    # Prefix it to signify that it's a dummy token
+                    # Follow-up changes will be needed to rework this.
+                    container.push(
+                        API_TOKEN_PATH, f"DUMMY-{secrets.token_hex(16)}", user=USER, group=GROUP
+                    )
+                    return
+            # Not in the case where security is disabled, reraise the exception
+            except (requests.exceptions.JSONDecodeError, KeyError):
+                logger.error(
+                    "Failed parsing jenkins's security config in response, will raise initial error"
+                )
+            raise JenkinsBootstrapError("Failed to setup user token") from e
 
     def _configure_proxy(
         self, container: ops.Container, proxy_config: state.ProxyConfig | None = None
