@@ -1,6 +1,11 @@
 name: Integration tests
 
-on: [pull_request, workflow_dispatch]
+on:
+  schedule:
+    # * is a special character in YAML so you have to quote this string
+    - cron: '0 2 * * *' # 2AM for UTC, 10AM APAC (Hong Kong, Taiwan)
+    - cron: '0 9 * * *' # 9AM UTC, 10AM EU (London)
+    - cron: '0 13 * * *' # 1PM UTC, 10AM AMER (Boston)
 
 jobs:
   integration-test:
