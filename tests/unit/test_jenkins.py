@@ -17,6 +17,7 @@ from functools import partial
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import jenkinsapi
+import jenkinsapi.utils.requester
 import ops
 import pytest
 import requests
@@ -243,6 +244,87 @@ def test__setup_user_token_raises_exception(mock_env: jenkins.Environment):
     mock_container.pull = MagicMock(
         side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
     )
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
+
+        with pytest.raises(jenkins.JenkinsBootstrapError):
+            jenkins.Jenkins(mock_env)._setup_user_token(mock_container)
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        pytest.param(requests.exceptions.JSONDecodeError, id="decode_error"),
+        pytest.param(KeyError, id="keyerror"),
+    ],
+)
+def test__setup_user_token_security_disabled_response_parse_error(
+    monkeypatch: pytest.MonkeyPatch, exception: Exception, mock_env: jenkins.Environment
+):
+    """
+    arrange: given a container raising an exception and a monkeypatched mocked jenkinsapi client.
+    act: when _setup_user_token is called.
+    assert: a JenkinsBootstrapError is raised.
+    """
+    monkeypatch.setattr(
+        requests.exceptions.JSONDecodeError, "__init__", MagicMock(return_value=None)
+    )
+    jenkins_security_response_mock = MagicMock(spec=requests.Response)
+    jenkins_security_response_mock.status_code = 200
+    jenkins_security_response_mock.json = MagicMock(side_effect=exception)
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.generate_new_api_token.side_effect = jenkinsapi.utils.requester.JenkinsAPIException
+    requester_mock = PropertyMock(spec=jenkinsapi.utils.requester.Requester)
+    requester_mock.get_url = MagicMock(return_value=jenkins_security_response_mock)
+    mock_client.requester = requester_mock
+    mock_container = MagicMock(ops.Container)
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
+
+        with pytest.raises(jenkins.JenkinsBootstrapError):
+            jenkins.Jenkins(mock_env)._setup_user_token(mock_container)
+
+
+def test__setup_user_token_security_disabled_push_dummy_token(mock_env: jenkins.Environment):
+    """
+    arrange: given a container raising an exception and a monkeypatched mocked jenkinsapi client.
+    act: when _setup_user_token is called.
+    assert: a JenkinsBootstrapError is raised.
+    """
+    jenkins_security_response_mock = PropertyMock(spec=requests.Response)
+    jenkins_security_response_mock.status_code = 200
+    jenkins_security_response_mock.json = MagicMock(return_value={"useSecurity": False})
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.generate_new_api_token.side_effect = jenkinsapi.utils.requester.JenkinsAPIException
+    requester_mock = PropertyMock(spec=jenkinsapi.utils.requester.Requester)
+    requester_mock.get_url = MagicMock(return_value=jenkins_security_response_mock)
+    mock_client.requester = requester_mock
+    mock_container = MagicMock(ops.Container)
+    push_mock = MagicMock()
+    mock_container.push = push_mock
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
+        jenkins.Jenkins(mock_env)._setup_user_token(mock_container)
+        push_mock.assert_called_once()
+
+
+def test__setup_user_token_security_disabled_raise_original_error(mock_env: jenkins.Environment):
+    """
+    arrange: given a container raising an exception and a monkeypatched mocked jenkinsapi client.
+    act: when _setup_user_token is called.
+    assert: a JenkinsBootstrapError is raised.
+    """
+    jenkins_security_response_mock = PropertyMock(spec=requests.Response)
+    jenkins_security_response_mock.status_code = 200
+    jenkins_security_response_mock.json = MagicMock(return_value={"useSecurity": True})
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.generate_new_api_token.side_effect = jenkinsapi.utils.requester.JenkinsAPIException
+    requester_mock = PropertyMock(spec=jenkinsapi.utils.requester.Requester)
+    requester_mock.get_url = MagicMock(return_value=jenkins_security_response_mock)
+    mock_client.requester = requester_mock
+    mock_container = MagicMock(ops.Container)
+    pull_mock = MagicMock()
+    mock_container.pull = pull_mock
     with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
         get_client_mock.return_value = mock_client
 
