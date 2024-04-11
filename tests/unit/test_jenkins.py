@@ -285,7 +285,7 @@ def test__setup_user_token_security_disabled_response_parse_error(
             jenkins.Jenkins(mock_env)._setup_user_token(mock_container)
 
 
-def test__setup_user_token_security_disabled_push_dummy_token(mock_env: jenkins.Environment):
+def test__setup_user_token_security_disabled_push_placeholder_token(mock_env: jenkins.Environment):
     """
     arrange: given a container raising an exception and a monkeypatched mocked jenkinsapi client.
     act: when _setup_user_token is called.

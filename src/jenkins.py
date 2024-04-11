@@ -305,10 +305,13 @@ class Jenkins:
             try:
                 if response.status_code == 200 and not response.json()["useSecurity"]:
                     # !! Write a random string to the api token as a temporary workaround,
-                    # Prefix it to signify that it's a dummy token
+                    # Prefix it to signify that it's a placeholder token
                     # Follow-up changes will be needed to rework this.
                     container.push(
-                        API_TOKEN_PATH, f"DUMMY-{secrets.token_hex(16)}", user=USER, group=GROUP
+                        API_TOKEN_PATH,
+                        f"placeholder-{secrets.token_hex(16)}",
+                        user=USER,
+                        group=GROUP,
                     )
                     return
             # Not in the case where security is disabled, reraise the exception
