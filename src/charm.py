@@ -53,6 +53,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
+        
+        print("hello world")
 
         # Ingress dedicated to agent discovery
         self.agent_discovery_ingress_observer = ingress.Observer(
