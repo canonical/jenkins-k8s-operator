@@ -1,8 +1,9 @@
-# pylint: disable=too-many-lines
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Functions to operate Jenkins."""
+
+# pylint: disable=too-many-lines
 
 import dataclasses
 import functools
