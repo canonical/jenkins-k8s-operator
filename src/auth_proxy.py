@@ -125,7 +125,6 @@ class Observer(ops.Object):
         Args:
             event: The event fired.
         """
-        logger.info("state: %s", self.state.auth_proxy_integrated)
         if self.state.auth_proxy_integrated:
             self._update_auth_proxy_config()
         self._replan_jenkins(event, self.state.auth_proxy_integrated)

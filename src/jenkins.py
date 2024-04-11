@@ -1,4 +1,4 @@
-# pylint: disable=C0302
+# pylint: disable=too-many-lines
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
@@ -319,6 +319,10 @@ class Jenkins:
                 logger.error(
                     "Failed parsing jenkins's security config in response, will raise initial error"
                 )
+            logger.error(
+                "Generate token failed but security is not disabled, API response: HTTP %s",
+                response.status_code,
+            )
             raise JenkinsBootstrapError("Failed to setup user token") from e
 
     def _configure_proxy(
