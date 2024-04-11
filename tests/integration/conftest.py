@@ -785,8 +785,11 @@ async def oathkeeper_application_related_fixture(
 ):
     """The application related to Jenkins via auth_proxy v0 relation."""
     oathkeeper = await application.model.deploy("oathkeeper", channel="edge", trust=True)
+    # Using a patched local bundle from identity team here as a temporary workaround for
+    # https://github.com/canonical/traefik-k8s-operator/issues/322 and
+    # https://github.com/juju/python-libjuju/issues/1042
     identity_platform = await application.model.deploy(
-        "./tests/integration/files/identity-bundle-edge.yaml", trust=True
+        "./tests/integration/files/identity-bundle-edge-patched.yaml", trust=True
     )
     await application.model.applications["kratos-external-idp-integrator"].set_config(
         {
