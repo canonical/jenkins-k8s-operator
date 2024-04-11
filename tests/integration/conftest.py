@@ -786,7 +786,7 @@ async def oathkeeper_application_related_fixture(
     """The application related to Jenkins via auth_proxy v0 relation."""
     oathkeeper = await application.model.deploy("oathkeeper", channel="edge", trust=True)
     identity_platform = await application.model.deploy(
-        "identity-platform", channel="edge", trust=True
+        "./tests/integration/files/identity-bundle-edge.yaml", trust=True
     )
     await application.model.applications["kratos-external-idp-integrator"].set_config(
         {
