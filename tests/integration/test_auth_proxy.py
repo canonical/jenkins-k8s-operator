@@ -83,7 +83,10 @@ async def test_auth_proxy_integration_authorized(
 
     # Choose provider
     async with page.expect_navigation():
-        await page.get_by_role("button", name="Dex").click()
+        button_locator = page.get_by_role("button", name="Dex")
+        await expect(button_locator).to_be_visible()
+        # Increase timeout to wait for dex to be ready
+        await button_locator.click(timeout=60000 * 5)
 
     await expect(page).to_have_url(re.compile(rf"{ext_idp_service}*"))
 
