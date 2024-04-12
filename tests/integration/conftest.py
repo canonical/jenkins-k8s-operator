@@ -3,6 +3,8 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+# pylint: disable=too-many-lines
+
 import os
 import random
 import secrets
@@ -42,6 +44,13 @@ from .helpers import generate_jenkins_client_from_application, get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
+IDENTITY_PLATFORM_APPS = [
+    "traefik-admin",
+    "traefik-public",
+    "hydra",
+    "kratos",
+    "kratos-external-idp-integrator",
+]
 
 
 @pytest.fixture(scope="module", name="model")
@@ -781,15 +790,15 @@ async def traefik_application_fixture(model: Model):
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
 async def oathkeeper_application_related_fixture(
-    application: Application, client: Client, ext_idp_service: str
+    ops_test: OpsTest, application: Application, client: Client, ext_idp_service: str
 ):
     """The application related to Jenkins via auth_proxy v0 relation."""
     oathkeeper = await application.model.deploy("oathkeeper", channel="edge", trust=True)
     # Using a patched local bundle from identity team here as a temporary workaround for
     # https://github.com/canonical/traefik-k8s-operator/issues/322 and
     # https://github.com/juju/python-libjuju/issues/1042
-    identity_platform = await application.model.deploy(
-        "./tests/integration/files/identity-bundle-edge-patched.yaml", trust=True
+    await ops_test.run(
+        "juju", "deploy", "./tests/integration/files/identity-bundle-edge-patched.yaml", "--trust"
     )
     await application.model.applications["kratos-external-idp-integrator"].set_config(
         {
@@ -805,7 +814,7 @@ async def oathkeeper_application_related_fixture(
     # See https://github.com/canonical/kratos-operator/issues/182
     await application.model.wait_for_idle(
         status="active",
-        apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
+        apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
         raise_on_error=False,
         timeout=30 * 60,
         idle_period=5,
@@ -831,7 +840,7 @@ async def oathkeeper_application_related_fixture(
 
     await application.model.wait_for_idle(
         status="active",
-        apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
+        apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
         raise_on_error=False,
         timeout=30 * 60,
         idle_period=5,
