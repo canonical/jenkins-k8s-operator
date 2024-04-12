@@ -43,17 +43,17 @@ applications:
     scale: 1
   traefik-admin:
     charm: traefik-k8s
-    channel: latest/edge
+    channel: latest/stable
     series: focal
     scale: 1
-    revision: 177
+    revision: 170
     trust: true
   traefik-public:
     charm: traefik-k8s
-    channel: latest/edge
+    channel: latest/stable
     series: focal
     scale: 1
-    revision: 177
+    revision: 170
     trust: true
 relations:
   - [hydra:pg-database, postgresql-k8s:database]
