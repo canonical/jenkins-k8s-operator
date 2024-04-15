@@ -5,18 +5,113 @@
 
 import logging
 import re
-from typing import Match
+from typing import Any, AsyncGenerator, Callable, Coroutine, Match
 
 import pytest
+import pytest_asyncio
 import requests
 from juju.application import Application
 from juju.model import Model
-from playwright.async_api import expect
-from playwright.async_api._generated import Page
+from playwright.async_api import async_playwright, expect
+from playwright.async_api._generated import Browser, BrowserContext, BrowserType, Page
+from playwright.async_api._generated import Playwright as AsyncPlaywright
 
 from .helpers import wait_for
 
 logger = logging.getLogger(__name__)
+
+
+# The playwright fixtures are taken from:
+# https://github.com/microsoft/playwright-python/blob/main/tests/async/conftest.py
+@pytest_asyncio.fixture(scope="module", name="playwright")
+async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
+    """Playwright object."""
+    async with async_playwright() as playwright_object:
+        yield playwright_object
+
+
+@pytest_asyncio.fixture(scope="module", name="browser_type")
+async def browser_type_fixture(playwright: AsyncPlaywright) -> AsyncGenerator[BrowserType, None]:
+    """Browser type for playwright."""
+    yield playwright.firefox
+
+
+@pytest_asyncio.fixture(scope="module", name="browser_factory")
+async def browser_factory_fixture(
+    browser_type: BrowserType,
+) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, Browser]], None]:
+    """Browser factory."""
+    browsers = []
+
+    async def launch(**kwargs: Any) -> Browser:
+        """Launch browser.
+
+        Args:
+            kwargs: kwargs.
+
+        Returns:
+            a browser instance.
+        """
+        browser = await browser_type.launch(**kwargs)
+        browsers.append(browser)
+        return browser
+
+    yield launch
+    for browser in browsers:
+        await browser.close()
+
+
+@pytest_asyncio.fixture(scope="module", name="browser")
+async def browser_fixture(
+    browser_factory: Callable[..., Coroutine[Any, Any, Browser]]
+) -> AsyncGenerator[Browser, None]:
+    """Browser."""
+    browser = await browser_factory()
+    yield browser
+    await browser.close()
+
+
+@pytest_asyncio.fixture(name="context_factory")
+async def context_factory_fixture(
+    browser: Browser,
+) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, BrowserContext]], None]:
+    """Playwright context factory."""
+    contexts = []
+
+    async def launch(**kwargs: Any) -> BrowserContext:
+        """Launch browser.
+
+        Args:
+            kwargs: kwargs.
+
+        Returns:
+            the browser context.
+        """
+        context = await browser.new_context(**kwargs)
+        contexts.append(context)
+        return context
+
+    yield launch
+    for context in contexts:
+        await context.close()
+
+
+@pytest_asyncio.fixture(name="context")
+async def context_fixture(
+    context_factory: Callable[..., Coroutine[Any, Any, BrowserContext]]
+) -> AsyncGenerator[BrowserContext, None]:
+    """Playwright context."""
+    context = await context_factory(ignore_https_errors=True)
+    yield context
+    await context.close()
+
+
+@pytest_asyncio.fixture(name="page")
+async def page_fixture(context: BrowserContext) -> AsyncGenerator[Page, None]:
+    """Playwright page."""
+    new_page = await context.new_page()
+    yield new_page
+    await new_page.close()
 
 
 @pytest.mark.abort_on_fail
@@ -84,7 +179,7 @@ async def test_auth_proxy_integration_authorized(
     # Choose provider
     async with page.expect_navigation():
         # Increase timeout to wait for dex to be ready
-        await page.get_by_role("button", name="Dex").click(timeout=60000 * 5)
+        await page.get_by_role("button", name="Dex").click()
 
     await expect(page).to_have_url(re.compile(rf"{ext_idp_service}*"))
 

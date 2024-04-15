@@ -34,7 +34,9 @@ def test_get_path():
     assert harness.charm.ingress_observer.get_path() == ""
 
 
-def test__on_ingress_replan(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+def test_traefik_integration_added_replans_jenkins(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+):
     """
     arrange: given a base jenkins charm.
     act: add an integration with traefik on :ingress endpoint and remove it.
@@ -57,7 +59,9 @@ def test__on_ingress_replan(harness: Harness, monkeypatch: pytest.MonkeyPatch):
     assert replan_mock.call_count == 2
 
 
-def test__on_ingress_replan_with_auth_proxy(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+def test_traefik_integration_added_with_auth_proxy_replans_jenkins(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+):
     """
     arrange: given a base jenkins charm with auth-proxy relation.
     act: add an integration with traefik on :ingress endpoint and remove it.
