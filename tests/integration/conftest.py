@@ -7,7 +7,7 @@ import os
 import random
 import secrets
 import string
-from typing import Any, AsyncGenerator, Callable, Coroutine, Generator, Iterable, Optional
+from typing import AsyncGenerator, Generator, Iterable, Optional
 
 import jenkinsapi.jenkins
 import kubernetes.config
@@ -22,9 +22,6 @@ from juju.unit import Unit
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 from lightkube import Client, KubeConfig
 from lightkube.core.exceptions import ApiError
-from playwright.async_api import async_playwright
-from playwright.async_api._generated import Browser, BrowserContext, BrowserType, Page
-from playwright.async_api._generated import Playwright as AsyncPlaywright
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
@@ -42,6 +39,13 @@ from .helpers import generate_jenkins_client_from_application, get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
+IDENTITY_PLATFORM_APPS = [
+    "traefik-admin",
+    "traefik-public",
+    "hydra",
+    "kratos",
+    "kratos-external-idp-integrator",
+]
 
 
 @pytest.fixture(scope="module", name="model")
@@ -781,12 +785,15 @@ async def traefik_application_fixture(model: Model):
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
 async def oathkeeper_application_related_fixture(
-    application: Application, client: Client, ext_idp_service: str
+    ops_test: OpsTest, application: Application, client: Client, ext_idp_service: str
 ):
     """The application related to Jenkins via auth_proxy v0 relation."""
     oathkeeper = await application.model.deploy("oathkeeper", channel="edge", trust=True)
-    identity_platform = await application.model.deploy(
-        "identity-platform", channel="edge", trust=True
+    # Using a patched local bundle from identity team here as a temporary workaround for
+    # https://github.com/canonical/traefik-k8s-operator/issues/322 and
+    # https://github.com/juju/python-libjuju/issues/1042
+    await ops_test.run(
+        "juju", "deploy", "./tests/integration/files/identity-bundle-edge-patched.yaml", "--trust"
     )
     await application.model.applications["kratos-external-idp-integrator"].set_config(
         {
@@ -802,7 +809,7 @@ async def oathkeeper_application_related_fixture(
     # See https://github.com/canonical/kratos-operator/issues/182
     await application.model.wait_for_idle(
         status="active",
-        apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
+        apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
         raise_on_error=False,
         timeout=30 * 60,
         idle_period=5,
@@ -828,7 +835,7 @@ async def oathkeeper_application_related_fixture(
 
     await application.model.wait_for_idle(
         status="active",
-        apps=[application.name, oathkeeper.name] + [app.name for app in identity_platform],
+        apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
         raise_on_error=False,
         timeout=30 * 60,
         idle_period=5,
@@ -884,96 +891,3 @@ def external_user_email() -> str:
 def external_user_password() -> str:
     """Password for testing proxy authentication."""
     return "password"
-
-
-# The playwright fixtures are taken from:
-# https://github.com/microsoft/playwright-python/blob/main/tests/async/conftest.py
-@pytest_asyncio.fixture(scope="module", name="playwright")
-async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
-    """Playwright object."""
-    async with async_playwright() as playwright_object:
-        yield playwright_object
-
-
-@pytest_asyncio.fixture(scope="module", name="browser_type")
-async def browser_type_fixture(playwright: AsyncPlaywright) -> AsyncGenerator[BrowserType, None]:
-    """Browser type for playwright."""
-    yield playwright.firefox
-
-
-@pytest_asyncio.fixture(scope="module", name="browser_factory")
-async def browser_factory_fixture(
-    browser_type: BrowserType,
-) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, Browser]], None]:
-    """Browser factory."""
-    browsers = []
-
-    async def launch(**kwargs: Any) -> Browser:
-        """Launch browser.
-
-        Args:
-            kwargs: kwargs.
-
-        Returns:
-            a browser instance.
-        """
-        browser = await browser_type.launch(**kwargs)
-        browsers.append(browser)
-        return browser
-
-    yield launch
-    for browser in browsers:
-        await browser.close()
-
-
-@pytest_asyncio.fixture(scope="module", name="browser")
-async def browser_fixture(
-    browser_factory: Callable[..., Coroutine[Any, Any, Browser]]
-) -> AsyncGenerator[Browser, None]:
-    """Browser."""
-    browser = await browser_factory()
-    yield browser
-    await browser.close()
-
-
-@pytest_asyncio.fixture(name="context_factory")
-async def context_factory_fixture(
-    browser: Browser,
-) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, BrowserContext]], None]:
-    """Playwright context factory."""
-    contexts = []
-
-    async def launch(**kwargs: Any) -> BrowserContext:
-        """Launch browser.
-
-        Args:
-            kwargs: kwargs.
-
-        Returns:
-            the browser context.
-        """
-        context = await browser.new_context(**kwargs)
-        contexts.append(context)
-        return context
-
-    yield launch
-    for context in contexts:
-        await context.close()
-
-
-@pytest_asyncio.fixture(name="context")
-async def context_fixture(
-    context_factory: Callable[..., Coroutine[Any, Any, BrowserContext]]
-) -> AsyncGenerator[BrowserContext, None]:
-    """Playwright context."""
-    context = await context_factory(ignore_https_errors=True)
-    yield context
-    await context.close()
-
-
-@pytest_asyncio.fixture
-async def page(context: BrowserContext) -> AsyncGenerator[Page, None]:
-    """Playwright page."""
-    new_page = await context.new_page()
-    yield new_page
-    await new_page.close()
