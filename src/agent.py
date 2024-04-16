@@ -104,7 +104,8 @@ class Observer(ops.Object):
             unit_ip = str(binding.network.bind_address)
             try:
                 ipaddress.ip_address(unit_ip)
-                return f"http://{unit_ip}:{jenkins.WEB_PORT}"
+                env_dict = typing.cast(typing.Dict[str, str], self.jenkins.environment)
+                return f"http://{unit_ip}:{jenkins.WEB_PORT}{env_dict['JENKINS_PREFIX']}"
             except ValueError as exc:
                 logger.error(
                     "IP from juju-info is not valid: %s, we can still fall back to using fqdn", exc
