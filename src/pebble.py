@@ -78,6 +78,7 @@ def _get_pebble_layer(jenkins_instance: jenkins.Jenkins) -> ops.pebble.Layer:
                 "summary": "jenkins",
                 "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
                 f"-D{jenkins.SYSTEM_PROPERTY_LOGGING} "
+                "-XX:MaxRAMPercentage=50.0 -XX:InitialRAMPercentage=50.0 "
                 f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war "
                 f"--prefix={env_dict['JENKINS_PREFIX']}",
                 "startup": "enabled",
