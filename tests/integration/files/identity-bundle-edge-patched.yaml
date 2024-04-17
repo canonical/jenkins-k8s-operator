@@ -30,6 +30,8 @@ applications:
     scale: 1
     series: jammy
     trust: true
+    resources:
+      oci-image: 79
   postgresql-k8s:
     charm: postgresql-k8s
     channel: 14/stable
