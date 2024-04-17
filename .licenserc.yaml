@@ -35,4 +35,5 @@ header:
     - 'zap_rules.tsv'
     - 'lib/**'
     - tests/integration/files/dex.yaml
+    - tests/integration/files/identity-bundle-edge-patched.yaml
   comment: on-failure

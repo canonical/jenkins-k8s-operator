@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 
 
 def replan_jenkins(
-    container: ops.Container, jenkins_instance: jenkins.Jenkins, state: State
+    container: ops.Container,
+    jenkins_instance: jenkins.Jenkins,
+    state: State,
+    disable_security: bool = False,
 ) -> None:
     """Replan the jenkins services.
 
@@ -26,6 +29,7 @@ def replan_jenkins(
         container: the container for with to replan the services.
         jenkins_instance: the Jenkins instance.
         state: the charm state.
+        disable_security: whether to replan with security disabled.
 
     Raises:
         JenkinsBootstrapError: if an error occurs while bootstrapping Jenkins.
@@ -35,7 +39,7 @@ def replan_jenkins(
     try:
         jenkins_instance.wait_ready()
         # Tested in integration
-        if state.auth_proxy_integrated:  # pragma: no cover
+        if disable_security:  # pragma: no cover
             jenkins_instance.bootstrap(
                 container, jenkins.AUTH_PROXY_JENKINS_CONFIG, state.proxy_config
             )
@@ -74,6 +78,7 @@ def _get_pebble_layer(jenkins_instance: jenkins.Jenkins) -> ops.pebble.Layer:
                 "summary": "jenkins",
                 "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
                 f"-D{jenkins.SYSTEM_PROPERTY_LOGGING} "
+                "-XX:MaxRAMPercentage=50.0 -XX:InitialRAMPercentage=50.0 "
                 f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war "
                 f"--prefix={env_dict['JENKINS_PREFIX']}",
                 "startup": "enabled",
