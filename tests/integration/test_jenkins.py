@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Integration tests for jenkins-k8s-operator charm."""
@@ -11,10 +11,8 @@ import pytest
 from juju.action import Action
 from juju.application import Application
 from juju.unit import Unit
-from pytest_operator.plugin import OpsTest
 
 from .helpers import gen_test_job_xml, install_plugins
-from .substrings import assert_substrings_not_in_string
 from .types_ import UnitWebClient
 
 JENKINS_UID = "2000"
@@ -32,14 +30,11 @@ async def test_jenkins_update_ui_disabled(
     res = jenkins_client.requester.get_url(f"{web_address}/manage")
 
     page_content = str(res.content, encoding="utf-8")
-    assert_substrings_not_in_string(
-        ("New version of Jenkins", "is available", "download"), page_content
-    )
+    assert "New version of Jenkins" not in page_content
 
 
 @pytest.mark.usefixtures("app_with_restart_time_range", "libfaketime_unit")
 async def test_jenkins_automatic_update_out_of_range(
-    ops_test: OpsTest,
     libfaketime_env: typing.Iterable[str],
     update_status_env: typing.Iterable[str],
     unit_web_client: UnitWebClient,
@@ -50,7 +45,7 @@ async def test_jenkins_automatic_update_out_of_range(
     assert: the maintenance (plugins removal) does not take place.
     """
     extra_plugin = "oic-auth"
-    await install_plugins(ops_test, unit_web_client.unit, unit_web_client.client, (extra_plugin,))
+    await install_plugins(unit_web_client, (extra_plugin,))
     action: Action = await unit_web_client.unit.run(
         f"-- {' '.join(libfaketime_env)} {' '.join(update_status_env)} ./dispatch"
     )

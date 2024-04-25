@@ -25,7 +25,7 @@ fixes and constructive feedback.
 * [Get support](https://discourse.charmhub.io/)
 * [Join our online chat](https://chat.charmhub.io/charmhub/channels/charm-dev)
 * [Contribute](https://charmhub.io/jenkins-k8s/docs/contributing)
-* [Getting Started](https://charmhub.io/jenkins-k8s/docs/getting-started)
+* [Getting Started](https://charmhub.io/jenkins-k8s/docs/tutorial-getting-started)
 Thinking about using the Jenkins-k8s Operator for your next project? 
 [Get in touch](https://chat.charmhub.io/charmhub/channels/charm-dev)!
 

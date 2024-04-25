@@ -1,15 +1,15 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+import os
 import random
 import secrets
 import string
-import typing
+from typing import AsyncGenerator, Generator, Iterable, Optional
 
 import jenkinsapi.jenkins
-import kubernetes.client
 import kubernetes.config
 import kubernetes.stream
 import pytest
@@ -20,15 +20,32 @@ from juju.client._definitions import FullStatus, UnitStatus
 from juju.model import Controller, Model
 from juju.unit import Unit
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
+from lightkube import Client, KubeConfig
+from lightkube.core.exceptions import ApiError
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
-import jenkins
 import state
 
 from .constants import ALLOWED_PLUGINS
-from .helpers import get_pod_ip
+from .dex import (
+    apply_dex_resources,
+    create_dex_resources,
+    get_dex_manifest,
+    get_dex_service_url,
+    update_redirect_uri,
+)
+from .helpers import generate_jenkins_client_from_application, get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
+
+KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
+IDENTITY_PLATFORM_APPS = [
+    "traefik-admin",
+    "traefik-public",
+    "hydra",
+    "kratos",
+    "kratos-external-idp-integrator",
+]
 
 
 @pytest.fixture(scope="module", name="model")
@@ -36,6 +53,12 @@ def model_fixture(ops_test: OpsTest) -> Model:
     """The testing model."""
     assert ops_test.model
     return ops_test.model
+
+
+@pytest.fixture(scope="module", name="cloud")
+def cloud_fixture(ops_test: OpsTest) -> Optional[str]:
+    """The cloud the k8s model is running on."""
+    return ops_test.cloud_name
 
 
 @pytest.fixture(scope="module", name="jenkins_image")
@@ -62,17 +85,15 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
         charm = await ops_test.build_charm(".")
     else:
         charm = f"./{charm}"
-
     return charm
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
     ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """Deploy the charm."""
     resources = {"jenkins-image": jenkins_image}
-
     # Deploy the charm and wait for active/idle status
     application = await model.deploy(charm, resources=resources, series="jammy")
     await model.wait_for_idle(
@@ -127,17 +148,10 @@ async def jenkins_client_fixture(
     web_address: str,
 ) -> jenkinsapi.jenkins.Jenkins:
     """The Jenkins API client."""
-    jenkins_unit: Unit = application.units[0]
-    ret, api_token, stderr = await ops_test.juju(
-        "ssh",
-        "--container",
-        "jenkins",
-        jenkins_unit.name,
-        "cat",
-        str(jenkins.API_TOKEN_PATH),
+    jenkins_client = await generate_jenkins_client_from_application(
+        ops_test, application, web_address
     )
-    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
-    return jenkinsapi.jenkins.Jenkins(web_address, "admin", api_token, timeout=60)
+    return jenkins_client
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_user_client")
@@ -165,29 +179,23 @@ def app_suffix_fixture():
     """Get random 4 char length application suffix."""
     # secrets random hex cannot be used because it has chances to generate numeric only suffix
     # which will return "<application-name> is not a valid application tag"
-    app_suffix = "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
-    return app_suffix
+    return "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_k8s_agents")
-async def jenkins_k8s_agents_fixture(
-    model: Model, app_suffix: str
-) -> typing.AsyncGenerator[Application, None]:
+@pytest_asyncio.fixture(scope="module", name="jenkins_k8s_agents")
+async def jenkins_k8s_agents_fixture(model: Model):
     """The Jenkins k8s agent."""
-    agent_app: Application = await model.deploy(
+    agent: Application = await model.deploy(
         "jenkins-agent-k8s",
+        base="ubuntu@22.04",
         config={"jenkins_agent_labels": "k8s"},
         channel="latest/edge",
-        application_name=f"jenkins-agentk8s-{app_suffix}",
     )
-    await model.wait_for_idle(apps=[agent_app.name], status="blocked")
-
-    yield agent_app
-
-    await model.remove_application(agent_app.name, block_until_done=True)
+    await model.wait_for_idle(apps=[agent.name], status="blocked")
+    return agent
 
 
-@pytest_asyncio.fixture(scope="function", name="k8s_agent_related_app")
+@pytest_asyncio.fixture(scope="module", name="k8s_agent_related_app")
 async def k8s_agent_related_app_fixture(
     jenkins_k8s_agents: Application,
     application: Application,
@@ -199,23 +207,22 @@ async def k8s_agent_related_app_fixture(
     await application.model.wait_for_idle(
         apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
     )
-
-    yield application
+    return application
 
 
 @pytest_asyncio.fixture(scope="function", name="extra_jenkins_k8s_agents")
 async def extra_jenkins_k8s_agents_fixture(
     model: Model,
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
+        base="ubuntu@22.04",
         config={"jenkins_agent_labels": "k8s-extra"},
         channel="latest/edge",
-        application_name="jenkins-agentk8s-extra",
+        application_name="jenkins-agent-k8s-extra",
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
-
     yield agent_app
 
 
@@ -229,55 +236,51 @@ async def k8s_deprecated_agent_related_app_fixture(
     await application.model.wait_for_idle(
         apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
     )
-
     yield application
 
 
 @pytest_asyncio.fixture(scope="module", name="machine_controller")
-async def machine_controller_fixture() -> typing.AsyncGenerator[Controller, None]:
+async def machine_controller_fixture() -> AsyncGenerator[Controller, None]:
     """The lxd controller."""
     controller = Controller()
     await controller.connect_controller("localhost")
-
     yield controller
-
     await controller.disconnect()
 
 
 @pytest_asyncio.fixture(scope="module", name="machine_model")
 async def machine_model_fixture(
     machine_controller: Controller,
-) -> typing.AsyncGenerator[Model, None]:
+) -> AsyncGenerator[Model, None]:
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
     model = await machine_controller.add_model(machine_model_name)
     await model.connect(f"localhost:admin/{model.name}")
-
     yield model
-
+    await machine_controller.destroy_models(
+        model.name, destroy_storage=True, force=True, max_wait=10 * 60
+    )
     await model.disconnect()
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_machine_agents")
 async def jenkins_machine_agents_fixture(
     machine_model: Model, num_units: int, app_suffix: str
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """The jenkins machine agent with 3 units to be used for new agent relation."""
     # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
     # stable.
     app: Application = await machine_model.deploy(
         "jenkins-agent",
-        channel="latest/edge",
-        config={"labels": "machine"},
+        channel="latest/stable",
+        config={"jenkins_agent_labels": "machine"},
         application_name=f"jenkins-agent-{app_suffix}",
         num_units=num_units,
     )
     await machine_model.create_offer(f"{app.name}:{state.AGENT_RELATION}", state.AGENT_RELATION)
-    await machine_model.create_offer(f"{app.name}:slave", state.DEPRECATED_AGENT_RELATION)
     await machine_model.wait_for_idle(
         apps=[app.name], status="blocked", idle_period=30, timeout=1200, check_freq=5
     )
-
     yield app
 
 
@@ -300,7 +303,6 @@ async def machine_agent_related_app_fixture(
         apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5
     )
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
-
     yield application
 
 
@@ -318,7 +320,6 @@ async def machine_deprecated_agent_related_app_fixture(
     )
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
-
     yield application
 
 
@@ -332,9 +333,7 @@ def freeze_time_fixture() -> str:
 async def app_with_restart_time_range_fixture(application: Application):
     """Application with restart-time-range configured."""
     await application.set_config({"restart-time-range": "03-05"})
-
     yield application
-
     await application.reset_config(["restart-time-range"])
 
 
@@ -349,7 +348,7 @@ async def libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit) -> Unit:
 
 
 @pytest.fixture(scope="function", name="libfaketime_env")
-def libfaketime_env_fixture(freeze_time: str) -> typing.Iterable[str]:
+def libfaketime_env_fixture(freeze_time: str) -> Iterable[str]:
     """The environment variables for using libfaketime."""
     return (
         'LD_PRELOAD="/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1"',
@@ -358,7 +357,7 @@ def libfaketime_env_fixture(freeze_time: str) -> typing.Iterable[str]:
 
 
 @pytest.fixture(scope="function", name="update_status_env")
-def update_status_env_fixture(model: Model, unit: Unit) -> typing.Iterable[str]:
+def update_status_env_fixture(model: Model, unit: Unit) -> Iterable[str]:
     """The environment variables for executing Juju hooks."""
     return (
         "JUJU_DISPATCH_PATH=hooks/update-status",
@@ -443,36 +442,29 @@ async def tinyproxy_ip_fixture(
     spec: kubernetes.client.V1DaemonSetSpec = tiny_proxy_daemonset.spec
     template: kubernetes.client.V1PodTemplateSpec = spec.template
     metadata: kubernetes.client.V1ObjectMeta = template.metadata
-
     return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
 
 
 @pytest_asyncio.fixture(scope="module", name="model_with_proxy")
 async def model_with_proxy_fixture(
     model: Model, tinyproxy_ip: str, tinyproxy_port: int
-) -> typing.AsyncGenerator[Model, None]:
+) -> AsyncGenerator[Model, None]:
     """Model with proxy configuration values."""
     tinyproxy_url = f"http://{tinyproxy_ip}:{tinyproxy_port}"
     await model.set_config({"juju-http-proxy": tinyproxy_url, "juju-https-proxy": tinyproxy_url})
-
     yield model
-
     await model.set_config({"juju-http-proxy": "", "juju-https-proxy": ""})
 
 
 @pytest_asyncio.fixture(scope="module", name="jenkins_with_proxy")
 async def jenkins_with_proxy_fixture(
     model_with_proxy: Model, charm: str, ops_test: OpsTest, jenkins_image: str
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """Jenkins server charm deployed under model with proxy configuration."""
     resources = {"jenkins-image": jenkins_image}
-
     # Deploy the charm and wait for active/idle status
     application = await model_with_proxy.deploy(
-        charm,
-        resources=resources,
-        series="jammy",
-        application_name="jenkins-proxy-k8s",
+        charm, resources=resources, series="jammy", application_name="jenkins-proxy-k8s"
     )
     await model_with_proxy.wait_for_idle(
         apps=[application.name],
@@ -481,11 +473,9 @@ async def jenkins_with_proxy_fixture(
         timeout=20 * 60,
         idle_period=30,
     )
-
     # slow down update-status so that it doesn't intervene currently running tests
     async with ops_test.fast_forward(fast_interval="5h"):
         yield application
-
     await model_with_proxy.remove_application(application.name, block_until_done=True)
 
 
@@ -519,7 +509,6 @@ async def jenkins_with_proxy_client_fixture(
     action: Action = await jenkins_unit.run_action("get-admin-password")
     await action.wait()
     password = action.results["password"]
-
     # Initialization of the jenkins client will raise an exception if unable to connect to the
     # server.
     return jenkinsapi.jenkins.Jenkins(
@@ -530,23 +519,17 @@ async def jenkins_with_proxy_client_fixture(
 @pytest_asyncio.fixture(scope="function", name="app_with_allowed_plugins")
 async def app_with_allowed_plugins_fixture(
     application: Application,
-) -> typing.AsyncGenerator[Application, None]:
+) -> AsyncGenerator[Application, None]:
     """Jenkins charm with plugins configured."""
     await application.set_config({"allowed-plugins": ",".join(ALLOWED_PLUGINS)})
-
     yield application
-
     await application.reset_config(to_default=["allowed-plugins"])
 
 
 @pytest.fixture(scope="module", name="ldap_settings")
 def ldap_settings_fixture() -> LDAPSettings:
     """LDAP user for testing."""
-    return LDAPSettings(
-        container_port=1389,
-        username="customuser",
-        password=secrets.token_hex(16),
-    )
+    return LDAPSettings(container_port=1389, username="customuser", password=secrets.token_hex(16))
 
 
 @pytest_asyncio.fixture(scope="module", name="ldap_server")
@@ -596,7 +579,6 @@ async def ldap_server_ip_fixture(
     spec: kubernetes.client.V1DeploymentSpec = ldap_server.spec
     template: kubernetes.client.V1PodTemplateSpec = spec.template
     metadata: kubernetes.client.V1ObjectMeta = template.metadata
-
     return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
 
 
@@ -786,24 +768,126 @@ def external_hostname_fixture() -> str:
     return "juju.test"
 
 
-@pytest_asyncio.fixture(scope="module", name="ingress_related")
-async def ingress_application_related_fixture(application: Application, external_hostname: str):
+@pytest_asyncio.fixture(scope="module", name="traefik_application_and_unit_ip")
+async def traefik_application_fixture(model: Model):
     """The application related to Jenkins via ingress v2 relation."""
-    traefik = await application.model.deploy(
-        "traefik-k8s",
-        channel="1.0/stable",
-        trust=True,
-        config={"external_hostname": external_hostname},
+    traefik = await model.deploy(
+        "traefik-k8s", channel="edge", trust=True, config={"routing_mode": "path"}
     )
-    await application.model.wait_for_idle(
-        status="active", apps=[traefik.name], raise_on_error=False, timeout=30 * 60
+    await model.wait_for_idle(
+        status="active", apps=[traefik.name], timeout=20 * 60, idle_period=30, raise_on_error=False
     )
-    await application.model.add_relation(f"{application.name}:ingress", traefik.name)
+    status = await model.get_status(filters=[traefik.name])
+    unit = next(iter(status.applications[traefik.name].units))
+    traefik_address = status["applications"][traefik.name]["units"][unit]["address"]
+    return (traefik, traefik_address)
+
+
+@pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
+async def oathkeeper_application_related_fixture(
+    ops_test: OpsTest, application: Application, client: Client, ext_idp_service: str
+):
+    """The application related to Jenkins via auth_proxy v0 relation."""
+    oathkeeper = await application.model.deploy("oathkeeper", channel="edge", trust=True)
+    # Using a patched local bundle from identity team here as a temporary workaround for
+    # https://github.com/canonical/traefik-k8s-operator/issues/322 and
+    # https://github.com/juju/python-libjuju/issues/1042
+    await ops_test.run(
+        "juju", "deploy", "./tests/integration/files/identity-bundle-edge-patched.yaml", "--trust"
+    )
+    await application.model.applications["kratos-external-idp-integrator"].set_config(
+        {
+            "client_id": "client_id",
+            "client_secret": "client_secret",
+            "provider": "generic",
+            "issuer_url": ext_idp_service,
+            "scope": "profile email",
+            "provider_id": "Dex",
+        }
+    )
+
+    # See https://github.com/canonical/kratos-operator/issues/182
     await application.model.wait_for_idle(
         status="active",
-        apps=[traefik.name, application.name],
-        timeout=20 * 60,
-        idle_period=30,
+        apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
         raise_on_error=False,
+        timeout=30 * 60,
+        idle_period=5,
     )
-    return traefik
+
+    await application.model.add_relation(
+        f"{oathkeeper.name}:certificates", "self-signed-certificates"
+    )
+    await application.model.add_relation(
+        "traefik-public:receive-ca-cert", "self-signed-certificates"
+    )
+    await application.model.applications["traefik-public"].set_config(
+        {"enable_experimental_forward_auth": "True"}
+    )
+    await application.model.add_relation(
+        f"{oathkeeper.name}", "traefik-public:experimental-forward-auth"
+    )
+    await application.model.add_relation(f"{oathkeeper.name}:kratos-info", "kratos")
+    # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
+    await application.model.applications["kratos"].set_config({"dev": "True"})
+    await application.model.add_relation(f"{application.name}:ingress", "traefik-public")
+    await application.model.add_relation(f"{application.name}:auth-proxy", oathkeeper.name)
+
+    await application.model.wait_for_idle(
+        status="active",
+        apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
+        raise_on_error=False,
+        timeout=30 * 60,
+        idle_period=5,
+    )
+
+    get_redirect_uri_action = (
+        await application.model.applications["kratos-external-idp-integrator"]
+        .units[0]
+        .run_action("get-redirect-uri")
+    )
+    action_output = await get_redirect_uri_action.wait()
+    update_redirect_uri(client, action_output.results["redirect-uri"])
+    return oathkeeper
+
+
+@pytest.fixture(scope="session", name="client")
+def client_fixture() -> Client:
+    """k8s client."""
+    return Client(config=KubeConfig.from_file(KUBECONFIG), field_manager="dex-test")
+
+
+@pytest.fixture(scope="module", name="ext_idp_service")
+def ext_idp_service_fixture(ops_test: OpsTest, client: Client) -> Generator[str, None, None]:
+    """Deploy a DEX service on top of k8s for authentication."""
+    try:
+        create_dex_resources(client)
+        # We need to set the dex issuer_url to be the IP that was assigned to
+        # the dex service by metallb. We can't know that before hand, so we
+        # reapply the dex manifests.
+        apply_dex_resources(client)
+        yield get_dex_service_url(client)
+    finally:
+        if not ops_test.keep_model:
+            for obj in get_dex_manifest():
+                try:
+                    # mypy doesn't work well with lightkube
+                    client.delete(
+                        type(obj),
+                        obj.metadata.name,  # type: ignore
+                        namespace=obj.metadata.namespace,  # type: ignore
+                    )
+                except ApiError:
+                    pass
+
+
+@pytest.fixture()
+def external_user_email() -> str:
+    """Username for testing proxy authentication."""
+    return "admin@example.com"
+
+
+@pytest.fixture()
+def external_user_password() -> str:
+    """Password for testing proxy authentication."""
+    return "password"

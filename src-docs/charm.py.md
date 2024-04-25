@@ -5,14 +5,19 @@
 # <kbd>module</kbd> `charm.py`
 Charm Jenkins. 
 
+**Global Variables**
+---------------
+- **JENKINS_SERVICE_NAME**
+- **AGENT_DISCOVERY_INGRESS_RELATION_NAME**
+- **INGRESS_RELATION_NAME**
 
 
 ---
 
 ## <kbd>class</kbd> `JenkinsK8sOperatorCharm`
-Charm Jenkins. 
+Charmed Jenkins. 
 
-<a href="../src/charm.py#L36"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/charm.py#L39"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -72,5 +77,40 @@ Shortcut for more simple access the model.
 Unit that this execution is responsible for. 
 
 
+
+---
+
+<a href="../src/charm.py#L78"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `calculate_env`
+
+```python
+calculate_env() → Environment
+```
+
+Return a dictionary for Jenkins Pebble layer. 
+
+
+
+**Returns:**
+  The dictionary mapping of environment variables for the Jenkins service. 
+
+---
+
+<a href="../src/charm.py#L175"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `jenkins_set_storage_config`
+
+```python
+jenkins_set_storage_config(event: EventBase) → None
+```
+
+Correctly set permissions when storage is attached. 
+
+
+
+**Args:**
+ 
+ - <b>`event`</b>:  The event fired when the permission change is needed. 
 
 

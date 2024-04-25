@@ -1,21 +1,26 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 name: jenkins
 summary: Jenkins rock
 description: Jenkins OCI image for the Jenkins charm
 version: "1.0"
-base: ubuntu:22.04
-build-base: ubuntu:22.04
+base: ubuntu@22.04
+build-base: ubuntu@22.04
 license: Apache-2.0
 platforms:
   amd64:
 services:
   jenkins:
-    override: merge
-    summary: The Jenkins server.
-    command: java -Djava.awt.headless=true -jar /srv/jenkins/jenkins.war
+    override: replace
+    summary: jenkins
     startup: enabled
+    command: java -Djava.awt.headless=true -Djava.util.logging.config.file=/var/lib/jenkins/logging.properties -jar /srv/jenkins/jenkins.war
+    environment:
+      JENKINS_HOME: /var/lib/jenkins
+    user: jenkins
+    group: jenkins
+    
 parts:
   add-user:
     plugin: nil
@@ -40,7 +45,7 @@ parts:
       - default-jre-headless
       - git
     build-environment:
-      - JENKINS_VERSION: 2.414.1
+      - JENKINS_VERSION: 2.440.2
       - JENKINS_PLUGIN_MANAGER_VERSION: 2.12.13
     override-build: |
       mkdir -p ${CRAFT_PART_INSTALL}/{srv/jenkins/,etc/default/jenkins/}

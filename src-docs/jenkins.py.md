@@ -8,8 +8,8 @@ Functions to operate Jenkins.
 **Global Variables**
 ---------------
 - **WEB_PORT**
-- **WEB_URL**
-- **LOGIN_URL**
+- **LOGIN_PATH**
+- **JUJU_API_TOKEN**
 - **REQUIRED_PLUGINS**
 - **USER**
 - **GROUP**
@@ -18,6 +18,9 @@ Functions to operate Jenkins.
 - **WAR_DOWNLOAD_URL**
 - **SYSTEM_PROPERTY_HEADLESS**
 - **SYSTEM_PROPERTY_LOGGING**
+- **AUTH_PROXY_JENKINS_CONFIG**
+- **DEFAULT_JENKINS_CONFIG**
+- **JENKINS_LOGGING_CONFIG**
 - **PLUGIN_NAME_GROUP**
 - **WHITESPACE**
 - **VERSION_GROUP**
@@ -27,33 +30,7 @@ Functions to operate Jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L142"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>function</kbd> `wait_ready`
-
-```python
-wait_ready(timeout: int = 300, check_interval: int = 10) → None
-```
-
-Wait until Jenkins service is up. 
-
-
-
-**Args:**
- 
- - <b>`timeout`</b>:  Time in seconds to wait for jenkins to become ready in 10 second intervals. 
- - <b>`check_interval`</b>:  Time in seconds to wait between ready checks. 
-
-
-
-**Raises:**
- 
- - <b>`TimeoutError`</b>:  if Jenkins status check did not pass within the timeout duration. 
-
-
----
-
-<a href="../src/jenkins.py#L171"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L114"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_admin_credentials`
 
@@ -77,183 +54,75 @@ Retrieve admin credentials.
 
 ---
 
-<a href="../src/jenkins.py#L215"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L651"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-## <kbd>function</kbd> `calculate_env`
+## <kbd>function</kbd> `is_storage_ready`
 
 ```python
-calculate_env() → Environment
+is_storage_ready(container: Optional[Container]) → bool
 ```
 
-Return a dictionary for Jenkins Pebble layer. 
+Return whether the Jenkins home directory is mounted and owned by jenkins. 
+
+
+
+**Args:**
+ 
+ - <b>`container`</b>:  The Jenkins workload container. 
+
+
+
+**Raises:**
+ 
+ - <b>`StorageMountError`</b>:  if there was an error getting storage information. 
 
 
 
 **Returns:**
-  The dictionary mapping of environment variables for the Jenkins service. 
+ True if home directory is mounted and owned by jenkins, False otherwise. 
 
 
 ---
 
-<a href="../src/jenkins.py#L224"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L706"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-## <kbd>function</kbd> `get_version`
-
-```python
-get_version() → str
-```
-
-Get the Jenkins server version. 
-
-
-
-**Raises:**
- 
- - <b>`JenkinsError`</b>:  if Jenkins is unreachable. 
-
-
-
-**Returns:**
- The Jenkins server version. 
-
-
----
-
-<a href="../src/jenkins.py#L408"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>function</kbd> `bootstrap`
+## <kbd>function</kbd> `install_default_config`
 
 ```python
-bootstrap(container: Container, proxy_config: ProxyConfig | None = None) → None
+install_default_config(container: Container) → None
 ```
 
-Initialize and install Jenkins. 
+Install default jenkins-config.xml. 
 
 
 
 **Args:**
  
  - <b>`container`</b>:  The Jenkins workload container. 
- - <b>`proxy_config`</b>:  The Jenkins proxy configuration settings. 
-
-
-
-**Raises:**
- 
- - <b>`JenkinsBootstrapError`</b>:  if there was an error installing given plugins or required plugins. 
 
 
 ---
 
-<a href="../src/jenkins.py#L446"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L715"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
-## <kbd>function</kbd> `get_node_secret`
+## <kbd>function</kbd> `install_auth_proxy_config`
 
 ```python
-get_node_secret(node_name: str, container: Container) → str
+install_auth_proxy_config(container: Container) → None
 ```
 
-Get node secret from jenkins. 
+Install jenkins-config.xml for auth_proxy. 
 
 
 
 **Args:**
  
- - <b>`node_name`</b>:  The registered node to fetch the secret from. 
  - <b>`container`</b>:  The Jenkins workload container. 
 
 
-
-**Returns:**
- The Jenkins agent node secret. 
-
-
-
-**Raises:**
- 
- - <b>`JenkinsError`</b>:  if an error occurred running groovy script getting the node secret. 
-
-
 ---
 
-<a href="../src/jenkins.py#L469"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>function</kbd> `add_agent_node`
-
-```python
-add_agent_node(agent_meta: AgentMeta, container: Container) → None
-```
-
-Add a Jenkins agent node. 
-
-
-
-**Args:**
- 
- - <b>`agent_meta`</b>:  The Jenkins agent metadata to create the node from. 
- - <b>`container`</b>:  The Jenkins workload container. 
-
-
-
-**Raises:**
- 
- - <b>`JenkinsError`</b>:  if an error occurred running groovy script creating the node. 
-
-
----
-
-<a href="../src/jenkins.py#L494"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>function</kbd> `remove_agent_node`
-
-```python
-remove_agent_node(agent_name: str, container: Container) → None
-```
-
-Remove a Jenkins agent node. 
-
-
-
-**Args:**
- 
- - <b>`agent_name`</b>:  The agent node name to remove. 
- - <b>`container`</b>:  The Jenkins workload container. 
-
-
-
-**Raises:**
- 
- - <b>`JenkinsError`</b>:  if an error occurred running groovy script removing the node. 
-
-
----
-
-<a href="../src/jenkins.py#L547"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>function</kbd> `safe_restart`
-
-```python
-safe_restart(container: Container) → None
-```
-
-Safely restart Jenkins server after all jobs are done executing. 
-
-
-
-**Args:**
- 
- - <b>`container`</b>:  The Jenkins workload container to interact with filesystem. 
-
-
-
-**Raises:**
- 
- - <b>`JenkinsError`</b>:  if there was an API error calling safe restart. 
-
-
----
-
-<a href="../src/jenkins.py#L572"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L818"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
@@ -273,67 +142,6 @@ Infer agent name from unit name.
 
 **Returns:**
  The agent node name registered on Jenkins server. 
-
-
----
-
-<a href="../src/jenkins.py#L720"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>function</kbd> `remove_unlisted_plugins`
-
-```python
-remove_unlisted_plugins(
-    plugins: Optional[Iterable[str]],
-    container: Container
-) → None
-```
-
-Remove plugins that are not in the list of desired plugins. 
-
-
-
-**Args:**
- 
- - <b>`plugins`</b>:  The list of plugins that can be installed. 
- - <b>`container`</b>:  The workload container. 
-
-
-
-**Raises:**
- 
- - <b>`JenkinsPluginError`</b>:  if there was an error removing unlisted plugin. 
- - <b>`JenkinsError`</b>:  if there was an error restarting Jenkins after removing the plugin. 
- - <b>`TimeoutError`</b>:  if it took too long to restart Jenkins after removing the plugin. 
-
-
----
-
-<a href="../src/jenkins.py#L810"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
-
-## <kbd>function</kbd> `rotate_credentials`
-
-```python
-rotate_credentials(container: Container) → str
-```
-
-Invalidate all Jenkins sessions and create new password for admin account. 
-
-
-
-**Args:**
- 
- - <b>`container`</b>:  The workload container. 
-
-
-
-**Raises:**
- 
- - <b>`JenkinsError`</b>:  if any error happened running the groovy script to invalidate sessions. 
-
-
-
-**Returns:**
- The new generated password. 
 
 
 ---
@@ -362,9 +170,288 @@ Dictionary mapping of Jenkins environment variables.
 **Attributes:**
  
  - <b>`JENKINS_HOME`</b>:  The Jenkins home directory. 
+ - <b>`JENKINS_PREFIX`</b>:  The prefix in which Jenkins will be accessible. 
 
 
 
+
+
+---
+
+## <kbd>class</kbd> `Jenkins`
+Wrapper for Jenkins functionality. 
+
+Attrs:  environment: the Jenkins environment configuration.  web_url: the Jenkins web URL.  login_url: the Jenkins login URL.  version: the Jenkins version. 
+
+<a href="../src/jenkins.py#L160"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `__init__`
+
+```python
+__init__(environment: Environment)
+```
+
+Construct a Jenkins class. 
+
+
+
+**Args:**
+ 
+ - <b>`environment`</b>:  the Jenkins environment. 
+
+
+---
+
+#### <kbd>property</kbd> login_url
+
+Get the Jenkins login URL. 
+
+Returns: the login URL. 
+
+---
+
+#### <kbd>property</kbd> version
+
+Get the Jenkins server version. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsError`</b>:  if Jenkins is unreachable. 
+
+
+
+**Returns:**
+ The Jenkins server version. 
+
+---
+
+#### <kbd>property</kbd> web_url
+
+Get the Jenkins web URL. 
+
+Returns: the web URL. 
+
+
+
+---
+
+<a href="../src/jenkins.py#L396"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `add_agent_node`
+
+```python
+add_agent_node(agent_meta: AgentMeta, container: Container) → None
+```
+
+Add a Jenkins agent node. 
+
+
+
+**Args:**
+ 
+ - <b>`agent_meta`</b>:  The Jenkins agent metadata to create the node from. 
+ - <b>`container`</b>:  The Jenkins workload container. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsError`</b>:  if an error occurred running groovy script creating the node. 
+
+---
+
+<a href="../src/jenkins.py#L313"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `bootstrap`
+
+```python
+bootstrap(
+    container: Container,
+    jenkins_config_file: str,
+    proxy_config: ProxyConfig | None = None
+) → None
+```
+
+Initialize and install Jenkins. 
+
+
+
+**Args:**
+ 
+ - <b>`container`</b>:  The Jenkins workload container. 
+ - <b>`jenkins_config_file`</b>:  the path to the Jenkins configuration file to install. 
+ - <b>`proxy_config`</b>:  The Jenkins proxy configuration settings. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsBootstrapError`</b>:  if there was an error installing the plugins plugins. 
+
+---
+
+<a href="../src/jenkins.py#L338"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `get_node_secret`
+
+```python
+get_node_secret(node_name: str, container: Container) → str
+```
+
+Get node secret from jenkins. 
+
+
+
+**Args:**
+ 
+ - <b>`node_name`</b>:  The registered node to fetch the secret from. 
+ - <b>`container`</b>:  The Jenkins workload container. 
+
+
+
+**Returns:**
+ The Jenkins agent node secret. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsError`</b>:  if an error occurred running groovy script getting the node secret. 
+
+---
+
+<a href="../src/jenkins.py#L416"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `remove_agent_node`
+
+```python
+remove_agent_node(agent_name: str, container: Container) → None
+```
+
+Remove a Jenkins agent node. 
+
+
+
+**Args:**
+ 
+ - <b>`agent_name`</b>:  The agent node name to remove. 
+ - <b>`container`</b>:  The Jenkins workload container. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsError`</b>:  if an error occurred running groovy script removing the node. 
+
+---
+
+<a href="../src/jenkins.py#L546"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `remove_unlisted_plugins`
+
+```python
+remove_unlisted_plugins(
+    plugins: Optional[Iterable[str]],
+    container: Container
+) → None
+```
+
+Remove plugins that are not in the list of desired plugins. 
+
+
+
+**Args:**
+ 
+ - <b>`plugins`</b>:  The list of plugins that can be installed. 
+ - <b>`container`</b>:  The workload container. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsPluginError`</b>:  if there was an error removing unlisted plugin or there are plugins  currently being installed. 
+ - <b>`JenkinsError`</b>:  if there was an error restarting Jenkins after removing the plugin. 
+ - <b>`TimeoutError`</b>:  if it took too long to restart Jenkins after removing the plugin. 
+
+---
+
+<a href="../src/jenkins.py#L518"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `rotate_credentials`
+
+```python
+rotate_credentials(container: Container) → str
+```
+
+Invalidate all Jenkins sessions and create new password for admin account. 
+
+
+
+**Args:**
+ 
+ - <b>`container`</b>:  The workload container. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsError`</b>:  if any error happened running the groovy script to invalidate sessions. 
+
+
+
+**Returns:**
+ The new generated password. 
+
+---
+
+<a href="../src/jenkins.py#L464"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `safe_restart`
+
+```python
+safe_restart(container: Container) → None
+```
+
+Safely restart Jenkins server after all jobs are done executing. 
+
+
+
+**Args:**
+ 
+ - <b>`container`</b>:  The Jenkins workload container to interact with filesystem. 
+
+
+
+**Raises:**
+ 
+ - <b>`JenkinsError`</b>:  if there was an API error calling safe restart. 
+
+---
+
+<a href="../src/jenkins.py#L212"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `wait_ready`
+
+```python
+wait_ready(timeout: int = 300, check_interval: int = 10) → None
+```
+
+Wait until Jenkins service is up. 
+
+
+
+**Args:**
+ 
+ - <b>`timeout`</b>:  Time in seconds to wait for jenkins to become ready in 10 second intervals. 
+ - <b>`check_interval`</b>:  Time in seconds to wait between ready checks. 
+
+
+
+**Raises:**
+ 
+ - <b>`TimeoutError`</b>:  if Jenkins status check did not pass within the timeout duration. 
 
 
 ---
@@ -387,15 +474,6 @@ Base exception for Jenkins errors.
 
 ---
 
-## <kbd>class</kbd> `JenkinsNetworkError`
-An error occurred communicating with the upstream Jenkins server. 
-
-
-
-
-
----
-
 ## <kbd>class</kbd> `JenkinsPluginError`
 An error occurred installing Jenkins plugin. 
 
@@ -405,26 +483,30 @@ An error occurred installing Jenkins plugin.
 
 ---
 
-## <kbd>class</kbd> `JenkinsProxyError`
-An error occurred configuring Jenkins proxy. 
+## <kbd>class</kbd> `StorageMountError`
+Represents an error probing for Jenkins storage mount. 
 
 
 
+**Attributes:**
+ 
+ - <b>`msg`</b>:  Explanation of the error. 
+
+<a href="../src/jenkins.py#L642"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+### <kbd>function</kbd> `__init__`
+
+```python
+__init__(msg: str)
+```
+
+Initialize a new instance of the StorageMountError exception. 
 
 
----
 
-## <kbd>class</kbd> `JenkinsRestartError`
-An error occurred trying to restart Jenkins. 
-
-
-
-
-
----
-
-## <kbd>class</kbd> `JenkinsUpdateError`
-An error occurred trying to update Jenkins. 
+**Args:**
+ 
+ - <b>`msg`</b>:  Explanation of the error. 
 
 
 

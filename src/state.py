@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Jenkins States."""
@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 AGENT_RELATION = "agent"
 DEPRECATED_AGENT_RELATION = "agent-deprecated"
+AUTH_PROXY_RELATION = "auth-proxy"
+JENKINS_SERVICE_NAME = "jenkins"
+JENKINS_HOME_STORAGE_NAME = "jenkins-home"
 
 
 class CharmStateBaseError(Exception):
@@ -183,6 +186,19 @@ def _get_agent_meta_map_from_relation(
     return unit_metadata_mapping
 
 
+def _is_auth_proxy_integrated(relation: typing.Optional[ops.Relation]) -> bool:
+    """Check if there is an auth proxy integration..
+
+    Args:
+        relation: The auth-proxy relation.
+
+    Returns:
+        True if an integration for atuh proxy exists.
+    """
+    # No relation data is written by the provider, so checking the existence suffices.
+    return bool(relation)
+
+
 class ProxyConfig(BaseModel):
     """Configuration for accessing Jenkins through proxy.
 
@@ -225,7 +241,8 @@ class State:
             deprecated agent relation.
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
-        jenkins_service_name: The Jenkins service name. Note that the container name is the same.
+        auth_proxy_integrated: if an auth proxy integrated has been set.
+
     """
 
     restart_time_range: typing.Optional[Range]
@@ -235,7 +252,7 @@ class State:
     ]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
-    jenkins_service_name: str = "jenkins"
+    auth_proxy_integrated: bool
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -252,17 +269,15 @@ class State:
             CharmRelationDataInvalidError: if invalid relation data was received.
             CharmIllegalNumUnitsError: if more than 1 unit of Jenkins charm is deployed.
         """
-        time_range_str = charm.config.get("restart-time-range")
-        if time_range_str:
-            try:
+        try:
+            time_range_str = charm.config.get("restart-time-range")
+            if time_range_str:
                 restart_time_range = Range.from_str(time_range_str)
-            except InvalidTimeRangeError as exc:
-                logger.error("Invalid config value for restart-time-range, %s", exc)
-                raise CharmConfigInvalidError(
-                    "Invalid config value for restart-time-range."
-                ) from exc
-        else:
-            restart_time_range = None
+            else:
+                restart_time_range = None
+        except InvalidTimeRangeError as exc:
+            logger.error("Invalid config value for restart-time-range, %s", exc)
+            raise CharmConfigInvalidError("Invalid config value for restart-time range.") from exc
 
         try:
             agent_relation_meta_map = _get_agent_meta_map_from_relation(
@@ -270,6 +285,9 @@ class State:
             )
             deprecated_agent_meta_map = _get_agent_meta_map_from_relation(
                 charm.model.relations[DEPRECATED_AGENT_RELATION], charm.app.name
+            )
+            is_auth_proxy_integrated = _is_auth_proxy_integrated(
+                charm.model.get_relation(AUTH_PROXY_RELATION)
             )
         except ValidationError as exc:
             logger.error("Invalid agent relation data received, %s", exc)
@@ -297,4 +315,5 @@ class State:
             deprecated_agent_relation_meta=deprecated_agent_meta_map,
             plugins=plugins,
             proxy_config=proxy_config,
+            auth_proxy_integrated=is_auth_proxy_integrated,
         )

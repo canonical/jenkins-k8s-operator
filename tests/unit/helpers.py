@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Helper functions used to unit test Jenkins charm."""
@@ -10,6 +10,7 @@ import requests
 ACTIVE_STATUS_NAME = "active"
 BLOCKED_STATUS_NAME = "blocked"
 MAINTENANCE_STATUS_NAME = "maintenance"
+WAITING_STATUS_NAME = "waiting"
 
 
 # There aren't enough public methods with this patch class.

@@ -1,8 +1,10 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Helpers for Jenkins-k8s-operator charm integration tests."""
 import inspect
+import logging
+import secrets
 import textwrap
 import time
 import typing
@@ -10,63 +12,73 @@ import typing
 import jenkinsapi.jenkins
 import kubernetes.client
 import requests
+from juju.application import Application
 from juju.model import Model
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
 import jenkins
 
+from .types_ import UnitWebClient
+
+logger = logging.getLogger(__name__)
+
 
 async def install_plugins(
-    ops_test: OpsTest,
-    unit: Unit,
-    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    unit_web_client: UnitWebClient,
     plugins: typing.Iterable[str],
 ) -> None:
     """Install plugins to Jenkins unit.
 
     Args:
-        ops_test: The Ops testing fixture.
-        unit: The Jenkins unit to install plugins to.
-        jenkins_client: The Jenkins client of given unit.
+        unit_web_client: The wrapper around unit, web_address and jenkins_client.
         plugins: Desired plugins to install.
     """
-    plugins = tuple(plugin for plugin in plugins if not jenkins_client.has_plugin(plugin))
+    unit, web, client = unit_web_client.unit, unit_web_client.web, unit_web_client.client
+    plugins = tuple(plugin for plugin in plugins if not client.has_plugin(plugin))
     if not plugins:
         return
 
-    returncode, stdout, stderr = await ops_test.juju(
-        "ssh",
-        "--container",
-        "jenkins",
-        unit.name,
-        "java",
-        "-jar",
-        f"{jenkins.EXECUTABLES_PATH / 'jenkins-plugin-manager-2.12.13.jar'}",
-        "-w",
-        f"{jenkins.EXECUTABLES_PATH / 'jenkins.war'}",
-        "-d",
-        str(jenkins.PLUGINS_PATH),
-        "-p",
-        " ".join(plugins),
+    post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
+    post_data["dynamic_load"] = ""
+    res = client.requester.post_url(f"{web}/manage/pluginManager/install", data=post_data)
+    assert res.status_code == 200, "Failed to request plugins install"
+
+    # block until the UI does not have "Pending" in download progress column.
+    await unit.model.block_until(
+        lambda: "Pending"
+        not in str(
+            client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
+            encoding="utf-8",
+        ),
+        timeout=60 * 10,
+        wait_period=10,
     )
-    assert (
-        not returncode
-    ), f"Non-zero return code {returncode} received, stdout: {stdout} stderr: {stderr}"
-    # When there are connectivity issues it retries with other mirrors/links which the output gets
-    # printed in stderr and if not it prints in stdout.
-    assert any(
-        ("Done" in stdout, "Done" in stderr)
-    ), f"Failed to install plugins via juju ssh, {stdout}, {stderr}"
 
     # the library will return 503 or other status codes that are not 200, hence restart and
     # wait rather than check for status code.
-    jenkins_client.safe_restart()
+    client.safe_restart()
     await unit.model.block_until(
-        lambda: requests.get(jenkins_client.baseurl, timeout=10).status_code == 403,
-        timeout=300,
+        lambda: requests.get(web, timeout=10).status_code == 403,
+        timeout=60 * 10,
         wait_period=10,
     )
+
+
+async def get_model_jenkins_unit_address(model: Model, app_name: str):
+    """Extract the address of a given unit.
+
+    Args:
+        model: Juju model
+        app_name: Juju application name
+
+    Returns:
+        the IP address of the Jenkins unit.
+    """
+    status = await model.get_status()
+    unit = list(status.applications[app_name].units)[0]
+    address = status["applications"][app_name]["units"][unit]["address"]
+    return address
 
 
 def gen_test_job_xml(node_label: str):
@@ -257,6 +269,54 @@ async def wait_for(
     raise TimeoutError()
 
 
+async def generate_jenkins_client_from_application(
+    ops_test: OpsTest, jenkins_app: Application, address: str
+):
+    """Generate a Jenkins client directly from the Juju application.
+
+    Args:
+        ops_test: OpsTest framework
+        jenkins_app: Juju Jenkins-k8s application.
+        address: IP address of the jenkins unit.
+
+    Returns:
+        A Jenkins web client.
+    """
+    jenkins_unit = jenkins_app.units[0]
+    ret, api_token, stderr = await ops_test.juju(
+        "ssh",
+        "--container",
+        "jenkins",
+        jenkins_unit.name,
+        "cat",
+        str(jenkins.API_TOKEN_PATH),
+    )
+    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
+    return jenkinsapi.jenkins.Jenkins(address, "admin", api_token, timeout=60)
+
+
+async def generate_unit_web_client_from_application(
+    ops_test: OpsTest, model: Model, jenkins_app: Application
+) -> UnitWebClient:
+    """Generate a UnitWebClient client directly from the Juju application.
+
+    Args:
+        ops_test: OpsTest framework
+        model: Juju model
+        jenkins_app: Juju Jenkins-k8s application.
+
+    Returns:
+        A Jenkins web client.
+    """
+    assert model
+    unit_ip = await get_model_jenkins_unit_address(model, jenkins_app.name)
+    address = f"http://{unit_ip}:8080"
+    jenkins_unit = jenkins_app.units[0]
+    jenkins_client = await generate_jenkins_client_from_application(ops_test, jenkins_app, address)
+    unit_web_client = UnitWebClient(unit=jenkins_unit, web=address, client=jenkins_client)
+    return unit_web_client
+
+
 def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Unit]) -> Unit | None:
     """Get the jenkins unit that has run the latest job.
 
@@ -273,3 +333,197 @@ def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Uni
         if unit.name.replace("/", "-") == invoked_agent:
             return unit
     return None
+
+
+def gen_test_pipeline_with_custom_script_xml(script: str) -> str:
+    """Generate a job xml with custom pipeline script.
+
+    Args:
+        script: Custom pipeline script.
+
+    Returns:
+        The job XML.
+    """
+    return textwrap.dedent(
+        f"""
+        <flow-definition plugin="workflow-job@1385.vb_58b_86ea_fff1">
+            <actions/>
+            <description></description>
+            <keepDependencies>false</keepDependencies>
+            <properties/>
+            <definition
+                class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition"
+                plugin="workflow-cps@3837.v305192405b_c0">
+                <script>{script}</script>
+                <sandbox>true</sandbox>
+            </definition>
+            <triggers/>
+            <disabled>false</disabled>
+        </flow-definition>
+        """
+    )
+
+
+def kubernetes_test_pipeline_script() -> str:
+    """Generate a test pipeline script using the kubernetes plugin.
+
+    Return:
+        The pipeline script
+    """
+    return textwrap.dedent(
+        """
+        podTemplate(yaml: '''
+            apiVersion: v1
+            kind: Pod
+            metadata:
+            labels:
+                some-label: some-label-value
+            spec:
+            containers:
+            - name: httpd
+              image: httpd
+              command:
+              - sleep
+              args:
+              - 99d
+              tty: true
+        ''') {
+        node(POD_LABEL) {
+            stage('Integration Test') {
+            sh '''#!/bin/bash
+                hostname
+            '''
+            }
+        }
+        }"""
+    )
+
+
+def declarative_pipeline_script() -> str:
+    """Generate a declarative pipeline script.
+
+    Return:
+        The pipeline script
+    """
+    return textwrap.dedent(
+        """
+        pipeline {
+            agent any
+
+            stages {
+                stage('Integration Test') {
+                    steps {
+                        sh'''#!/bin/bash
+                            echo "$(hostname) $(date) : Running in $(pwd)"
+                        '''
+                    }
+                }
+            }
+        }"""
+    )
+
+
+def create_secret_file_credentials(
+    unit_web_client: UnitWebClient, kube_config: str
+) -> typing.Optional[str]:
+    """Use the jenkins client to create a new secretfile credential.
+    plain-credentials plugin is required.
+
+    Args:
+        unit_web_client: Client for Jenkins's remote access API.
+        kube_config: path to the kube_config file.
+
+    Returns:
+        The id of the created credential, or None in case of error.
+    """
+    url = f"{unit_web_client.web}/credentials/store/system/domain/_/createCredentials"
+    credentials_id = f"kube-config-{secrets.token_hex(4)}"
+    payload = {
+        "json": f"""{{
+            "": "4",
+            "credentials": {{
+                "file": "file0",
+                "id": "{credentials_id}",
+                "description": "Created by API",
+                "stapler-class": "org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl",
+                "$class": "org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl",
+            }},
+        }}"""
+    }
+
+    accept_header = (
+        "text/html,"
+        "application/xhtml+xml,"
+        "application/xml;q=0.9,"
+        "image/avif,image/webp,"
+        "image/apng,"
+        "*/*;q=0.8,"
+        "application/signed-exchange;v=b3;q=0.9'"
+    )
+    headers = {
+        "Accept": accept_header,
+    }
+
+    with open(kube_config, "rb") as kube_config_file:
+        files = [("file0", ("config", kube_config_file, "application/octet-stream"))]
+        logger.debug("Creating jenkins credentials, params: %s %s %s", headers, files, payload)
+        res = unit_web_client.client.requester.post_url(
+            url=url, headers=headers, data=payload, files=files, timeout=30
+        )
+        logger.debug("Credential created, %s", res.status_code)
+        return credentials_id if res.status_code == 200 else None
+
+
+def create_kubernetes_cloud(
+    unit_web_client: UnitWebClient, kube_config_credentials_id: str
+) -> typing.Optional[str]:
+    """Use the Jenkins client to add a Kubernetes cloud.
+    For dynamic agent provisioning through pods.
+
+    Args:
+        unit_web_client: Client for Jenkins's remote access API.
+        kube_config_credentials_id: credential id stored in jenkins.
+
+    Returns:
+        The created kubernetes cloud name or None in case of error.
+    """
+    kubernetes_test_cloud_name = "kubernetes"
+
+    url = f"{unit_web_client.web}/manage/cloud/doCreate"
+
+    payload = {
+        "name": kubernetes_test_cloud_name,
+        "type": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
+        "json": f"""
+        {{
+            "name": "{kubernetes_test_cloud_name}",
+            "credentialsId": "{kube_config_credentials_id}",
+            "jenkinsUrl": "{unit_web_client.web}",
+            "type": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
+            "webSocket":true,
+            "Submit": "",
+        }}""",
+        "webSocket": True,
+        "Submit": '""',
+    }
+    accept_header = (
+        "text/html,"
+        "application/xhtml+xml,"
+        "application/xml;q=0.9,"
+        "image/avif,"
+        "image/webp,"
+        "image/apng,"
+        "*/*;q=0.8,"
+        "application/signed-exchange;v=b3;q=0.7"
+    )
+    headers = {
+        "Accept": accept_header,
+    }
+
+    logger.debug("Creating jenkins kubernets cloud, params: %s %s", headers, payload)
+    res = unit_web_client.client.requester.post_url(
+        url=url, headers=headers, data=payload, timeout=30
+    )
+    logger.debug("Cloud created, %s", res.status_code)
+
+    return kubernetes_test_cloud_name if res.status_code == 200 else None

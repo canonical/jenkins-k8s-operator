@@ -1,9 +1,9 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Jenkins-k8s time range module tests."""
 
-import unittest.mock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -79,7 +79,7 @@ def test_restart_time_range_check_now(
     act: when check_now is called.
     assert: expected value returning whether now is within time range is returned.
     """
-    mock_datetime = unittest.mock.MagicMock(spec=timerange.datetime)
+    mock_datetime = MagicMock(spec=timerange.datetime)
     test_time = timerange.datetime(2023, 1, 1, patch_hour)
     mock_datetime.utcnow.return_value = test_time
     monkeypatch.setattr(timerange, "datetime", mock_datetime)
