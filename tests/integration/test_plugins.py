@@ -330,18 +330,24 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     """
     await install_plugins(unit_web_client, ("thinBackup",))
     backup_path = "/srv/jenkins/backup/"
-    res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/manage/thinBackup/saveSettings",
-        data={
-            "backupPath": backup_path,
-            "fullBackupSchedule": "",
-            "diffBackupSchedule": "",
-            "nrMaxStoredFull": -1,
-            "excludedFilesRegex": "",
-            "forceQuietModeTimeout": 120,
-            "failFast": "on",
-            "Submit": "",
+    payload = {
+        "jenkins-model-MasterBuildConfiguration": {
+            "numExecutors": "0",
         },
+        "jenkins-model-GlobalQuietPeriodConfiguration": {"quietPeriod": "5"},
+        "jenkins-model-GlobalSCMRetryCountConfiguration": {"scmCheckoutRetryCount": "0"},
+        "org-jvnet-hudson-plugins-thinbackup-ThinBackupPluginImpl": {
+            "backupPath": backup_path,
+        },
+    }
+    res = unit_web_client.client.requester.post_url(
+        f"{unit_web_client.web}/configSubmit",
+        data=[
+            (
+                "json",
+                json.dumps(payload),
+            ),
+        ],
     )
     res.raise_for_status()
     res = unit_web_client.client.requester.get_url(
