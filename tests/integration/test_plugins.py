@@ -350,7 +350,7 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
         ],
     )
     res.raise_for_status()
-    res = unit_web_client.client.requester.get_url(
+    res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/thinBackup/backupManual"
     )
     res.raise_for_status()
