@@ -355,11 +355,20 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     )
     res.raise_for_status()
 
-    ret, stdout, stderr = await ops_test.juju(
-        "ssh", "--container", "jenkins", unit_web_client.unit.name, "ls", backup_path
-    )
-    assert ret == 0, f"Failed to ls backup path, {stderr}"
-    assert "FULL" in stdout, "The backup folder of format FULL-<backup-date> not found."
+    async def has_backup():
+        """Get whether the backup is created.
+
+        The backup folder of format FULL-<backup-date> should be created.
+        """
+        ret, stdout, stderr = await ops_test.juju(
+            "ssh", "--container", "jenkins", unit_web_client.unit.name, "ls", backup_path
+        )
+        logger.info(
+            "Run backup path ls result: code: %s stdout: %s, stderr: %s", ret, stdout, stderr
+        )
+        return ret == 0 and "FULL" in stdout
+
+    await wait_for(has_backup)
 
 
 async def test_bzr_plugin(unit_web_client: UnitWebClient):
