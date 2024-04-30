@@ -36,7 +36,7 @@ bash /backup.sh
 ```
 2. Retrieve the compressed backup file
 ```bash
-juju scp --container jenkins jenkins-k8s/0:/backup/jenkins_backup.tar.gz jenkins_backup.tar.gz
+juju scp --container jenkins jenkins-k8s/0:/jenkins_backup.tar.gz jenkins_backup.tar.gz
 ```
 3. With the data backed-up, we can remove the jenkins-k8s application.
 ```bash
