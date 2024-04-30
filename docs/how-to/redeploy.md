@@ -14,5 +14,6 @@ See the `Migrate Jenkins data` section below.
 ```bash
 juju remove-application jenkins-k8s
 ```
+
 ### Migrate Jenkins data
-Follow the instructions in [the charm's documentation for resizing storage](https://charmhub.io/jenkins-k8s/docs/how-to-resize-jenkins-storage) to migrate to the new Jenkins charm instance.
+Follow the instructions in [the charm's documentation for resizing storage](https://charmhub.io/jenkins-k8s/docs/how-to-resize-jenkins-storage) to migrate the data to the new Jenkins charm instance.
