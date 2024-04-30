@@ -355,10 +355,13 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     )
     res.raise_for_status()
 
-    async def has_backup():
+    async def has_backup() -> bool:
         """Get whether the backup is created.
 
         The backup folder of format FULL-<backup-date> should be created.
+
+        Returns:
+            Whether the backup file has successfully been created.
         """
         ret, stdout, stderr = await ops_test.juju(
             "ssh", "--container", "jenkins", unit_web_client.unit.name, "ls", backup_path
