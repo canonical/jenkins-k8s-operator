@@ -18,7 +18,7 @@ Observer module for Jenkins to auth_proxy integration.
 ## <kbd>class</kbd> `Observer`
 The Jenkins Auth Proxy integration observer. 
 
-<a href="../src/auth_proxy.py#L27"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/auth_proxy.py#L31"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 

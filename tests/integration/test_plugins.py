@@ -330,30 +330,48 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     """
     await install_plugins(unit_web_client, ("thinBackup",))
     backup_path = "/srv/jenkins/backup/"
-    res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/manage/thinBackup/saveSettings",
-        data={
-            "backupPath": backup_path,
-            "fullBackupSchedule": "",
-            "diffBackupSchedule": "",
-            "nrMaxStoredFull": -1,
-            "excludedFilesRegex": "",
-            "forceQuietModeTimeout": 120,
-            "failFast": "on",
-            "Submit": "",
+    payload = {
+        "jenkins-model-MasterBuildConfiguration": {
+            "numExecutors": "0",
         },
+        "jenkins-model-GlobalQuietPeriodConfiguration": {"quietPeriod": "5"},
+        "jenkins-model-GlobalSCMRetryCountConfiguration": {"scmCheckoutRetryCount": "0"},
+        "org-jvnet-hudson-plugins-thinbackup-ThinBackupPluginImpl": {
+            "backupPath": backup_path,
+        },
+    }
+    res = unit_web_client.client.requester.post_url(
+        f"{unit_web_client.web}/configSubmit",
+        data=[
+            (
+                "json",
+                json.dumps(payload),
+            ),
+        ],
     )
     res.raise_for_status()
-    res = unit_web_client.client.requester.get_url(
+    res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/thinBackup/backupManual"
     )
     res.raise_for_status()
 
-    ret, stdout, stderr = await ops_test.juju(
-        "ssh", "--container", "jenkins", unit_web_client.unit.name, "ls", backup_path
-    )
-    assert ret == 0, f"Failed to ls backup path, {stderr}"
-    assert "FULL" in stdout, "The backup folder of format FULL-<backup-date> not found."
+    async def has_backup() -> bool:
+        """Get whether the backup is created.
+
+        The backup folder of format FULL-<backup-date> should be created.
+
+        Returns:
+            Whether the backup file has successfully been created.
+        """
+        ret, stdout, stderr = await ops_test.juju(
+            "ssh", "--container", "jenkins", unit_web_client.unit.name, "ls", backup_path
+        )
+        logger.info(
+            "Run backup path ls result: code: %s stdout: %s, stderr: %s", ret, stdout, stderr
+        )
+        return ret == 0 and "FULL" in stdout
+
+    await wait_for(has_backup)
 
 
 async def test_bzr_plugin(unit_web_client: UnitWebClient):

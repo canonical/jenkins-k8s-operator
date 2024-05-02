@@ -19,7 +19,8 @@ Pebble functionality.
 replan_jenkins(
     container: Container,
     jenkins_instance: Jenkins,
-    state: State
+    state: State,
+    disable_security: bool = False
 ) → None
 ```
 
@@ -32,6 +33,7 @@ Replan the jenkins services.
  - <b>`container`</b>:  the container for with to replan the services. 
  - <b>`jenkins_instance`</b>:  the Jenkins instance. 
  - <b>`state`</b>:  the charm state. 
+ - <b>`disable_security`</b>:  whether to replan with security disabled. 
 
 
 
