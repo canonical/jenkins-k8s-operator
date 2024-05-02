@@ -18,7 +18,6 @@ export JENKINS_BACKUP=/mnt/backup
 echo "running backup as \$(whoami) in \$(pwd)"
 mkdir -p \$JENKINS_BACKUP
 cp \$JENKINS_HOME/secrets/master.key \$JENKINS_BACKUP
-cp -r \$JENKINS_HOME/*.xml \$JENKINS_BACKUP
 cp -r \$JENKINS_HOME/jobs \$JENKINS_BACKUP
 cp -r \$JENKINS_HOME/builds \$JENKINS_BACKUP
 cp -r \$JENKINS_HOME/workspace \$JENKINS_BACKUP
@@ -59,8 +58,8 @@ juju deploy jenkins-k8s --storage jenkins-home=10GB
 JENKINS_UNIT=jenkins-k8s/0
 juju scp --container jenkins ./jenkins_backup.tar.gz $JENKINS_UNIT:/jenkins_backup.tar.gz
 juju ssh --container jenkins $JENKINS_UNIT tar zxvf jenkins_backup.tar.gz
-juju ssh --container jenkins $JENKINS_UNIT chown -R 2000:2000 /backup
-juju ssh --container jenkins $JENKINS_UNIT cp -R /backup/* /var/lib/jenkins
+juju ssh --container jenkins $JENKINS_UNIT chown -R jenkins:jenkins /backup
+juju ssh --container jenkins $JENKINS_UNIT cp -avR /backup/* /var/lib/jenkins
 juju ssh --container jenkins $JENKINS_UNIT rm -rf /backup /jenkins_backup.tar.gz
 ```
 3. Finally restart pebble
