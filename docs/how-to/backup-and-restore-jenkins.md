@@ -19,7 +19,6 @@ export JENKINS_BACKUP=/mnt/backup
 echo "running backup as \$(whoami) in \$(pwd)"
 mkdir -p \$JENKINS_BACKUP
 cp \$JENKINS_HOME/secrets/master.key \$JENKINS_BACKUP
-cp -r \$JENKINS_HOME/*.xml \$JENKINS_BACKUP
 cp -r \$JENKINS_HOME/jobs \$JENKINS_BACKUP
 cp -r \$JENKINS_HOME/builds \$JENKINS_BACKUP
 cp -r \$JENKINS_HOME/workspace \$JENKINS_BACKUP
@@ -27,7 +26,7 @@ mkdir -p \$JENKINS_BACKUP/plugins
 cp -r \$JENKINS_HOME/plugins/*.hpi \$JENKINS_BACKUP/plugins
 cp -r \$JENKINS_HOME/plugins/*.jpi \$JENKINS_BACKUP/plugins
 
-chown -R 2000:2000 $JENKINS_BACKUP
+chown -R 2000:2000 \$JENKINS_BACKUP
 tar zcvf jenkins_backup.tar.gz --directory=/mnt backup
 EOF
 
