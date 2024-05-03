@@ -1,5 +1,5 @@
 # External access
-The Jenkins charm requires access to the following domains to install Jenkins and its plugin:
+The Jenkins charm requires access to the following domains to install Jenkins and its plugins:
 
 * `jenkins-ci.org`
 * `updates.jenkins-ci.org`
