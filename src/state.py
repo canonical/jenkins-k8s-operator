@@ -270,7 +270,7 @@ class State:
             CharmIllegalNumUnitsError: if more than 1 unit of Jenkins charm is deployed.
         """
         try:
-            time_range_str = charm.config.get("restart-time-range")
+            time_range_str = typing.cast(str, charm.config.get("restart-time-range"))
             if time_range_str:
                 restart_time_range = Range.from_str(time_range_str)
             else:
@@ -301,7 +301,7 @@ class State:
             logger.error("Invalid juju model proxy configuration, %s", exc)
             raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
 
-        plugins_str = charm.config.get("allowed-plugins")
+        plugins_str = typing.cast(str, charm.config.get("allowed-plugins"))
         plugins = (plugin.strip() for plugin in plugins_str.split(",")) if plugins_str else None
 
         if charm.app.planned_units() > 1:
