@@ -17,18 +17,6 @@ from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, JENKINS_SERVICE_NAM
 logger = logging.getLogger(__name__)
 
 
-class AgentRelationData(typing.TypedDict):
-    """Relation data required for adding the Jenkins agent.
-
-    Attributes:
-        url: The Jenkins server url.
-        secret: The secret for agent node.
-    """
-
-    url: str
-    secret: str
-
-
 class Observer(ops.Object):
     """The Jenkins agent relation observer.
 
@@ -146,9 +134,7 @@ class Observer(ops.Object):
             return
 
         jenkins_url = self.agent_discovery_url
-        event.relation.data[self.model.unit].update(
-            AgentRelationData(url=jenkins_url, secret=secret)
-        )
+        event.relation.data[self.model.unit].update({"url": jenkins_url, "secret": secret})
         self.charm.unit.status = ops.ActiveStatus()
 
     def _on_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
