@@ -80,12 +80,11 @@ def num_units_fixture(request: FixtureRequest) -> int:
 @pytest_asyncio.fixture(scope="module", name="charm")
 async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
     """The path to charm."""
-    charm = request.config.getoption("--charm-file")
-    if not charm:
-        charm = await ops_test.build_charm(".")
+    charms = request.config.getoption("--charm-file")
+    if not charms:
+        return await ops_test.build_charm(".")
     else:
-        charm = f"./{charm}"
-    return charm
+        return charms[0]
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
