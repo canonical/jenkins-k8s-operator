@@ -171,6 +171,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         if not jenkins.is_storage_ready(container):
             self.jenkins_set_storage_config(event)
+        # Update the agent discovery address.
+        # Updating the secret is not required since it's calculated using the agent's node name.
+        self.agent_observer.reconfigure_agent_discovery(event)
 
     def jenkins_set_storage_config(self, event: ops.framework.EventBase) -> None:
         """Correctly set permissions when storage is attached.
