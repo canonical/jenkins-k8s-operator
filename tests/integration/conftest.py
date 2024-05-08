@@ -86,8 +86,7 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Pat
         charm = await ops_test.build_charm(".")
         assert charm, "Charm not built"
         return charm
-    else:
-        return charms[0]
+    return charms[0]
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
