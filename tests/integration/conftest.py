@@ -7,6 +7,7 @@ import os
 import random
 import secrets
 import string
+from pathlib import Path
 from typing import AsyncGenerator, Generator, Iterable, Optional
 
 import jenkinsapi.jenkins
@@ -78,14 +79,14 @@ def num_units_fixture(request: FixtureRequest) -> int:
 
 
 @pytest_asyncio.fixture(scope="module", name="charm")
-async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str:
+async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Path:
     """The path to charm."""
-    charm = request.config.getoption("--charm-file")
-    if not charm:
+    charms = request.config.getoption("--charm-file")
+    if not charms:
         charm = await ops_test.build_charm(".")
-    else:
-        charm = f"./{charm}"
-    return charm
+        assert charm, "Charm not built"
+        return charm
+    return charms[0]
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
