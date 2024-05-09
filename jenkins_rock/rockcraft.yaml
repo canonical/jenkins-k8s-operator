@@ -28,7 +28,7 @@ parts:
       mkdir -p $CRAFT_OVERLAY/var
       chmod 755 $CRAFT_OVERLAY/var
       groupadd -R $CRAFT_OVERLAY --gid 2000 jenkins
-      useradd -R $CRAFT_OVERLAY --system --gid 2000 --uid 2000 --home /srv/jenkins jenkins
+      useradd -R $CRAFT_OVERLAY --system --gid 2000 --uid 2000 --home /var/lib/jenkins jenkins
   jenkins:
     plugin: nil
     build-packages:
