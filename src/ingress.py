@@ -31,7 +31,7 @@ class Observer(ops.Object):
         )
 
     def get_path(self) -> str:
-        """Return the path in whick Jenkins is expected to be listening.
+        """Return the path in which Jenkins is expected to be listening.
 
         Returns:
             the path for the ingress URL.
