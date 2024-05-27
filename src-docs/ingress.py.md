@@ -49,7 +49,7 @@ Shortcut for more simple access the model.
 get_path() → str
 ```
 
-Return the path in whick Jenkins is expected to be listening. 
+Return the path in which Jenkins is expected to be listening. 
 
 
 
