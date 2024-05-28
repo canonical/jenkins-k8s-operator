@@ -14,22 +14,6 @@ The Jenkins agent relation observer.
 
 ---
 
-## <kbd>class</kbd> `AgentRelationData`
-Relation data required for adding the Jenkins agent. 
-
-
-
-**Attributes:**
- 
- - <b>`url`</b>:  The Jenkins server url. 
- - <b>`secret`</b>:  The secret for agent node. 
-
-
-
-
-
----
-
 ## <kbd>class</kbd> `Observer`
 The Jenkins agent relation observer. 
 
@@ -39,7 +23,7 @@ The Jenkins agent relation observer.
  
  - <b>`agent_discovery_url`</b>:  external hostname to be passed to agents for discovery. 
 
-<a href="../src/agent.py#L39"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/agent.py#L27"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `__init__`
 
@@ -87,7 +71,7 @@ Shortcut for more simple access the model.
 
 ---
 
-<a href="../src/agent.py#L248"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/agent.py#L234"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ### <kbd>function</kbd> `reconfigure_agent_discovery`
 
