@@ -26,7 +26,7 @@ mkdir -p \$JENKINS_BACKUP/plugins
 cp -r \$JENKINS_HOME/plugins/*.hpi \$JENKINS_BACKUP/plugins
 cp -r \$JENKINS_HOME/plugins/*.jpi \$JENKINS_BACKUP/plugins
 
-chown -R 2000:2000\$JENKINS_BACKUP
+chown -R 2000:2000 \$JENKINS_BACKUP
 tar zcvf jenkins_backup.tar.gz --directory=/mnt backup
 EOF
 
