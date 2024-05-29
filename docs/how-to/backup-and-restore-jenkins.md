@@ -51,8 +51,8 @@ You now have the compressed Jenkins data on your host system.
 JENKINS_UNIT=jenkins-k8s/0
 juju scp --container jenkins ./jenkins_backup.tar.gz $JENKINS_UNIT:/jenkins_backup.tar.gz
 juju ssh --container jenkins $JENKINS_UNIT tar zxvf jenkins_backup.tar.gz
-juju ssh --container jenkins $JENKINS_UNIT chown -R 2000:2000 /backup
-juju ssh --container jenkins $JENKINS_UNIT cp -aR /backup/* /var/lib/jenkins
+juju ssh --container jenkins $JENKINS_UNIT chown -R jenkins:jenkins /backup
+juju ssh --container jenkins $JENKINS_UNIT cp -avR /backup/* /var/lib/jenkins
 juju ssh --container jenkins $JENKINS_UNIT rm -rf /backup /jenkins_backup.tar.gz
 ```
 2. Restart pebble for the changes to take effect
