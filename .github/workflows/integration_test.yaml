@@ -21,7 +21,7 @@ jobs:
       self-hosted-runner-label: "xlarge"
       microk8s-addons: "dns ingress rbac storage metallb:10.15.119.2-10.15.119.4 registry"
 
-  integration-tests2.9:
+  integration-tests-juju-29:
     uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
