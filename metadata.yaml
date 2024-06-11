@@ -4,6 +4,7 @@
 name: jenkins-k8s
 assumes:
   - k8s-api
+  - juju >= 2.9
 display-name: Jenkins K8s
 summary: Jenkins Continuous Integration Server
 maintainers:
