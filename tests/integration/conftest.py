@@ -15,6 +15,7 @@ import kubernetes.config
 import kubernetes.stream
 import pytest
 import pytest_asyncio
+import requests
 from juju.action import Action
 from juju.application import Application
 from juju.client._definitions import FullStatus, UnitStatus
@@ -36,7 +37,7 @@ from .dex import (
     get_dex_service_url,
     update_redirect_uri,
 )
-from .helpers import generate_jenkins_client_from_application, get_pod_ip
+from .helpers import generate_jenkins_client_from_application, get_pod_ip, wait_for
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
@@ -525,6 +526,12 @@ async def app_with_allowed_plugins_fixture(
     await application.set_config({"allowed-plugins": ",".join(ALLOWED_PLUGINS)})
     yield application
     await application.reset_config(to_default=["allowed-plugins"])
+
+
+@pytest_asyncio.fixture(scope="function", name="wait_jenkins_ready", autouse=True)
+async def wait_jenkins_ready_fixture(unit_web_client: UnitWebClient):
+    """Wait until Jenkins can start handling requests."""
+    await wait_for(lambda: requests.get(unit_web_client.web).ok)
 
 
 @pytest.fixture(scope="module", name="ldap_settings")

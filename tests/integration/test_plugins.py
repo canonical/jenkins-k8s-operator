@@ -3,6 +3,7 @@
 
 """Integration tests for jenkins-k8s-operator charm."""
 
+import functools
 import json
 import logging
 import typing
@@ -39,7 +40,7 @@ async def test_plugins_remove_delay(
     """
     arrange: given a Jenkins with plugins being installed through UI.
     act: when update_status_hook is fired.
-    assert: the plugin removal is delayed warning is logged until plugin installation is settled.
+    assert: the plugin removal delayed warning is logged until plugin installation is settled.
     """
     post_data = {f"plugin.{plugin}.default": "on" for plugin in ALLOWED_PLUGINS}
     post_data["dynamic_load"] = ""
@@ -580,10 +581,14 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
     """
     # Use plain credentials to be able to create secret-file/secret-text credentials
     await install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
-    credentials_id = create_secret_file_credentials(unit_web_client, kube_config)
-    assert credentials_id
-    kubernetes_cloud_name = create_kubernetes_cloud(unit_web_client, credentials_id)
-    assert kubernetes_cloud_name
+    credentials_id = await wait_for(
+        functools.partial(create_secret_file_credentials, unit_web_client, kube_config)
+    )
+    assert credentials_id, "Failed to create credentials id"
+    kubernetes_cloud_name = await wait_for(
+        functools.partial(create_kubernetes_cloud, unit_web_client, credentials_id)
+    )
+    assert kubernetes_cloud_name, "Failed to create kubernetes cloud"
     job = unit_web_client.client.create_job(
         "kubernetes_plugin_test",
         gen_test_pipeline_with_custom_script_xml(kubernetes_test_pipeline_script()),
@@ -599,7 +604,7 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
     assert build.get_status() == "SUCCESS"
 
 
-@pytest.mark.usefixtures("k8s_agent_related_app")
+@pytest.mark.usefixtures("k8s_agent_related_app", "wait_jenkins_ready")
 async def test_pipeline_model_definition_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with declarative pipeline plugin installed.
