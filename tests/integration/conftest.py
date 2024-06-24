@@ -528,12 +528,6 @@ async def app_with_allowed_plugins_fixture(
     await application.reset_config(to_default=["allowed-plugins"])
 
 
-@pytest_asyncio.fixture(scope="function", name="wait_jenkins_ready")
-async def wait_jenkins_ready_fixture(unit_web_client: UnitWebClient):
-    """Wait until Jenkins can start handling requests."""
-    await wait_for(lambda: requests.get(unit_web_client.web).ok)
-
-
 @pytest.fixture(scope="module", name="ldap_settings")
 def ldap_settings_fixture() -> LDAPSettings:
     """LDAP user for testing."""

@@ -33,7 +33,7 @@ from .types_ import KeycloakOIDCMetadata, LDAPSettings, UnitWebClient
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.usefixtures("app_with_allowed_plugins", "wait_jenkins_ready")
+@pytest.mark.usefixtures("app_with_allowed_plugins")
 async def test_plugins_remove_delay(
     ops_test: OpsTest, update_status_env: typing.Iterable[str], unit_web_client: UnitWebClient
 ):
@@ -95,7 +95,7 @@ async def test_plugins_remove_delay(
     )
 
 
-@pytest.mark.usefixtures("app_with_allowed_plugins", "wait_jenkins_ready")
+@pytest.mark.usefixtures("app_with_allowed_plugins")
 async def test_jenkins_plugins_config(
     ops_test: OpsTest,
     unit_web_client: UnitWebClient,
@@ -128,7 +128,7 @@ async def test_jenkins_plugins_config(
     assert all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
 
 
-@pytest.mark.usefixtures("k8s_agent_related_app", "wait_jenkins_ready")
+@pytest.mark.usefixtures("k8s_agent_related_app")
 async def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
     """
     arrange: given a jenkins charm with git plugin installed.
@@ -153,7 +153,7 @@ async def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
     ) == "<div/>", f"Non-empty error message returned, {check_url_content}"
 
 
-@pytest.mark.usefixtures("app_with_allowed_plugins", "wait_jenkins_ready")
+@pytest.mark.usefixtures("app_with_allowed_plugins")
 async def test_ldap_plugin(
     unit_web_client: UnitWebClient,
     ldap_server_ip: str,
@@ -221,7 +221,7 @@ async def test_ldap_plugin(
     ), f"User lookup unsuccessful, {res.content}"
 
 
-@pytest.mark.usefixtures("app_with_allowed_plugins", "wait_jenkins_ready")
+@pytest.mark.usefixtures("app_with_allowed_plugins")
 async def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a jenkins server with matrix-combinations-parameter plugin installed.
@@ -255,7 +255,7 @@ async def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClie
     ), f"Configuration matrix table not found, {test_page}"
 
 
-@pytest.mark.usefixtures("k8s_agent_related_app", "wait_jenkins_ready")
+@pytest.mark.usefixtures("k8s_agent_related_app")
 async def test_postbuildscript_plugin(
     ops_test: OpsTest, unit_web_client: UnitWebClient, jenkins_k8s_agents: Application
 ):
@@ -289,7 +289,6 @@ async def test_postbuildscript_plugin(
     assert stdout == test_output
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 async def test_ssh_agent_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given jenkins charm with ssh_agent plugin installed.
@@ -307,7 +306,6 @@ async def test_ssh_agent_plugin(unit_web_client: UnitWebClient):
     assert "SSH Agent" in config_page, f"SSH agent configuration not found. {config_page}"
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 async def test_blueocean_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a jenkins charm with blueocean plugin installed.
@@ -325,7 +323,6 @@ async def test_blueocean_plugin(unit_web_client: UnitWebClient):
     ), f"Failed to access Blueocean frontend, {str(res.content, encoding='utf-8')}"
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with thinbackup plugin installed and backup configured.
@@ -378,7 +375,6 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     await wait_for(has_backup)
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 async def test_bzr_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with bazaar plugin installed.
@@ -396,7 +392,6 @@ async def test_bzr_plugin(unit_web_client: UnitWebClient):
     assert "Bazaar" in config_page, f"Bzr configuration option not found. {config_page}"
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with docker-build-publish plugin installed.
@@ -414,7 +409,6 @@ async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
     ), f"docker-build-publish configuration option not found. {config_page}"
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with reverse-proxy-auth-plugin plugin installed.
@@ -433,7 +427,6 @@ async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
     ), f"reverse-proxy-auth-plugin configuration option not found. {config_page}"
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with dependency-check-jenkins-plugin plugin installed.
@@ -456,7 +449,6 @@ async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
     ), f"Dependency check tool configuration option not found. {tools_page}"
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with pipeline-groovy-lib plugin installed.
@@ -472,7 +464,6 @@ async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
     ), f"Groovy libs configuration option not found. {config_page}"
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 @pytest.mark.usefixtures("k8s_agent_related_app")
 async def test_rebuilder_plugin(unit_web_client: UnitWebClient):
     """
@@ -494,7 +485,6 @@ async def test_rebuilder_plugin(unit_web_client: UnitWebClient):
     assert job.get_last_buildnumber() == 2, "Rebuild not triggered."
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 async def test_openid_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with openid plugin installed.
@@ -512,7 +502,6 @@ async def test_openid_plugin(unit_web_client: UnitWebClient):
     assert res.status_code == 200, "Failed to validate openid endpoint using the plugin."
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 async def test_openid_connect_plugin(
     unit_web_client: UnitWebClient,
     keycloak_oidc_meta: KeycloakOIDCMetadata,
@@ -584,7 +573,6 @@ async def test_openid_connect_plugin(
     assert res.status_code == 200, "Failed to load Jenkins native login UI."
 
 
-@pytest.mark.usefixtures("wait_jenkins_ready")
 async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: str):
     """
     arrange: given a Jenkins charm with kubernetes plugin installed and credentials from microk8s.
@@ -616,7 +604,7 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
     assert build.get_status() == "SUCCESS"
 
 
-@pytest.mark.usefixtures("k8s_agent_related_app", "wait_jenkins_ready")
+@pytest.mark.usefixtures("k8s_agent_related_app")
 async def test_pipeline_model_definition_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with declarative pipeline plugin installed.
