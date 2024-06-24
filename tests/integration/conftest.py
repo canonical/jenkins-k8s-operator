@@ -15,7 +15,6 @@ import kubernetes.config
 import kubernetes.stream
 import pytest
 import pytest_asyncio
-import requests
 from juju.action import Action
 from juju.application import Application
 from juju.client._definitions import FullStatus, UnitStatus
@@ -37,7 +36,7 @@ from .dex import (
     get_dex_service_url,
     update_redirect_uri,
 )
-from .helpers import generate_jenkins_client_from_application, get_pod_ip, wait_for
+from .helpers import generate_jenkins_client_from_application, get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
