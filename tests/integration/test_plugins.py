@@ -45,7 +45,7 @@ async def test_plugins_remove_delay(
     post_data = {f"plugin.{plugin}.default": "on" for plugin in ALLOWED_PLUGINS}
     post_data["dynamic_load"] = ""
 
-    def install_plugins() -> bool:
+    def _install_plugins_via_web_api() -> bool:
         """Install plugins via pluginManager API.
 
         Returns:
@@ -60,7 +60,7 @@ async def test_plugins_remove_delay(
             logger.exception("Failed to post plugin installations.")
             return False
 
-    await wait_for(install_plugins)
+    await wait_for(_install_plugins_via_web_api)
 
     async def has_temp_files():
         """Check if tempfiles exist in Jenkins plugins directory.
