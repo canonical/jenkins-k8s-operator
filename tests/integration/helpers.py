@@ -12,6 +12,7 @@ import typing
 import jenkinsapi.jenkins
 import kubernetes.client
 import requests
+import tenacity
 from juju.application import Application
 from juju.model import Model
 from juju.unit import Unit
@@ -24,6 +25,11 @@ from .types_ import UnitWebClient
 logger = logging.getLogger(__name__)
 
 
+@tenacity.retry(
+    wait=tenacity.wait_exponential(multiplier=2, max=60),
+    reraise=True,
+    stop=tenacity.stop_after_attempt(5),
+)
 async def install_plugins(
     unit_web_client: UnitWebClient,
     plugins: typing.Iterable[str],

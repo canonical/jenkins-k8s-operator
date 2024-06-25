@@ -44,10 +44,23 @@ async def test_plugins_remove_delay(
     """
     post_data = {f"plugin.{plugin}.default": "on" for plugin in ALLOWED_PLUGINS}
     post_data["dynamic_load"] = ""
-    res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/manage/pluginManager/install", data=post_data
-    )
-    assert res.status_code == 200, "Failed to request plugins install"
+
+    def install_plugins() -> bool:
+        """Install plugins via pluginManager API.
+
+        Returns:
+            Whether the plugin installation request has succeeded.
+        """
+        try:
+            res = unit_web_client.client.requester.post_url(
+                f"{unit_web_client.web}/manage/pluginManager/install", data=post_data
+            )
+            return res.ok
+        except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError):
+            logger.exception("Failed to post plugin installations.")
+            return False
+
+    await wait_for(install_plugins)
 
     async def has_temp_files():
         """Check if tempfiles exist in Jenkins plugins directory.
@@ -459,8 +472,10 @@ async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
     res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configure")
 
     config_page = str(res.content, "utf-8")
+    # The string is now "Global Trusted Pipeline Libraries" and
+    # "Global Untrusted Pipeline Libraries" for v727.ve832a_9244dfa_
     assert (
-        "Global Pipeline Libraries" in config_page
+        "Pipeline Libraries" in config_page
     ), f"Groovy libs configuration option not found. {config_page}"
 
 
