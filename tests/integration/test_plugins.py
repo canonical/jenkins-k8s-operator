@@ -11,6 +11,7 @@ import typing
 import jenkinsapi.plugin
 import pytest
 import requests
+import urllib3.exceptions
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
@@ -56,7 +57,7 @@ async def test_plugins_remove_delay(
                 f"{unit_web_client.web}/manage/pluginManager/install", data=post_data
             )
             return res.ok
-        except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError):
+        except (requests.exceptions.RequestException, urllib3.exceptions.HTTPError):
             logger.exception("Failed to post plugin installations.")
             return False
 

@@ -15,6 +15,7 @@ import kubernetes.config
 import kubernetes.stream
 import pytest
 import pytest_asyncio
+import requests
 from juju.action import Action
 from juju.application import Application
 from juju.client._definitions import FullStatus, UnitStatus
@@ -519,10 +520,17 @@ async def jenkins_with_proxy_client_fixture(
 
 @pytest_asyncio.fixture(scope="function", name="app_with_allowed_plugins")
 async def app_with_allowed_plugins_fixture(
-    application: Application,
+    application: Application, web_address: str
 ) -> AsyncGenerator[Application, None]:
     """Jenkins charm with plugins configured."""
     await application.set_config({"allowed-plugins": ",".join(ALLOWED_PLUGINS)})
+    model: Model = application.model
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+    await model.block_until(
+        lambda: requests.get(web_address, timeout=10).status_code == 403,
+        timeout=60 * 10,
+        wait_period=10,
+    )
     yield application
     await application.reset_config(to_default=["allowed-plugins"])
 
