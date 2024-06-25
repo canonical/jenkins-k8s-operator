@@ -456,18 +456,8 @@ def create_secret_file_credentials(
             }},
         }}"""
     }
-
-    accept_header = (
-        "text/html,"
-        "application/xhtml+xml,"
-        "application/xml;q=0.9,"
-        "image/avif,image/webp,"
-        "image/apng,"
-        "*/*;q=0.8,"
-        "application/signed-exchange;v=b3;q=0.9'"
-    )
     headers = {
-        "Accept": accept_header,
+        "Accept": "*/*",
     }
 
     with open(kube_config, "rb") as kube_config_file:
@@ -528,7 +518,7 @@ def create_kubernetes_cloud(
 
     logger.debug("Creating jenkins kubernets cloud, params: %s %s", headers, payload)
     res = unit_web_client.client.requester.post_url(
-        url=url, headers=headers, data=payload, timeout=30
+        url=url, headers=headers, data=payload, timeout=60 * 5
     )
     logger.debug("Cloud created, %s", res.status_code)
 
