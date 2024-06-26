@@ -489,7 +489,7 @@ def create_kubernetes_cloud(
 
     payload = {
         "name": kubernetes_test_cloud_name,
-        "type": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
+        "cloudDescriptorName": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
         "json": f"""
         {{
             "name": "{kubernetes_test_cloud_name}",
