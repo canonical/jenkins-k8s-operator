@@ -12,6 +12,7 @@ import typing
 import jenkinsapi.jenkins
 import kubernetes.client
 import requests
+import tenacity
 from juju.application import Application
 from juju.model import Model
 from juju.unit import Unit
@@ -24,6 +25,11 @@ from .types_ import UnitWebClient
 logger = logging.getLogger(__name__)
 
 
+@tenacity.retry(
+    wait=tenacity.wait_exponential(multiplier=2, max=60),
+    reraise=True,
+    stop=tenacity.stop_after_attempt(5),
+)
 async def install_plugins(
     unit_web_client: UnitWebClient,
     plugins: typing.Iterable[str],
@@ -450,18 +456,8 @@ def create_secret_file_credentials(
             }},
         }}"""
     }
-
-    accept_header = (
-        "text/html,"
-        "application/xhtml+xml,"
-        "application/xml;q=0.9,"
-        "image/avif,image/webp,"
-        "image/apng,"
-        "*/*;q=0.8,"
-        "application/signed-exchange;v=b3;q=0.9'"
-    )
     headers = {
-        "Accept": accept_header,
+        "Accept": "*/*",
     }
 
     with open(kube_config, "rb") as kube_config_file:
@@ -493,7 +489,7 @@ def create_kubernetes_cloud(
 
     payload = {
         "name": kubernetes_test_cloud_name,
-        "type": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
+        "cloudDescriptorName": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
         "json": f"""
         {{
             "name": "{kubernetes_test_cloud_name}",
@@ -522,7 +518,7 @@ def create_kubernetes_cloud(
 
     logger.debug("Creating jenkins kubernets cloud, params: %s %s", headers, payload)
     res = unit_web_client.client.requester.post_url(
-        url=url, headers=headers, data=payload, timeout=30
+        url=url, headers=headers, data=payload, timeout=60 * 5
     )
     logger.debug("Cloud created, %s", res.status_code)
 
