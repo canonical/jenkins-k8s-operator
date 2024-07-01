@@ -88,7 +88,7 @@ async def test_loki_integration(
                 log_files_exist,
                 unit.address,
                 application.name,
-                ("/var/lib/jenkins/jenkins.log",),
+                ("/var/lib/jenkins/logs/jenkins.log",),
             ),
             timeout=10 * 60,
         )

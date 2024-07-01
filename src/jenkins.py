@@ -50,7 +50,7 @@ PLUGINS_PATH = JENKINS_HOME_PATH / "plugins"
 # The Jenkins logging configuration path
 LOGGING_CONFIG_PATH = JENKINS_HOME_PATH / "logging.properties"
 # The Jenkins logging path as defined in templates/logging.properties file
-LOGGING_PATH = JENKINS_HOME_PATH / "jenkins.log"
+LOGGING_PATH = JENKINS_HOME_PATH / "logs/jenkins.log"
 # The plugins that are required for Jenkins to work
 REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server

@@ -32,7 +32,7 @@ _Interface_: loki_push_api
 _Supported charms_: [loki-k8s](https://charmhub.io/loki-k8s)
 
 Logging relation provides a way to scrape logs produced from the Jenkins server charm. The Jenkins 
-server logs are stored at `/var/lib/jenkins/jenkins.log`. These logs are the same logs as the logs 
+server logs are stored at `/var/lib/jenkins/logs/jenkins.log`. These logs are the same logs as the logs 
 emitted to the standard output. A promtail worker is spawned and will periodically push logs to
 Loki.
 
