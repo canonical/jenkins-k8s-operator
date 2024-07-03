@@ -3,6 +3,7 @@
 
 """Integration tests for jenkins-k8s-operator charm."""
 
+import functools
 import json
 import logging
 import typing
@@ -10,6 +11,7 @@ import typing
 import jenkinsapi.plugin
 import pytest
 import requests
+import urllib3.exceptions
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
@@ -39,14 +41,27 @@ async def test_plugins_remove_delay(
     """
     arrange: given a Jenkins with plugins being installed through UI.
     act: when update_status_hook is fired.
-    assert: the plugin removal is delayed warning is logged until plugin installation is settled.
+    assert: the plugin removal delayed warning is logged until plugin installation is settled.
     """
     post_data = {f"plugin.{plugin}.default": "on" for plugin in ALLOWED_PLUGINS}
     post_data["dynamic_load"] = ""
-    res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/manage/pluginManager/install", data=post_data
-    )
-    assert res.status_code == 200, "Failed to request plugins install"
+
+    def _install_plugins_via_web_api() -> bool:
+        """Install plugins via pluginManager API.
+
+        Returns:
+            Whether the plugin installation request has succeeded.
+        """
+        try:
+            res = unit_web_client.client.requester.post_url(
+                f"{unit_web_client.web}/manage/pluginManager/install", data=post_data
+            )
+            return res.ok
+        except (requests.exceptions.RequestException, urllib3.exceptions.HTTPError):
+            logger.exception("Failed to post plugin installations.")
+            return False
+
+    await wait_for(_install_plugins_via_web_api)
 
     async def has_temp_files():
         """Check if tempfiles exist in Jenkins plugins directory.
@@ -458,8 +473,10 @@ async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
     res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configure")
 
     config_page = str(res.content, "utf-8")
+    # The string is now "Global Trusted Pipeline Libraries" and
+    # "Global Untrusted Pipeline Libraries" for v727.ve832a_9244dfa_
     assert (
-        "Global Pipeline Libraries" in config_page
+        "Pipeline Libraries" in config_page
     ), f"Groovy libs configuration option not found. {config_page}"
 
 
@@ -580,10 +597,14 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
     """
     # Use plain credentials to be able to create secret-file/secret-text credentials
     await install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
-    credentials_id = create_secret_file_credentials(unit_web_client, kube_config)
-    assert credentials_id
-    kubernetes_cloud_name = create_kubernetes_cloud(unit_web_client, credentials_id)
-    assert kubernetes_cloud_name
+    credentials_id = await wait_for(
+        functools.partial(create_secret_file_credentials, unit_web_client, kube_config)
+    )
+    assert credentials_id, "Failed to create credentials id"
+    kubernetes_cloud_name = await wait_for(
+        functools.partial(create_kubernetes_cloud, unit_web_client, credentials_id)
+    )
+    assert kubernetes_cloud_name, "Failed to create kubernetes cloud"
     job = unit_web_client.client.create_job(
         "kubernetes_plugin_test",
         gen_test_pipeline_with_custom_script_xml(kubernetes_test_pipeline_script()),
