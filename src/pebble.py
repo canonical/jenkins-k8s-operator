@@ -34,6 +34,7 @@ def replan_jenkins(
     Raises:
         JenkinsBootstrapError: if an error occurs while bootstrapping Jenkins.
     """
+    jenkins.install_logging_config(container=container)
     container.add_layer("jenkins", _get_pebble_layer(jenkins_instance), combine=True)
     container.replan()
     try:

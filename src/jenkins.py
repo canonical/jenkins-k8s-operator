@@ -740,7 +740,6 @@ def _install_configs(container: ops.Container, jenkins_config_file: str) -> None
         jenkins_config_file: the path to the Jenkins configuration file to install.
     """
     _install_config(container, jenkins_config_file, CONFIG_FILE_PATH)
-    _install_config(container, JENKINS_LOGGING_CONFIG, LOGGING_CONFIG_PATH)
 
 
 def install_default_config(container: ops.Container) -> None:
@@ -759,6 +758,16 @@ def install_auth_proxy_config(container: ops.Container) -> None:
         container: The Jenkins workload container.
     """
     _install_config(container, AUTH_PROXY_JENKINS_CONFIG, CONFIG_FILE_PATH)
+
+
+def install_logging_config(container: ops.Container) -> None:
+    """Install logging config.
+
+    Args:
+        container: The Jenkins workload container.
+    """
+    container.make_dir(LOGGING_PATH.parent, make_parents=True, user=USER, group=GROUP)
+    _install_config(container, JENKINS_LOGGING_CONFIG, LOGGING_CONFIG_PATH)
 
 
 def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
