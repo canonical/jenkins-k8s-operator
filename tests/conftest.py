@@ -12,6 +12,7 @@ def pytest_addoption(parser: pytest.Parser):
     Args:
         parser: pytest command line parser.
     """
+    print("hello world")
     # The prebuilt charm file.
     parser.addoption("--charm-file", action="append", default=[])
     # The Jenkins image name:tag.
