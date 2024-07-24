@@ -5,7 +5,9 @@ type: charm
 parts:
   charm:
     build-packages:
-      - rust-all  # for cryptography
+      # for building requests dependency in rust
+      - libssl-dev
+      - rust-all
     prime:
       - templates/jenkins-auth-proxy-config.xml
       - templates/jenkins-config.xml
