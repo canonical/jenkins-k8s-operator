@@ -84,7 +84,7 @@ Return whether the Jenkins home directory is mounted and owned by jenkins.
 
 ---
 
-<a href="../src/jenkins.py#L746"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L745"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `install_default_config`
 
@@ -103,7 +103,7 @@ Install default jenkins-config.xml.
 
 ---
 
-<a href="../src/jenkins.py#L755"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L754"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `install_auth_proxy_config`
 
@@ -122,7 +122,26 @@ Install jenkins-config.xml for auth_proxy.
 
 ---
 
-<a href="../src/jenkins.py#L858"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+<a href="../src/jenkins.py#L763"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
+
+## <kbd>function</kbd> `install_logging_config`
+
+```python
+install_logging_config(container: Container) → None
+```
+
+Install logging config. 
+
+
+
+**Args:**
+ 
+ - <b>`container`</b>:  The Jenkins workload container. 
+
+
+---
+
+<a href="../src/jenkins.py#L867"><img align="right" style="float:right;" src="https://img.shields.io/badge/-source-cccccc?style=flat-square"></a>
 
 ## <kbd>function</kbd> `get_agent_name`
 
