@@ -19,7 +19,7 @@ from .types_ import HarnessWithContainer
 
 def test_replan_jenkins_pebble_error(
     harness_container: HarnessWithContainer,
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    mocked_get_request: typing.Callable[..., requests.Response],
     monkeypatch: pytest.MonkeyPatch,
 ):
     """

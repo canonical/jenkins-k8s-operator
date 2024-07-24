@@ -4,6 +4,7 @@
 """Integration tests for jenkins-k8s-operator with COS."""
 
 import functools
+import logging
 import typing
 
 import pytest
@@ -16,6 +17,8 @@ from kubernetes.client import CoreV1Api
 
 from .helpers import wait_for
 from .types_ import UnitWebClient
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.abort_on_fail
@@ -56,6 +59,7 @@ def log_files_exist(
     """
     series = requests.get(f"http://{unit_address}:3100/loki/api/v1/series", timeout=10).json()
     log_files = set(series_data["filename"] for series_data in series["data"])
+    logger.info("Loki log files: %s", log_files)
     if not all(filename in log_files for filename in filenames):
         return False
     log_query = requests.get(
@@ -88,7 +92,7 @@ async def test_loki_integration(
                 log_files_exist,
                 unit.address,
                 application.name,
-                ("/var/lib/jenkins/jenkins.log",),
+                ("/var/lib/jenkins/logs/jenkins.log",),
             ),
             timeout=10 * 60,
         )
