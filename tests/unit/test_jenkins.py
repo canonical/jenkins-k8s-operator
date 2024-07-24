@@ -49,7 +49,7 @@ def test__is_ready_connection_exception(
 )
 def test__is_ready(
     monkeypatch: pytest.MonkeyPatch,
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    mocked_get_request: typing.Callable[..., requests.Response],
     status_code: int,
     expected_ready: bool,
     mock_env: jenkins.Environment,
@@ -66,7 +66,7 @@ def test__is_ready(
 
 def test_wait_ready_timeout(
     monkeypatch: pytest.MonkeyPatch,
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    mocked_get_request: typing.Callable[..., requests.Response],
     mock_env: jenkins.Environment,
 ):
     """
@@ -113,7 +113,7 @@ def test_wait_ready_last_successful_check(
 
 def test_wait_ready(
     monkeypatch: pytest.MonkeyPatch,
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    mocked_get_request: typing.Callable[..., requests.Response],
     mock_env: jenkins.Environment,
 ):
     """
@@ -356,7 +356,7 @@ def test_version_error(
 
 def test_version(
     monkeypatch: pytest.MonkeyPatch,
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    mocked_get_request: typing.Callable[..., requests.Response],
     jenkins_version: str,
     mock_env: jenkins.Environment,
 ):
@@ -372,7 +372,7 @@ def test_version(
 
 def test__unlock_wizard(
     harness_container: HarnessWithContainer,
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    mocked_get_request: typing.Callable[..., requests.Response],
     monkeypatch: pytest.MonkeyPatch,
     jenkins_version: str,
     mock_env: jenkins.Environment,
@@ -397,7 +397,7 @@ def test__unlock_wizard(
 
 
 def test__unlock_wizard_raises_exception(
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    mocked_get_request: typing.Callable[..., requests.Response],
     monkeypatch: pytest.MonkeyPatch,
     mock_env: jenkins.Environment,
 ):

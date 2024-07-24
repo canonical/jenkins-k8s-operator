@@ -96,7 +96,7 @@ def test_storage_not_ready(harness: Harness, event_handler: str):
 
 def test__on_jenkins_pebble_ready_get_version_error(
     harness_container: HarnessWithContainer,
-    mocked_get_request: typing.Callable[[str, int, typing.Any, typing.Any], requests.Response],
+    mocked_get_request: typing.Callable[..., requests.Response],
     monkeypatch: pytest.MonkeyPatch,
 ):
     """
