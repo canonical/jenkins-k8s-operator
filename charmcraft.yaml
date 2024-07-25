@@ -4,13 +4,10 @@
 type: charm
 parts:
   charm:
+    build-snaps:
+      - rustup
     override-build: |
-      # install latest version of rust deps because rust-all rustc 1.76 or greater is required to
-      # build requests lib from source.
-      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-      mv $HOME/.cargo/bin/* /usr/bin/
-      # setuptools >= 61 is required
-      pip install --upgrade setuptools
+      rustup default stable
       craftctl default
     prime:
       - templates/jenkins-auth-proxy-config.xml
