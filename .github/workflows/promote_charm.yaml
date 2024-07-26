@@ -9,7 +9,4 @@ jobs:
       origin-channel: latest/edge
       destination-channel: latest/stable
       doc-automation-disabled: false
-      base-architecture: amd64
-      base-channel: "22.04"
-      base-name: ubuntu
     secrets: inherit
