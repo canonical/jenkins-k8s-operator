@@ -6,7 +6,7 @@ jobs:
   promote-charm:
     uses: canonical/operator-workflows/.github/workflows/promote_charm.yaml@feat/multiarch-promote
     with:
-      origin-channel: ${{ github.event.inputs.origin-channel }}
-      destination-channel: ${{ github.event.inputs.destination-channel }}
+      origin-channel: latest/edge
+      destination-channel: latest/stable
       doc-automation-disabled: false
     secrets: inherit
