@@ -2,6 +2,17 @@
 # See LICENSE file for licensing details.
 
 type: charm
+parts:
+  charm:
+    build-snaps:
+      - rustup
+    override-build: |
+      rustup default stable
+      craftctl default
+    prime:
+      - templates/jenkins-auth-proxy-config.xml
+      - templates/jenkins-config.xml
+      - templates/logging.properties
 bases:
   - build-on:
     - name: ubuntu
