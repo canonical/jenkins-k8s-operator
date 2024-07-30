@@ -9,8 +9,6 @@ parts:
     override-build: |
       rustup default stable
       craftctl default
-    charm-binary-python-packages:
-      - setuptools
     prime:
       - templates/jenkins-auth-proxy-config.xml
       - templates/jenkins-config.xml
