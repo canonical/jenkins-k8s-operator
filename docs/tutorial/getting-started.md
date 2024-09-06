@@ -3,8 +3,8 @@
 ## What you'll do
 
 - Deploy the [jenkins-k8s charm](https://charmhub.io/jenkins-k8s)
-- [Deploy and integrate agents](#deploy-and-relate-agents)
-- [Get admin password](#get-admin-password)
+- Deploy and integrate agents
+- Get admin password
 
 The jenkins-k8s charm helps deploy a Jenkins automation server application with ease and
 also helps operate the charm. This
@@ -12,14 +12,14 @@ tutorial will walk you through each step of deployment to get a basic Jenkins se
 
 ### Prerequisites
 
-To deploy jenkins-k8s charm, you will need a juju bootstrapped with any kubernetes controller.
-To see how to bootstrap your juju installation with microk8s, please refer to the documentation
-on microk8s [installation](https://juju.is/docs/olm/microk8s).
+To deploy jenkins-k8s charm, you will need a Juju bootstrapped with any Kubernetes controller.
+To see how to bootstrap your Juju installation with MicroK8s, please refer to the documentation
+on MicroK8s [installation](https://juju.is/docs/olm/microk8s).
 
-### Setting up the tutorial model
+### Set up the tutorial model
 
 To easily clean up the resources and to separate your workload from the contents of this tutorial,
-it is recommended to set up a new model with the following command.
+set up a new Juju model with the following command.
 
 ```
 juju add-model jenkins-tutorial
@@ -64,7 +64,7 @@ By running the `get-admin-password` action on a jenkins-k8s unit, juju will read
 admin credentials setup for you. You can use the following command below.
 
 ```
-juju run-action jenkins-k8s/0 get-admin-password --wait
+juju run jenkins-k8s/0 get-admin-password 
 ```
 
 The output should look something similar to the contents below:
@@ -91,5 +91,5 @@ Congratulations! You have successfully finished the jennkins-k8s tutorial. You c
 model environment that you’ve created using the following command.
 
 ```
-juju destroy model jenkins-tutorial -y --release-storage
+juju destroy-model jenkins-tutorial --destroy-storage
 ```
