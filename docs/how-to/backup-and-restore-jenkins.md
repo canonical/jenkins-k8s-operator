@@ -8,7 +8,7 @@ A backup is a snapshot of the Jenkins data (jobs, configurations, secrets, plugi
 From [Backing-up/Restoring Jenkins](https://www.jenkins.io/doc/book/system-administration/backing-up/), This script backs up the most essential files as mentioned in the article:
 * The `master.key` file.
 * Job-related files in the `./jobs`, `./builds` and `./workspace` folders.
-* Plugins (`.hpi` and `.jpi` files) in the `./plugins` folder
+* Plugin-related files (`.hpi` and `.jpi`) in the `./plugins` folder.
 
 ```bash
 cat <<EOF > backup.sh
@@ -55,7 +55,7 @@ juju ssh --container jenkins $JENKINS_UNIT chown -R jenkins:jenkins /backup
 juju ssh --container jenkins $JENKINS_UNIT cp -avR /backup/* /var/lib/jenkins
 juju ssh --container jenkins $JENKINS_UNIT rm -rf /backup /jenkins_backup.tar.gz
 ```
-2. Restart pebble for the changes to take effect
+2. Restart Pebble for the changes to take effect.
 ```bash
 juju ssh --container jenkins $JENKINS_UNIT pebble restart jenkins
 ```
