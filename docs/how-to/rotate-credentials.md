@@ -6,7 +6,7 @@ To rotate credentials for the admin account and invalidate all logged in user se
 `rotate-credentials` action.
 
 ```
-juju run-action jenkins-k8s/0 rotate-credentials --wait
+juju run jenkins-k8s/0 rotate-credentials 
 ```
 
 The output should look similar to the contents below:
@@ -16,7 +16,7 @@ unit-jenkins-k8s-0:
   UnitId: jenkins-k8s/0
   id: "1"
   results:
-    password: <password>
+    password: <new password>
   status: completed
   timing:
     completed: <timestamp>
