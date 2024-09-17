@@ -5,7 +5,7 @@
 To retrieve the password for the admin account, you can run the `get-admin-password` action.
 
 ```
-juju run-action jenkins-k8s/0 get-admin-password --wait
+juju run jenkins-k8s/0 get-admin-password 
 ```
 
 The output should look something similar to the contents below:
