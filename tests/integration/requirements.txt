@@ -1,5 +1,5 @@
 Jinja2>=3,<4
-lightkube==0.15.1
+lightkube==0.15.4
 pytest-playwright==0.4.4
 python-keycloak>=3,<4
 tenacity==8.4.2
