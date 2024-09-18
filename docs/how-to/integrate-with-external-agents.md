@@ -13,7 +13,7 @@ juju integrate jenkins-k8s:agent-discovery-ingress traefik-k8s:ingress
 juju integrate jenkins-k8s:agent <offer-endpoint>
 ```
 
-# Networking considerations
+## Networking considerations
 The charm assumes that:
 1. There are connectivity between the juju controller of the `jenkins-k8s` charm and the juju controller of the agent charm trying to connect with the `jenkins-k8s` charm.
 2. The agent can resolve the ingress hostname provided by the `jenkins-k8s` charm and the resulting IP address is reachable, and there are firewall rules in place to allow HTTP traffic.

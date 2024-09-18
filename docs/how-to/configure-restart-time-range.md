@@ -9,7 +9,7 @@ Use the `restart-time-range` configuration to set the time interval when `jenkin
 2. automatically remove plugins that are installed on the system but are not part of the `plugins`
    configuration option.
 
-The minimum time interval is 1 hour. Time range is applied each day of the week.
+The minimum time interval is 1 hour. The time range is applied each day of the week.
 
 ```
 juju config jenkins-k8s restart-time-range=<desired-time-range>
