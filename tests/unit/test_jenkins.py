@@ -1480,7 +1480,7 @@ def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-argu
     ],
 )
 # all arguments below are required
-def test_remove_unlisted_plugins(  # pylint: disable=too-many-arguments
+def test_remove_unlisted_plugins(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     mock_client: MagicMock,
     container: ops.Container,
     desired_plugins: tuple[str],
