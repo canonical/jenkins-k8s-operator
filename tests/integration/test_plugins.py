@@ -540,7 +540,12 @@ async def test_openid_connect_plugin(
             "clientId": keycloak_oidc_meta.client_id,
             "clientSecret": keycloak_oidc_meta.client_secret,
             "automanualconfigure": "auto",
-            "wellKnownOpenIDConfigurationUrl": keycloak_oidc_meta.well_known_endpoint,
+            "serverConfiguration":{
+                "wellKnownOpenIDConfigurationUrl": keycloak_oidc_meta.well_known_endpoint,
+                "scopesOverride":"",
+                "stapler-class":"org.jenkinsci.plugins.oic.OicServerWellKnownConfiguration",
+                "$class":"org.jenkinsci.plugins.oic.OicServerWellKnownConfiguration"
+            },
             "userNameField": "sub",
             "stapler-class": "org.jenkinsci.plugins.oic.OicSecurityRealm",
             "$class": "org.jenkinsci.plugins.oic.OicSecurityRealm",
