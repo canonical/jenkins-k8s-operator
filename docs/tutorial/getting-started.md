@@ -197,10 +197,7 @@ model environments that you’ve created using the following commands.
 
 
 ```
-juju destroy-model lxd:jenkins-tutorial --destroy-storage
-```
-
-```
 juju destroy-model jenkins-tutorial --destroy-storage
+juju destroy-model lxd:jenkins-tutorial --destroy-storage
 ```
 
