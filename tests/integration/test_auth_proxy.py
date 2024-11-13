@@ -150,7 +150,7 @@ async def test_auth_proxy_integration_authorized(
 ) -> None:
     """
     arrange: Deploy jenkins, the authentication bundle and DEX.
-    act: log into via DEX
+    act: log in via DEX
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
     status = await application.model.get_status()
