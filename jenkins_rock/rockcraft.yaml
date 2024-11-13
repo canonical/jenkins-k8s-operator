@@ -37,13 +37,26 @@ parts:
       - libnss3
       - unzip
       - openjdk-21-jdk-headless
+    # Referred from https://github.com/jenkinsci/docker/blob/master/debian/bookworm/hotspot/Dockerfile
     overlay-packages:
       - bash
+      - ca-certificates
       - ca-certificates-java
+      - curl
       - fonts-dejavu-core
-      - libfontconfig1
-      - openjdk-21-jre-headless
       - git
+      - gnupg
+      - gpg
+      - libfontconfig1
+      - libfreetype6
+      - libharfbuzz0b
+      - openjdk-21-jre-headless
+      - procps
+      - ssh-client
+      - tini
+      - tzdata
+      - wget
+      - unzip
     build-environment:
       - JENKINS_VERSION: 2.479.1
       - JENKINS_PLUGIN_MANAGER_VERSION: 2.13.2

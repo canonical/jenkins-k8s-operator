@@ -215,7 +215,7 @@ def container_fixture(
             case _ if [
                 "java",
                 "-jar",
-                "jenkins-plugin-manager-2.12.13.jar",
+                f"jenkins-plugin-manager-{jenkins.JENKINS_PLUGIN_MANAGER_VERSION}.jar",
                 "-w",
                 "jenkins.war",
                 "-d",
@@ -237,7 +237,7 @@ def container_fixture(
                 f"-Dhttps.proxyPassword={proxy_config.https_proxy.password}",
                 f'-Dhttp.nonProxyHosts="{no_proxy_hosts}"',
                 "-jar",
-                "jenkins-plugin-manager-2.12.13.jar",
+                f"jenkins-plugin-manager-{jenkins.JENKINS_PLUGIN_MANAGER_VERSION}.jar",
                 "-w",
                 "jenkins.war",
                 "-d",
