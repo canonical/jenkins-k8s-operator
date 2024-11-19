@@ -798,24 +798,100 @@ async def oathkeeper_application_related_fixture(
 ):
     """The application related to Jenkins via auth_proxy v0 relation."""
     oathkeeper = await application.model.deploy("oathkeeper", channel="edge", trust=True)
-    # Using a patched local bundle from identity team here as a temporary workaround for
-    # https://github.com/canonical/traefik-k8s-operator/issues/322 and
-    # https://github.com/juju/python-libjuju/issues/1042
-    await ops_test.run(
-        "juju", "deploy", "./tests/integration/files/identity-bundle-edge-patched.yaml", "--trust"
+    kratos_app = await application.model.deploy(
+        "kratos",
+        channel="0.4/edge",
+        # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
+        config={"dev": "True"},
+        trust=True,
     )
-    await application.model.applications["kratos-external-idp-integrator"].set_config(
-        {
+    kratos_external_idp_integrator_app = await application.model.deploy(
+        "kratos-external-idp-integrator",
+        channel="latest/edge",
+        config={
             "client_id": "client_id",
             "client_secret": "client_secret",
             "provider": "generic",
             "issuer_url": ext_idp_service,
             "scope": "profile email",
             "provider_id": "Dex",
-        }
+        },
+    )
+    hydra_app = await application.model.deploy("hydra", channel="edge", series="jammy", trust=True)
+    postgresql_app = await ops_test.model.deploy(
+        entity_url="postgresql-k8s",
+        channel="14/stable",
+        series="jammy",
+        trust=True,
+    )
+    traefik_public_app = await ops_test.model.deploy(
+        "traefik-k8s",
+        application_name="traefik-public",
+        channel="latest/edge",
+        config={
+            "external_hostname": "public-ingress",
+            "enable_experimental_forward_auth": "True",
+        },
+        trust=True,
+    )
+    traefik_admin_app = await ops_test.model.deploy(
+        "traefik-k8s",
+        application_name="traefik-admin",
+        channel="latest/edge",
+        config={"external_hostname": "admin-ingress"},
+        trust=True,
+    )
+    ca_app = await ops_test.model.deploy(
+        "self-signed-certificates",
+        channel="latest/stable",
+        trust=True,
+    )
+    login_ui_app = await ops_test.model.deploy(
+        "identity-platform-login-ui-operator",
+        channel="0.3/edge",
+        trust=True,
     )
 
-    # See https://github.com/canonical/kratos-operator/issues/182
+    await application.model.add_relation(f"{hydra_app.name}:pg-database", postgresql_app.name)
+    await application.model.add_relation(f"{kratos_app.name}:pg-database", postgresql_app.name)
+    await application.model.add_relation(
+        f"{kratos_app.name}:hydra-endpoint-info", f"{hydra_app.name}:hydra-endpoint-info"
+    )
+    await application.model.add_relation(
+        f"{kratos_external_idp_integrator_app.name}:kratos-external-idp",
+        f"{kratos_app.name}:kratos-external-idp",
+    )
+    await application.model.add_relation(
+        f"{hydra_app.name}:admin-ingress", f"{traefik_admin_app.name}:ingress"
+    )
+    await application.model.add_relation(
+        f"{hydra_app.name}:public-ingress", f"{traefik_public_app.name}:ingress"
+    )
+    await application.model.add_relation(
+        f"{kratos_app.name}:admin-ingress", f"{traefik_admin_app.name}:ingress"
+    )
+    await application.model.add_relation(
+        f"{kratos_app.name}:public-ingress", f"{traefik_public_app.name}:ingress"
+    )
+    await application.model.add_relation(f"{login_ui_app.name}:ingress", traefik_public_app.name)
+    await application.model.add_relation(
+        f"{login_ui_app.name}:hydra-endpoint-info", f"{hydra_app.name}:hydra-endpoint-info"
+    )
+    await application.model.add_relation(
+        f"{login_ui_app.name}:ui-endpoint-info", f"{hydra_app.name}:ui-endpoint-info"
+    )
+    await application.model.add_relation(
+        f"{login_ui_app.name}:ui-endpoint-info", f"{kratos_app.name}:ui-endpoint-info"
+    )
+    await application.model.add_relation(
+        f"{login_ui_app.name}:kratos-info", f"{kratos_app.name}:kratos-info"
+    )
+    await application.model.add_relation(
+        f"{traefik_admin_app.name}:certificates", f"{ca_app.name}:certificates"
+    )
+    await application.model.add_relation(
+        f"{traefik_public_app.name}:certificates", f"{ca_app.name}:certificates"
+    )
     await application.model.wait_for_idle(
         status="active",
         apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
@@ -824,36 +900,8 @@ async def oathkeeper_application_related_fixture(
         idle_period=5,
     )
 
-    await application.model.add_relation(
-        f"{oathkeeper.name}:certificates", "self-signed-certificates"
-    )
-    await application.model.add_relation(
-        "traefik-public:receive-ca-cert", "self-signed-certificates"
-    )
-    await application.model.applications["traefik-public"].set_config(
-        {"enable_experimental_forward_auth": "True"}
-    )
-    await application.model.add_relation(
-        f"{oathkeeper.name}", "traefik-public:experimental-forward-auth"
-    )
-    await application.model.add_relation(f"{oathkeeper.name}:kratos-info", "kratos")
-    # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
-    await application.model.applications["kratos"].set_config({"dev": "True"})
-    await application.model.add_relation(f"{application.name}:ingress", "traefik-public")
-    await application.model.add_relation(f"{application.name}:auth-proxy", oathkeeper.name)
-
-    await application.model.wait_for_idle(
-        status="active",
-        apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
-        raise_on_error=False,
-        timeout=30 * 60,
-        idle_period=5,
-    )
-
-    get_redirect_uri_action = (
-        await application.model.applications["kratos-external-idp-integrator"]
-        .units[0]
-        .run_action("get-redirect-uri")
+    get_redirect_uri_action = await kratos_external_idp_integrator_app.units[0].run_action(
+        "get-redirect-uri"
     )
     action_output = await get_redirect_uri_action.wait()
     update_redirect_uri(client, action_output.results["redirect-uri"])
