@@ -861,6 +861,7 @@ async def oathkeeper_application_related_fixture(
         f"{kratos_external_idp_integrator_app.name}:kratos-external-idp",
         f"{kratos_app.name}:kratos-external-idp",
     )
+    await application.model.add_relation(f"{application.name}:ingress", traefik_public_app.name)
     await application.model.add_relation(
         f"{hydra_app.name}:admin-ingress", f"{traefik_admin_app.name}:ingress"
     )

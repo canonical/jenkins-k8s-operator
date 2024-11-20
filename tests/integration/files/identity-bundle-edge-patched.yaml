@@ -6,8 +6,8 @@ issues: https://github.com/canonical/iam-bundle/issues
 applications:
   hydra:
     charm: hydra
-    revision: 320
-    channel: 0.3/edge
+    revision: 285
+    channel: 0.2/stable
     scale: 1
     series: jammy
     trust: true
@@ -32,9 +32,9 @@ applications:
     trust: true
     resources:
       oci-image: 79
-  postgresql-k8s:
-    charm: postgresql-k8s
-    revision: 300
+  postgresql:
+    charm: postgresql-k8s 
+    revision: 444
     channel: 14/stable
     series: jammy
     scale: 1
