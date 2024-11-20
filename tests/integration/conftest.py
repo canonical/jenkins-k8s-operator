@@ -817,6 +817,14 @@ async def oathkeeper_application_related_fixture(
             "provider_id": "Dex",
         },
     )
+    # See https://github.com/canonical/kratos-operator/issues/182
+    await application.model.wait_for_idle(
+        status="active",
+        apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
+        raise_on_error=False,
+        timeout=30 * 60,
+        idle_period=5,
+    )
     hydra_app = await application.model.deploy("hydra", channel="edge", series="jammy", trust=True)
     postgresql_app = await application.model.deploy(
         entity_url="postgresql-k8s",
@@ -888,7 +896,18 @@ async def oathkeeper_application_related_fixture(
         f"{login_ui_app.name}:kratos-info", f"{kratos_app.name}:kratos-info"
     )
     await application.model.add_relation(
+        f"{oathkeeper.name}:certificates", f"{traefik_public_app.name}:experimental-forward-auth"
+    )
+    await application.model.add_relation(
+        f"{oathkeeper.name}:certificates", f"{ca_app.name}:certificates"
+    )
+    await application.model.add_relation(f"{oathkeeper.name}:kratos-info", kratos_app.name)
+    await application.model.add_relation(f"{oathkeeper.name}:auth-proxy", application.name)
+    await application.model.add_relation(
         f"{traefik_admin_app.name}:certificates", f"{ca_app.name}:certificates"
+    )
+    await application.model.add_relation(
+        f"{traefik_public_app.name}:certificates", f"{ca_app.name}:certificates"
     )
     await application.model.add_relation(
         f"{traefik_public_app.name}:certificates", f"{ca_app.name}:certificates"
