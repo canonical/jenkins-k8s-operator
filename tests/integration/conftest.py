@@ -901,9 +901,6 @@ async def oathkeeper_application_related_fixture(
     await application.model.add_relation(
         f"{traefik_public_app.name}:certificates", f"{ca_app.name}:certificates"
     )
-    await application.model.add_relation(
-        f"{traefik_public_app.name}:certificates", f"{ca_app.name}:certificates"
-    )
     await application.model.wait_for_idle(
         status="active",
         apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
