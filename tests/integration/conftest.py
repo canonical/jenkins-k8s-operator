@@ -794,7 +794,7 @@ async def traefik_application_fixture(model: Model):
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
 async def oathkeeper_application_related_fixture(
-    ops_test: OpsTest, application: Application, client: Client, ext_idp_service: str
+    application: Application, client: Client, ext_idp_service: str
 ):
     """The application related to Jenkins via auth_proxy v0 relation."""
     oathkeeper = await application.model.deploy("oathkeeper", channel="edge", trust=True)
@@ -818,13 +818,13 @@ async def oathkeeper_application_related_fixture(
         },
     )
     hydra_app = await application.model.deploy("hydra", channel="edge", series="jammy", trust=True)
-    postgresql_app = await ops_test.model.deploy(
+    postgresql_app = await application.model.deploy(
         entity_url="postgresql-k8s",
         channel="14/stable",
         series="jammy",
         trust=True,
     )
-    traefik_public_app = await ops_test.model.deploy(
+    traefik_public_app = await application.model.deploy(
         "traefik-k8s",
         application_name="traefik-public",
         channel="latest/edge",
@@ -834,19 +834,19 @@ async def oathkeeper_application_related_fixture(
         },
         trust=True,
     )
-    traefik_admin_app = await ops_test.model.deploy(
+    traefik_admin_app = await application.model.deploy(
         "traefik-k8s",
         application_name="traefik-admin",
         channel="latest/edge",
         config={"external_hostname": "admin-ingress"},
         trust=True,
     )
-    ca_app = await ops_test.model.deploy(
+    ca_app = await application.model.deploy(
         "self-signed-certificates",
         channel="latest/stable",
         trust=True,
     )
-    login_ui_app = await ops_test.model.deploy(
+    login_ui_app = await application.model.deploy(
         "identity-platform-login-ui-operator",
         channel="0.3/edge",
         trust=True,
