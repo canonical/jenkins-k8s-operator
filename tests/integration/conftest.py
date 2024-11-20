@@ -817,14 +817,6 @@ async def oathkeeper_application_related_fixture(
             "provider_id": "Dex",
         },
     )
-    # See https://github.com/canonical/kratos-operator/issues/182
-    await application.model.wait_for_idle(
-        status="active",
-        apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
-        raise_on_error=False,
-        timeout=30 * 60,
-        idle_period=5,
-    )
     hydra_app = await application.model.deploy("hydra", channel="edge", series="jammy", trust=True)
     postgresql_app = await application.model.deploy(
         entity_url="postgresql-k8s",
