@@ -888,7 +888,7 @@ async def oathkeeper_application_related_fixture(
         f"{login_ui_app.name}:kratos-info", f"{kratos_app.name}:kratos-info"
     )
     await application.model.add_relation(
-        f"{oathkeeper.name}:certificates", f"{traefik_public_app.name}:experimental-forward-auth"
+        f"{oathkeeper.name}", f"{traefik_public_app.name}:experimental-forward-auth"
     )
     await application.model.add_relation(
         f"{oathkeeper.name}:certificates", f"{ca_app.name}:certificates"
