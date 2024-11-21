@@ -3,6 +3,7 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+import asyncio
 import os
 import random
 import secrets
@@ -199,23 +200,21 @@ async def jenkins_k8s_agents_fixture(model: Model):
 
 @pytest_asyncio.fixture(scope="module", name="k8s_agent_related_app")
 async def k8s_agent_related_app_fixture(
-    jenkins_k8s_agents: Application,
-    application: Application,
+    jenkins_k8s_agents: Application, application: Application, model: Model
 ):
     """The Jenkins-k8s server charm related to Jenkins-k8s agent charm through agent relation."""
-    await application.relate(
-        state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
+    await model.integrate(
+        f"{application.name}:{state.AGENT_RELATION}",
+        f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}",
     )
-    await application.model.wait_for_idle(
+    await model.wait_for_idle(
         apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
     )
     return application
 
 
 @pytest_asyncio.fixture(scope="function", name="extra_jenkins_k8s_agents")
-async def extra_jenkins_k8s_agents_fixture(
-    model: Model,
-) -> AsyncGenerator[Application, None]:
+async def extra_jenkins_k8s_agents_fixture(model: Model) -> AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
@@ -230,12 +229,13 @@ async def extra_jenkins_k8s_agents_fixture(
 
 @pytest_asyncio.fixture(scope="function", name="k8s_deprecated_agent_related_app")
 async def k8s_deprecated_agent_related_app_fixture(
-    jenkins_k8s_agents: Application,
-    application: Application,
+    jenkins_k8s_agents: Application, application: Application, model: Model
 ):
     """The Jenkins-k8s charm related to Jenkins-k8s agent through deprecated agent relation."""
-    await application.relate(state.DEPRECATED_AGENT_RELATION, jenkins_k8s_agents.name)
-    await application.model.wait_for_idle(
+    await model.integrate(
+        f"{application.name}:{state.DEPRECATED_AGENT_RELATION}", jenkins_k8s_agents.name
+    )
+    await model.wait_for_idle(
         apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
     )
     yield application
@@ -288,16 +288,14 @@ async def jenkins_machine_agents_fixture(
 
 @pytest_asyncio.fixture(scope="function", name="machine_agent_related_app")
 async def machine_agent_related_app_fixture(
-    jenkins_machine_agents: Application,
-    application: Application,
+    jenkins_machine_agents: Application, application: Application, model: Model
 ):
     """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
-    model: Model = application.model
     machine_model: Model = jenkins_machine_agents.model
     await machine_model.wait_for_idle(
         apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5
     )
-    await model.relate(
+    await model.integrate(
         f"{application.name}:{state.AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
@@ -310,13 +308,11 @@ async def machine_agent_related_app_fixture(
 
 @pytest_asyncio.fixture(scope="function", name="machine_deprecated_agent_related_app")
 async def machine_deprecated_agent_related_app_fixture(
-    jenkins_machine_agents: Application,
-    application: Application,
+    jenkins_machine_agents: Application, application: Application, model: Model
 ):
     """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
-    model: Model = application.model
     machine_model: Model = jenkins_machine_agents.model
-    await model.relate(
+    await model.integrate(
         f"{application.name}:{state.DEPRECATED_AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{state.DEPRECATED_AGENT_RELATION}",
     )
@@ -520,11 +516,10 @@ async def jenkins_with_proxy_client_fixture(
 
 @pytest_asyncio.fixture(scope="function", name="app_with_allowed_plugins")
 async def app_with_allowed_plugins_fixture(
-    application: Application, web_address: str
+    application: Application, web_address: str, model: Model
 ) -> AsyncGenerator[Application, None]:
     """Jenkins charm with plugins configured."""
     await application.set_config({"allowed-plugins": ",".join(ALLOWED_PLUGINS)})
-    model: Model = application.model
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
     await model.block_until(
         lambda: requests.get(web_address, timeout=10).status_code == 403,
@@ -794,18 +789,18 @@ async def traefik_application_fixture(model: Model):
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
 async def oathkeeper_application_related_fixture(
-    application: Application, client: Client, ext_idp_service: str
+    application: Application, client: Client, ext_idp_service: str, model: Model
 ):
     """The application related to Jenkins via auth_proxy v0 relation."""
-    oathkeeper = await application.model.deploy("oathkeeper", channel="edge", trust=True)
-    kratos_app = await application.model.deploy(
+    oathkeeper = await model.deploy("oathkeeper", channel="edge", trust=True)
+    kratos_app = await model.deploy(
         "kratos",
         channel="0.4/edge",
         # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
         config={"dev": "True"},
         trust=True,
     )
-    kratos_external_idp_integrator_app = await application.model.deploy(
+    kratos_external_idp_integrator_app = await model.deploy(
         "kratos-external-idp-integrator",
         channel="latest/edge",
         config={
@@ -817,91 +812,88 @@ async def oathkeeper_application_related_fixture(
             "provider_id": "Dex",
         },
     )
-    hydra_app = await application.model.deploy("hydra", channel="edge", series="jammy", trust=True)
-    postgresql_app = await application.model.deploy(
+    hydra_app = await model.deploy("hydra", channel="edge", series="jammy", trust=True)
+    postgresql_app = await model.deploy(
         entity_url="postgresql-k8s",
         channel="14/stable",
         series="jammy",
         trust=True,
     )
-    traefik_public_app = await application.model.deploy(
+    traefik_public_app = await model.deploy(
         "traefik-k8s",
         application_name="traefik-public",
         channel="latest/edge",
         config={
-            "external_hostname": "public-ingress",
             "enable_experimental_forward_auth": "True",
         },
         trust=True,
     )
-    traefik_admin_app = await application.model.deploy(
+    traefik_admin_app = await model.deploy(
         "traefik-k8s",
         application_name="traefik-admin",
         channel="latest/edge",
-        config={"external_hostname": "admin-ingress"},
         trust=True,
     )
-    ca_app = await application.model.deploy(
+    ca_app = await model.deploy(
         "self-signed-certificates",
         channel="latest/stable",
         trust=True,
     )
-    login_ui_app = await application.model.deploy(
+    login_ui_app = await model.deploy(
         "identity-platform-login-ui-operator",
         channel="0.3/edge",
         trust=True,
     )
 
-    await application.model.add_relation(f"{hydra_app.name}:pg-database", postgresql_app.name)
-    await application.model.add_relation(f"{kratos_app.name}:pg-database", postgresql_app.name)
-    await application.model.add_relation(
+    await model.add_relation(f"{hydra_app.name}:pg-database", postgresql_app.name)
+    await model.add_relation(f"{kratos_app.name}:pg-database", postgresql_app.name)
+    await model.add_relation(
         f"{kratos_app.name}:hydra-endpoint-info", f"{hydra_app.name}:hydra-endpoint-info"
     )
-    await application.model.add_relation(
+    await model.add_relation(f"{application.name}:ingress", traefik_public_app.name)
+    await model.add_relation(
+        f"{hydra_app.name}:admin-ingress", f"{traefik_admin_app.name}:ingress"
+    )
+    await model.add_relation(
+        f"{hydra_app.name}:public-ingress", f"{traefik_public_app.name}:ingress"
+    )
+    await model.add_relation(
+        f"{kratos_app.name}:admin-ingress", f"{traefik_admin_app.name}:ingress"
+    )
+    await model.add_relation(
+        f"{kratos_app.name}:public-ingress", f"{traefik_public_app.name}:ingress"
+    )
+    await model.add_relation(f"{login_ui_app.name}:ingress", traefik_public_app.name)
+    await model.add_relation(
+        f"{login_ui_app.name}:hydra-endpoint-info", f"{hydra_app.name}:hydra-endpoint-info"
+    )
+    await model.add_relation(
+        f"{login_ui_app.name}:ui-endpoint-info", f"{hydra_app.name}:ui-endpoint-info"
+    )
+    await model.add_relation(
+        f"{login_ui_app.name}:ui-endpoint-info", f"{kratos_app.name}:ui-endpoint-info"
+    )
+    await model.add_relation(f"{login_ui_app.name}:kratos-info", f"{kratos_app.name}:kratos-info")
+    await model.add_relation(
+        f"{oathkeeper.name}", f"{traefik_public_app.name}:experimental-forward-auth"
+    )
+    await model.add_relation(f"{oathkeeper.name}:certificates", f"{ca_app.name}:certificates")
+    await model.add_relation(f"{oathkeeper.name}:kratos-info", kratos_app.name)
+    await model.add_relation(f"{oathkeeper.name}:auth-proxy", application.name)
+    await model.add_relation(
+        f"{traefik_admin_app.name}:certificates", f"{ca_app.name}:certificates"
+    )
+    await model.add_relation(
+        f"{traefik_public_app.name}:certificates", f"{ca_app.name}:certificates"
+    )
+    # try sleeping since the kratos relation does not work well.
+    await asyncio.sleep(10)
+    await model.add_relation(
         f"{kratos_external_idp_integrator_app.name}:kratos-external-idp",
         f"{kratos_app.name}:kratos-external-idp",
     )
-    await application.model.add_relation(f"{application.name}:ingress", traefik_public_app.name)
-    await application.model.add_relation(
-        f"{hydra_app.name}:admin-ingress", f"{traefik_admin_app.name}:ingress"
-    )
-    await application.model.add_relation(
-        f"{hydra_app.name}:public-ingress", f"{traefik_public_app.name}:ingress"
-    )
-    await application.model.add_relation(
-        f"{kratos_app.name}:admin-ingress", f"{traefik_admin_app.name}:ingress"
-    )
-    await application.model.add_relation(
-        f"{kratos_app.name}:public-ingress", f"{traefik_public_app.name}:ingress"
-    )
-    await application.model.add_relation(f"{login_ui_app.name}:ingress", traefik_public_app.name)
-    await application.model.add_relation(
-        f"{login_ui_app.name}:hydra-endpoint-info", f"{hydra_app.name}:hydra-endpoint-info"
-    )
-    await application.model.add_relation(
-        f"{login_ui_app.name}:ui-endpoint-info", f"{hydra_app.name}:ui-endpoint-info"
-    )
-    await application.model.add_relation(
-        f"{login_ui_app.name}:ui-endpoint-info", f"{kratos_app.name}:ui-endpoint-info"
-    )
-    await application.model.add_relation(
-        f"{login_ui_app.name}:kratos-info", f"{kratos_app.name}:kratos-info"
-    )
-    await application.model.add_relation(
-        f"{oathkeeper.name}", f"{traefik_public_app.name}:experimental-forward-auth"
-    )
-    await application.model.add_relation(
-        f"{oathkeeper.name}:certificates", f"{ca_app.name}:certificates"
-    )
-    await application.model.add_relation(f"{oathkeeper.name}:kratos-info", kratos_app.name)
-    await application.model.add_relation(f"{oathkeeper.name}:auth-proxy", application.name)
-    await application.model.add_relation(
-        f"{traefik_admin_app.name}:certificates", f"{ca_app.name}:certificates"
-    )
-    await application.model.add_relation(
-        f"{traefik_public_app.name}:certificates", f"{ca_app.name}:certificates"
-    )
-    await application.model.wait_for_idle(
+
+    await model.wait_for_idle(
         status="active",
         apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
         raise_on_error=False,
