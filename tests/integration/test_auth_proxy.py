@@ -142,7 +142,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
     act: send a request Jenkins.
     assert: a 401 is returned.
     """
-    unit_status = await get_application_unit_status(model=model, application=application.name)
+    unit_status = await get_application_unit_status(model=model, application="traefik-public")
     workload_message = str(cast(DetailedStatus, unit_status.workload_status).info)
     # The message is: Serving at <external loadbalancer IP>
     address = workload_message.removeprefix("Serving at ")
@@ -180,7 +180,7 @@ async def test_auth_proxy_integration_authorized(
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
     unit_status = await get_application_unit_status(
-        model=application.model, application=application.name
+        model=application.model, application="traefik-public"
     )
     workload_message = str(cast(DetailedStatus, unit_status.workload_status).info)
     # The message is: Serving at <external loadbalancer IP>
