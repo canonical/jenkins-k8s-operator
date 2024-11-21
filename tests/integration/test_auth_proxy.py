@@ -5,13 +5,13 @@
 
 import logging
 import re
-from typing import Any, AsyncGenerator, Callable, Coroutine, Match
+from typing import Any, AsyncGenerator, Callable, Coroutine, Match, cast
 
 import pytest
 import pytest_asyncio
 import requests
 from juju.application import Application
-from juju.client._definitions import UnitStatus
+from juju.client._definitions import DetailedStatus, UnitStatus
 from juju.model import Model
 from playwright.async_api import async_playwright, expect
 from playwright.async_api._generated import Browser, BrowserContext, BrowserType, Page
@@ -129,7 +129,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
     """
     status = await model.get_status()
     unit_status: UnitStatus = status["applications"]["traefik-public"]["units"]["traefik-public/0"]
-    workload_message = str(unit_status.workload_status.info)
+    workload_message = str(cast(DetailedStatus, unit_status.workload_status).info)
     # The message is: Serving at <external loadbalancer IP>
     address = workload_message.removeprefix("Serving at ")
 
