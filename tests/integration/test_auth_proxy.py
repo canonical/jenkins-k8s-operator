@@ -115,6 +115,21 @@ async def page_fixture(context: BrowserContext) -> AsyncGenerator[Page, None]:
     await new_page.close()
 
 
+async def get_application_unit_status(model: Model, application: str) -> UnitStatus:
+    """Get the application unit status object.
+
+    Args:
+        model: The Juju model connection object.
+        application: The application unit to get the unit status.
+
+    Returns:
+        The application first unit's status.
+    """
+    status = await model.get_status()
+    unit_status: UnitStatus = status["applications"][application]["units"][f"{application}/0"]
+    return unit_status
+
+
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("oathkeeper_related")
@@ -127,8 +142,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
     act: send a request Jenkins.
     assert: a 401 is returned.
     """
-    status = await model.get_status()
-    unit_status: UnitStatus = status["applications"]["traefik-public"]["units"]["traefik-public/0"]
+    unit_status = await get_application_unit_status(model=model, application=application.name)
     workload_message = str(cast(DetailedStatus, unit_status.workload_status).info)
     # The message is: Serving at <external loadbalancer IP>
     address = workload_message.removeprefix("Serving at ")
@@ -165,8 +179,12 @@ async def test_auth_proxy_integration_authorized(
     act: log in via DEX
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
-    status = await application.model.get_status()
-    address = status["applications"]["traefik-public"]["public-address"]
+    unit_status = await get_application_unit_status(
+        model=application.model, application=application.name
+    )
+    workload_message = str(cast(DetailedStatus, unit_status.workload_status).info)
+    # The message is: Serving at <external loadbalancer IP>
+    address = workload_message.removeprefix("Serving at ")
     jenkins_url = f"https://{address}/{application.model.name}-{application.name}/"
     expected_url = (
         f"https://{address}/{application.model.name}"
