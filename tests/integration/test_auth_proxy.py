@@ -11,6 +11,7 @@ import pytest
 import pytest_asyncio
 import requests
 from juju.application import Application
+from juju.client._definitions import DetailedStatus, UnitStatus
 from juju.model import Model
 from playwright.async_api import async_playwright, expect
 from playwright.async_api._generated import Browser, BrowserContext, BrowserType, Page
@@ -127,10 +128,17 @@ async def test_auth_proxy_integration_returns_not_authorized(
     assert: a 401 is returned.
     """
     status = await model.get_status()
-    address = status["applications"]["traefik-public"]["public-address"]
+    unit_status: UnitStatus = status["applications"]["traefik-public"]["units"]["traefik-public/0"]
+    workload_message = str(unit_status.workload_status.info)
+    # The message is: Serving at <external loadbalancer IP>
+    address = workload_message.removeprefix("Serving at ")
 
     def is_auth_401():
-        """Get the status code of application request via ingress."""
+        """Get the status code of application request via ingress.
+
+        Returns:
+            Whether the status code of the request is 401.
+        """
         response = requests.get(  # nosec
             f"https://{address}/{application.model.name}-{application.name}/",
             # The certificate is self signed, so verification is disabled.
