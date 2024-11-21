@@ -128,14 +128,18 @@ async def test_auth_proxy_integration_returns_not_authorized(
     """
     status = await model.get_status()
     address = status["applications"]["traefik-public"]["public-address"]
-    # The certificate is self signed, so verification is disabled.
-    response = requests.get(  # nosec
-        f"https://{address}/{application.model.name}-{application.name}/",
-        verify=False,
-        timeout=5,
-    )
 
-    assert response.status_code == 401
+    def is_auth_401():
+        """Get the status code of application request via ingress."""
+        response = requests.get(  # nosec
+            f"https://{address}/{application.model.name}-{application.name}/",
+            # The certificate is self signed, so verification is disabled.
+            verify=False,
+            timeout=5,
+        )
+        return response.status_code == 401
+
+    await wait_for(is_auth_401)
 
 
 @pytest.mark.abort_on_fail
