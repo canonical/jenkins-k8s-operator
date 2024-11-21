@@ -886,19 +886,28 @@ async def oathkeeper_application_related_fixture(
     await model.add_relation(
         f"{traefik_public_app.name}:certificates", f"{ca_app.name}:certificates"
     )
+    # Wait for idle before running actions to unblock buggy postgresql
+    # "awaiting for primary endpoint to be ready"
+    # Wait for idle before running actions to unblock buggy kratos-external-idp-integrator
+    # "Waiting for Kratos to register provider"
+    await model.wait_for_idle(
+        raise_on_error=False,
+        timeout=30 * 60,
+        idle_period=30,
+    )
+
     # try sleeping since the kratos relation does not work well.
     await asyncio.sleep(10)
     await model.add_relation(
         f"{kratos_external_idp_integrator_app.name}:kratos-external-idp",
         f"{kratos_app.name}:kratos-external-idp",
     )
-
     await model.wait_for_idle(
         status="active",
         apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
         raise_on_error=False,
         timeout=30 * 60,
-        idle_period=5,
+        idle_period=30,
     )
 
     get_redirect_uri_action = await kratos_external_idp_integrator_app.units[0].run_action(
