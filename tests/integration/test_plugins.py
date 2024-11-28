@@ -16,7 +16,12 @@ from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
-from .constants import ALLOWED_PLUGINS, INSTALLED_PLUGINS, REMOVED_PLUGINS
+from .constants import (
+    ALLOWED_PLUGINS,
+    DEFAULT_SYSTEM_CONFIGURE_PAYLOAD,
+    INSTALLED_PLUGINS,
+    REMOVED_PLUGINS,
+)
 from .helpers import (
     create_kubernetes_cloud,
     create_secret_file_credentials,
@@ -346,11 +351,7 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     await install_plugins(unit_web_client, ("thinBackup",))
     backup_path = "/srv/jenkins/backup/"
     payload = {
-        "jenkins-model-MasterBuildConfiguration": {
-            "numExecutors": "0",
-        },
-        "jenkins-model-GlobalQuietPeriodConfiguration": {"quietPeriod": "5"},
-        "jenkins-model-GlobalSCMRetryCountConfiguration": {"scmCheckoutRetryCount": "0"},
+        **DEFAULT_SYSTEM_CONFIGURE_PAYLOAD,
         "org-jvnet-hudson-plugins-thinbackup-ThinBackupPluginImpl": {
             "backupPath": backup_path,
         },
