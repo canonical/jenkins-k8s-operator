@@ -41,7 +41,7 @@ from .dex import (
 from .helpers import generate_jenkins_client_from_application, get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
-KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
+KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "./kube-config")
 IDENTITY_PLATFORM_APPS = [
     "traefik-admin",
     "traefik-public",
