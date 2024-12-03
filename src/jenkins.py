@@ -31,6 +31,7 @@ import state
 logger = logging.getLogger(__name__)
 
 WEB_PORT = 8080
+JENKINS_PLUGIN_MANAGER_VERSION = "2.13.2"
 LOGIN_PATH = "/login?from=%2F"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 JENKINS_HOME_PATH = Path("/var/lib/jenkins")
@@ -841,7 +842,7 @@ def _install_plugins(
         "java",
         *proxy_args,
         "-jar",
-        "jenkins-plugin-manager-2.12.13.jar",
+        f"jenkins-plugin-manager-{JENKINS_PLUGIN_MANAGER_VERSION}.jar",
         "-w",
         "jenkins.war",
         "-d",

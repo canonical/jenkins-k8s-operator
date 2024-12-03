@@ -51,14 +51,13 @@ async def install_plugins(
     assert res.status_code == 200, "Failed to request plugins install"
 
     # block until the UI does not have "Pending" in download progress column.
-    await unit.model.block_until(
+    await wait_for(
         lambda: "Pending"
         not in str(
             client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
             encoding="utf-8",
         ),
         timeout=60 * 10,
-        wait_period=10,
     )
 
     # the library will return 503 or other status codes that are not 200, hence restart and
