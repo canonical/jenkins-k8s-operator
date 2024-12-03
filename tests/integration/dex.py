@@ -133,6 +133,7 @@ def _apply_dex_manifests(
     )
 
     for obj in objs:
+        logger.info("Applying dex manifest: %s", obj)
         client.apply(obj, force=True)
 
 
