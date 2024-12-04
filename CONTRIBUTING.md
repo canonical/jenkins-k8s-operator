@@ -5,14 +5,13 @@ Build the OCI image:
 ```bash
 cd jenkins_rock
 rockcraft pack
+cd ..
 ```
 
 Push the OCI image to microk8s:
 
 ```bash
-sudo /snap/rockcraft/current/bin/skopeo --insecure-policy copy oci-archive:jenkins_rock/Jenkins_1.0_amd64.rock docker-daemon:jenkins:1.0
-sudo docker tag jenkins:1.0 localhost:32000/jenkins:1.0
-sudo docker push localhost:32000/jenkins:1.0
+rockcraft.skopeo --insecure-policy copy --dest-tls-verify=false oci-archive:jenkins_rock/jenkins_1.0_amd64.rock docker://localhost:32000/jenkins:1.0
 ```
 
 Deploy the charm:

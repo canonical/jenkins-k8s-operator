@@ -36,17 +36,30 @@ parts:
       - curl
       - libnss3
       - unzip
-      - default-jdk-headless
+      - openjdk-21-jdk-headless
+    # Referred from https://github.com/jenkinsci/docker/blob/master/debian/bookworm/hotspot/Dockerfile
     overlay-packages:
       - bash
+      - ca-certificates
       - ca-certificates-java
+      - curl
       - fonts-dejavu-core
-      - libfontconfig1
-      - default-jre-headless
       - git
+      - gnupg
+      - gpg
+      - libfontconfig1
+      - libfreetype6
+      - libharfbuzz0b
+      - openjdk-21-jre-headless
+      - procps
+      - ssh-client
+      - tini
+      - tzdata
+      - wget
+      - unzip
     build-environment:
-      - JENKINS_VERSION: 2.462.2
-      - JENKINS_PLUGIN_MANAGER_VERSION: 2.12.13
+      - JENKINS_VERSION: 2.479.1
+      - JENKINS_PLUGIN_MANAGER_VERSION: 2.13.2
     override-build: |
       mkdir -p ${CRAFT_PART_INSTALL}/{srv/jenkins/,etc/default/jenkins/}
       # Use jenkins war rather than apt install for easier Jenkins version control.
