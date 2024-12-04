@@ -5,8 +5,8 @@
 
 
 import logging
+import pathlib
 
-import ops
 import pytest
 import pytest_asyncio
 import requests
@@ -46,7 +46,7 @@ async def jenkins_upgrade_depl(ops_test: OpsTest, model: Model):
 
 @pytest.mark.usefixtures("jenkins_upgrade_depl")
 async def test_jenkins_upgrade_check_job(
-    ops_test: OpsTest, jenkins_image: str, model: Model, charm: ops.CharmBase
+    ops_test: OpsTest, jenkins_image: str, model: Model, charm: str | pathlib.Path
 ):
     """
     arrange: given charm has been built, deployed and a job has been defined.

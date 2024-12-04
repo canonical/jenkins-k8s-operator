@@ -23,3 +23,12 @@ ALL_PLUGINS = [
     "ssh-agent",
     "thinBackup",
 ]
+DEFAULT_SYSTEM_CONFIGURE_PAYLOAD = {
+    "jenkins-model-MasterBuildConfiguration": {"numExecutors": "0"},
+    "jenkins-model-GlobalComputerRetentionCheckIntervalConfiguration": {
+        "computerRetentionCheckInterval": "60"
+    },
+    "jenkins-model-GlobalQuietPeriodConfiguration": {"quietPeriod": "5"},
+    "jenkins-model-GlobalSCMRetryCountConfiguration": {"scmCheckoutRetryCount": "0"},
+    "com-sonyericsson-rebuild-RebuildDescriptor": {"rememberPasswordEnabled": True},
+}

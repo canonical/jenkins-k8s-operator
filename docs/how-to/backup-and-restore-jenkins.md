@@ -1,4 +1,4 @@
-# Backup and restore Jenkins
+# How to back up and restore Jenkins
 A backup is a snapshot of the Jenkins data (jobs, configurations, secrets, plugins, etc.) at a given point in time. This backup can be used to:
 * Restore Jenkins to a previous stable state (during disaster recovery).
 * Migrate data to a new Jenkins charm instance.
