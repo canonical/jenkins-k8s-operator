@@ -6,7 +6,7 @@ on:
 jobs:
   test-private-endpoint:
     runs-on: [self-hosted, self-hosted-linux-amd64-jammy-private-endpoint-medium]
-      steps:
-      - uses: actions/checkout@v3
-      - name: Setup tmate session
-        uses: canonical/action-tmate@main
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup tmate session
+      uses: canonical/action-tmate@main
