@@ -49,6 +49,6 @@ See the [how-to-integrate-with-external-agents](https://charmhub.io/jenkins-k8s/
 The Jenkins-agent-k8s Operator is a member of the Ubuntu family. It's an open source project that warmly welcomes community projects, contributions, suggestions, fixes and constructive feedback.
 
 * [Issues](https://github.com/canonical/jenkins-k8s-operator/issues) <!--Link to GitHub issues (if applicable)-->
-* [Contributing](https://charmhub.io/jenkins-k8s#contributing-to-this-documentation) <!--Link to any contribution guides--> 
+* [Contributing](https://github.com/canonical/jenkins-k8s-operator/blob/main/CONTRIBUTING.md) <!--Link to any contribution guides--> 
 - [Matrix](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
 
