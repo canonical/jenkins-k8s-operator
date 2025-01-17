@@ -81,7 +81,8 @@ async def get_model_jenkins_unit_address(model: Model, app_name: str):
         the IP address of the Jenkins unit.
     """
     status = await model.get_status()
-    unit = list(status.applications[app_name].units)[0]
+    application = typing.cast(Application, status.applications[app_name])
+    unit = list(application.units)[0]
     address = status["applications"][app_name]["units"][unit]["address"]
     return address
 

@@ -8,6 +8,7 @@ import os
 import random
 import secrets
 import string
+import typing
 from pathlib import Path
 from typing import AsyncGenerator, Generator, Iterable, Optional
 
@@ -481,10 +482,10 @@ async def jenkins_with_proxy_fixture(
 async def proxy_jenkins_unit_ip_fixture(model: Model, jenkins_with_proxy: Application):
     """Get Jenkins charm w/ proxy enabled unit IP."""
     status: FullStatus = await model.get_status([jenkins_with_proxy.name])
+    application = typing.cast(Application, status.applications[jenkins_with_proxy.name])
+
     try:
-        unit_status: UnitStatus = next(
-            iter(status.applications[jenkins_with_proxy.name].units.values())
-        )
+        unit_status: UnitStatus = next(iter(application.units.values()))
         assert unit_status.address, "Invalid unit address"
         return unit_status.address
     except StopIteration as exc:
@@ -782,7 +783,8 @@ async def traefik_application_fixture(model: Model):
         status="active", apps=[traefik.name], timeout=20 * 60, idle_period=30, raise_on_error=False
     )
     status = await model.get_status(filters=[traefik.name])
-    unit = next(iter(status.applications[traefik.name].units))
+    application = typing.cast(Application, status.applications[traefik.name])
+    unit = next(iter(application.units))
     traefik_address = status["applications"][traefik.name]["units"][unit]["address"]
     return (traefik, traefik_address)
 

@@ -37,7 +37,9 @@ async def test_prometheus_integration(
 
     model: Model = unit_web_client.unit.model
     status: FullStatus = await model.get_status(filters=[prometheus_related.name])
-    for unit in status.applications[prometheus_related.name].units.values():
+    application = typing.cast(Application, status.applications[prometheus_related.name])
+
+    for unit in application.units.values():
         query_targets = requests.get(
             f"http://{unit.address}:9090/api/v1/targets", timeout=10
         ).json()
@@ -86,7 +88,9 @@ async def test_loki_integration(
     """
     model: Model = unit_web_client.unit.model
     status: FullStatus = await model.get_status(filters=[loki_related.name])
-    for unit in status.applications[loki_related.name].units.values():
+    application = typing.cast(Application, status.applications[loki_related.name])
+
+    for unit in application.units.values():
         await wait_for(
             functools.partial(
                 log_files_exist,
@@ -152,10 +156,11 @@ async def test_grafana_integration(
     """
     model: Model = application.model
     status: FullStatus = await model.get_status(filters=[grafana_related.name])
+    application = typing.cast(Application, status.applications[grafana_related.name])
     action: Action = await grafana_related.units[0].run_action("get-admin-password")
     await action.wait()
     password = action.results["admin-password"]
-    for unit in status.applications[grafana_related.name].units.values():
+    for unit in application.units.values():
         sess = requests.session()
         sess.post(
             f"http://{unit.address}:3000/login",
