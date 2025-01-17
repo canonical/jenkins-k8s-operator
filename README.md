@@ -38,7 +38,7 @@ See the [deploy and integrate k8s agents](https://charmhub.io/jenkins-k8s/docs/t
 
 #### Use agent-discovery-ingress integration to integrate with "external" agents
 
-See the [how-to-integrate-with-external-agents](https://charmhub.io/jenkins-k8s/docs/how-to-integrate-with-external-agents) section in the jenkins-k8s-operator documentation.
+See the [how to integrate with external agents](https://charmhub.io/jenkins-k8s/docs/how-to-integrate-with-external-agents) section in the jenkins-k8s-operator documentation.
 
 ## Learn more
 
