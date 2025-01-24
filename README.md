@@ -43,6 +43,8 @@ See the [how to integrate with external agents](https://charmhub.io/jenkins-k8s/
 ## Learn more
 
 - [Read more](https://charmhub.io/jenkins-k8s/docs)
+- [Official Webpage] (https://www.jenkins.io/)
+- [Troubleshooting](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
 
 ## Project and community
 
