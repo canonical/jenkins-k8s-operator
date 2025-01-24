@@ -11,11 +11,10 @@ import pytest
 import requests
 from juju.action import Action
 from juju.application import Application
-from juju.client._definitions import FullStatus
 from juju.model import Model
 from kubernetes.client import CoreV1Api
 
-from .helpers import wait_for
+from .helpers import get_model_unit_addresses, wait_for
 from .types_ import UnitWebClient
 
 logger = logging.getLogger(__name__)
@@ -36,13 +35,10 @@ async def test_prometheus_integration(
     assert res.status_code == 200
 
     model: Model = unit_web_client.unit.model
-    status: FullStatus = await model.get_status(filters=[prometheus_related.name])
-    application = typing.cast(Application, status.applications[prometheus_related.name])
-
-    for unit in application.units.values():
-        query_targets = requests.get(
-            f"http://{unit.address}:9090/api/v1/targets", timeout=10
-        ).json()
+    unit_ips = await get_model_unit_addresses(model=model, app_name=prometheus_related.name)
+    assert unit_ips, f"Unit IP address not found for {prometheus_related.name}"
+    for ip in unit_ips:
+        query_targets = requests.get(f"http://{ip}:9090/api/v1/targets", timeout=10).json()
         assert len(query_targets["data"]["activeTargets"])
 
 
@@ -87,14 +83,13 @@ async def test_loki_integration(
         loki to scrape.
     """
     model: Model = unit_web_client.unit.model
-    status: FullStatus = await model.get_status(filters=[loki_related.name])
-    application = typing.cast(Application, status.applications[loki_related.name])
-
-    for unit in application.units.values():
+    unit_ips = await get_model_unit_addresses(model=model, app_name=loki_related.name)
+    assert unit_ips, f"Unit IP address not found for {loki_related.name}"
+    for ip in unit_ips:
         await wait_for(
             functools.partial(
                 log_files_exist,
-                unit.address,
+                ip,
                 application.name,
                 ("/var/lib/jenkins/logs/jenkins.log",),
             ),
@@ -155,21 +150,20 @@ async def test_grafana_integration(
     assert: grafana Jenkins dashboard can be found
     """
     model: Model = application.model
-    status: FullStatus = await model.get_status(filters=[grafana_related.name])
-    application = typing.cast(Application, status.applications[grafana_related.name])
     action: Action = await grafana_related.units[0].run_action("get-admin-password")
     await action.wait()
     password = action.results["admin-password"]
-    for unit in application.units.values():
+    unit_ips = await get_model_unit_addresses(model=model, app_name=grafana_related.name)
+    for ip in unit_ips:
         sess = requests.session()
         sess.post(
-            f"http://{unit.address}:3000/login",
+            f"http://{ip}:3000/login",
             json={
                 "user": "admin",
                 "password": password,
             },
         ).raise_for_status()
         await wait_for(
-            functools.partial(dashboard_exist, loggedin_session=sess, unit_address=unit.address),
+            functools.partial(dashboard_exist, loggedin_session=sess, unit_address=ip),
             timeout=60 * 20,
         )
