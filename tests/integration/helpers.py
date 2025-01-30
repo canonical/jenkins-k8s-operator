@@ -525,7 +525,7 @@ def create_kubernetes_cloud(
         "Accept": accept_header,
     }
 
-    logger.debug("Creating jenkins kubernets cloud, params: %s %s", headers, payload)
+    logger.debug("Creating jenkins kubernetes cloud, params: %s %s", headers, payload)
     res = unit_web_client.client.requester.post_url(
         url=url, headers=headers, data=payload, timeout=60 * 5
     )
