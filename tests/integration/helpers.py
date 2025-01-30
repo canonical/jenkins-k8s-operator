@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Helpers for Jenkins-k8s-operator charm integration tests."""
@@ -14,6 +14,7 @@ import kubernetes.client
 import requests
 import tenacity
 from juju.application import Application
+from juju.client._definitions import ApplicationStatus, FullStatus, UnitStatus
 from juju.model import Model
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
@@ -70,7 +71,7 @@ async def install_plugins(
     )
 
 
-async def get_model_jenkins_unit_address(model: Model, app_name: str):
+async def get_model_unit_addresses(model: Model, app_name: str) -> list[str]:
     """Extract the address of a given unit.
 
     Args:
@@ -80,10 +81,18 @@ async def get_model_jenkins_unit_address(model: Model, app_name: str):
     Returns:
         the IP address of the Jenkins unit.
     """
-    status = await model.get_status()
-    unit = list(status.applications[app_name].units)[0]
-    address = status["applications"][app_name]["units"][unit]["address"]
-    return address
+    status: FullStatus = await model.get_status()
+    # mypy cannot infer the type ApplicationStatus but thinks its the base class type "Type".
+    application_status: ApplicationStatus | None = status.applications[app_name]  # type: ignore
+    assert application_status, f"Application status {app_name} not found in {status}"
+    # mypy cannot infer the type UnitStatus but thinks its the base class type "Type".
+    unit_status_map: dict[typing.Any, UnitStatus | None] = application_status.units  # type: ignore
+    units_statuses: list[UnitStatus | None] = list(unit_status_map.values())
+    return [
+        str(unit_status.address)
+        for unit_status in units_statuses
+        if unit_status and unit_status.address
+    ]
 
 
 def gen_test_job_xml(node_label: str):
@@ -314,8 +323,9 @@ async def generate_unit_web_client_from_application(
         A Jenkins web client.
     """
     assert model
-    unit_ip = await get_model_jenkins_unit_address(model, jenkins_app.name)
-    address = f"http://{unit_ip}:8080"
+    unit_ips = await get_model_unit_addresses(model, jenkins_app.name)
+    assert unit_ips, f"Unit IP address not found for {jenkins_app.name}"
+    address = f"http://{unit_ips[0]}:8080"
     jenkins_unit = jenkins_app.units[0]
     jenkins_client = await generate_jenkins_client_from_application(ops_test, jenkins_app, address)
     unit_web_client = UnitWebClient(unit=jenkins_unit, web=address, client=jenkins_client)
@@ -515,7 +525,7 @@ def create_kubernetes_cloud(
         "Accept": accept_header,
     }
 
-    logger.debug("Creating jenkins kubernets cloud, params: %s %s", headers, payload)
+    logger.debug("Creating jenkins kubernetes cloud, params: %s %s", headers, payload)
     res = unit_web_client.client.requester.post_url(
         url=url, headers=headers, data=payload, timeout=60 * 5
     )

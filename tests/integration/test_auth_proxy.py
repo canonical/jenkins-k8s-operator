@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Integration tests for jenkins-k8s-operator with auth_proxy."""
@@ -64,7 +64,7 @@ async def browser_factory_fixture(
 
 @pytest_asyncio.fixture(scope="module", name="browser")
 async def browser_fixture(
-    browser_factory: Callable[..., Coroutine[Any, Any, Browser]]
+    browser_factory: Callable[..., Coroutine[Any, Any, Browser]],
 ) -> AsyncGenerator[Browser, None]:
     """Browser."""
     browser = await browser_factory()
@@ -99,7 +99,7 @@ async def context_factory_fixture(
 
 @pytest_asyncio.fixture(name="context")
 async def context_fixture(
-    context_factory: Callable[..., Coroutine[Any, Any, BrowserContext]]
+    context_factory: Callable[..., Coroutine[Any, Any, BrowserContext]],
 ) -> AsyncGenerator[BrowserContext, None]:
     """Playwright context."""
     context = await context_factory(ignore_https_errors=True)

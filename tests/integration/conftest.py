@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
@@ -19,7 +19,6 @@ import pytest_asyncio
 import requests
 from juju.action import Action
 from juju.application import Application
-from juju.client._definitions import FullStatus, UnitStatus
 from juju.model import Controller, Model
 from juju.unit import Unit
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
@@ -38,7 +37,7 @@ from .dex import (
     get_dex_service_url,
     update_redirect_uri,
 )
-from .helpers import generate_jenkins_client_from_application, get_pod_ip
+from .helpers import generate_jenkins_client_from_application, get_model_unit_addresses, get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "./kube-config")
@@ -129,13 +128,9 @@ def model_app_unit_fixture(model: Model, application: Application, unit: Unit):
 @pytest_asyncio.fixture(scope="module", name="unit_ip")
 async def unit_ip_fixture(model: Model, application: Application):
     """Get Jenkins charm unit IP."""
-    status: FullStatus = await model.get_status([application.name])
-    try:
-        unit_status: UnitStatus = next(iter(status.applications[application.name].units.values()))
-        assert unit_status.address, "Invalid unit address"
-        return unit_status.address
-    except StopIteration as exc:
-        raise StopIteration("Invalid unit status") from exc
+    unit_ips = await get_model_unit_addresses(model=model, app_name=application.name)
+    assert unit_ips, f"Unit IP address not found for {application.name}"
+    return unit_ips[0]
 
 
 @pytest.fixture(scope="module", name="web_address")
@@ -480,15 +475,9 @@ async def jenkins_with_proxy_fixture(
 @pytest_asyncio.fixture(scope="module", name="proxy_jenkins_unit_ip")
 async def proxy_jenkins_unit_ip_fixture(model: Model, jenkins_with_proxy: Application):
     """Get Jenkins charm w/ proxy enabled unit IP."""
-    status: FullStatus = await model.get_status([jenkins_with_proxy.name])
-    try:
-        unit_status: UnitStatus = next(
-            iter(status.applications[jenkins_with_proxy.name].units.values())
-        )
-        assert unit_status.address, "Invalid unit address"
-        return unit_status.address
-    except StopIteration as exc:
-        raise StopIteration("Invalid unit status") from exc
+    unit_ips = await get_model_unit_addresses(model=model, app_name=jenkins_with_proxy.name)
+    assert unit_ips, f"Unit IP address not found for {jenkins_with_proxy.name}"
+    return unit_ips[0]
 
 
 @pytest_asyncio.fixture(scope="module", name="proxy_jenkins_web_address")
@@ -781,10 +770,9 @@ async def traefik_application_fixture(model: Model):
     await model.wait_for_idle(
         status="active", apps=[traefik.name], timeout=20 * 60, idle_period=30, raise_on_error=False
     )
-    status = await model.get_status(filters=[traefik.name])
-    unit = next(iter(status.applications[traefik.name].units))
-    traefik_address = status["applications"][traefik.name]["units"][unit]["address"]
-    return (traefik, traefik_address)
+    unit_ips = await get_model_unit_addresses(model=model, app_name=traefik.name)
+    assert unit_ips, f"Unit IP address not found for {traefik.name}"
+    return (traefik, unit_ips[0])
 
 
 @pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
