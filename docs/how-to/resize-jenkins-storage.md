@@ -14,4 +14,3 @@ juju deploy jenkins-k8s-new --storage jenkins-home=10GB
 
 ### Restore the created backup onto the newly created Jenkins charm instance
 Follow the "Restore the backup on a new (or existing) charm instance" section of [the charm's backup and restore documentation](https://charmhub.io/jenkins-k8s/docs/how-to-backup-and-restore-jenkins) to create an archive of the Jenkins data on your host system. Remember to update the `JENKINS_UNIT` environment variable. For our example we have `JENKINS_UNIT=jenkins-k8s-new/0`.
-
