@@ -89,7 +89,7 @@ JENKINS_IMAGE := localhost:32000/jenkins-image:test
 JENKINS_CHARM_PATH := ./jenkins-k8s_ubuntu-22.04-amd64.charm
 
 .PHONY: setup-microk8s
-setup-microk8s:
+setup-microk8s: ## Setup microk8s plugins for this integration test
 	sudo microk8s enable dns ingress rbac storage registry
 
 .PHONY: setup-integration
