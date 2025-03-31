@@ -1,3 +1,6 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 PROJECT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 SRC := $(PROJECT)src
