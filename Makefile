@@ -13,6 +13,10 @@ help: ## Show this help.
 	@printf "%-30s %s\n" "------" "-----------"
 	@fgrep " ## " $(MAKEFILE_LIST) | fgrep -v grep | awk -F ': .*## ' '{$$1 = sprintf("%-30s", $$1)} 1'
 
+# Check UV is installed.
+ifeq (, $(shell which uv))
+$(error "No uv in PATH, $(PATH), consider running `snap install astral-uv --classic`")
+endif
 
 .PHONY: setup-development
 setup-development: ## Install development tools required for development
