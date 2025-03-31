@@ -93,7 +93,7 @@ setup-microk8s: ## Setup microk8s plugins for this integration test
 	sudo microk8s enable dns ingress rbac storage registry
 
 .PHONY: setup-integration
-setup-integration: build ## Install required artefacts for integration tests
+setup-integration: build ## Build & install required artefacts for integration tests
 	rockcraft.skopeo \
 		--insecure-policy copy \
 		--dest-tls-verify=false \
