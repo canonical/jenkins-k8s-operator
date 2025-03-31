@@ -73,7 +73,7 @@ pack-rock:
 
 
 .PHONY: build
-build: pack-charm pack-rock ## Build necessary artefacts
+build: pack-charm pack-rock ## Build charm+rock artefacts
 
 .PHONY: clean
 clean: ## Clean artifacts from building, testing, etc.
