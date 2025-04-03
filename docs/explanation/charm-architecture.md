@@ -95,7 +95,7 @@ When an agent joins the relation, the charm registers the Jenkins agent node to 
 
 ### agent_relation_departed
 
-When an agent departs the relation, the charm unregisters teh Jenkins agent node from the Jenkins application.
+When an agent departs the relation, the charm unregisters the Jenkins agent node from the Jenkins application.
 
 ## Charm code overview
 
