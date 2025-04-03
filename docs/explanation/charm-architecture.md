@@ -78,14 +78,14 @@ charm’s life [documentation](https://canonical-juju.readthedocs-hosted.com/en/
 
 This event signals that the Pebble inside the workload container is ready. The charm then starts interacting with Pebble to begin the installation process.
 
-### _on_jenkins_home_storage_attached
+### jenkins_home_storage_attached
 
 This event marks the charm’s storage availability. The name of the event derived from the name of
 the storage noted in the `metadata.yaml` configuration under "storage" key.
 `containers.jenkins.mounts.storage` and `storage.jenkins-home` section. The storage filesystem maps to
 `/var/lib/jenkins` directory of the Jenkins application, which is used to store Jenkins related files.
 
-### _on_update_status
+### update_status
 
 This event is fired regularly by Juju to check the status of the charm. The charm checks if any plugins outside of the configured plugins (through charm configuration) have been installed and removes them.
 
