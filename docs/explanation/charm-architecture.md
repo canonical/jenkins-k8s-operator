@@ -12,7 +12,7 @@ charms.
 The core component of jenkins-k8s charm consists of a jenkins-k8s main workload container. The
 services inside the container are driven by Pebble, a lightweight API-driven process supervisor
 that controls the lifecycle of a service.
-Learn more about Pebble and its layer configurations [in the Pebble documentation](https://github.com/canonical/pebble).
+Learn more about Pebble and its layer configurations [in the Pebble documentation](https://documentation.ubuntu.com/pebble/).
 
 ```mermaid
 C4Context
