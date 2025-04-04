@@ -40,7 +40,7 @@ from .dex import (
 from .helpers import generate_jenkins_client_from_application, get_model_unit_addresses, get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
-KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "./kube-config")
+KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
 IDENTITY_PLATFORM_APPS = [
     "traefik-admin",
     "traefik-public",
@@ -783,7 +783,8 @@ async def oathkeeper_application_related_fixture(
     oathkeeper = await model.deploy("oathkeeper", channel="edge", trust=True)
     kratos_app = await model.deploy(
         "kratos",
-        channel="0.4/edge",
+        channel="latest/stable",
+        revision=527,
         # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
         config={"dev": "True"},
         trust=True,

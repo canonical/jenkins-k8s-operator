@@ -14,7 +14,7 @@ The focus of Jenkins is the building/testing of software projects continuously, 
 executions of externally-run jobs. More information at http://jenkins-ci.org/.
 
 This charm provides the Jenkins server service, and when paired with the
-jenkins agent provides an easy way to deploy Jenkins.
+jenkins agent, provides an easy way to deploy Jenkins.
 
 For DevOps and SRE teams, this charm will make operating Jenkins simple and straightforward
 through Juju's clean interface. Allowing both kubernetes and machine agent relations, it supports
