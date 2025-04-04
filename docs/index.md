@@ -59,3 +59,4 @@ Thinking about using the Jenkins-k8s Operator for your next project? [Get in tou
   1. [Integrations](reference/integrations.md)
 1. [Explanation](explanation)
   1. [Agent-deprecated relation](explanation/agent-deprecated-relation.md)
+1. [Changelog](changelog.md)
