@@ -16,7 +16,7 @@ Learn more about Pebble and its layer configurations [in the Pebble documentatio
 
 ```mermaid
 C4Context
-title Component diagram for Jenkins Charm
+title Component diagram for the Jenkins charm
 
 Container_Boundary(jenkins, "Jenkins") {
   Component(jenkins-app, "Jenkins application", "", "Serves the Jenkins application")
