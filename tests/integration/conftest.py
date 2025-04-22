@@ -783,8 +783,7 @@ async def oathkeeper_application_related_fixture(
     oathkeeper = await model.deploy("oathkeeper", channel="edge", trust=True)
     kratos_app = await model.deploy(
         "kratos",
-        channel="latest/stable",
-        revision=527,
+        channel="0.4/edge",
         # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
         config={"dev": "True"},
         trust=True,
@@ -830,7 +829,7 @@ async def oathkeeper_application_related_fixture(
     )
     login_ui_app = await model.deploy(
         "identity-platform-login-ui-operator",
-        channel="0.3/edge",
+        channel="latest/edge",
         trust=True,
     )
 
