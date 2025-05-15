@@ -4,9 +4,9 @@ on:
   pull_request:
 
 jobs:
-  unit-tests:
-    uses: canonical/operator-workflows/.github/workflows/test.yaml@main
-    secrets: inherit
-    with:
-      self-hosted-runner: true
-      self-hosted-runner-label: "edge"
+  tmate-test:
+    runs-on: self-hosted, ppc64el
+    steps:
+      # Enable tmate debugging of manually-triggered workflows if the input option was provided
+      - name: Setup tmate session
+        uses: canonical/action-tmate@feat/ubuntu-arch
