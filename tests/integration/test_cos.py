@@ -56,7 +56,9 @@ def log_files_exist(
         True if log files with logs exists. False otherwise.
     """
     series = requests.get(f"http://{unit_address}:3100/loki/api/v1/series", timeout=10).json()
-    log_files = set(series_data["filename"] for series_data in series["data"])
+    log_files = set(
+        series_data["filename"] for series_data in series["data"] if "filename" in series_data
+    )
     logger.info("Loki log files: %s", log_files)
     if not all(filename in log_files for filename in filenames):
         return False
