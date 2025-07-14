@@ -1,6 +1,6 @@
 # Integrations
 
-### agent
+### `agent`
 
 _Interface_: jenkins_agent_v0    
 _Supported charms_: [jenkins-agent-k8s](https://charmhub.io/jenkins-agent-k8s),
@@ -35,7 +35,7 @@ localhost
 juju integrate jenkins-k8s:agent localhost:admin/jenkins-vm-model.jenkins-agent
 ```
 
-### logging
+### `logging`
 
 _Interface_: loki_push_api    
 _Supported charms_: [loki-k8s](https://charmhub.io/loki-k8s)
@@ -50,7 +50,7 @@ Example agent integrate command:
 juju integrate jenkins-k8s:logging loki-k8s:logging
 ```
 
-### metrics-endpoint
+### `metrics-endpoint`
 
 _Interface_: prometheus_scrape    
 _Supported charms_: [prometheus-k8s](https://charmhub.io/prometheus-k8s)
@@ -67,7 +67,7 @@ Example metrics-endpoint integrate command:
 juju integrate jenkins-k8s:metrics-endpoint prometheus-k8s:metrics-endpoint
 ```
 
-### grafana-dashboard
+### `grafana-dashboard`
 
 _Interface_: grafana_dashboard    
 _Supported charms_: [grafana-k8s](https://charmhub.io/grafana-k8s)

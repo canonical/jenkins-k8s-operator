@@ -13,7 +13,9 @@ Use `juju bootstrap localhost localhost` to bootstrap a `lxd` machine controller
 
 Use `juju add-model tutorial` to add a model named `tutorial`.
 
+<!-- vale Canonical.007-Headings-sentence-case = NO -->
 ### Deploy Jenkins agents (VM)
+<!-- vale Canonical.007-Headings-sentence-case = YES -->
 
 Deploy 3 units of [jenkins agents](https://charmhub.io/jenkins-agent) on the lxd cloud.
 
@@ -22,7 +24,7 @@ Deploy 3 units of [jenkins agents](https://charmhub.io/jenkins-agent) on the lxd
 juju deploy jenkins-agent --channel=latest/edge -n3
 ```
 
-### Create an offer for Cross Model Relation
+### Create an offer for cross model relation
 
 To relate charms
 [across different models](https://juju.is/docs/juju/manage-cross-model-integrations), a juju

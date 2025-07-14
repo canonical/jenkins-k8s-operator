@@ -8,7 +8,7 @@ rockcraft pack
 cd ..
 ```
 
-Push the OCI image to microk8s:
+Push the OCI image to MicroK8s:
 
 ```bash
 rockcraft.skopeo --insecure-policy copy --dest-tls-verify=false oci-archive:jenkins_rock/jenkins_1.0_amd64.rock docker://localhost:32000/jenkins:1.0

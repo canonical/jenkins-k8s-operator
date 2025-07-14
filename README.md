@@ -1,4 +1,4 @@
-# jenkins-k8s-operator
+# Jenkins operator
 
 [![CharmHub Badge](https://charmhub.io/jenkins-k8s/badge.svg)](https://charmhub.io/jenkins-k8s)
 [![Publish to edge](https://github.com/canonical/jenkins-k8s-operator/actions/workflows/publish_charm.yaml/badge.svg)](https://github.com/canonical/jenkins-k8s-operator/actions/workflows/publish_charm.yaml)
@@ -14,7 +14,7 @@ The focus of Jenkins is the building/testing of software projects continuously, 
 executions of externally-run jobs. More information at http://jenkins-ci.org/.
 
 This charm provides the Jenkins server service, and when paired with the
-jenkins agent, provides an easy way to deploy Jenkins.
+Jenkins agent, provides an easy way to deploy Jenkins.
 
 For DevOps and SRE teams, this charm will make operating Jenkins simple and straightforward
 through Juju's clean interface. Allowing both kubernetes and machine agent relations, it supports

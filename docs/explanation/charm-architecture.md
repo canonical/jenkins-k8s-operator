@@ -43,7 +43,7 @@ When a logging relation is joined, a promtail application is started via Pebble 
 pushing Jenkins logs at `/var/lib/jenkins/logs/jenkins.log` to Loki.
 The metrics are also scraped via accessing the `/metrics` endpoint of the Jenkins application.
 
-### charm
+### Charm
 
 This container is the main point of contact with the Juju controller. It communicates with Juju to
 run necessary charm code defined by the main `src/charm.py`. The source code is copied to the
@@ -74,26 +74,26 @@ context of a charm. Below is the list of observed events for `jenkins-k8s charm`
 reacts to the event. For more information about the charm’s lifecycle in general, refer to the
 charm’s life [documentation](https://canonical-juju.readthedocs-hosted.com/en/3.6/user/reference/hook/).
 
-### jenkins_pebble_ready
+### Event jenkins_pebble_ready
 
 This event signals that the Pebble inside the workload container is ready. The charm then starts interacting with Pebble to begin the installation process.
 
-### jenkins_home_storage_attached
+### Event jenkins_home_storage_attached
 
 This event marks the charm’s storage availability. The name of the event derived from the name of
 the storage noted in the `metadata.yaml` configuration under "storage" key.
 `containers.jenkins.mounts.storage` and `storage.jenkins-home` section. The storage filesystem maps to
 `/var/lib/jenkins` directory of the Jenkins application, which is used to store Jenkins related files.
 
-### update_status
+### Event update_status
 
 This event is fired regularly by Juju to check the status of the charm. The charm checks if any plugins outside of the configured plugins (through charm configuration) have been installed and removes them.
 
-### agent_relation_joined
+### Event agent_relation_joined
 
 When an agent joins the relation, the charm registers the Jenkins agent node to the Jenkins application and starts orchestrating it.
 
-### agent_relation_departed
+### Event agent_relation_departed
 
 When an agent departs the relation, the charm unregisters the Jenkins agent node from the Jenkins application.
 
