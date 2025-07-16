@@ -1,4 +1,4 @@
-# Jenkins-k8s Operator
+# Jenkins operator
 
 A Juju charm deploying and managing Jenkins on Kubernetes. [Jenkins](https://www.jenkins.io/) is an open source automation server. Jenkins provides hundreds of plugins to support building, deploying and automating any project. It can be integrated with both k8s and machine (VM) agents for use.
 

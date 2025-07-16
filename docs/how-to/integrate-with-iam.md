@@ -1,10 +1,14 @@
+<!-- vale Canonical.007-Headings-sentence-case = NO -->
 # How to integrate with IAM
+<!-- vale Canonical.007-Headings-sentence-case = YES -->
 
 This charm supports integration with the [IAM bundle](https://charmhub.io/iam) via [Oathkeeper](https://charmhub.io/oathkeeper), adding an authentication layer that will front the Jenkins applications. When enabled, Jenkins authentication will be disabled.
 
 The steps to enable this mechanism are described below.
 
+<!-- vale Canonical.007-Headings-sentence-case = NO -->
 ## Deploy the IAM bundle
+<!-- vale Canonical.007-Headings-sentence-case = YES -->
 
 To deploy the IAM bundle, follow [the corresponding section of the tutorial](https://charmhub.io/topics/canonical-identity-platform/tutorials/e2e-tutorial#heading--0001) and configure it with the Identity Provider of your choice, as described in [the documentation](https://charmhub.io/topics/canonical-identity-platform/tutorials/e2e-tutorial#heading--0002).
 
@@ -28,7 +32,9 @@ Finally, integrate Oathkeeper with [Kratos](https://charmhub.io/kratos), the Use
 juju integrate oathkeeper kratos
 ```
 
+<!-- vale Canonical.007-Headings-sentence-case = NO -->
 ## Configure the Jenkins charm
+<!-- vale Canonical.007-Headings-sentence-case = YES -->
 
 Jenkins needs to be accessible via the same ingress in which Oathkeeper has been configured for the requests to be redirected, so upon integrating with it and with Oathkeeper itself. Authentication is set up in place.
 ```
