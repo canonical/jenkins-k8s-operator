@@ -14,7 +14,7 @@ tutorial will walk through each step of deployment to get a basic Jenkins server
 
 - A machine with amd64 architecture.
 - Juju 3 installed.
-- Juju MicroK8s controller created and active named `microk8s`. [MetalLB addon](https://microk8s.io/docs/addon-metallb) should be enabled for traefik-k8s to work.
+- Juju MicroK8s controller created and active named `microk8s`. [MetalLB add-on](https://microk8s.io/docs/addon-metallb) should be enabled for traefik-k8s to work.
 - LXD controller created and active named `lxd` (optional).
 - All the requirements can be met using the [Multipass charm-dev blueprint](https://juju.is/docs/juju/set-up--tear-down-your-test-environment#heading--set-up---tear-down-automatically). Use the Multipass VM shell to run all commands in this tutorial.
 
@@ -157,7 +157,7 @@ traefik-k8s:ingress      jenkins-k8s:ingress  ingress           regular
 traefik-k8s:peers        traefik-k8s:peers    traefik_peers     peer     
 ```
 
-After a few minutes you should be able to see the jenkins agent K8s model as a new build executor
+After a few minutes you should be able to see the Jenkins agent K8s model as a new build executor
 in the Jenkins UI.
 
 
@@ -181,12 +181,12 @@ juju deploy --model lxd:jenkins-tutorial jenkins-agent --channel=latest/edge
 juju integrate --model lxd:jenkins-tutorial jenkins-agent:agent microk8s:admin/jenkins-tutorial.jenkins-k8s
 ```
 
-You can check the status of the lxd model with:
+You can check the status of the LXD model with:
 ```
 juju status --model lxd:jenkins-tutorial --relations
 ```
 
-After a few minutes you should be able to see the jenkins agent machine model as a new build executor
+After a few minutes you should be able to see the Jenkins agent machine model as a new build executor
 in the Jenkins UI.
 
 
