@@ -132,3 +132,9 @@ dmypy.json
 
 # charm artifact
 *.charm
+
+# test artifacts
+.kube_config
+
+# IDE artifacts
+.vscode
