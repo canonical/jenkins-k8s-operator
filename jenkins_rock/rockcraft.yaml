@@ -5,8 +5,8 @@ name: jenkins
 summary: Jenkins rock
 description: Jenkins OCI image for the Jenkins charm
 version: "1.0"
-base: ubuntu@22.04
-build-base: ubuntu@22.04
+base: ubuntu@24.04
+build-base: ubuntu@24.04
 license: Apache-2.0
 platforms:
   amd64:
