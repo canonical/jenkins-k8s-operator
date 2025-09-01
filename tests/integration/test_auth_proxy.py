@@ -161,7 +161,10 @@ async def test_auth_proxy_integration_returns_not_authorized(
         )
         return response.status_code == 401
 
-    await wait_for(is_auth_401)
+    await wait_for(
+        is_auth_401,
+        timeout=60 * 10,
+    )
 
 
 @pytest.mark.abort_on_fail
