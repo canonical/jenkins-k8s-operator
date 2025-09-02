@@ -20,7 +20,7 @@ services:
       JENKINS_HOME: /var/lib/jenkins
     user: jenkins
     group: jenkins
-    
+
 parts:
   add-user:
     plugin: nil
@@ -58,6 +58,8 @@ parts:
       - wget
       - unzip
     build-environment:
+      # Modifying the following format will break renovate configuration for auto-patching Jenkins.
+      # See renovate.json "customManagers" section.
       - JENKINS_VERSION: 2.492.3
       - JENKINS_PLUGIN_MANAGER_VERSION: 2.13.2
     override-build: |
