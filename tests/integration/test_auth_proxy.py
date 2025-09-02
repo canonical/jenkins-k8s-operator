@@ -7,14 +7,14 @@ import json
 import logging
 import re
 import urllib.parse
-from typing import Any, AsyncGenerator, Callable, Coroutine, Match, cast
+from typing import Any, AsyncGenerator, Callable, Coroutine, Match
 
 import pytest
 import pytest_asyncio
 import requests
 from juju.action import Action
 from juju.application import Application
-from juju.client._definitions import DetailedStatus, UnitStatus
+from juju.client._definitions import UnitStatus
 from juju.model import Model
 from playwright.async_api import async_playwright, expect
 from playwright.async_api._generated import Browser, BrowserContext, BrowserType, Page
