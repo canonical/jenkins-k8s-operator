@@ -3,6 +3,7 @@
 
 """Integration tests for jenkins-k8s-operator with auth_proxy."""
 
+import json
 import logging
 import re
 from typing import Any, AsyncGenerator, Callable, Coroutine, Match, cast
@@ -10,6 +11,7 @@ from typing import Any, AsyncGenerator, Callable, Coroutine, Match, cast
 import pytest
 import pytest_asyncio
 import requests
+from juju.action import Action
 from juju.application import Application
 from juju.client._definitions import DetailedStatus, UnitStatus
 from juju.model import Model
@@ -142,10 +144,20 @@ async def test_auth_proxy_integration_returns_not_authorized(
     act: send a request Jenkins.
     assert: a 401 is returned.
     """
-    unit_status = await get_application_unit_status(model=model, application="traefik-public")
-    workload_message = str(cast(DetailedStatus, unit_status.workload_status).info)
-    # The message is: Serving at <external loadbalancer IP>
-    address = workload_message.removeprefix("Serving at ")
+    traefik_unit = model.units.get("traefik-public/0", None)
+    assert traefik_unit, "Required traefik-public unit not found"
+    # Example output of show-proxied-endpoints action:
+    # proxied-endpoints: '{"traefik-public": {"url": "https://10.15.119.4"}, "jenkins-k8s":
+    #   {"url": "https://10.15.119.4/testing-jenkins-k8s"}, "hydra": {"url":
+    #    "https://10.15.119.4/testing-hydra"}, "kratos": {"url":
+    #    "https://10.15.119.4/testing-kratos"}, "identity-platform-login-ui-operator":
+    #    {"url": "https://10.15.119.4/testing-identity-platform-login-ui-operator"}}'
+    action: Action = await traefik_unit.run_action("show-proxied-endpoints")
+    await action.wait()
+    endpoints_json: str = str(action.results.get("proxied-endpoints"))
+    endpoints: dict = json.loads(endpoints_json)
+    jenkins_endpoint = endpoints.get("jenkins-k8s", {}).get("url")
+    assert jenkins_endpoint, "Jenkins endpoint not found in proxied endpoints"
 
     def is_auth_401():
         """Get the status code of application request via ingress.
@@ -154,7 +166,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
             Whether the status code of the request is 401.
         """
         response = requests.get(  # nosec
-            f"https://{address}/{application.model.name}-{application.name}/",
+            jenkins_endpoint,
             # The certificate is self signed, so verification is disabled.
             verify=False,
             timeout=5,
