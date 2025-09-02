@@ -214,9 +214,9 @@ async def test_auth_proxy_integration_authorized(
     jenkins_endpoint = endpoints.get("jenkins-k8s", {}).get("url")
     assert jenkins_endpoint, "Jenkins endpoint not found in proxied endpoints"
     jenkins_url = urllib.parse.urlparse(jenkins_endpoint)
-    public_host = jenkins_url.hostname
+    public_hostname = jenkins_url.hostname
     expected_url = (
-        f"https://{public_host}/{application.model.name}"
+        f"https://{public_hostname}/{application.model.name}"
         "-identity-platform-login-ui-operator/ui/login"
     )
     expected_url_regex = re.compile(rf"{expected_url}*")
