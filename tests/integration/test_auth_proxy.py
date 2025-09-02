@@ -249,4 +249,4 @@ async def test_auth_proxy_integration_authorized(
     await page.get_by_placeholder("password").fill(external_user_password)
     await page.get_by_role("button", name="Login").click()
 
-    await expect(page).to_have_url(re.compile(rf"{jenkins_url}*"))
+    await expect(page).to_have_url(re.compile(rf"{jenkins_endpoint}*"))
