@@ -9,7 +9,4 @@ jobs:
     secrets: inherit
     with:
       self-hosted-runner: true
-      # 2025/09/03: Use jammy non-edge runners until pflake8 issue is resolved:
-      # https://github.com/canonical/operator-workflows/pull/791
-      # self-hosted-runner-label: "edge"
-      self-hosted-runner-image: "jammy"
+      self-hosted-runner-label: "edge"
