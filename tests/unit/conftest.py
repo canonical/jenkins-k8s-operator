@@ -456,16 +456,6 @@ def patch_os_environ_fixture(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(state.os, "environ", {})
 
 
-@pytest.fixture(scope="function", name="patch_jenkins_node")
-def patch_jenkins_node_fixture(monkeypatch: pytest.MonkeyPatch):
-    """Monkeypatch jenkinsapi Node to enable node creation."""
-    mock_node = MagicMock(spec=jenkinsapi.node.Node)
-    mock_node.return_value.get_node_attributes.return_value = {
-        "json": '{"launcher": {"tunnel": ""}}'
-    }
-    monkeypatch.setattr(jenkins, "Node", mock_node)
-
-
 @pytest.fixture(scope="function", name="mock_ip_addr")
 def mock_ip_addr_fixture():
     """Mock IPV4 fixture."""
