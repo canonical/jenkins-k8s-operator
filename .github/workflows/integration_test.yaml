@@ -23,4 +23,4 @@ jobs:
       juju-channel: 3/stable
       self-hosted-runner: true
       self-hosted-runner-label: "xlarge"
-      microk8s-addons: "dns ingress rbac hostpath-storage metallb:10.15.119.2-10.15.119.4 registry"
+      microk8s-addons: "dns ingress rbac hostpath-storage registry"
