@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+### 2025-09-02
+
+- Upgrade Jenkins version to latest LTS (v2.516.2)
+- Upgrade Ubuntu base to Noble
+
 ### 2025-05-01
 
 - Added how-to landing page 

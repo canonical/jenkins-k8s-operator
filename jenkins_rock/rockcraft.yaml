@@ -5,8 +5,8 @@ name: jenkins
 summary: Jenkins rock
 description: Jenkins OCI image for the Jenkins charm
 version: "1.0"
-base: ubuntu@22.04
-build-base: ubuntu@22.04
+base: ubuntu@24.04
+build-base: ubuntu@24.04
 license: Apache-2.0
 platforms:
   amd64:
@@ -20,7 +20,7 @@ services:
       JENKINS_HOME: /var/lib/jenkins
     user: jenkins
     group: jenkins
-    
+
 parts:
   add-user:
     plugin: nil
@@ -58,7 +58,7 @@ parts:
       - wget
       - unzip
     build-environment:
-      - JENKINS_VERSION: 2.492.3
+      - JENKINS_VERSION: 2.516.2
       - JENKINS_PLUGIN_MANAGER_VERSION: 2.13.2
     override-build: |
       mkdir -p ${CRAFT_PART_INSTALL}/{srv/jenkins/,etc/default/jenkins/}
