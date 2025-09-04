@@ -426,6 +426,7 @@ class Jenkins:
                 "labels": agent_meta.labels,
                 "exclusive": False,
             },
+            poll=False,
         )
         attribs = node.get_node_attributes()
         meta = json.loads(attribs["json"])
