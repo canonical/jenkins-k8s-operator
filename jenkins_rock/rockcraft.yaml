@@ -58,6 +58,8 @@ parts:
       - wget
       - unzip
     build-environment:
+      # Modifying the following format will break renovate configuration for auto-patching Jenkins.
+      # See renovate.json "customManagers" section.
       - JENKINS_VERSION: 2.516.2
       - JENKINS_PLUGIN_MANAGER_VERSION: 2.13.2
     override-build: |
