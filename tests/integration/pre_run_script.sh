@@ -13,7 +13,8 @@ TESTING_MODEL="$(juju switch)"
 
 # lxd should be install and init by a previous step in integration test action.
 echo "bootstrapping lxd juju controller"
-export IPADDR="$( { ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc'; } );"
+IPADDR="$( { ip -4 -j route get 2.2.2.2 | jq -r '.[] | .prefsrc'; } );"
+export IPADDR
 sg snap_microk8s -c "microk8s enalble metallb:$IPADDR-$IPADDR"
 sg snap_microk8s -c "microk8s status --wait-ready --timeout 1200"
 sg snap_microk8s -c "juju bootstrap localhost localhost"
