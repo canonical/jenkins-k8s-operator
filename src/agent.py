@@ -109,7 +109,9 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container) or not jenkins.is_jenkins_ready(
+            container=container
+        ):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()
             return
@@ -144,10 +146,13 @@ class Observer(ops.Object):
             event: The event fired from an agent joining the relationship.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container) or not jenkins.is_jenkins_ready(
+            container=container
+        ):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()
             return
+
         # The relation is joined, it cannot be None, hence the type casting.
         agent_relation_meta = typing.cast(
             typing.Mapping[str, AgentMeta], self.state.agent_relation_meta
@@ -183,7 +188,9 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container) or not jenkins.is_jenkins_ready(
+            container=container
+        ):
             logger.warning("Relation departed before service ready.")
             return
 
@@ -211,7 +218,9 @@ class Observer(ops.Object):
         """
         # the event unit cannot be None.
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_storage_ready(container):
+        if not jenkins.is_storage_ready(container) or not jenkins.is_jenkins_ready(
+            container=container
+        ):
             logger.warning("Relation departed before service ready.")
             return
 
