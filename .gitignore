@@ -132,4 +132,4 @@ dmypy.json
 
 # charm artifact
 *.charm
-libs/
+lib/
