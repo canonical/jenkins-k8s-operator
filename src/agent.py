@@ -28,6 +28,7 @@ class Observer(ops.Object):
         self,
         charm: ops.CharmBase,
         state: State,
+        agent_discovery_ingress_observer: ingress.Observer,
         ingress_observer: ingress.Observer,
         jenkins_instance: jenkins.Jenkins,
     ):
@@ -37,12 +38,14 @@ class Observer(ops.Object):
             charm: The parent charm to attach the observer to.
             state: The charm state.
             jenkins_instance: The Jenkins instance.
-            ingress_observer: The ingress observer responsible for agent discovery.
+            agent_discovery_ingress_observer: The ingress observer responsible for agent discovery.
+            ingress_observer: The ingress observer for Jenkins server.
         """
         super().__init__(charm, "agent-observer")
         self.charm = charm
         self.state = state
         self.jenkins = jenkins_instance
+        self.agent_discovery_ingress_observer = agent_discovery_ingress_observer
         self.ingress_observer = ingress_observer
 
         charm.framework.observe(
@@ -60,6 +63,14 @@ class Observer(ops.Object):
             charm.on[AGENT_RELATION].relation_departed, self._on_agent_relation_departed
         )
         # Event hooks for agent-discovery-ingress
+        charm.framework.observe(
+            agent_discovery_ingress_observer.ingress.on.ready,
+            self._ingress_on_ready,
+        )
+        charm.framework.observe(
+            agent_discovery_ingress_observer.ingress.on.revoked,
+            self._ingress_on_revoked,
+        )
         charm.framework.observe(
             ingress_observer.ingress.on.ready,
             self._ingress_on_ready,
@@ -83,8 +94,10 @@ class Observer(ops.Object):
         Returns:
             The charm's agent discovery url.
         """
-        # Check if an ingress URL is available
-        if ingress_url := self.ingress_observer.ingress.url:
+        # Check if an agent-discovery or Jenkins server ingress URL is available
+        if ingress_url := (
+            self.agent_discovery_ingress_observer.ingress.url or self.ingress_observer.ingress.url
+        ):
             return ingress_url
 
         # Fallback to pod IP

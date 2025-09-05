@@ -62,7 +62,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.jenkins = jenkins.Jenkins(self.calculate_env())
         self.actions_observer = actions.Observer(self, self.state, self.jenkins)
         self.agent_observer = agent.Observer(
-            self, self.state, self.agent_discovery_ingress_observer, self.jenkins
+            self,
+            self.state,
+            self.agent_discovery_ingress_observer,
+            self.ingress_observer,
+            self.jenkins,
         )
         self.cos_observer = cos.Observer(self)
         self.auth_proxy_observer = auth_proxy.Observer(
