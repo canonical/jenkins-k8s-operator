@@ -716,16 +716,13 @@ def is_storage_ready(container: typing.Optional[ops.Container]) -> bool:
 
 
 def is_jenkins_ready(container: typing.Optional[ops.Container]) -> bool:
-    """Return whether the Jenkins home directory is mounted and owned by jenkins.
+    """Return whether the Jenkins service is running and operational.
 
     Args:
         container: The Jenkins workload container.
 
-    Raises:
-        StorageMountError: if there was an error getting storage information.
-
     Returns:
-        True if home directory is mounted and owned by jenkins, False otherwise.
+        True if Jenkins service is ready and healthy. False otherwise.
     """
     if not container or not container.can_connect():
         return False
