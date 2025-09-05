@@ -3,15 +3,18 @@
 
 """Integration tests for jenkins-k8s-operator with auth_proxy."""
 
+import json
 import logging
 import re
-from typing import Any, AsyncGenerator, Callable, Coroutine, Match, cast
+import urllib.parse
+from typing import Any, AsyncGenerator, Callable, Coroutine, Match
 
 import pytest
 import pytest_asyncio
 import requests
+from juju.action import Action
 from juju.application import Application
-from juju.client._definitions import DetailedStatus, UnitStatus
+from juju.client._definitions import UnitStatus
 from juju.model import Model
 from playwright.async_api import async_playwright, expect
 from playwright.async_api._generated import Browser, BrowserContext, BrowserType, Page
@@ -130,22 +133,45 @@ async def get_application_unit_status(model: Model, application: str) -> UnitSta
     return unit_status
 
 
+async def _get_traefik_proxied_endpoints(model: Model, traefik_app_name: str) -> dict:
+    """Get traefik's proxied endpoints via running show-proxied-endpoints action.
+
+    Args:
+        model: The Juju model to search traefik application for.
+        traefik_app_name: Deployed traefik application name.
+
+    Returns:
+        Mapping of proxied endpoints in the format of {<app-name>: {url: <url>}}
+    """
+    traefik_unit = model.units.get(f"{traefik_app_name}/0", None)
+    assert traefik_unit, f"Required {traefik_app_name} unit not found"
+    # Example output of show-proxied-endpoints action:
+    # proxied-endpoints: '{"traefik-public": {"url": "https://10.15.119.4"}, "jenkins-k8s":
+    #   {"url": "https://10.15.119.4/testing-jenkins-k8s"}, "hydra": {"url":
+    #    "https://10.15.119.4/testing-hydra"}, "kratos": {"url":
+    #    "https://10.15.119.4/testing-kratos"}, "identity-platform-login-ui-operator":
+    #    {"url": "https://10.15.119.4/testing-identity-platform-login-ui-operator"}}'
+    action: Action = await traefik_unit.run_action("show-proxied-endpoints")
+    await action.wait()
+    endpoints_json: str = str(action.results.get("proxied-endpoints"))
+    endpoints: dict = json.loads(endpoints_json)
+    return endpoints
+
+
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("oathkeeper_related")
-async def test_auth_proxy_integration_returns_not_authorized(
-    model: Model,
-    application: Application,
-) -> None:
+async def test_auth_proxy_integration_returns_not_authorized(model: Model) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
     act: send a request Jenkins.
     assert: a 401 is returned.
     """
-    unit_status = await get_application_unit_status(model=model, application="traefik-public")
-    workload_message = str(cast(DetailedStatus, unit_status.workload_status).info)
-    # The message is: Serving at <external loadbalancer IP>
-    address = workload_message.removeprefix("Serving at ")
+    endpoints = await _get_traefik_proxied_endpoints(
+        model=model, traefik_app_name="traefik-public"
+    )
+    jenkins_endpoint = endpoints.get("jenkins-k8s", {}).get("url")
+    assert jenkins_endpoint, "Jenkins endpoint not found in proxied endpoints"
 
     def is_auth_401():
         """Get the status code of application request via ingress.
@@ -154,14 +180,17 @@ async def test_auth_proxy_integration_returns_not_authorized(
             Whether the status code of the request is 401.
         """
         response = requests.get(  # nosec
-            f"https://{address}/{application.model.name}-{application.name}/",
+            jenkins_endpoint,
             # The certificate is self signed, so verification is disabled.
             verify=False,
             timeout=5,
         )
         return response.status_code == 401
 
-    await wait_for(is_auth_401)
+    await wait_for(
+        is_auth_401,
+        timeout=60 * 10,
+    )
 
 
 @pytest.mark.abort_on_fail
@@ -179,15 +208,15 @@ async def test_auth_proxy_integration_authorized(
     act: log in via DEX
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
-    unit_status = await get_application_unit_status(
-        model=application.model, application="traefik-public"
+    endpoints = await _get_traefik_proxied_endpoints(
+        model=application.model, traefik_app_name="traefik-public"
     )
-    workload_message = str(cast(DetailedStatus, unit_status.workload_status).info)
-    # The message is: Serving at <external loadbalancer IP>
-    address = workload_message.removeprefix("Serving at ")
-    jenkins_url = f"https://{address}/{application.model.name}-{application.name}/"
+    jenkins_endpoint = endpoints.get("jenkins-k8s", {}).get("url")
+    assert jenkins_endpoint, "Jenkins endpoint not found in proxied endpoints"
+    jenkins_url = urllib.parse.urlparse(jenkins_endpoint)
+    public_hostname = jenkins_url.hostname
     expected_url = (
-        f"https://{address}/{application.model.name}"
+        f"https://{public_hostname}/{application.model.name}"
         "-identity-platform-login-ui-operator/ui/login"
     )
     expected_url_regex = re.compile(rf"{expected_url}*")
@@ -198,7 +227,7 @@ async def test_auth_proxy_integration_authorized(
         Returns:
             A match if found, None otherwise.
         """
-        await page.goto(jenkins_url)
+        await page.goto(jenkins_endpoint)
         logger.info("Page URL: %s", page.url)
         return expected_url_regex.match(page.url)
 
@@ -220,4 +249,4 @@ async def test_auth_proxy_integration_authorized(
     await page.get_by_placeholder("password").fill(external_user_password)
     await page.get_by_role("button", name="Login").click()
 
-    await expect(page).to_have_url(re.compile(rf"{jenkins_url}*"))
+    await expect(page).to_have_url(re.compile(rf"{jenkins_endpoint}*"))

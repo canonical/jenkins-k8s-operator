@@ -829,7 +829,6 @@ def test_get_node_secret(
         assert secret == node_secret, "Secret value mismatch."
 
 
-@pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node_fail(
     container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
 ):
@@ -851,7 +850,6 @@ def test_add_agent_node_fail(
             )
 
 
-@pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node_already_exists(
     container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
 ):
@@ -870,7 +868,6 @@ def test_add_agent_node_already_exists(
         )
 
 
-@pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node(
     container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
 ):
@@ -889,7 +886,6 @@ def test_add_agent_node(
         )
 
 
-@pytest.mark.usefixtures("patch_jenkins_node")
 def test_add_agent_node_websocket(
     container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
 ):
@@ -908,7 +904,6 @@ def test_add_agent_node_websocket(
         )
 
 
-@pytest.mark.usefixtures("patch_jenkins_node")
 def test_remove_agent_node_fail(
     container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
 ):
