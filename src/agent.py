@@ -16,6 +16,8 @@ from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, JENKINS_SERVICE_NAM
 
 logger = logging.getLogger(__name__)
 
+AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
+
 
 class Observer(ops.Object):
     """The Jenkins agent relation observer.
@@ -95,9 +97,16 @@ class Observer(ops.Object):
             The charm's agent discovery url.
         """
         # Check if an agent-discovery or Jenkins server ingress URL is available
-        if ingress_url := (
-            self.agent_discovery_ingress_observer.ingress.url or self.ingress_observer.ingress.url
-        ):
+        # 2025/09/05 If the public ingress is secured (e.g. Oathkeeper), the agents will fail to
+        # register.
+        if ingress_url := self.agent_discovery_ingress_observer.ingress.url:
+            return ingress_url
+        if ingress_url := self.ingress_observer.ingress.url:
+            logger.warning(
+                "Using public ingress with protected endpoints (e.g. oathkeeper)"
+                "will result in agent discovery failure. Use %s for agents discovery.",
+                AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+            )
             return ingress_url
 
         # Fallback to pod IP
@@ -114,6 +123,15 @@ class Observer(ops.Object):
 
         # Fallback to using socket.fqdn
         return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
+
+    @property
+    def _status_message(self) -> str:
+        """Status message to set on agent relation joined."""
+        if self.ingress_observer.ingress.url and not self.ingress_observer.ingress.url:
+            return (
+                f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
+            )
+        return ""
 
     def _on_deprecated_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
         """Handle deprecated agent relation joined event.
@@ -148,7 +166,7 @@ class Observer(ops.Object):
 
         jenkins_url = self.agent_discovery_url
         event.relation.data[self.model.unit].update({"url": jenkins_url, "secret": secret})
-        self.charm.unit.status = ops.ActiveStatus()
+        self.charm.unit.status = ops.ActiveStatus(self._status_message)
 
     def _on_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
         """Handle agent relation joined event.
@@ -186,7 +204,7 @@ class Observer(ops.Object):
         event.relation.data[self.model.unit].update(
             {"url": jenkins_url, f"{agent_meta.name}_secret": secret}
         )
-        self.charm.unit.status = ops.ActiveStatus()
+        self.charm.unit.status = ops.ActiveStatus(self._status_message)
 
     def _on_deprecated_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
         """Handle deprecated agent relation departed event.

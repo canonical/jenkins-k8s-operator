@@ -28,7 +28,6 @@ from state import (
     State,
 )
 
-AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
 INGRESS_RELATION_NAME = "ingress"
 logger = logging.getLogger(__name__)
 
@@ -56,7 +55,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         # Ingress dedicated to agent discovery
         self.agent_discovery_ingress_observer = ingress.Observer(
-            self, "agent-discovery-ingress-observer", AGENT_DISCOVERY_INGRESS_RELATION_NAME
+            self, "agent-discovery-ingress-observer", agent.AGENT_DISCOVERY_INGRESS_RELATION_NAME
         )
         self.ingress_observer = ingress.Observer(self, "ingress-observer", INGRESS_RELATION_NAME)
         self.jenkins = jenkins.Jenkins(self.calculate_env())
