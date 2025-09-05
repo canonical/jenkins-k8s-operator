@@ -1,4 +1,4 @@
-# Deploy the jenkins-k8s charm for the first time
+# Deploy the `jenkins-k8s` charm for the first time
 
 ## What you'll do
 
@@ -12,13 +12,13 @@ tutorial will walk through each step of deployment to get a basic Jenkins server
 
 ### Requirements
 
-- A machine with amd64 architecture.
+- A machine with AMD64 architecture.
 - Juju 3 installed.
 - Juju MicroK8s controller created and active named `microk8s`. [MetalLB add-on](https://microk8s.io/docs/addon-metallb) should be enabled for traefik-k8s to work.
 - LXD controller created and active named `lxd` (optional).
-- All the requirements can be met using the [Multipass charm-dev blueprint](https://juju.is/docs/juju/set-up--tear-down-your-test-environment#heading--set-up---tear-down-automatically). Use the Multipass VM shell to run all commands in this tutorial.
+- All the requirements can be met using the [Set up your deployment - local testing and development](https://documentation.ubuntu.com/juju/3.6/howto/manage-your-juju-deployment/set-up-your-juju-deployment-local-testing-and-development/). Use the Multipass VM shell to run all commands in this tutorial.
 
-For more information about how to install Juju, see [Get started with Juju](https://juju.is/docs/olm/get-started-with-juju).
+For more information about how to install Juju, see [Get started with Juju](https://documentation.ubuntu.com/juju/3.6/tutorial/).
 
 ### Set up the tutorial model
 
@@ -30,7 +30,7 @@ juju switch microk8s
 juju add-model jenkins-tutorial
 ```
 
-### Deploy the jenkins-k8s charm
+### Deploy the `jenkins-k8s` charm
 
 Start off by deploying the jenkins-k8s charm. By default it will deploy the latest stable release
 of the jenkins-k8s charm.
@@ -48,7 +48,7 @@ The Jenkins application can only have a single server unit. Adding more units th
 parameter will cause the application to misbehave.
 
 
-### Expose jenkins-k8s through ingress
+### Expose `jenkins-k8s` through ingress
 
 Deploy traefik-k8s charm and integrate it with the jenkins-k8s charm:
 ```

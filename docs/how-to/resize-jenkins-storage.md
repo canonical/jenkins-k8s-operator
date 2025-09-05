@@ -1,4 +1,4 @@
-# How to resize the jenkins-home storage volume
+# How to resize the Jenkins home storage volume
 The default size of the jenkins-home storage volume for a fresh installation is 1GB. While this works for most scenarios, operators might need to have more storage for installing plugins, storing artifacts, and running builds/checking out SCMs on the built-in node.
 
 A low disk-space on the built-in node will cause the node to go offline, blocking Jenkins from running jobs.
