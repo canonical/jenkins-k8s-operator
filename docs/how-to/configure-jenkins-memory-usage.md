@@ -1,4 +1,4 @@
-# How to control heap memory of the jenkins-k8s-operator charm
+# How to control heap memory
 The [jenkins-k8s-operator](https://github.com/canonical/jenkins-k8s-operator) charm uses [Juju constraints](https://juju.is/docs/juju/constraint) to limit the amount of memory a charm can use. To deploy the charm with constraints, use the `--constraints "<key>=<value>"` option when running `juju deploy`:
 ```bash
 juju deploy jenkins-k8s --channel=latest/edge --constraints "mem=2048M"

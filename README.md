@@ -5,7 +5,7 @@
 [![Promote charm](https://github.com/canonical/jenkins-k8s-operator/actions/workflows/promote_charm.yaml/badge.svg)](https://github.com/canonical/jenkins-k8s-operator/actions/workflows/promote_charm.yaml)
 [![Discourse Status](https://img.shields.io/discourse/status?server=https%3A%2F%2Fdiscourse.charmhub.io&style=flat&label=CharmHub%20Discourse)](https://discourse.charmhub.io)
 
-A [Juju](https://juju.is/) [charm](https://juju.is/docs/olm/charmed-operators)
+A [Juju](https://juju.is/) [charm](https://documentation.ubuntu.com/juju/3.6/reference/charm/)
 deploying and managing [Jenkins](https://jenkins.io/) on Kubernetes. Jenkins is an open source
 automation server, providing plugins to support building, deploying and automating any project.
 
@@ -28,11 +28,11 @@ To begin, refer to the [tutorial](https://charmhub.io/jenkins-k8s/docs/tutorial-
 
 ### Basic operations
 
-#### Expose jenkins-k8s through ingress
+#### Expose `jenkins-k8s` through ingress
 
 See the [Expose jenkins-k8s through ingress](https://charmhub.io/jenkins-k8s/docs/tutorial-getting-started#expose-jenkins-k8s-through-ingress) section in the jenkins-k8s-operator documentation.
 
-#### Integrate with the jenkins-agent and the jenkins-agent-k8s charm
+#### Integrate with the `jenkins-agent` and the `jenkins-agent-k8s` charms
 
 See the [deploy and integrate k8s agents](https://charmhub.io/jenkins-k8s/docs/tutorial-getting-started#deploy-and-integrate-k8s-agents) section and the [deploy and integrate machine agents](https://charmhub.io/jenkins-k8s/docs/tutorial-getting-started#deploy-and-integrate-machine-agents-optional) section in the jenkins-k8s-operator documentation.
 
