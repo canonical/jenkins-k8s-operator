@@ -18,8 +18,6 @@ from .helpers import assert_job_success
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text(encoding="utf-8"))
-
 
 async def test_jenkins_wizard_bypass(web_address: str):
     """
