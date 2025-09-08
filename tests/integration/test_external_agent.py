@@ -3,7 +3,7 @@
 
 """Integration tests for jenkins-k8s-operator with ingress."""
 
-import typing
+from dataclasses import dataclass
 
 import pytest
 import pytest_asyncio
@@ -12,51 +12,52 @@ from juju.model import Model
 
 import state
 
-from .helpers import get_model_unit_addresses
+
+@dataclass
+class _IngressTraefiks:
+    """The ingress applications for Jenkins server.
+
+    Attributes:
+        agent_discovery: The ingress application for agent discovery.
+        server: The ingress application for Jenkins server.
+    """
+
+    agent_discovery: Application
+    server: Application
 
 
-@pytest_asyncio.fixture(scope="module", name="agent_discovery_traefik")
-async def agent_discovery_traefik_fixture(model: Model):
+@pytest_asyncio.fixture(scope="module", name="ingress_traefik")
+async def ingress_traefik_fixture(model: Model):
     """The application related to Jenkins via ingress v2 relation."""
-    traefik = await model.deploy(
+    agent_discovery_traefik = await model.deploy(
         "traefik-k8s",
         channel="edge",
         trust=True,
         config={"routing_mode": "path"},
-        application_name="agent_discovery_traefik",
+        application_name="agent-discovery-traefik",
     )
-    await model.wait_for_idle(
-        status="active", apps=[traefik.name], timeout=20 * 60, idle_period=30, raise_on_error=False
-    )
-    unit_ips = await get_model_unit_addresses(model=model, app_name=traefik.name)
-    assert unit_ips, f"Unit IP address not found for {traefik.name}"
-    return (traefik, unit_ips[0])
-
-
-@pytest_asyncio.fixture(scope="module", name="server_traefik")
-async def server_traefik_fixture(model: Model):
-    """The application related to Jenkins via ingress v2 relation."""
-    traefik = await model.deploy(
+    server_traefik = await model.deploy(
         "traefik-k8s",
         channel="edge",
         trust=True,
         config={"routing_mode": "path"},
-        application_name="server_traefik",
+        application_name="server-traefik",
     )
     await model.wait_for_idle(
-        status="active", apps=[traefik.name], timeout=20 * 60, idle_period=30, raise_on_error=False
+        status="active",
+        apps=[agent_discovery_traefik.name, server_traefik.name],
+        timeout=20 * 60,
+        idle_period=30,
+        raise_on_error=False,
     )
-    unit_ips = await get_model_unit_addresses(model=model, app_name=traefik.name)
-    assert unit_ips, f"Unit IP address not found for {traefik.name}"
-    return (traefik, unit_ips[0])
+    return _IngressTraefiks(agent_discovery=agent_discovery_traefik, server=server_traefik)
 
 
 # This will only work on microk8s !!
 @pytest.mark.abort_on_fail
 async def test_agent_discovery_ingress_integration(
     application: Application,
-    agent_discovery_traefik: typing.Tuple[Application, str],
-    server_traefik: typing.Tuple[Application, str],
+    ingress_traefik: _IngressTraefiks,
     jenkins_machine_agents: Application,
 ):
     """
@@ -66,16 +67,12 @@ async def test_agent_discovery_ingress_integration(
     """
     model = application.model
     machine_model = jenkins_machine_agents.model
-    agent_discovery_traefik_application, _ = server_traefik
-    server_ingress_traefik_application, _ = agent_discovery_traefik
 
     await application.relate(
         state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
-        f"{agent_discovery_traefik_application.name}:ingress",
+        f"{ingress_traefik.agent_discovery.name}:ingress",
     )
-    await application.relate(
-        state.INGRESS_RELATION_NAME, f"{server_ingress_traefik_application.name}:ingress"
-    )
+    await application.relate(state.INGRESS_RELATION_NAME, f"{ingress_traefik.server.name}:ingress")
 
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
