@@ -19,7 +19,11 @@ from .helpers import get_model_unit_addresses
 async def agent_discovery_traefik_fixture(model: Model):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
-        "traefik-k8s", channel="edge", trust=True, config={"routing_mode": "path"}
+        "traefik-k8s",
+        channel="edge",
+        trust=True,
+        config={"routing_mode": "path"},
+        application_name="agent_discovery_traefik",
     )
     await model.wait_for_idle(
         status="active", apps=[traefik.name], timeout=20 * 60, idle_period=30, raise_on_error=False
@@ -33,7 +37,11 @@ async def agent_discovery_traefik_fixture(model: Model):
 async def server_traefik_fixture(model: Model):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
-        "traefik-k8s", channel="edge", trust=True, config={"routing_mode": "path"}
+        "traefik-k8s",
+        channel="edge",
+        trust=True,
+        config={"routing_mode": "path"},
+        application_name="server_traefik",
     )
     await model.wait_for_idle(
         status="active", apps=[traefik.name], timeout=20 * 60, idle_period=30, raise_on_error=False
