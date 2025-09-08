@@ -6,7 +6,7 @@ This guide assumes the `jenkins-k8s` charm to already be deployed on a k8s juju 
 
 To integrate machine (VM) agents, you'll need to have a bootstrapped machine model. Learn about
 bootstrapping different clouds
-[here](https://juju.is/docs/olm/get-started-with-juju#heading--prepare-your-cloud).
+[here](https://documentation.ubuntu.com/juju/3.6/tutorial/#prepare-your-cloud).
 
 Use `juju bootstrap localhost localhost` to bootstrap a `lxd` machine controller with the name
 `localhost` for tutorial purposes.
@@ -27,8 +27,8 @@ juju deploy jenkins-agent --channel=latest/edge -n3
 ### Create an offer for cross model relation
 
 To relate charms
-[across different models](https://juju.is/docs/juju/manage-cross-model-integrations), a juju
-[`offer`](https://juju.is/docs/juju/manage-cross-model-integrations#heading--create-an-offer) is
+[across different models](https://documentation.ubuntu.com/juju/3.6/howto/manage-relations/#add-a-cross-model-relation), a Juju
+[`offer`](https://documentation.ubuntu.com/juju/3.6/howto/manage-offers/#integrate-with-an-offer) is
 required.
 
 Create an offer of the `jenkins-agent` charm's `agent` relation.
