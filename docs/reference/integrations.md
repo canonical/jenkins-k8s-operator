@@ -14,7 +14,7 @@ Example agent integrate command:
 juju relate jenkins-k8s:agent jenkins-agent-k8s:agent
 ```
 
-To create a [cross model relation](https://juju.is/docs/olm/manage-cross-model-integrations) with
+To create a [cross model relation](https://documentation.ubuntu.com/juju/3.6/howto/manage-relations/#add-a-cross-model-relation) with
 a jenkins-agent (VM) charm, create an offer from the machine model.
 
 ```
@@ -29,7 +29,7 @@ juju integrate jenkins-k8s:agent <controller-name>:<juju-user>/<agent-model>.jen
 
 An example of such command would look like the following, using a jenkins-agent deployed on a
 localhost
-[lxd controller](https://juju.is/docs/olm/get-started-with-juju#heading--prepare-your-cloud).
+[LXD controller](https://documentation.ubuntu.com/juju/3.6/tutorial/#prepare-your-cloud).
 
 ```
 juju integrate jenkins-k8s:agent localhost:admin/jenkins-vm-model.jenkins-agent
