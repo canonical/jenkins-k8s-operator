@@ -4,11 +4,9 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import logging
-from pathlib import Path
 
 import jenkinsapi.jenkins
 import requests
-import yaml
 from juju.application import Application
 from juju.model import Model
 
