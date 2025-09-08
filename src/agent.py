@@ -6,6 +6,7 @@ import ipaddress
 import logging
 import socket
 import typing
+from dataclasses import dataclass
 
 import ops
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRevokedEvent
@@ -19,6 +20,19 @@ logger = logging.getLogger(__name__)
 AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
 
 
+@dataclass(frozen=True)
+class IngressObservers:
+    """Wrapper for ingress observers.
+
+    Attributes:
+        agent_discovery: Agent discovery ingress observer instance.
+        server: Jenkins server ingress observer instance.
+    """
+
+    agent_discovery: ingress.Observer
+    server: ingress.Observer
+
+
 class Observer(ops.Object):
     """The Jenkins agent relation observer.
 
@@ -30,8 +44,7 @@ class Observer(ops.Object):
         self,
         charm: ops.CharmBase,
         state: State,
-        agent_discovery_ingress_observer: ingress.Observer,
-        ingress_observer: ingress.Observer,
+        observers: IngressObservers,
         jenkins_instance: jenkins.Jenkins,
     ):
         """Initialize the observer and register event handlers.
@@ -40,15 +53,14 @@ class Observer(ops.Object):
             charm: The parent charm to attach the observer to.
             state: The charm state.
             jenkins_instance: The Jenkins instance.
-            agent_discovery_ingress_observer: The ingress observer responsible for agent discovery.
-            ingress_observer: The ingress observer for Jenkins server.
+            observers: The ingress observers.
         """
         super().__init__(charm, "agent-observer")
         self.charm = charm
         self.state = state
         self.jenkins = jenkins_instance
-        self.agent_discovery_ingress_observer = agent_discovery_ingress_observer
-        self.ingress_observer = ingress_observer
+        self.agent_discovery_ingress_observer = observers.agent_discovery
+        self.ingress_observer = observers.server
 
         charm.framework.observe(
             charm.on[DEPRECATED_AGENT_RELATION].relation_joined,
@@ -66,19 +78,19 @@ class Observer(ops.Object):
         )
         # Event hooks for agent-discovery-ingress
         charm.framework.observe(
-            agent_discovery_ingress_observer.ingress.on.ready,
+            observers.agent_discovery.ingress.on.ready,
             self._ingress_on_ready,
         )
         charm.framework.observe(
-            agent_discovery_ingress_observer.ingress.on.revoked,
+            observers.agent_discovery.ingress.on.revoked,
             self._ingress_on_revoked,
         )
         charm.framework.observe(
-            ingress_observer.ingress.on.ready,
+            observers.server.ingress.on.ready,
             self._ingress_on_ready,
         )
         charm.framework.observe(
-            ingress_observer.ingress.on.revoked,
+            observers.server.ingress.on.revoked,
             self._ingress_on_revoked,
         )
 
@@ -127,7 +139,10 @@ class Observer(ops.Object):
     @property
     def _status_message(self) -> str:
         """Status message to set on agent relation joined."""
-        if self.ingress_observer.ingress.url and not self.ingress_observer.ingress.url:
+        if (
+            self.ingress_observer.ingress.url
+            and not self.agent_discovery_ingress_observer.ingress.url
+        ):
             return (
                 f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
             )

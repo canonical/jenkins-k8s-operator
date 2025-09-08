@@ -362,6 +362,26 @@ def test_agent_discovery_url_with_ingress(harness: Harness):
     assert harness.charm.agent_observer.agent_discovery_url == mock_ingress_url
 
 
+def test_agent_discovery_url_with_server_ingress(harness: Harness):
+    """
+    arrange: given a base jenkins charm with server ingress integration.
+    act: start the charm and add an server ingress integration with traefik.
+    assert: charm.agent_observer.agent_discovery_url is the value
+    from the ingress integration databag.
+    """
+    harness.begin()
+
+    mock_ingress_url = "http://ingress.test"
+    harness.add_relation(
+        "ingress",
+        "traefik-k8s",
+        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
+    )
+
+    assert harness.charm.agent_observer.agent_discovery_url == mock_ingress_url
+    assert "Consider separating ingress for agents" in harness.charm.agent_observer._status_message
+
+
 def test_agent_discovery_url_fqdn_fallback(harness: Harness, monkeypatch: pytest.MonkeyPatch):
     """
     arrange: given a base jenkins charm with no ingress and an invalid ip.
