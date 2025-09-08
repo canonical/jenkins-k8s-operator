@@ -1,5 +1,5 @@
 <!-- vale Canonical.007-Headings-sentence-case = NO -->
-# GitHub runner Terraform module
+# Jenkins-k8s Terraform module
 <!-- vale Canonical.007-Headings-sentence-case = YES -->
 
 This folder contains a base [Terraform][Terraform] module for the Jenkins-k8s charm.

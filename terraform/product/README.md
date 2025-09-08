@@ -1,8 +1,8 @@
 <!-- vale Canonical.007-Headings-sentence-case = NO -->
-# GitHub runner Terraform module
+# Jenkins-k8s Terraform module
 <!-- vale Canonical.007-Headings-sentence-case = YES -->
 
-This folder contains a base [Terraform][Terraform] module for the GitHub runner charm.
+This folder contains a base [Terraform][Terraform] module for the Jenkins-k8s charm.
 
 The module uses the [Terraform Juju provider][Terraform Juju provider] to model the charm
 deployment onto any Kubernetes environment managed by [Juju][Juju].
@@ -17,9 +17,9 @@ deployment onto any Kubernetes environment managed by [Juju][Juju].
   the Juju application name.
 - **versions.tf** - Defines the Terraform provider version.
 
-## Using github-runner base module in higher level modules
+## Using jenkins-k8s base module in higher level modules
 
-If you want to use `github-runner` base module as part of your Terraform module, import it
+If you want to use `jenkins-k8s` base module as part of your Terraform module, import it
 like shown below:
 
 ```text
@@ -27,8 +27,8 @@ data "juju_model" "my_model" {
   name = var.model
 }
 
-module "github_runner" {
-  source = "git::https://github.com/canonical/github-runner-operator//terraform"
+module "jenkins_k8s" {
+  source = "git::https://github.com/canonical/jenkins-k8s-operator//terraform"
 
   model = juju_model.my_model.name
   # (Customize configuration variables here if needed)
@@ -38,22 +38,22 @@ module "github_runner" {
 Create integrations, for instance:
 
 ```text
-resource "juju_integration" "ghib-gh" {
+resource "juju_integration" "jenkins_k8s_jenkins_agent_k8s_agent" {
   model = juju_model.my_model.name
   application {
-    name     = module.github_runner.app_name
-    endpoint = module.github_runner.requires.github_runner_image_v0
+    name     = module.jenkins_k8s.app_name
+    endpoint = module.jenkins_k8s.requires.agent
   }
   application {
-    name     = "github-runner-image-builder"
-    endpoint = "image"
+    name     = "jenkins-agent-k8s"
+    endpoint = "agent"
   }
 }
 ```
 
-The complete list of available integrations can be found [in the Integrations tab][github-runner-integrations].
+The complete list of available integrations can be found [in the Integrations tab][jenkins-k8s-integrations].
 
 [Terraform]: https://www.terraform.io/
 [Terraform Juju provider]: https://registry.terraform.io/providers/juju/juju/latest
 [Juju]: https://juju.is
-[github-runner-integrations]: https://charmhub.io/github-runner/integrations
+[github-runner-integrations]: https://charmhub.io/jenkins-k8s/integrations
