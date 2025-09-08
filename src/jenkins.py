@@ -728,6 +728,7 @@ def is_jenkins_ready(container: typing.Optional[ops.Container]) -> bool:
         return False
     try:
         jenkins_service = container.get_service(state.JENKINS_SERVICE_NAME)
+        print(jenkins_service)
     except ops.ModelError:
         logger.warning("Jenkins service not yet initialized", exc_info=True)
         return False

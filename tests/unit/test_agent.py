@@ -154,6 +154,7 @@ def test__on_agent_relation_joined_relation_data_not_valid(
         pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
+@pytest.mark.usefixtures("patch_is_jenkins_ready")
 def test__on_agent_relation_joined_client_error(
     harness_container: HarnessWithContainer,
     get_relation_data: Callable[[str], dict[str, str]],
@@ -198,6 +199,7 @@ def test__on_agent_relation_joined_client_error(
         pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
+@pytest.mark.usefixtures("patch_is_jenkins_ready")
 def test__on_agent_relation_joined(
     harness_container: HarnessWithContainer,
     get_relation_data: Callable[[str], dict[str, str]],
@@ -274,6 +276,7 @@ def test__on_agent_relation_departed_no_container(
         pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
+@pytest.mark.usefixtures("patch_is_jenkins_ready")
 def test__on_agent_relation_departed_remove_agent_node_error(
     harness_container: HarnessWithContainer,
     get_relation_data: Callable[[str], dict[str, str]],
@@ -312,6 +315,7 @@ def test__on_agent_relation_departed_remove_agent_node_error(
         pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
+@pytest.mark.usefixtures("patch_is_jenkins_ready")
 def test__on_agent_relation_departed(
     harness_container: HarnessWithContainer,
     get_relation_data: Callable[[str], dict[str, str]],

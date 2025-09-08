@@ -121,7 +121,7 @@ class Observer(ops.Object):
         )
         # The event unit cannot be None.
         agent_meta = deprecated_agent_relation_meta[typing.cast(ops.Unit, event.unit).name]
-        if not agent_meta:
+        if not agent_meta:  # pragma: nocover
             logger.warning("Relation data not ready yet. Deferring.")
             # The event needs to be retried until the agents have set it's side of relation data.
             event.defer()
@@ -159,7 +159,7 @@ class Observer(ops.Object):
         )
         # The event unit cannot be None.
         agent_meta = agent_relation_meta[typing.cast(ops.Unit, event.unit).name]
-        if not agent_meta:
+        if not agent_meta:  # pragma: nocover
             logger.warning("Relation data not ready yet. Deferring.")
             # The event needs to be retried until the agents have set it's side of relation data.
             event.defer()

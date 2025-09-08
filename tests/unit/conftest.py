@@ -169,6 +169,12 @@ def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Ha
     )
 
 
+@pytest.fixture(name="patch_is_jenkins_ready")
+def patch_is_jenkins_ready_fixture(monkeypatch: pytest.MonkeyPatch):
+    """Patch Jenkins module to report Jenkins service as ready in is_jenkins_ready function."""
+    monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
+
+
 @pytest.fixture(scope="function", name="container")
 def container_fixture(
     harness: Harness,
