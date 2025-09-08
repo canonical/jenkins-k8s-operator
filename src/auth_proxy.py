@@ -103,7 +103,7 @@ class Observer(ops.Object):
     def _update_auth_proxy_config(self) -> None:
         """Update auth_proxy configuration with the correct jenkins url."""
         auth_proxy_config = AuthProxyConfig(
-            protected_urls=[self.ingress.url],
+            protected_urls=[self.ingress.url] if self.ingress.url else [],
             allowed_endpoints=AUTH_PROXY_ALLOWED_ENDPOINTS,
             headers=AUTH_PROXY_HEADERS,
         )

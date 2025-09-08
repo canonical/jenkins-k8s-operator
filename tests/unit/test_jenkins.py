@@ -175,6 +175,46 @@ def test_is_storage_ready_proc_error():
         jenkins.is_storage_ready(container=mock_container)
 
 
+def _parametrize_jenkins_container_states():
+    """Parametrize Jenkins container states for test_is_jekins_ready.
+
+    Returns:
+        Mock Jenkins container with different states.
+    """
+    not_connectable_container = MagicMock()
+    not_connectable_container.can_connect.return_value = False
+
+    service_not_ready_container = MagicMock()
+    service_not_ready_container.get_service.side_effect = [ops.ModelError()]
+
+    service_not_running_container = MagicMock()
+    service_not_running_container.get_service.return_value = (service_mock := MagicMock())
+    service_mock.is_running.return_value = False
+
+    happy_container = MagicMock()
+    happy_container.get_service.return_value = (happy_service_mock := MagicMock())
+    happy_service_mock.is_running.return_value = True
+    return [
+        pytest.param(None, False, id="No container"),
+        pytest.param(not_connectable_container, False, id="Container not yet connectable"),
+        pytest.param(service_not_ready_container, False, id="Service not yet ready"),
+        pytest.param(service_not_running_container, False, id="Service not running"),
+        pytest.param(happy_container, True, id="Service running"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("container", "expected_ready_status"), _parametrize_jenkins_container_states()
+)
+def test_is_jenkins_ready(container: MagicMock, expected_ready_status: bool):
+    """
+    arrange: given a mocked Jenkins container of different states.
+    act: when is_jenkins_ready is called.
+    assert: expected status is returned.
+    """
+    assert jenkins.is_jenkins_ready(container=container) == expected_ready_status
+
+
 def test_get_admin_credentials(
     harness_container: HarnessWithContainer, admin_credentials: jenkins.Credentials
 ):
