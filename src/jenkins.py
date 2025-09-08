@@ -715,6 +715,26 @@ def is_storage_ready(container: typing.Optional[ops.Container]) -> bool:
     return "jenkins" in stdout
 
 
+def is_jenkins_ready(container: typing.Optional[ops.Container]) -> bool:
+    """Return whether the Jenkins service is running and operational.
+
+    Args:
+        container: The Jenkins workload container.
+
+    Returns:
+        True if Jenkins service is ready and healthy. False otherwise.
+    """
+    if not container or not container.can_connect():
+        return False
+    try:
+        jenkins_service = container.get_service(state.JENKINS_SERVICE_NAME)
+        print(jenkins_service)
+    except ops.ModelError:
+        logger.warning("Jenkins service not yet initialized", exc_info=True)
+        return False
+    return jenkins_service.is_running()
+
+
 def _install_config(container: ops.Container, filename: str, destination_path: Path) -> None:
     """Install jenkins-config.xml.
 
