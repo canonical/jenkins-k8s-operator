@@ -13,11 +13,16 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerApp
 
 import ingress
 import jenkins
-from state import AGENT_RELATION, DEPRECATED_AGENT_RELATION, JENKINS_SERVICE_NAME, AgentMeta, State
+from state import (
+    AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+    AGENT_RELATION,
+    DEPRECATED_AGENT_RELATION,
+    JENKINS_SERVICE_NAME,
+    AgentMeta,
+    State,
+)
 
 logger = logging.getLogger(__name__)
-
-AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
 
 
 @dataclass(frozen=True)

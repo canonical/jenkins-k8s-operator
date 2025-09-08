@@ -21,6 +21,7 @@ import jenkins
 import pebble
 import timerange
 from state import (
+    INGRESS_RELATION_NAME,
     JENKINS_SERVICE_NAME,
     CharmConfigInvalidError,
     CharmIllegalNumUnitsError,
@@ -28,7 +29,6 @@ from state import (
     State,
 )
 
-INGRESS_RELATION_NAME = "ingress"
 logger = logging.getLogger(__name__)
 
 

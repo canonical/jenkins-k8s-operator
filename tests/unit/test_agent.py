@@ -513,7 +513,7 @@ def test_reconfigure_agent_discovery_url_ingress_revoked(
     """
     mock_ingress_url = "http://ingress.test"
     ingress_relation_id = harness.add_relation(
-        "agent-discovery-ingress",
+        "ingress",
         "traefik-k8s",
         app_data={"ingress": json.dumps({"url": mock_ingress_url})},
     )

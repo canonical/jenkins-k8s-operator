@@ -184,6 +184,20 @@ def test_auth_proxy_integrated_true(mock_charm: MagicMock):
     assert not config.auth_proxy_integrated
 
 
+def test_agent_discovery_ingress_without_server_ingress(mock_charm: MagicMock):
+    """
+    arrange: a charm with agent discovery ingress but no server ingress.
+    act: when state.from_charm is called.
+    assert: CharmConfigInvalidError is raised.
+    """
+    mock_charm.model.get_relation = lambda relation_name: (
+        None if relation_name == state.INGRESS_RELATION_NAME else MagicMock()
+    )
+
+    with pytest.raises(state.CharmConfigInvalidError):
+        state.State.from_charm(mock_charm)
+
+
 def test_invalid_num_units(mock_charm: MagicMock):
     """
     arrange: given a mock charm with more than 1 unit of deployment.
