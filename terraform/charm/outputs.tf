@@ -8,7 +8,7 @@ output "app_name" {
 
 output "requires" {
   value = {
-    agent = "jenkins_agent_v0"
+    agent = "agent"
     ingress = "ingress"
     agent_discovery_ingress = "ingress"
     auth_proxy = "auth_proxy"

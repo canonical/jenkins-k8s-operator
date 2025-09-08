@@ -17,7 +17,7 @@ module "jenkins_k8s" {
 }
 
 module "jenkins_agent_k8s" {
-  source      = "git::https://github.com/canonical/jenkins-agent-k8s-operator//terraform/charm?ref=rev67"
+  source      = "git::https://github.com/canonical/jenkins-agent-k8s-operator//terraform/charm?ref=feat/terraform-module"
   app_name    = var.jenkins_agent_k8s.app_name
   channel     = var.jenkins_agent_k8s.channel
   config      = var.jenkins_agent_k8s.config
