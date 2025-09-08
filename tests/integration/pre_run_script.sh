@@ -16,7 +16,7 @@ echo "bootstrapping lxd juju controller"
 # Assign random IP address - this should have a very low collision rate
 sg snap_microk8s -c "sudo microk8s enable metallb:10.15.119.2-10.15.119.4"
 sg snap_microk8s -c "microk8s status --wait-ready --timeout 1200"
-sg snap_microk8s -c "juju bootstrap localhost localhost"
+sg snap_microk8s -c "juju bootstrap localhost localhost --debug"
 
 echo "Switching to testing model"
 sg snap_microk8s -c "juju switch $TESTING_MODEL"
