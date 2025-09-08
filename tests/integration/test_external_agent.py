@@ -9,7 +9,7 @@ import pytest
 from juju.application import Application
 
 import state
-from charm import AGENT_DISCOVERY_INGRESS_RELATION_NAME
+from agent import AGENT_DISCOVERY_INGRESS_RELATION_NAME
 
 
 # This will only work on microk8s !!
