@@ -4,11 +4,9 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import logging
-from pathlib import Path
 
 import jenkinsapi.jenkins
 import requests
-import yaml
 from juju.application import Application
 from juju.model import Model
 
@@ -17,8 +15,6 @@ import state
 from .helpers import assert_job_success
 
 logger = logging.getLogger(__name__)
-
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text(encoding="utf-8"))
 
 
 async def test_jenkins_wizard_bypass(web_address: str):
