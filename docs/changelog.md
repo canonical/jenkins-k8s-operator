@@ -8,6 +8,7 @@ Each revision is versioned by the date of the revision.
 
 ### 2025-09-05
 
+- Fix issue with Jenkins agent node server discovery when ingress is applied to server
 - Fix race condition with agent trying to register before service ready
 
 ### 2025-09-02

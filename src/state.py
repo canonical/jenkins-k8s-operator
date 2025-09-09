@@ -20,6 +20,8 @@ DEPRECATED_AGENT_RELATION = "agent-deprecated"
 AUTH_PROXY_RELATION = "auth-proxy"
 JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
+INGRESS_RELATION_NAME = "ingress"
+AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
 
 
 class CharmStateBaseError(Exception):
@@ -307,6 +309,13 @@ class State:
         if charm.app.planned_units() > 1:
             raise CharmIllegalNumUnitsError(
                 "The Jenkins charm supports only 1 unit of deployment."
+            )
+        agent_discovery_ingress = charm.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME)
+        server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
+        if agent_discovery_ingress and not server_ingress:
+            raise CharmConfigInvalidError(
+                f"{INGRESS_RELATION_NAME} integration is required when using "
+                f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME}"
             )
 
         return cls(
