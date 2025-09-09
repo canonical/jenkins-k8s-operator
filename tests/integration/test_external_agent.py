@@ -3,49 +3,76 @@
 
 """Integration tests for jenkins-k8s-operator with ingress."""
 
-import typing
+from dataclasses import dataclass
 
 import pytest
+import pytest_asyncio
 from juju.application import Application
+from juju.model import Model
 
 import state
-from charm import AGENT_DISCOVERY_INGRESS_RELATION_NAME
+
+
+@dataclass
+class _IngressTraefiks:
+    """The ingress applications for Jenkins server.
+
+    Attributes:
+        agent_discovery: The ingress application for agent discovery.
+        server: The ingress application for Jenkins server.
+    """
+
+    agent_discovery: Application
+    server: Application
+
+
+@pytest_asyncio.fixture(scope="module", name="ingress_traefik")
+async def ingress_traefik_fixture(model: Model):
+    """The application related to Jenkins via ingress v2 relation."""
+    agent_discovery_traefik = await model.deploy(
+        "traefik-k8s",
+        channel="edge",
+        trust=True,
+        config={"routing_mode": "path"},
+        application_name="agent-discovery-traefik",
+    )
+    server_traefik = await model.deploy(
+        "traefik-k8s",
+        channel="edge",
+        trust=True,
+        config={"routing_mode": "path"},
+        application_name="server-traefik",
+    )
+    await model.wait_for_idle(
+        status="active",
+        apps=[agent_discovery_traefik.name, server_traefik.name],
+        timeout=20 * 60,
+        idle_period=30,
+        raise_on_error=False,
+    )
+    return _IngressTraefiks(agent_discovery=agent_discovery_traefik, server=server_traefik)
 
 
 # This will only work on microk8s !!
 @pytest.mark.abort_on_fail
 async def test_agent_discovery_ingress_integration(
     application: Application,
-    traefik_application_and_unit_ip: typing.Tuple[Application, str],
-    external_hostname: str,
+    ingress_traefik: _IngressTraefiks,
     jenkins_machine_agents: Application,
 ):
     """
     arrange: deploy the Jenkins charm, ingress, and a machine agent.
-    act: integrate the charms with each other and update the machine agent's dns record.
+    act: integrate the charms with each other.
     assert: All units should be in active status.
     """
     model = application.model
     machine_model = jenkins_machine_agents.model
-    traefik_application, traefik_address = traefik_application_and_unit_ip
-    # The jenkins prefix will be fetch from the main ingress, which is not related for this test
-    await traefik_application.set_config(
-        {
-            "routing_mode": "subdomain",
-            "external_hostname": external_hostname,
-        }
-    )
+
     await application.relate(
-        AGENT_DISCOVERY_INGRESS_RELATION_NAME, f"{traefik_application.name}:ingress"
+        state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+        f"{ingress_traefik.agent_discovery.name}:ingress",
     )
-    # Add dns record
-    ingress_hostname_mapping = (
-        f"{traefik_address} {model.name}-{application.name}.{external_hostname}"
-    )
-    command = f"sudo echo '{ingress_hostname_mapping}' >> /etc/hosts"
-    for unit in jenkins_machine_agents.units:
-        action = await unit.run(command)
-        await action.wait()
+    await application.relate(state.INGRESS_RELATION_NAME, f"{ingress_traefik.server.name}:ingress")
 
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
