@@ -16,7 +16,6 @@ import jenkins
 from state import (
     AGENT_DISCOVERY_INGRESS_RELATION_NAME,
     AGENT_RELATION,
-    DEPRECATED_AGENT_RELATION,
     JENKINS_SERVICE_NAME,
     AgentMeta,
     State,
@@ -67,14 +66,6 @@ class Observer(ops.Object):
         self.agent_discovery_ingress_observer = observers.agent_discovery
         self.ingress_observer = observers.server
 
-        charm.framework.observe(
-            charm.on[DEPRECATED_AGENT_RELATION].relation_joined,
-            self._on_deprecated_agent_relation_joined,
-        )
-        charm.framework.observe(
-            charm.on[DEPRECATED_AGENT_RELATION].relation_departed,
-            self._on_deprecated_agent_relation_departed,
-        )
         charm.framework.observe(
             charm.on[AGENT_RELATION].relation_joined, self._on_agent_relation_joined
         )
@@ -153,43 +144,6 @@ class Observer(ops.Object):
             )
         return ""
 
-    def _on_deprecated_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
-        """Handle deprecated agent relation joined event.
-
-        Args:
-            event: The event fired from an agent joining the relationship.
-        """
-        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_storage_ready(container) or not jenkins.is_jenkins_ready(
-            container=container
-        ):
-            logger.warning("Service not yet ready. Deferring.")
-            event.defer()
-            return
-        # The relation is joined, it cannot be None, hence the type casting.
-        deprecated_agent_relation_meta = typing.cast(
-            typing.Mapping[str, AgentMeta], self.state.deprecated_agent_relation_meta
-        )
-        # The event unit cannot be None.
-        agent_meta = deprecated_agent_relation_meta[typing.cast(ops.Unit, event.unit).name]
-        if not agent_meta:  # pragma: nocover
-            logger.warning("Relation data not ready yet. Deferring.")
-            # The event needs to be retried until the agents have set it's side of relation data.
-            event.defer()
-            return
-
-        self.charm.unit.status = ops.MaintenanceStatus("Adding agent node.")
-        try:
-            self.jenkins.add_agent_node(agent_meta=agent_meta, container=container)
-            secret = self.jenkins.get_node_secret(container=container, node_name=agent_meta.name)
-        except jenkins.JenkinsError as exc:
-            self.charm.unit.status = ops.BlockedStatus(f"Jenkins API exception. {exc=!r}")
-            return
-
-        jenkins_url = self.agent_discovery_url
-        event.relation.data[self.model.unit].update({"url": jenkins_url, "secret": secret})
-        self.charm.unit.status = ops.ActiveStatus(self._status_message)
-
     def _on_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
         """Handle agent relation joined event.
 
@@ -230,36 +184,6 @@ class Observer(ops.Object):
             {"url": jenkins_url, f"{agent_meta.name}_secret": secret}
         )
         self.charm.unit.status = ops.ActiveStatus(self._status_message)
-
-    def _on_deprecated_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
-        """Handle deprecated agent relation departed event.
-
-        Args:
-            event: The event fired when a unit in deprecated agent relation is departed.
-        """
-        # the event unit cannot be None.
-        container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_storage_ready(container) or not jenkins.is_jenkins_ready(
-            container=container
-        ):
-            logger.warning("Relation departed before service ready.")
-            return
-
-        # The relation data is removed before this particular hook runs, making the name set by the
-        # agent not available. Hence, we can try to infer the name of the unit.
-        # See discussion: https://github.com/canonical/operator/issues/888
-        # assert type since event unit cannot be None.
-        agent_name = jenkins.get_agent_name(typing.cast(ops.Unit, event.unit).name)
-        self.charm.unit.status = ops.MaintenanceStatus("Removing agent node.")
-        try:
-            self.jenkins.remove_agent_node(agent_name=agent_name, container=container)
-        except jenkins.JenkinsError as exc:
-            logger.error("Failed to remove agent %s, %s", agent_name, exc)
-            # There is no support for degraded status yet, however, this will not impact Jenkins
-            # server operation.
-            self.charm.unit.status = ops.ActiveStatus(f"Failed to remove {agent_name}")
-            return
-        self.charm.unit.status = ops.ActiveStatus()
 
     def _on_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
         """Handle agent relation departed event.
