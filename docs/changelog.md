@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+### 2025-09-10
+
+- Fix issue with service check which did not correctly report when service is ready for
+    interaction.
+
 ### 2025-09-05
 
 - Fix issue with Jenkins agent node server discovery when ingress is applied to server
