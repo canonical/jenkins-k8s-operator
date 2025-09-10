@@ -280,32 +280,14 @@ def harness_container_fixture(harness: Harness, container: Container) -> Harness
     return HarnessWithContainer(harness=harness, container=container)
 
 
-@pytest.fixture(scope="function", name="get_relation_data")
-def get_relation_data_fixture():
+@pytest.fixture(scope="function", name="relation_data")
+def relation_data_fixture():
     """The agent relation data required to register agent."""
-
-    def get_relation_data(relation: str):
-        """Return a valid relation data matching the relation interface.
-
-        Args:
-            relation: The relation name.
-
-        Returns:
-            A valid test relation data.
-        """
-        if relation == state.DEPRECATED_AGENT_RELATION:
-            return {
-                "executors": "2",
-                "labels": "x84_64",
-                "slavehost": "jenkins-agent-0",
-            }
-        return {
-            "executors": "2",
-            "labels": "x84_64",
-            "name": "jenkins-agent-0",
-        }
-
-    return get_relation_data
+    return {
+        "executors": "2",
+        "labels": "x84_64",
+        "name": "jenkins-agent-0",
+    }
 
 
 @pytest.fixture(scope="function", name="current_version")
