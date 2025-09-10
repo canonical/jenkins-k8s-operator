@@ -10,7 +10,7 @@ import ipaddress
 import json
 import secrets
 import socket
-from typing import Callable, cast
+from typing import cast
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
@@ -26,16 +26,7 @@ from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME, MAINTENANCE_STATUS
 from .types_ import Harness, HarnessWithContainer
 
 
-@pytest.mark.parametrize(
-    "relation",
-    [
-        pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
-    ],
-)
-def test__on_agent_relation_joined_no_container(
-    harness_container: HarnessWithContainer, relation: str
-):
+def test__on_agent_relation_joined_no_container(harness_container: HarnessWithContainer):
     """
     arrange: given a charm with no connectable container.
     act: when agent relation joined event is fired.
@@ -48,10 +39,7 @@ def test__on_agent_relation_joined_no_container(
     jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     mock_event = MagicMock(spec=PebbleReadyEvent)
 
-    if relation == state.AGENT_RELATION:
-        jenkins_charm.agent_observer._on_agent_relation_joined(mock_event)
-    else:
-        jenkins_charm.agent_observer._on_deprecated_agent_relation_joined(mock_event)
+    jenkins_charm.agent_observer._on_agent_relation_joined(mock_event)
 
     assert mock_event.defer.to_be_called_once()
     assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
@@ -61,7 +49,6 @@ def test__on_agent_relation_joined_no_container(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.DEPRECATED_AGENT_RELATION, id="slave relation"),
     ],
 )
 def test__on_agent_relation_joined_relation_data_not_set(
@@ -90,24 +77,6 @@ def test__on_agent_relation_joined_relation_data_not_set(
 @pytest.mark.parametrize(
     "relation_data, relation",
     [
-        pytest.param(
-            {
-                "executors": "non-numeric",
-                "labels": "x84_64",
-                "slavehost": "http://sample-address:8080",
-            },
-            state.DEPRECATED_AGENT_RELATION,
-            id="non-numeric executor(deprecated agent)",
-        ),
-        pytest.param(
-            {
-                "executors": "3.14",
-                "labels": "x84_64",
-                "slavehost": "http://sample-address:8080",
-            },
-            state.DEPRECATED_AGENT_RELATION,
-            id="Non int convertible(deprecated agent)",
-        ),
         pytest.param(
             {
                 "executors": "non-numeric",
@@ -151,13 +120,12 @@ def test__on_agent_relation_joined_relation_data_not_valid(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
 @pytest.mark.usefixtures("patch_is_jenkins_ready")
 def test__on_agent_relation_joined_client_error(
     harness_container: HarnessWithContainer,
-    get_relation_data: Callable[[str], dict[str, str]],
+    relation_data: dict[str, str],
     relation: str,
 ):
     """
@@ -170,7 +138,7 @@ def test__on_agent_relation_joined_client_error(
     harness_container.harness.update_relation_data(
         relation_id,
         "jenkins-agent/0",
-        get_relation_data(relation),
+        relation_data,
     )
     harness_container.harness.begin()
 
@@ -196,13 +164,12 @@ def test__on_agent_relation_joined_client_error(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
 @pytest.mark.usefixtures("patch_is_jenkins_ready")
 def test__on_agent_relation_joined(
     harness_container: HarnessWithContainer,
-    get_relation_data: Callable[[str], dict[str, str]],
+    relation_data: dict[str, str],
     relation: str,
 ):
     """
@@ -212,11 +179,7 @@ def test__on_agent_relation_joined(
     """
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness_container.harness.update_relation_data(
-        relation_id,
-        "jenkins-agent/0",
-        get_relation_data(relation),
-    )
+    harness_container.harness.update_relation_data(relation_id, "jenkins-agent/0", relation_data)
     with (
         patch.object(jenkins.Jenkins, "wait_ready"),
         patch.object(jenkins.Jenkins, "add_agent_node"),
@@ -240,7 +203,6 @@ def test__on_agent_relation_joined(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
 def test__on_agent_relation_departed_no_container(
@@ -273,13 +235,12 @@ def test__on_agent_relation_departed_no_container(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
 @pytest.mark.usefixtures("patch_is_jenkins_ready")
 def test__on_agent_relation_departed_remove_agent_node_error(
     harness_container: HarnessWithContainer,
-    get_relation_data: Callable[[str], dict[str, str]],
+    relation_data: dict[str, str],
     relation: str,
 ):
     """
@@ -289,9 +250,7 @@ def test__on_agent_relation_departed_remove_agent_node_error(
     """
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness_container.harness.update_relation_data(
-        relation_id, "jenkins-agent/0", get_relation_data(relation)
-    )
+    harness_container.harness.update_relation_data(relation_id, "jenkins-agent/0", relation_data)
     with patch.object(jenkins.Jenkins, "remove_agent_node") as remove_agent_node_mock:
         remove_agent_node_mock.side_effect = jenkins.JenkinsError()
         harness_container.harness.begin()
@@ -312,13 +271,12 @@ def test__on_agent_relation_departed_remove_agent_node_error(
     "relation",
     [
         pytest.param(state.AGENT_RELATION, id="agent relation"),
-        pytest.param(state.DEPRECATED_AGENT_RELATION, id="deprecated agent relation"),
     ],
 )
 @pytest.mark.usefixtures("patch_is_jenkins_ready")
 def test__on_agent_relation_departed(
     harness_container: HarnessWithContainer,
-    get_relation_data: Callable[[str], dict[str, str]],
+    relation_data: dict[str, str],
     relation: str,
 ):
     """
@@ -328,9 +286,7 @@ def test__on_agent_relation_departed(
     """
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness_container.harness.update_relation_data(
-        relation_id, "jenkins-agent/0", get_relation_data(relation)
-    )
+    harness_container.harness.update_relation_data(relation_id, "jenkins-agent/0", relation_data)
     with patch.object(jenkins.Jenkins, "remove_agent_node") as remove_agent_node_mock:
         harness_container.harness.begin()
 
@@ -478,10 +434,7 @@ def test_agent_discovery_url_pod_ip(harness: Harness, monkeypatch: pytest.Monkey
     )
 
 
-def test_reconfigure_agent_discovery_url(
-    harness: Harness,
-    get_relation_data: Callable[[str], dict[str, str]],
-):
+def test_reconfigure_agent_discovery_url(harness: Harness, relation_data: dict[str, str]):
     """
     arrange: given a base jenkins charm integrated with the jenkins-agent charm.
     act: add an integration with traefik.
@@ -489,9 +442,7 @@ def test_reconfigure_agent_discovery_url(
     """
     relation_id = harness.add_relation(state.AGENT_RELATION, "jenkins-agent")
     harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness.update_relation_data(
-        relation_id, "jenkins-agent/0", get_relation_data(state.AGENT_RELATION)
-    )
+    harness.update_relation_data(relation_id, "jenkins-agent/0", relation_data)
     harness.begin()
 
     mock_ingress_url = "http://ingress.test"
@@ -507,8 +458,7 @@ def test_reconfigure_agent_discovery_url(
 
 
 def test_reconfigure_agent_discovery_url_ingress_revoked(
-    harness: Harness,
-    get_relation_data: Callable[[str], dict[str, str]],
+    harness: Harness, relation_data: dict[str, str]
 ):
     """
     arrange: given a base jenkins charm integrated with the jenkins-agent charm with ingress.
@@ -522,7 +472,7 @@ def test_reconfigure_agent_discovery_url_ingress_revoked(
         app_data={"ingress": json.dumps({"url": mock_ingress_url})},
     )
     relation_id = harness.add_relation(
-        state.AGENT_RELATION, "jenkins-agent", unit_data=get_relation_data(state.AGENT_RELATION)
+        state.AGENT_RELATION, "jenkins-agent", unit_data=relation_data
     )
     harness.begin()
 
@@ -533,8 +483,7 @@ def test_reconfigure_agent_discovery_url_ingress_revoked(
 
 
 def test_reconfigure_agent_discovery_url_unchanged(
-    harness: Harness,
-    get_relation_data: Callable[[str], dict[str, str]],
+    harness: Harness, relation_data: dict[str, str]
 ):
     """
     arrange: given a base jenkins charm integrated with the jenkins-agent charm.
@@ -544,7 +493,7 @@ def test_reconfigure_agent_discovery_url_unchanged(
     """
     mock_ingress_url = "http://ingress.test"
     relation_id = harness.add_relation(
-        state.AGENT_RELATION, "jenkins-agent", unit_data=get_relation_data(state.AGENT_RELATION)
+        state.AGENT_RELATION, "jenkins-agent", unit_data=relation_data
     )
     harness.update_relation_data(relation_id, harness.model.unit.name, {"url": mock_ingress_url})
     harness.begin()
