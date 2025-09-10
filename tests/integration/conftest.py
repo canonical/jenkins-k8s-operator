@@ -222,20 +222,6 @@ async def extra_jenkins_k8s_agents_fixture(model: Model) -> AsyncGenerator[Appli
     yield agent_app
 
 
-@pytest_asyncio.fixture(scope="function", name="k8s_deprecated_agent_related_app")
-async def k8s_deprecated_agent_related_app_fixture(
-    jenkins_k8s_agents: Application, application: Application, model: Model
-):
-    """The Jenkins-k8s charm related to Jenkins-k8s agent through deprecated agent relation."""
-    await model.integrate(
-        f"{application.name}:{state.DEPRECATED_AGENT_RELATION}", jenkins_k8s_agents.name
-    )
-    await model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
-    )
-    yield application
-
-
 @pytest_asyncio.fixture(scope="module", name="machine_controller")
 async def machine_controller_fixture() -> AsyncGenerator[Controller, None]:
     """The lxd controller."""
@@ -297,21 +283,6 @@ async def machine_agent_related_app_fixture(
     await machine_model.wait_for_idle(
         apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5
     )
-    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
-    yield application
-
-
-@pytest_asyncio.fixture(scope="function", name="machine_deprecated_agent_related_app")
-async def machine_deprecated_agent_related_app_fixture(
-    jenkins_machine_agents: Application, application: Application, model: Model
-):
-    """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
-    machine_model: Model = jenkins_machine_agents.model
-    await model.integrate(
-        f"{application.name}:{state.DEPRECATED_AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{state.DEPRECATED_AGENT_RELATION}",
-    )
-    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
     yield application
 

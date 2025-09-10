@@ -11,6 +11,10 @@ Each revision is versioned by the date of the revision.
 - Fix issue with service check which did not correctly report when service is ready for
     interaction.
 
+### 2025-09-09
+
+- Ejected deprecated `agent-deprecated`:`jenkins-slave` relation
+
 ### 2025-09-05
 
 - Fix issue with Jenkins agent node server discovery when ingress is applied to server

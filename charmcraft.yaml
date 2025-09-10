@@ -74,9 +74,6 @@ storage:
     location: /var/lib/jenkins
 
 requires:
-  agent-deprecated:
-    interface: jenkins-slave
-    optional: true
   agent:
     interface: jenkins_agent_v0
     optional: true

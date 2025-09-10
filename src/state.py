@@ -16,7 +16,6 @@ from timerange import InvalidTimeRangeError, Range
 logger = logging.getLogger(__name__)
 
 AGENT_RELATION = "agent"
-DEPRECATED_AGENT_RELATION = "agent-deprecated"
 AUTH_PROXY_RELATION = "auth-proxy"
 JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
@@ -103,25 +102,6 @@ class AgentMeta(BaseModel):
         return int(value)
 
     @classmethod
-    def from_deprecated_agent_relation(
-        cls, relation_data: ops.RelationDataContent
-    ) -> typing.Optional["AgentMeta"]:
-        """Instantiate AgentMeta from charm relation databag.
-
-        Args:
-            relation_data: The unit relation databag.
-
-        Returns:
-            AgentMeta if complete values(executors, labels, slavehost) are set. None otherwise.
-        """
-        num_executors = relation_data.get("executors")
-        labels = relation_data.get("labels")
-        name = relation_data.get("slavehost")
-        if not num_executors or not labels or not name:
-            return None
-        return cls(executors=num_executors, labels=labels, name=name)
-
-    @classmethod
     def from_agent_relation(
         cls, relation_data: ops.RelationDataContent
     ) -> typing.Optional["AgentMeta"]:
@@ -157,10 +137,10 @@ def _is_remote_unit(app_name: str, unit: ops.Unit) -> bool:
 def _get_agent_meta_map_from_relation(
     relations: typing.List[ops.Relation], current_app_name: str
 ) -> typing.Optional[typing.Mapping[str, typing.Optional[AgentMeta]]]:
-    """Return a mapping of unit name to AgentMetadata from agent or deprecated agent relation.
+    """Return a mapping of unit name to AgentMetadata from agent relation.
 
     Args:
-        relations: The agent or deprecated agent relations.
+        relations: The agent relations.
         current_app_name: Current application name, i.e. "jenkins-k8s-operator".
 
     Returns:
@@ -171,14 +151,6 @@ def _get_agent_meta_map_from_relation(
     unit_metadata_mapping = {}
     for relation in relations:
         remote_units = filter(functools.partial(_is_remote_unit, current_app_name), relation.units)
-        if relation.name == DEPRECATED_AGENT_RELATION:
-            unit_metadata_mapping.update(
-                {
-                    unit.name: AgentMeta.from_deprecated_agent_relation(relation.data[unit])
-                    for unit in remote_units
-                }
-            )
-            continue
         unit_metadata_mapping.update(
             {
                 unit.name: AgentMeta.from_agent_relation(relation.data[unit])
@@ -239,8 +211,6 @@ class State:
     Attributes:
         restart_time_range: Time range to allow Jenkins to update version.
         agent_relation_meta: Metadata of all agents from units related through agent relation.
-        deprecated_agent_relation_meta: Metadata of all agents from units related through
-            deprecated agent relation.
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
         auth_proxy_integrated: if an auth proxy integrated has been set.
@@ -249,9 +219,6 @@ class State:
 
     restart_time_range: typing.Optional[Range]
     agent_relation_meta: typing.Optional[typing.Mapping[str, typing.Optional[AgentMeta]]]
-    deprecated_agent_relation_meta: typing.Optional[
-        typing.Mapping[str, typing.Optional[AgentMeta]]
-    ]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
     auth_proxy_integrated: bool
@@ -285,16 +252,13 @@ class State:
             agent_relation_meta_map = _get_agent_meta_map_from_relation(
                 charm.model.relations[AGENT_RELATION], charm.app.name
             )
-            deprecated_agent_meta_map = _get_agent_meta_map_from_relation(
-                charm.model.relations[DEPRECATED_AGENT_RELATION], charm.app.name
-            )
             is_auth_proxy_integrated = _is_auth_proxy_integrated(
                 charm.model.get_relation(AUTH_PROXY_RELATION)
             )
         except ValidationError as exc:
             logger.error("Invalid agent relation data received, %s", exc)
             raise CharmRelationDataInvalidError(
-                f"Invalid {DEPRECATED_AGENT_RELATION} relation data."
+                f"Invalid {AGENT_RELATION} relation data."
             ) from exc
 
         try:
@@ -321,7 +285,6 @@ class State:
         return cls(
             restart_time_range=restart_time_range,
             agent_relation_meta=agent_relation_meta_map,
-            deprecated_agent_relation_meta=deprecated_agent_meta_map,
             plugins=plugins,
             proxy_config=proxy_config,
             auth_proxy_integrated=is_auth_proxy_integrated,
