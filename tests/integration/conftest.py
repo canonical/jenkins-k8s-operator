@@ -746,12 +746,12 @@ async def traefik_application_fixture(model: Model):
     return (traefik, unit_ips[0])
 
 
-@pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
-async def oathkeeper_application_related_fixture(
+@pytest_asyncio.fixture(scope="module", name="oauth2_proxy_related")
+async def oauth2_proxy_related_fixture(
     application: Application, client: Client, ext_idp_service: str, model: Model
 ):
     """The application related to Jenkins via auth_proxy v0 relation."""
-    oathkeeper = await model.deploy("oathkeeper", channel="edge", trust=True)
+    oauth2_proxy = await model.deploy("oauth2-proxy-k8s", channel="edge", trust=True)
     kratos_app = await model.deploy(
         "kratos",
         channel="0.4/edge",
@@ -834,11 +834,11 @@ async def oathkeeper_application_related_fixture(
     )
     await model.add_relation(f"{login_ui_app.name}:kratos-info", f"{kratos_app.name}:kratos-info")
     await model.add_relation(
-        f"{oathkeeper.name}", f"{traefik_public_app.name}:experimental-forward-auth"
+        f"{oauth2_proxy.name}", f"{traefik_public_app.name}:experimental-forward-auth"
     )
-    await model.add_relation(f"{oathkeeper.name}:certificates", f"{ca_app.name}:certificates")
-    await model.add_relation(f"{oathkeeper.name}:kratos-info", kratos_app.name)
-    await model.add_relation(f"{oathkeeper.name}:auth-proxy", application.name)
+    await model.add_relation(f"{oauth2_proxy.name}:certificates", f"{ca_app.name}:certificates")
+    await model.add_relation(f"{oauth2_proxy.name}:kratos-info", kratos_app.name)
+    await model.add_relation(f"{oauth2_proxy.name}:auth-proxy", application.name)
     await model.add_relation(
         f"{traefik_admin_app.name}:certificates", f"{ca_app.name}:certificates"
     )
@@ -863,7 +863,7 @@ async def oathkeeper_application_related_fixture(
     )
     await model.wait_for_idle(
         status="active",
-        apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
+        apps=[application.name, oauth2_proxy.name] + IDENTITY_PLATFORM_APPS,
         raise_on_error=False,
         timeout=30 * 60,
         idle_period=30,
@@ -874,7 +874,7 @@ async def oathkeeper_application_related_fixture(
     )
     action_output = await get_redirect_uri_action.wait()
     update_redirect_uri(client, action_output.results["redirect-uri"])
-    return oathkeeper
+    return oauth2_proxy
 
 
 @pytest.fixture(scope="session", name="client")
