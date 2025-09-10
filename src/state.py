@@ -136,7 +136,7 @@ def _is_remote_unit(app_name: str, unit: ops.Unit) -> bool:
 
 def _get_agent_meta_map_from_relation(
     relations: typing.List[ops.Relation], current_app_name: str
-) -> typing.Optional[typing.Mapping[str, typing.Optional[AgentMeta]]]:
+) -> typing.Optional[typing.Mapping[ops.Relation, list[AgentMeta]]]:
     """Return a mapping of unit name to AgentMetadata from agent relation.
 
     Args:
@@ -148,16 +148,12 @@ def _get_agent_meta_map_from_relation(
     """
     if not relations:
         return None
-    unit_metadata_mapping = {}
+    relation_agents_map = {}
     for relation in relations:
         remote_units = filter(functools.partial(_is_remote_unit, current_app_name), relation.units)
-        unit_metadata_mapping.update(
-            {
-                unit.name: AgentMeta.from_agent_relation(relation.data[unit])
-                for unit in remote_units
-            }
-        )
-    return unit_metadata_mapping
+        agents = [AgentMeta.from_agent_relation(relation.data[unit]) for unit in remote_units]
+        relation_agents_map.update({relation: [agent for agent in agents if agent]})
+    return relation_agents_map
 
 
 def _is_auth_proxy_integrated(relation: typing.Optional[ops.Relation]) -> bool:
@@ -218,7 +214,7 @@ class State:
     """
 
     restart_time_range: typing.Optional[Range]
-    agent_relation_meta: typing.Optional[typing.Mapping[str, typing.Optional[AgentMeta]]]
+    agent_relation_meta: typing.Optional[typing.Mapping[ops.Relation, list[AgentMeta]]]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
     auth_proxy_integrated: bool

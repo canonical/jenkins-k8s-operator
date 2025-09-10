@@ -836,6 +836,35 @@ def test_get_client(admin_credentials: jenkins.Credentials, mock_env: jenkins.En
         )
 
 
+def test_list_agent_nodes_error(
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
+):
+    """
+    arrange: given a mock client that raises an API exception.
+    act: when list_agent_nodes is called.
+    assert: JenkinsError is raised.
+    """
+    mock_client.get_nodes.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
+        with pytest.raises(jenkins.JenkinsError):
+            jenkins.Jenkins(mock_env).list_agent_nodes(container)
+
+
+def test_list_agent_nodes(
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
+):
+    """
+    arrange: given a mock client returns mock nodes.
+    act: when list_agent_nodes is called.
+    assert: expected nodes are returned.
+    """
+    mock_client.get_nodes.return_value = {"node": (mock_node := MagicMock())}
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
+        assert list(jenkins.Jenkins(mock_env).list_agent_nodes(container)) == [mock_node]
+
+
 def test_get_node_secret_api_error(
     container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
 ):
