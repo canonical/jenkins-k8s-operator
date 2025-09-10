@@ -144,8 +144,12 @@ class Observer(ops.Object):
             )
         return ""
 
-    def reconcile_agents(self) -> None:
-        """Reconcile agents from relation data."""
+    def reconcile_agents(self, event: ops.EventBase) -> None:
+        """Reconcile agents from relation data.
+
+        Args:
+            event: The event that triggered the agent reconcile.
+        """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         if (
             not jenkins.is_storage_ready(container)
@@ -153,6 +157,7 @@ class Observer(ops.Object):
             or not self.state.agent_relation_meta
         ):
             logger.warning("Service not yet ready, agents not reconciled.")
+            event.defer()
             return
 
         # Make sure Jenkins is fully up and running before interacting with it.
@@ -245,13 +250,21 @@ class Observer(ops.Object):
                 logger.exception("Failed to remove registered node: %s", agent)
                 raise
 
-    def _on_agent_relation_joined(self, _: ops.RelationJoinedEvent) -> None:
-        """Handle agent relation joined event."""
-        self.reconcile_agents()
+    def _on_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
+        """Handle agent relation joined event.
 
-    def _on_agent_relation_departed(self, _: ops.RelationDepartedEvent) -> None:
-        """Handle agent relation departed event."""
-        self.reconcile_agents()
+        Args:
+            event: The event fired on agent relation joined.
+        """
+        self.reconcile_agents(event=event)
+
+    def _on_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+        """Handle agent relation departed event.
+
+        Args:
+            event: The event fired on agent relation departed.
+        """
+        self.reconcile_agents(event=event)
 
     def reconfigure_agent_discovery(self, _: ops.EventBase) -> None:
         """Update the agent discovery URL in each of the connected agent's integration data.
