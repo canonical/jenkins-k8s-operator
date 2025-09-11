@@ -2,14 +2,14 @@
 # Jenkins-k8s Terraform module
 <!-- vale Canonical.007-Headings-sentence-case = YES -->
 
-This folder contains a base [Terraform][Terraform] module for the Jenkins-k8s charm.
+This folder contains the product [Terraform][Terraform] module for the Jenkins-k8s charm.
 
 The module uses the [Terraform Juju provider][Terraform Juju provider] to model the charm
 deployment onto any Kubernetes environment managed by [Juju][Juju].
 
 ## Module structure
 
-- **main.tf** - Defines the Juju application to be deployed.
+- **main.tf** - Defines the Juju applications to be deployed.
 - **variables.tf** - Allows customization of the deployment. Also models the charm configuration, 
   except for exposing the deployment options (Juju model name, channel or application name).
 - **output.tf** - Integrates the module with other Terraform modules, primarily
@@ -17,9 +17,9 @@ deployment onto any Kubernetes environment managed by [Juju][Juju].
   the Juju application name.
 - **versions.tf** - Defines the Terraform provider version.
 
-## Using jenkins-k8s base module in higher level modules
+## Using jenkins-k8s product module in higher level modules
 
-If you want to use `jenkins-k8s` base module as part of your Terraform module, import it
+If you want to use `jenkins-k8s` product module as part of your Terraform module, import it
 like shown below:
 
 ```text
@@ -28,7 +28,7 @@ data "juju_model" "my_model" {
 }
 
 module "jenkins_k8s" {
-  source = "git::https://github.com/canonical/jenkins-k8s-operator//terraform"
+  source = "git::https://github.com/canonical/jenkins-k8s-operator//terraform/product"
 
   model = juju_model.my_model.name
   # (Customize configuration variables here if needed)
