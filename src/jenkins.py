@@ -73,6 +73,8 @@ AUTH_PROXY_JENKINS_CONFIG = "templates/jenkins-auth-proxy-config.xml"
 DEFAULT_JENKINS_CONFIG = "templates/jenkins-config.xml"
 JENKINS_LOGGING_CONFIG = "templates/logging.properties"
 
+ONLINE_CHECK_NAME = "online"
+
 
 class JenkinsError(Exception):
     """Base exception for Jenkins errors."""
@@ -746,11 +748,11 @@ def is_jenkins_ready(container: typing.Optional[ops.Container]) -> bool:
     if not container or not container.can_connect():
         return False
     try:
-        jenkins_service = container.get_service(state.JENKINS_SERVICE_NAME)
+        online_check = container.get_check(ONLINE_CHECK_NAME)
     except ops.ModelError:
         logger.warning("Jenkins service not yet initialized", exc_info=True)
         return False
-    return jenkins_service.is_running()
+    return online_check.status == ops.pebble.CheckStatus.UP
 
 
 def _install_config(container: ops.Container, filename: str, destination_path: Path) -> None:

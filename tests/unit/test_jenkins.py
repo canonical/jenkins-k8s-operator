@@ -185,15 +185,15 @@ def _parametrize_jenkins_container_states():
     not_connectable_container.can_connect.return_value = False
 
     service_not_ready_container = MagicMock()
-    service_not_ready_container.get_service.side_effect = [ops.ModelError()]
+    service_not_ready_container.get_check.side_effect = [ops.ModelError()]
 
     service_not_running_container = MagicMock()
-    service_not_running_container.get_service.return_value = (service_mock := MagicMock())
-    service_mock.is_running.return_value = False
+    service_not_running_container.get_check.return_value = (check_mock := MagicMock())
+    check_mock.status = ops.pebble.CheckStatus.DOWN
 
     happy_container = MagicMock()
-    happy_container.get_service.return_value = (happy_service_mock := MagicMock())
-    happy_service_mock.is_running.return_value = True
+    happy_container.get_check.return_value = (happy_service_mock := MagicMock())
+    happy_service_mock.status = ops.pebble.CheckStatus.UP
     return [
         pytest.param(None, False, id="No container"),
         pytest.param(not_connectable_container, False, id="Container not yet connectable"),
