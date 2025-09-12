@@ -22,7 +22,7 @@ import jenkins
 import state
 from charm import JenkinsK8sOperatorCharm
 
-from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME, MAINTENANCE_STATUS_NAME
+from .helpers import ACTIVE_STATUS_NAME, MAINTENANCE_STATUS_NAME
 from .types_ import Harness, HarnessWithContainer
 
 
@@ -145,7 +145,11 @@ def test__on_agent_relation_joined_client_error(
     model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
     with (
         patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins.Jenkins, "list_agent_nodes"),
+        patch.object(jenkins.Jenkins, "get_node_secret"),
+        patch.object(jenkins.Jenkins, "remove_agent_node"),
         patch.object(jenkins.Jenkins, "add_agent_node") as add_agent_node_mock,
+        pytest.raises(jenkins.JenkinsError),
     ):
         add_agent_node_mock.side_effect = jenkins.JenkinsError()
 
@@ -155,22 +159,59 @@ def test__on_agent_relation_joined_client_error(
             unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
         )
 
-        jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-        assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
-        assert "Jenkins API exception." in jenkins_charm.unit.status.message
+
+@pytest.mark.usefixtures("patch_is_jenkins_ready")
+def test__on_agent_relation_joined_get_secret_error(
+    harness_container: HarnessWithContainer,
+    relation_data: dict[str, str],
+):
+    """
+    arrange: given a mocked patched jenkins client that raises an error.
+    act: when an agent relation joined event is fired.
+    assert: the unit falls to BlockedStatus.
+    """
+    relation_id = harness_container.harness.add_relation(state.AGENT_RELATION, "jenkins-agent")
+    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
+    harness_container.harness.update_relation_data(
+        relation_id,
+        "jenkins-agent/0",
+        relation_data,
+    )
+    harness_container.harness.begin()
+
+    model_relation = harness_container.harness.charm.model.get_relation(
+        state.AGENT_RELATION, relation_id
+    )
+    with (
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins.Jenkins, "list_agent_nodes"),
+        patch.object(jenkins.Jenkins, "remove_agent_node"),
+        patch.object(jenkins.Jenkins, "get_node_secret") as get_node_secret_mock,
+        patch.object(jenkins.Jenkins, "add_agent_node"),
+        pytest.raises(jenkins.JenkinsError),
+    ):
+        get_node_secret_mock.side_effect = jenkins.JenkinsError()
+
+        harness_container.harness.charm.on[state.AGENT_RELATION].relation_joined.emit(
+            model_relation,
+            app=harness_container.harness.model.get_app("jenkins-agent"),
+            unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
+        )
 
 
 @pytest.mark.parametrize(
-    "relation",
+    "relation, event",
     [
-        pytest.param(state.AGENT_RELATION, id="agent relation"),
+        pytest.param(state.AGENT_RELATION, "relation_joined", id="agent relation joined"),
+        pytest.param(state.AGENT_RELATION, "relation_changed", id="agent relation changed"),
     ],
 )
 @pytest.mark.usefixtures("patch_is_jenkins_ready")
-def test__on_agent_relation_joined(
+def test__on_agent_relation_events(
     harness_container: HarnessWithContainer,
     relation_data: dict[str, str],
     relation: str,
+    event: str,
 ):
     """
     arrange: given a charm instance.
@@ -182,6 +223,8 @@ def test__on_agent_relation_joined(
     harness_container.harness.update_relation_data(relation_id, "jenkins-agent/0", relation_data)
     with (
         patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins.Jenkins, "list_agent_nodes"),
+        patch.object(jenkins.Jenkins, "remove_agent_node"),
         patch.object(jenkins.Jenkins, "add_agent_node"),
         patch.object(jenkins.Jenkins, "get_node_secret") as get_node_secret_mock,
     ):
@@ -190,7 +233,7 @@ def test__on_agent_relation_joined(
         jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
 
         model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
-        harness_container.harness.charm.on[relation].relation_joined.emit(
+        getattr(harness_container.harness.charm.on[relation], event).emit(
             model_relation,
             app=harness_container.harness.model.get_app("jenkins-agent"),
             unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
@@ -219,7 +262,13 @@ def test__on_agent_relation_departed_no_container(
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
 
-    with patch.object(jenkins.Jenkins, "remove_agent_node") as remove_agent_node_mock:
+    with (
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins.Jenkins, "list_agent_nodes"),
+        patch.object(jenkins.Jenkins, "add_agent_node"),
+        patch.object(jenkins.Jenkins, "get_node_secret"),
+        patch.object(jenkins.Jenkins, "remove_agent_node") as remove_agent_node_mock,
+    ):
 
         model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
         harness_container.harness.charm.on[relation].relation_departed.emit(
@@ -251,8 +300,19 @@ def test__on_agent_relation_departed_remove_agent_node_error(
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(relation_id, "jenkins-agent/0", relation_data)
-    with patch.object(jenkins.Jenkins, "remove_agent_node") as remove_agent_node_mock:
-        remove_agent_node_mock.side_effect = jenkins.JenkinsError()
+    with (
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins.Jenkins, "list_agent_nodes") as list_agent_nodes_mock,
+        patch.object(jenkins.Jenkins, "add_agent_node"),
+        patch.object(jenkins.Jenkins, "get_node_secret") as get_node_secret_mock,
+        patch.object(jenkins.Jenkins, "remove_agent_node") as remove_agent_node_mock,
+        pytest.raises(jenkins.JenkinsError),
+    ):
+        get_node_secret_mock.return_value = "test"
+        list_agent_nodes_mock.return_value = [
+            state.AgentMeta(executors="1", labels="test", name="test")
+        ]
+        remove_agent_node_mock.side_effect = [jenkins.JenkinsError()]
         harness_container.harness.begin()
 
         model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
@@ -261,10 +321,6 @@ def test__on_agent_relation_departed_remove_agent_node_error(
             app=harness_container.harness.model.get_app("jenkins-agent"),
             unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
         )
-
-        jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-        assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
-        assert jenkins_charm.unit.status.message == "Failed to remove jenkins-agent-0"
 
 
 @pytest.mark.parametrize(
@@ -287,7 +343,17 @@ def test__on_agent_relation_departed(
     relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
     harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
     harness_container.harness.update_relation_data(relation_id, "jenkins-agent/0", relation_data)
-    with patch.object(jenkins.Jenkins, "remove_agent_node") as remove_agent_node_mock:
+    with (
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins.Jenkins, "list_agent_nodes") as list_agent_nodes_mock,
+        patch.object(jenkins.Jenkins, "add_agent_node"),
+        patch.object(jenkins.Jenkins, "get_node_secret") as get_node_secret_mock,
+        patch.object(jenkins.Jenkins, "remove_agent_node") as remove_agent_node_mock,
+    ):
+        get_node_secret_mock.return_value = "test"
+        list_agent_nodes_mock.return_value = [
+            state.AgentMeta(executors="1", labels="test", name="test")
+        ]
         harness_container.harness.begin()
 
         model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
