@@ -72,6 +72,9 @@ class Observer(ops.Object):
         charm.framework.observe(
             charm.on[AGENT_RELATION].relation_departed, self._on_agent_relation_departed
         )
+        charm.framework.observe(
+            charm.on[AGENT_RELATION].relation_changed, self._on_agent_relation_changed
+        )
         # Event hooks for agent-discovery-ingress
         charm.framework.observe(
             observers.agent_discovery.ingress.on.ready,
@@ -196,7 +199,9 @@ class Observer(ops.Object):
         Raises:
             JenkinsError: if there was an error while registering agent nodes to Jenkins.
         """
+        logger.info("Processing agent relations: %s", agent_relation)
         for relation, agents in agent_relation.items():
+            logger.info("Processing agent relations: %s", agent_relation)
             unregistered_agents = [agent for agent in agents if agent.name not in agent_node_names]
             for agent in unregistered_agents:
                 try:
@@ -263,6 +268,14 @@ class Observer(ops.Object):
 
         Args:
             event: The event fired on agent relation departed.
+        """
+        self.reconcile_agents(event=event)
+
+    def _on_agent_relation_changed(self, event: ops.RelationChangedEvent) -> None:
+        """Handle agent relation changed event.
+
+        Args:
+            event: The event fired on agent relation changed.
         """
         self.reconcile_agents(event=event)
 

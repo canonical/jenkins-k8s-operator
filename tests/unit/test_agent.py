@@ -200,16 +200,18 @@ def test__on_agent_relation_joined_get_secret_error(
 
 
 @pytest.mark.parametrize(
-    "relation",
+    "relation, event",
     [
-        pytest.param(state.AGENT_RELATION, id="agent relation"),
+        pytest.param(state.AGENT_RELATION, "relation_joined", id="agent relation joined"),
+        pytest.param(state.AGENT_RELATION, "relation_changed", id="agent relation changed"),
     ],
 )
 @pytest.mark.usefixtures("patch_is_jenkins_ready")
-def test__on_agent_relation_joined(
+def test__on_agent_relation_events(
     harness_container: HarnessWithContainer,
     relation_data: dict[str, str],
     relation: str,
+    event: str,
 ):
     """
     arrange: given a charm instance.
@@ -231,7 +233,7 @@ def test__on_agent_relation_joined(
         jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
 
         model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
-        harness_container.harness.charm.on[relation].relation_joined.emit(
+        getattr(harness_container.harness.charm.on[relation], event).emit(
             model_relation,
             app=harness_container.harness.model.get_app("jenkins-agent"),
             unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
