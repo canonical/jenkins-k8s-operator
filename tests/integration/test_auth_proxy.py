@@ -160,7 +160,7 @@ async def _get_traefik_proxied_endpoints(model: Model, traefik_app_name: str) ->
 
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("oathkeeper_related")
+@pytest.mark.usefixtures("oauth2_proxy_related")
 async def test_auth_proxy_integration_returns_not_authorized(model: Model) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
@@ -195,7 +195,7 @@ async def test_auth_proxy_integration_returns_not_authorized(model: Model) -> No
 
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("oathkeeper_related")
+@pytest.mark.usefixtures("oauth2_proxy_related")
 async def test_auth_proxy_integration_authorized(
     ext_idp_service: str,
     external_user_email: str,
