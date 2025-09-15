@@ -40,5 +40,5 @@ variable "revision" {
 variable "base" {
   description = "The operating system on which to deploy"
   type        = string
-  default     = "ubuntu@22.04"
+  default     = "ubuntu@24.04"
 }
