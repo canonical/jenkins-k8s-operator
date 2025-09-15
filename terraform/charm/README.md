@@ -2,10 +2,12 @@
 # Jenkins-k8s Terraform module
 <!-- vale Canonical.007-Headings-sentence-case = YES -->
 
-This folder contains a base [Terraform][Terraform] module for the Jenkins-k8s charm.
+This folder contains a base [Terraform](https://developer.hashicorp.com/terraform) module for the
+Jenkins-k8s charm.
 
-The module uses the [Terraform Juju provider][Terraform Juju provider] to model the charm
-deployment onto any Kubernetes environment managed by [Juju][Juju].
+The module uses the 
+[Terraform Juju provider](https://registry.terraform.io/providers/juju/juju/latest/docs) to model 
+the charm deployment onto any Kubernetes environment managed by [Juju](http://juju.is/).
 
 ## Module structure
 
@@ -17,7 +19,7 @@ deployment onto any Kubernetes environment managed by [Juju][Juju].
   the Juju application name.
 - **versions.tf** - Defines the Terraform provider version.
 
-## Using jenkins-k8s base module in higher level modules
+## Using `jenkins-k8s` base module in higher level modules
 
 If you want to use `jenkins-k8s` base module as part of your Terraform module, import it
 like shown below:
