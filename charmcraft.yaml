@@ -48,19 +48,10 @@ parts:
       - templates/jenkins-auth-proxy-config.xml
       - templates/jenkins-config.xml
       - templates/logging.properties
-bases:
-  - build-on:
-      - name: ubuntu
-        channel: "24.04"
-    run-on:
-      - name: ubuntu
-        channel: "24.04"
-  - build-on:
-      - name: ubuntu
-        channel: "22.04"
-    run-on:
-      - name: ubuntu
-        channel: "22.04"
+
+platforms:
+  ubuntu@24.04:amd64:
+  ubuntu@22.04:amd64:
 
 containers:
   jenkins:
