@@ -13,7 +13,7 @@ variable "jenkins_agent_k8s" {
     config      = optional(map(string), {})
     constraints = optional(string, "")
     revision    = optional(number)
-    base        = optional(string, "ubuntu@24.04")
+    base        = optional(string, "ubuntu@22.04")
     units       = optional(number, 3)
   })
 }
@@ -25,6 +25,6 @@ variable "jenkins_k8s" {
     config      = optional(map(string), {})
     constraints = optional(string, "")
     revision    = optional(number)
-    base        = optional(string, "ubuntu@24.04")
+    base        = optional(string, "ubuntu@22.04")
   })
 }
