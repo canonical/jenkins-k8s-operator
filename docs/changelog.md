@@ -13,7 +13,7 @@ Each revision is versioned by the date of the revision.
 
 ### 2025-09-10
 
-- Added terraform module for charm and Jenkins product,
+- Added terraform module for charm and Jenkins product.
 - Fix issue with service check which did not correctly report when service is ready for
     interaction.
 
