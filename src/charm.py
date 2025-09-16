@@ -178,6 +178,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         # Update the agent discovery address.
         # Updating the secret is not required since it's calculated using the agent's node name.
         self.agent_observer.reconfigure_agent_discovery(event)
+        self.agent_observer.reconcile_agents(event)
 
     def jenkins_set_storage_config(self, event: ops.framework.EventBase) -> None:
         """Correctly set permissions when storage is attached.
