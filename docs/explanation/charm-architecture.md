@@ -57,7 +57,7 @@ process.
 
 Jenkins application installation is done at runtime during container pebble ready step.
 
-Currently, Jenkins version 2.492.2 is used alongside Ubuntu 22.04 base image.
+Currently, Jenkins version 2.492.2 is used alongside Ubuntu 24.04 base image.
 
 ## Integrations
 

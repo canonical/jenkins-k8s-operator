@@ -11,6 +11,10 @@ Each revision is versioned by the date of the revision.
 - Fix issue where the agents were not reconciled in previous revisions to reconcile on charm 
     upgrade.
 
+### 2025-09-15
+
+- Updated charm to use Noble base.
+
 ### 2025-09-10
 
 - Added terraform module for charm and Jenkins product.
