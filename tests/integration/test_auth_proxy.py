@@ -82,6 +82,7 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
             "enable_experimental_forward_auth": "true",
             "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
         },
+        trust=True,
     )
 
     juju.wait(lambda status: jubilant.all_active(status, traefik_public))
@@ -104,12 +105,12 @@ def identity_platform_offers_fixture(
     traefik_admin = "traefik-admin"
     traefik_public = identity_platform_public_traefik
 
-    juju.deploy(hydra, channel="latest/edge")
-    juju.deploy(login_ui, channel="latest/edge")
-    juju.deploy(kratos, channel="latest/edge")
-    juju.deploy(postgresql, channel="14/stable")
-    juju.deploy(ca, channel="1/stable")
-    juju.deploy("traefik-k8s", traefik_admin, channel="latest/edge")
+    juju.deploy(hydra, channel="latest/edge", trust=True)
+    juju.deploy(login_ui, channel="latest/edge", trust=True)
+    juju.deploy(kratos, channel="latest/edge", trust=True)
+    juju.deploy(postgresql, channel="14/stable", trust=True)
+    juju.deploy(ca, channel="1/stable", trust=True)
+    juju.deploy("traefik-k8s", traefik_admin, channel="latest/edge", trust=True)
     juju.deploy(
         "traefik-k8s",
         traefik_public,
@@ -118,6 +119,7 @@ def identity_platform_offers_fixture(
             "enable_experimental_forward_auth": "true",
             "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
         },
+        trust=True,
     )
 
     juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
