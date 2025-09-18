@@ -111,16 +111,6 @@ def identity_platform_offers_fixture(
     juju.deploy(postgresql, channel="14/stable", trust=True)
     juju.deploy(ca, channel="1/stable", trust=True)
     juju.deploy("traefik-k8s", traefik_admin, channel="latest/edge", trust=True)
-    juju.deploy(
-        "traefik-k8s",
-        traefik_public,
-        channel="latest/edge",
-        config={
-            "enable_experimental_forward_auth": "true",
-            "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
-        },
-        trust=True,
-    )
 
     juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
     juju.integrate(f"{postgresql}:database", f"{kratos}:pg-database")
