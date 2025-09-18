@@ -136,5 +136,5 @@ charm-libs:
     version: "0"
   - lib: prometheus-k8s.prometheus_scrape
     version: "0"
-  - lib: oathkeeper.auth_proxy
+  - lib: oauth2-proxy-k8s.auth_proxy
     version: "0"

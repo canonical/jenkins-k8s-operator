@@ -7,7 +7,7 @@ import logging
 from typing import List
 
 import ops
-from charms.oathkeeper.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
+from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
 from charms.traefik_k8s.v2.ingress import (
     IngressPerAppReadyEvent,
     IngressPerAppRequirer,
