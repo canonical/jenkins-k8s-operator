@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+### 2025-09-18
+
+- Fixed issue where naming the application deployment to "jenkins" would not add relation data with
+    the agents.
+
 ### 2025-09-16
 
 - Fix issue where the agents were not reconciled in previous revisions to reconcile on charm 
