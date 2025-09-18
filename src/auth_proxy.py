@@ -19,7 +19,7 @@ import pebble
 from state import AUTH_PROXY_RELATION, JENKINS_SERVICE_NAME, State
 
 AUTH_PROXY_ALLOWED_ENDPOINTS: List[str] = []
-AUTH_PROXY_HEADERS = ["X-User"]
+AUTH_PROXY_HEADERS = ["X-Auth-Request-User"]
 
 
 logger = logging.getLogger(__name__)

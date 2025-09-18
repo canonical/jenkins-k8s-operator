@@ -2,22 +2,23 @@
 # See LICENSE file for licensing details.
 
 """Integration tests for jenkins-k8s-operator with auth_proxy."""
-
+import asyncio
 import json
 import logging
 import re
-import urllib.parse
+import secrets
+import socket
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator, Callable, Coroutine, Match
+from typing import Any, AsyncGenerator, Callable, Coroutine
 
 import jubilant
 import kubernetes
+import pyotp
 import pytest
 import pytest_asyncio
 import requests
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from juju.action import Action
 from juju.application import Application
 from juju.client._definitions import UnitStatus
 from juju.model import Model
@@ -129,7 +130,7 @@ def identity_platform_offers_fixture(
     juju.integrate(f"{login_ui}:ingress", f"{traefik_public}:ingress")
 
     hydra_endpoint = "oauth"
-    certificates_endpoint = "oauth"
+    certificates_endpoint = "certificates"
     send_ca_cert_endpoint = "send-ca-cert"
     juju.offer(f"{juju.model}.{hydra}", endpoint=hydra_endpoint, name=hydra_endpoint)
     juju.offer(f"{juju.model}.{ca}", endpoint=certificates_endpoint, name=certificates_endpoint)
@@ -171,7 +172,7 @@ def jenkins_k8s_charms_fixture(
     juju = jubilant.Juju(model=application.model.name)
 
     traefik_public = "traefik-k8s"
-    oauth2_proxy = "oauth2-k8s-proxy"
+    oauth2_proxy = "oauth2-proxy-k8s"
     juju.deploy(
         traefik_public,
         channel="latest/edge",
@@ -179,8 +180,9 @@ def jenkins_k8s_charms_fixture(
             "enable_experimental_forward_auth": "true",
             "external_hostname": JENKINS_HOSTNAME,
         },
+        trust=True,
     )
-    juju.deploy(oauth2_proxy, channel="latest/edge")
+    juju.deploy(oauth2_proxy, channel="latest/edge", trust=True)
 
     juju.consume(
         identity_platform_offers.certificates.url, alias=identity_platform_offers.certificates.saas
@@ -198,25 +200,72 @@ def jenkins_k8s_charms_fixture(
     juju.integrate(f"{oauth2_proxy}:forward-auth", f"{traefik_public}:experimental-forward-auth")
     juju.integrate(f"{oauth2_proxy}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
 
-    juju.wait(lambda status: jubilant.all_active(status), timeout=15 * 60)
+    juju.wait(
+        lambda status: jubilant.all_agents_idle(status), timeout=15 * 60, successes=5, delay=5
+    )
+    juju.wait(lambda status: jubilant.all_active(status), timeout=15 * 60, successes=5, delay=5)
 
     return _JenkinsCharms(jenkins=application.name, traefik=traefik_public, oauth2=oauth2_proxy)
+
+
+@pytest.fixture(scope="module", name="identity_platform_traefik_ip")
+def identity_platform_traefik_ip_fixture(
+    kube_core_client: kubernetes.client.CoreV1Api,
+    identity_platform_public_traefik: str,
+    identity_platform_juju: jubilant.Juju,
+):
+    """Identity platform traefik ip."""
+    idp_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
+        name=f"{identity_platform_public_traefik}-lb", namespace=identity_platform_juju.model
+    )
+    return idp_traefik_loadbalancer_service.status.load_balancer.ingress[0].ip
+
+
+@pytest.fixture(scope="module", name="jenkins_traefik_ip")
+def jenkins_traefik_ip_fixture(
+    kube_core_client: kubernetes.client.CoreV1Api, jenkins_k8s_charms: _JenkinsCharms, model: Model
+):
+    """Jenkins traefik ip."""
+    jenkins_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
+        name=f"{jenkins_k8s_charms.traefik}-lb", namespace=model.name
+    )
+    return jenkins_traefik_loadbalancer_service.status.load_balancer.ingress[0].ip
+
+
+@pytest.fixture(scope="module", name="patch_dns_resolver", autouse=True)
+def patch_dns_resolver_fixture(identity_platform_traefik_ip: str, jenkins_traefik_ip: str):
+    """Patch DNS resolution."""
+    dns_cache = {
+        IDENTITY_PLATFORM_HOSTNAME: identity_platform_traefik_ip,
+        JENKINS_HOSTNAME: jenkins_traefik_ip,
+    }
+    original_getaddrinfo = socket.getaddrinfo
+
+    def new_getaddrinfo(*args):
+        if args[0] in dns_cache:
+            logger.info("Forcing FQDN: {} to IP: {}".format(args[0], dns_cache[args[0]]))
+            return original_getaddrinfo(dns_cache[args[0]], *args[1:])
+        else:
+            return original_getaddrinfo(*args)
+
+    socket.getaddrinfo = new_getaddrinfo
+
+    yield
+
+    socket.getaddrinfo = original_getaddrinfo
 
 
 @pytest.fixture(scope="module", name="inject_dns")
 def inject_dns_fixture(
     kube_core_client: kubernetes.client.CoreV1Api,
-    identity_platform_public_traefik: str,
-    identity_platform_juju: jubilant.Juju,
+    identity_platform_traefik_ip: str,
 ):
     """Inject IDP hostname to CoreDNS."""
-    traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
-        name=f"{identity_platform_public_traefik}-lb", namespace=identity_platform_juju.model
-    )
-    traefik_public_ip = traefik_loadbalancer_service.status.load_balancer.ingress[0].ip
     environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
     template = environment.get_template("coredns.yaml.j2")
-    coredns_yaml = template.render(hostname=IDENTITY_PLATFORM_HOSTNAME, ip=traefik_public_ip)
+    coredns_yaml = template.render(
+        hostname=IDENTITY_PLATFORM_HOSTNAME, ip=identity_platform_traefik_ip
+    )
     coredns_configmap_manifest = yaml.safe_load(coredns_yaml)
 
     original_manifest = kube_core_client.read_namespaced_config_map(
@@ -296,7 +345,7 @@ async def browser_fixture(
     await browser.close()
 
 
-@pytest_asyncio.fixture(name="context_factory")
+@pytest_asyncio.fixture(scope="module", name="context_factory")
 async def context_factory_fixture(
     browser: Browser,
 ) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, BrowserContext]], None]:
@@ -321,7 +370,7 @@ async def context_factory_fixture(
         await context.close()
 
 
-@pytest_asyncio.fixture(name="context")
+@pytest_asyncio.fixture(scope="module", name="context")
 async def context_fixture(
     context_factory: Callable[..., Coroutine[Any, Any, BrowserContext]],
 ) -> AsyncGenerator[BrowserContext, None]:
@@ -331,7 +380,7 @@ async def context_fixture(
     await context.close()
 
 
-@pytest_asyncio.fixture(name="page")
+@pytest_asyncio.fixture(scope="module", name="page")
 async def page_fixture(context: BrowserContext) -> AsyncGenerator[Page, None]:
     """Playwright page."""
     new_page = await context.new_page()
@@ -379,105 +428,151 @@ def _get_traefik_proxied_endpoints(juju: jubilant.Juju, traefik_app_name: str) -
     return endpoints
 
 
+@pytest.fixture(scope="module", name="jenkins_endpoint")
+def jenkins_endpoint_fixture(model: Model, jenkins_k8s_charms: _JenkinsCharms):
+    """The Jenkins endpoint URL from public traefik."""
+    juju = jubilant.Juju(model=model.name)
+
+    endpoints = _get_traefik_proxied_endpoints(
+        juju=juju, traefik_app_name=jenkins_k8s_charms.traefik
+    )
+    jenkins_endpoint = endpoints.get("jenkins-k8s", {}).get("url")
+    assert jenkins_endpoint, "Jenkins endpoint not found in proxied endpoints"
+
+    return jenkins_endpoint
+
+
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("inject_dns")
-async def test_auth_proxy_integration_returns_not_authorized(
-    model: Model, kube_core_client: kubernetes.client.CoreV1Api, jenkins_k8s_charms: _JenkinsCharms
-) -> None:
+async def test_auth_proxy_integration_returns_not_authorized(jenkins_endpoint: str) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
     act: send a request Jenkins.
     assert: a 401 is returned.
     """
-    juju = jubilant.Juju(model=model.name)
 
-    endpoints = _get_traefik_proxied_endpoints(juju=juju, traefik_app_name="traefik-public")
-    jenkins_endpoint = endpoints.get("jenkins-k8s", {}).get("url")
-    assert jenkins_endpoint, "Jenkins endpoint not found in proxied endpoints"
-    jenkins_url = urllib.parse.urlparse(jenkins_endpoint)
-
-    traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
-        name=f"{jenkins_k8s_charms.traefik}-lb", namespace=juju.model
-    )
-    traefik_public_ip = traefik_loadbalancer_service.status.load_balancer.ingress[0].ip
-
-    def is_auth_401():
-        """Get the status code of application request via ingress.
+    def is_auth_ui():
+        """Get the application request via ingress.
 
         Returns:
-            Whether the status code of the request is 401.
+            Whether request is redirected to UI page.
         """
         response = requests.get(  # nosec
-            # Request directly to IP with Host headers to avoid configuring host DNS.
-            f"{jenkins_url.scheme}://{traefik_public_ip}{jenkins_url.path}",
-            headers={"Host": jenkins_url.hostname},
+            jenkins_endpoint,
             # The certificate is self signed, so verification is disabled.
             verify=False,
             timeout=5,
         )
-        return response.status_code == 401
+        return (
+            response.status_code == 200
+            and "kratos" in response.headers.get("content-security-policy", "")
+            and "identity-platform-login-ui-operator" in response.url
+        )
 
     await wait_for(
-        is_auth_401,
+        is_auth_ui,
         timeout=60 * 10,
     )
 
 
-# @pytest.mark.abort_on_fail
-# @pytest.mark.asyncio
-# @pytest.mark.usefixtures("oauth2_proxy_related")
-# async def test_auth_proxy_integration_authorized(
-#     ext_idp_service: str,
-#     external_user_email: str,
-#     external_user_password: str,
-#     page: Page,
-#     application: Application,
-# ) -> None:
-#     """
-#     arrange: Deploy jenkins, the authentication bundle and DEX.
-#     act: log in via DEX
-#     assert: the browser is redirected to the Jenkins URL with response code 200
-#     """
-#     endpoints = await _get_traefik_proxied_endpoints(
-#         model=application.model, traefik_app_name="traefik-public"
-#     )
-#     jenkins_endpoint = endpoints.get("jenkins-k8s", {}).get("url")
-#     assert jenkins_endpoint, "Jenkins endpoint not found in proxied endpoints"
-#     jenkins_url = urllib.parse.urlparse(jenkins_endpoint)
-#     public_hostname = jenkins_url.hostname
-#     expected_url = (
-#         f"https://{public_hostname}/{application.model.name}"
-#         "-identity-platform-login-ui-operator/ui/login"
-#     )
-#     expected_url_regex = re.compile(rf"{expected_url}*")
+@dataclass
+class _TestCredentials:
+    """Testing credentials.
 
-#     async def is_redirected_to_dex() -> Match[str] | None:
-#         """Wait until dex properly redirects to correct URL.
+    Attributes:
+        username: Testing username.
+        email: Testing email.
+        password: Testing password.
+    """
 
-#         Returns:
-#             A match if found, None otherwise.
-#         """
-#         await page.goto(jenkins_endpoint)
-#         logger.info("Page URL: %s", page.url)
-#         return expected_url_regex.match(page.url)
+    username: str
+    email: str
+    password: str
 
-#     # Dex might take a bit to be ready
-#     await wait_for(is_redirected_to_dex)
-#     await expect(page).to_have_url(expected_url_regex)
 
-#     # Choose provider
-#     async with page.expect_navigation():
-#         # Increase timeout to wait for dex to be ready
-#         await page.get_by_role("button", name="Dex").click()
+@pytest.fixture(scope="module", name="test_credentials")
+def test_credentials_fixture() -> _TestCredentials:
+    """Testing credentials fixture.
 
-#     await expect(page).to_have_url(re.compile(rf"{ext_idp_service}*"))
+    Password must contain uppercase, lowercase, number and should be greater than 8 chars.
+    """
+    return _TestCredentials(
+        username="testinguser", email="testingemail@test.com", password=secrets.token_urlsafe(32)
+    )
 
-#     # Login
-#     await page.get_by_placeholder("email address").click()
-#     await page.get_by_placeholder("email address").fill(external_user_email)
-#     await page.get_by_placeholder("password").click()
-#     await page.get_by_placeholder("password").fill(external_user_password)
-#     await page.get_by_role("button", name="Login").click()
 
-#     await expect(page).to_have_url(re.compile(rf"{jenkins_endpoint}*"))
+@pytest_asyncio.fixture(scope="module", name="totp")
+async def totp_fixture(
+    identity_platform_juju: jubilant.Juju, page: Page, test_credentials: _TestCredentials
+) -> pyotp.TOTP:
+    """User OTP fixture."""
+    juju = identity_platform_juju
+
+    # output looks something like:
+    # expires-at: "2025-09-18T17:44:47.541400692Z"
+    # identity-id: 165d553f-61f4-40da-97cb-24ac3179b6a7
+    # password-reset-code: "042474"
+    # password-reset-link: https://idp.test/.../ui/reset_email?flow=...
+    logger.info("Creating admin account: %s %s", test_credentials.username, test_credentials.email)
+    result = juju.run(
+        "kratos/0",
+        "create-admin-account",
+        params={"username": test_credentials.username, "email": test_credentials.email},
+    )
+    reset_page_url: str | None = result.results.get("password-reset-link")
+    assert reset_page_url, f"Reset page link not found in results {result.results}"
+    reset_code: str | None = result.results.get("password-reset-code")
+    assert reset_code is not None, f"Reset code not found in results {result.results}"
+    logger.info("Created admin account, reset link: %s, code: %s", reset_page_url, reset_code)
+
+    # sleep for 5 seconds to prevent weird behavior with reset link giving 500 errors.
+    await asyncio.sleep(5)
+
+    logger.info("Navigating to reset link")
+    await page.goto(url=reset_page_url)
+
+    async with page.expect_navigation():
+        logger.info("Page content:%s", await page.content())
+        await page.get_by_label("Recovery code", exact=True).fill(reset_code)
+        await page.get_by_role("button", name="Submit").click()
+
+    async with page.expect_navigation():
+        logger.info("Changing password: %s", test_credentials.password)
+        await page.get_by_label("New password", exact=True).fill(test_credentials.password)
+        await page.get_by_label("Confirm New password", exact=True).fill(test_credentials.password)
+        await page.get_by_role("button", name="Reset password").click()
+
+    async with page.expect_navigation():
+        code = await page.get_by_role("code").text_content()
+        assert code, "Code content not found"
+        totp = pyotp.TOTP(code)
+        await page.get_by_label("Verify code", exact=True).fill(totp.now())
+        await page.get_by_role("button", name="Save").click()
+
+    return totp
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("inject_dns")
+async def test_auth_proxy_integration_authorized(
+    jenkins_endpoint: str, page: Page, totp: pyotp.TOTP, test_credentials: _TestCredentials
+) -> None:
+    """
+    arrange: Deploy jenkins, the authentication bundle.
+    act: log in via IDP UI
+    assert: the browser is redirected to the Jenkins URL with response code 200
+    """
+    await page.goto(url=jenkins_endpoint)
+
+    async with page.expect_navigation():
+        await page.get_by_label("Email", exact=True).fill(test_credentials.email)
+        await page.get_by_label("Password", exact=True).fill(test_credentials.password)
+        await page.get_by_role("button", name="Sign in").click()
+
+    async with page.expect_navigation():
+        await page.get_by_label("Authentication code", exact=True).fill(totp.now())
+        await page.get_by_role("button", name="Sign in").click()
+
+    await expect(page).to_have_url(re.compile(r"https://jenkins.test/*"))
