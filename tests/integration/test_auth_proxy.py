@@ -7,8 +7,10 @@ import json
 import logging
 import re
 import urllib.parse
+from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Callable, Coroutine, Match
 
+import jubilant
 import pytest
 import pytest_asyncio
 import requests
@@ -23,6 +25,142 @@ from playwright.async_api._generated import Playwright as AsyncPlaywright
 from .helpers import wait_for
 
 logger = logging.getLogger(__name__)
+
+IDENTITY_PLATFORM_HOSTNAME = "idp.test"
+JENKINS_HOSTNAME = "jenkins.test"
+
+
+@dataclass
+class _Offer:
+    """The representation of a Juju offer.
+
+    Attributes:
+        url: The offer URL.
+        saas: The offer SaaS name.
+    """
+
+    url: str
+    saas: str
+
+
+@dataclass
+class _IdentityPlatformOffers:
+    """The offers provided by Identity Platform charms.
+
+    Attributes:
+        oauth: The OAuth endpoint from hydra.
+        certificates: The Certificates endpoint fro self-signed-ceritificates.
+        send_ca_cert: The send-ca-cert endpoint fro self-signed-ceritificates.
+    """
+
+    oauth: _Offer
+    certificates: _Offer
+    send_ca_cert: _Offer
+
+
+@pytest.fixture(scope="module", name="identity_platform_offers")
+def identity_platform_offers_fixture():
+    """Deploy, integrate identity platform charms and return offers."""
+    with jubilant.temp_model() as juju:
+        hydra = "hydra"
+        login_ui = "identity-platform-login-ui-operator"
+        kratos = "kratos"
+        postgresql = "postgresql-k8s"
+        ca = "self-signed-certificates"
+        traefik_admin = "traefik-admin"
+        traefik_public = "traefik-public"
+
+        juju.deploy(hydra, channel="latest/edge")
+        juju.deploy(login_ui, channel="latest/edge")
+        juju.deploy(kratos, channel="latest/edge")
+        juju.deploy(postgresql, channel="14/stable")
+        juju.deploy(ca, channel="1/stable")
+        juju.deploy(traefik_admin, channel="latest/edge")
+        juju.deploy(
+            traefik_public,
+            channel="latest/edge",
+            config={
+                "enable_experimental_forward_auth": "true",
+                "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
+            },
+        )
+
+        juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
+        juju.integrate(f"{postgresql}:database", f"{kratos}:pg-database")
+        juju.integrate(f"{hydra}:public-ingress", f"{traefik_public}:ingress")
+        juju.integrate(f"{hydra}:internal-ingress", f"{traefik_admin}:traefik-route")
+        juju.integrate(f"{traefik_public}:certificates", f"{ca}:certificates")
+        juju.integrate(f"{kratos}:hydra-endpoint-info", f"{hydra}:hydra-endpoint-info")
+        juju.integrate(f"{kratos}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info")
+        juju.integrate(f"{kratos}:kratos-info", f"{login_ui}:kratos-info")
+        juju.integrate(f"{kratos}:public-ingress", f"{traefik_public}:ingress")
+        juju.integrate(f"{kratos}:internal-ingress", f"{traefik_admin}:traefik-route")
+        juju.integrate(f"{hydra}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info")
+        juju.integrate(f"{hydra}:hydra-endpoint-info", f"{login_ui}:hydra-endpoint-info")
+        juju.integrate(f"{hydra}:admin-ingress", f"{traefik_admin}:ingress")
+        juju.integrate(f"{kratos}:admin-ingress", f"{traefik_admin}:ingress")
+        juju.integrate(f"{login_ui}:ingress", f"{traefik_public}:ingress")
+
+        hydra_endpoint = "oauth"
+        certificates_endpoint = "oauth"
+        send_ca_cert_endpoint = "send-ca-cert"
+        juju.offer(f"{juju.model}.{hydra}", endpoint=hydra_endpoint, name=hydra_endpoint)
+        juju.offer(
+            f"{juju.model}.{ca}", endpoint=certificates_endpoint, name=certificates_endpoint
+        )
+        juju.offer(
+            f"{juju.model}.{ca}", endpoint=send_ca_cert_endpoint, name=send_ca_cert_endpoint
+        )
+
+        juju.wait(lambda ready: jubilant.all_active(ready), timeout=60 * 15)
+
+        return _IdentityPlatformOffers(
+            oauth=_Offer(url=f"admin/{juju.model}.{hydra_endpoint}", saas=hydra_endpoint),
+            certificates=_Offer(
+                url=f"admin/{juju.model}.{certificates_endpoint}", saas=certificates_endpoint
+            ),
+            send_ca_cert=_Offer(
+                url=f"admin/{juju.model}.{send_ca_cert_endpoint}", saas=send_ca_cert_endpoint
+            ),
+        )
+
+
+@pytest.fixture(scope="module", name="jenkins_k8s_charms")
+def jenkins_k8s_charms_fixture(
+    application: Application, identity_platform_offers: _IdentityPlatformOffers
+):
+    """The Jenkins K8s charms model."""
+    juju = jubilant.Juju(model=application.model.name)
+
+    traefik_public = "traefik-k8s"
+    oauth2_proxy = "oauth2-k8s-proxy"
+    juju.deploy(
+        traefik_public,
+        channel="latest/edge",
+        config={
+            "enable_experimental_forward_auth": "true",
+            "external_hostname": JENKINS_HOSTNAME,
+        },
+    )
+    juju.deploy(oauth2_proxy, channel="latest/edge")
+
+    juju.consume(
+        identity_platform_offers.certificates.url, alias=identity_platform_offers.certificates.saas
+    )
+    juju.consume(identity_platform_offers.oauth.url, alias=identity_platform_offers.oauth.saas)
+    juju.consume(
+        identity_platform_offers.send_ca_cert.url, alias=identity_platform_offers.send_ca_cert.saas
+    )
+
+    juju.integrate(f"{traefik_public}:ingress", f"{application.name}:ingress")
+    juju.integrate(f"{traefik_public}:certificates", identity_platform_offers.certificates.saas)
+    juju.integrate(f"{oauth2_proxy}:ingress", f"{traefik_public}:ingress")
+    juju.integrate(f"{oauth2_proxy}:oauth", identity_platform_offers.oauth.saas)
+    juju.integrate(f"{application.name}:auth-proxy", f"{oauth2_proxy}:auth-proxy")
+    juju.integrate(f"{oauth2_proxy}:forward-auth", f"{traefik_public}:experimental-forward-auth")
+    juju.integrate(f"{oauth2_proxy}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
+
+    juju.wait(lambda status: jubilant.all_active(status), timeout=15 * 60)
 
 
 # The playwright fixtures are taken from:
