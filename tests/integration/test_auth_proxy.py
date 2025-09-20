@@ -58,7 +58,6 @@ class _IdentityPlatformOffers:
     """
 
     oauth: _Offer
-    certificates: _Offer
     send_ca_cert: _Offer
 
 
@@ -106,12 +105,12 @@ def identity_platform_offers_fixture(
     traefik_admin = "traefik-admin"
     traefik_public = identity_platform_public_traefik
 
-    juju.deploy(hydra, channel="latest/edge", trust=True)
-    juju.deploy(login_ui, channel="latest/edge", trust=True)
-    juju.deploy(kratos, channel="latest/edge", trust=True)
+    juju.deploy(hydra, channel="latest/stable", trust=True)
+    juju.deploy(login_ui, channel="latest/stable", trust=True)
+    juju.deploy(kratos, channel="latest/stable", trust=True)
     juju.deploy(postgresql, channel="14/stable", trust=True)
-    juju.deploy(ca, channel="1/stable", trust=True)
-    juju.deploy("traefik-k8s", traefik_admin, channel="latest/edge", trust=True)
+    juju.deploy(ca, channel="latest/stable", trust=True)
+    juju.deploy("traefik-k8s", traefik_admin, channel="latest/stable", trust=True)
 
     juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
     juju.integrate(f"{postgresql}:database", f"{kratos}:pg-database")
@@ -130,19 +129,14 @@ def identity_platform_offers_fixture(
     juju.integrate(f"{login_ui}:ingress", f"{traefik_public}:ingress")
 
     hydra_endpoint = "oauth"
-    certificates_endpoint = "certificates"
     send_ca_cert_endpoint = "send-ca-cert"
     juju.offer(f"{juju.model}.{hydra}", endpoint=hydra_endpoint, name=hydra_endpoint)
-    juju.offer(f"{juju.model}.{ca}", endpoint=certificates_endpoint, name=certificates_endpoint)
     juju.offer(f"{juju.model}.{ca}", endpoint=send_ca_cert_endpoint, name=send_ca_cert_endpoint)
 
     juju.wait(lambda ready: jubilant.all_active(ready), timeout=60 * 15)
 
     return _IdentityPlatformOffers(
         oauth=_Offer(url=f"admin/{juju.model}.{hydra_endpoint}", saas=hydra_endpoint),
-        certificates=_Offer(
-            url=f"admin/{juju.model}.{certificates_endpoint}", saas=certificates_endpoint
-        ),
         send_ca_cert=_Offer(
             url=f"admin/{juju.model}.{send_ca_cert_endpoint}", saas=send_ca_cert_endpoint
         ),
@@ -184,16 +178,13 @@ def jenkins_k8s_charms_fixture(
     )
     juju.deploy(oauth2_proxy, channel="latest/edge", trust=True)
 
-    juju.consume(
-        identity_platform_offers.certificates.url, alias=identity_platform_offers.certificates.saas
-    )
     juju.consume(identity_platform_offers.oauth.url, alias=identity_platform_offers.oauth.saas)
     juju.consume(
         identity_platform_offers.send_ca_cert.url, alias=identity_platform_offers.send_ca_cert.saas
     )
 
     juju.integrate(f"{traefik_public}:ingress", f"{application.name}:ingress")
-    juju.integrate(f"{traefik_public}:certificates", identity_platform_offers.certificates.saas)
+    juju.integrate(f"{traefik_public}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
     juju.integrate(f"{oauth2_proxy}:ingress", f"{traefik_public}:ingress")
     juju.integrate(f"{oauth2_proxy}:oauth", identity_platform_offers.oauth.saas)
     juju.integrate(f"{application.name}:auth-proxy", f"{oauth2_proxy}:auth-proxy")
@@ -509,6 +500,8 @@ async def totp_fixture(
     """User OTP fixture."""
     juju = identity_platform_juju
 
+    await asyncio.sleep(5)
+
     # output looks something like:
     # expires-at: "2025-09-18T17:44:47.541400692Z"
     # identity-id: 165d553f-61f4-40da-97cb-24ac3179b6a7
@@ -544,8 +537,10 @@ async def totp_fixture(
         await page.get_by_role("button", name="Reset password").click()
 
     async with page.expect_navigation():
+        logger.info("Getting OTP Code")
         code = await page.get_by_role("code").text_content()
         assert code, "Code content not found"
+        logger.info("Got OTP Code: %s", code)
         totp = pyotp.TOTP(code)
         await page.get_by_label("Verify code", exact=True).fill(totp.now())
         await page.get_by_role("button", name="Save").click()
