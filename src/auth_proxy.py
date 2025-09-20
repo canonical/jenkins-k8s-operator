@@ -7,7 +7,7 @@ import logging
 from typing import List
 
 import ops
-from charms.oathkeeper.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
+from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
 from charms.traefik_k8s.v2.ingress import (
     IngressPerAppReadyEvent,
     IngressPerAppRequirer,
@@ -19,7 +19,7 @@ import pebble
 from state import AUTH_PROXY_RELATION, JENKINS_SERVICE_NAME, State
 
 AUTH_PROXY_ALLOWED_ENDPOINTS: List[str] = []
-AUTH_PROXY_HEADERS = ["X-User"]
+AUTH_PROXY_HEADERS = ["X-Auth-Request-User"]
 
 
 logger = logging.getLogger(__name__)
