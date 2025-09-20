@@ -109,8 +109,8 @@ def identity_platform_offers_fixture(
     juju.deploy(login_ui, channel="latest/stable", trust=True)
     juju.deploy(kratos, channel="latest/stable", trust=True)
     juju.deploy(postgresql, channel="14/stable", trust=True)
-    juju.deploy(ca, channel="latest/stable", trust=True)
-    juju.deploy("traefik-k8s", traefik_admin, channel="latest/stable", trust=True)
+    juju.deploy(ca, channel="1/stable", trust=True)
+    juju.deploy("traefik-k8s", traefik_admin, channel="latest/edge", trust=True)
 
     juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
     juju.integrate(f"{postgresql}:database", f"{kratos}:pg-database")
