@@ -58,6 +58,7 @@ class _IdentityPlatformOffers:
     """
 
     oauth: _Offer
+    certificates: _Offer
     send_ca_cert: _Offer
 
 
@@ -77,7 +78,7 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
     juju.deploy(
         "traefik-k8s",
         traefik_public,
-        channel="latest/edge",
+        channel="latest/stable",
         config={
             "enable_experimental_forward_auth": "true",
             "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
@@ -102,41 +103,40 @@ def identity_platform_offers_fixture(
     kratos = "kratos"
     postgresql = "postgresql-k8s"
     ca = "self-signed-certificates"
-    traefik_admin = "traefik-admin"
     traefik_public = identity_platform_public_traefik
 
     juju.deploy(hydra, channel="latest/stable", trust=True)
     juju.deploy(login_ui, channel="latest/stable", trust=True)
     juju.deploy(kratos, channel="latest/stable", trust=True)
     juju.deploy(postgresql, channel="14/stable", trust=True)
-    juju.deploy(ca, channel="1/stable", trust=True)
-    juju.deploy("traefik-k8s", traefik_admin, channel="latest/edge", trust=True)
+    juju.deploy(ca, channel="latest/stable", trust=True)
 
     juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
     juju.integrate(f"{postgresql}:database", f"{kratos}:pg-database")
     juju.integrate(f"{hydra}:public-ingress", f"{traefik_public}:ingress")
-    juju.integrate(f"{hydra}:internal-ingress", f"{traefik_admin}:traefik-route")
     juju.integrate(f"{traefik_public}:certificates", f"{ca}:certificates")
     juju.integrate(f"{kratos}:hydra-endpoint-info", f"{hydra}:hydra-endpoint-info")
     juju.integrate(f"{kratos}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info")
     juju.integrate(f"{kratos}:kratos-info", f"{login_ui}:kratos-info")
     juju.integrate(f"{kratos}:public-ingress", f"{traefik_public}:ingress")
-    juju.integrate(f"{kratos}:internal-ingress", f"{traefik_admin}:traefik-route")
     juju.integrate(f"{hydra}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info")
     juju.integrate(f"{hydra}:hydra-endpoint-info", f"{login_ui}:hydra-endpoint-info")
-    juju.integrate(f"{hydra}:admin-ingress", f"{traefik_admin}:ingress")
-    juju.integrate(f"{kratos}:admin-ingress", f"{traefik_admin}:ingress")
     juju.integrate(f"{login_ui}:ingress", f"{traefik_public}:ingress")
 
     hydra_endpoint = "oauth"
+    certificates_endpoint = "certificates"
     send_ca_cert_endpoint = "send-ca-cert"
     juju.offer(f"{juju.model}.{hydra}", endpoint=hydra_endpoint, name=hydra_endpoint)
+    juju.offer(f"{juju.model}.{ca}", endpoint=certificates_endpoint, name=certificates_endpoint)
     juju.offer(f"{juju.model}.{ca}", endpoint=send_ca_cert_endpoint, name=send_ca_cert_endpoint)
 
     juju.wait(lambda ready: jubilant.all_active(ready), timeout=60 * 15)
 
     return _IdentityPlatformOffers(
         oauth=_Offer(url=f"admin/{juju.model}.{hydra_endpoint}", saas=hydra_endpoint),
+        certificates=_Offer(
+            url=f"admin/{juju.model}.{certificates_endpoint}", saas=certificates_endpoint
+        ),
         send_ca_cert=_Offer(
             url=f"admin/{juju.model}.{send_ca_cert_endpoint}", saas=send_ca_cert_endpoint
         ),
@@ -169,7 +169,7 @@ def jenkins_k8s_charms_fixture(
     oauth2_proxy = "oauth2-proxy-k8s"
     juju.deploy(
         traefik_public,
-        channel="latest/edge",
+        channel="latest/stable",
         config={
             "enable_experimental_forward_auth": "true",
             "external_hostname": JENKINS_HOSTNAME,
@@ -180,10 +180,14 @@ def jenkins_k8s_charms_fixture(
 
     juju.consume(identity_platform_offers.oauth.url, alias=identity_platform_offers.oauth.saas)
     juju.consume(
+        identity_platform_offers.certificates.url, alias=identity_platform_offers.certificates.saas
+    )
+    juju.consume(
         identity_platform_offers.send_ca_cert.url, alias=identity_platform_offers.send_ca_cert.saas
     )
 
     juju.integrate(f"{traefik_public}:ingress", f"{application.name}:ingress")
+    juju.integrate(f"{traefik_public}:certificates", identity_platform_offers.certificates.saas)
     juju.integrate(f"{traefik_public}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
     juju.integrate(f"{oauth2_proxy}:ingress", f"{traefik_public}:ingress")
     juju.integrate(f"{oauth2_proxy}:oauth", identity_platform_offers.oauth.saas)
@@ -194,6 +198,31 @@ def jenkins_k8s_charms_fixture(
     juju.wait(
         lambda status: jubilant.all_agents_idle(status), timeout=15 * 60, successes=5, delay=5
     )
+
+    # Need to patch oauth2-proxy's certificates by patching
+    # /etc/ssl/certs/ca-certificates.crt in workload container and
+    # /usr/local/share/ca-certificates/ca-certificates.crt in charm container
+    # then in charm container exec update-ca-certificates --fresh
+    # This is an issue in auth2-proxy-k8s charm in relation to send-ca-cert charm versions.
+    oauth2_proxy_unit_data = juju.cli("show-unit", "oauth2-proxy-k8s/0", include_model=True)
+    unit_contensts = yaml.safe_load(oauth2_proxy_unit_data)
+    unit_relations = unit_contensts["oauth2-proxy-k8s/0"]["relation-info"]
+    receive_relation = [
+        relation for relation in unit_relations if relation["endpoint"] == "receive-ca-cert"
+    ][0]
+    cert_contents: str = receive_relation["related-units"]["send-ca-cert/0"]["data"]["ca"]
+    out = juju.ssh(
+        f"{oauth2_proxy}/0",
+        "export PEBBLE_SOCKET=/charm/containers/oauth2-proxy/pebble.socket;"
+        f"echo '{cert_contents}' >> /charm/containers/oauth2-proxy/certs.crt;"
+        "/charm/bin/pebble push /charm/containers/oauth2-proxy/certs.crt "
+        "/etc/ssl/certs/ca-certificates.crt;"
+        "cp /charm/containers/oauth2-proxy/certs.crt "
+        "/usr/local/share/ca-certificates/ca-certificates.crt;",
+        "update-ca-certificates --fresh;",
+    )
+    logger.info("Patched oauth2-proxy-k8s, out: %s", out)
+
     juju.wait(lambda status: jubilant.all_active(status), timeout=15 * 60, successes=5, delay=5)
 
     return _JenkinsCharms(jenkins=application.name, traefik=traefik_public, oauth2=oauth2_proxy)
@@ -463,7 +492,7 @@ async def test_auth_proxy_integration_returns_not_authorized(jenkins_endpoint: s
 
     await wait_for(
         is_auth_ui,
-        timeout=60 * 10,
+        timeout=60 * 3,
     )
 
 
@@ -522,21 +551,21 @@ async def totp_fixture(
     # sleep for 5 seconds to prevent weird behavior with reset link giving 500 errors.
     await asyncio.sleep(5)
 
-    logger.info("Navigating to reset link")
+    logger.info("Navigating to reset link: %s", reset_page_url)
     await page.goto(url=reset_page_url)
 
-    async with page.expect_navigation():
+    async with page.expect_navigation(timeout=10000):
         logger.info("Page content:%s", await page.content())
         await page.get_by_label("Recovery code", exact=True).fill(reset_code)
         await page.get_by_role("button", name="Submit").click()
 
-    async with page.expect_navigation():
+    async with page.expect_navigation(timeout=10000):
         logger.info("Changing password: %s", test_credentials.password)
         await page.get_by_label("New password", exact=True).fill(test_credentials.password)
         await page.get_by_label("Confirm New password", exact=True).fill(test_credentials.password)
         await page.get_by_role("button", name="Reset password").click()
 
-    async with page.expect_navigation():
+    async with page.expect_navigation(timeout=10000):
         logger.info("Getting OTP Code")
         code = await page.get_by_role("code").text_content()
         assert code, "Code content not found"
@@ -559,15 +588,24 @@ async def test_auth_proxy_integration_authorized(
     act: log in via IDP UI
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
+    logger.info("Navigating to Jenkins public endpoint: %s", jenkins_endpoint)
     await page.goto(url=jenkins_endpoint)
 
     async with page.expect_navigation():
+        logger.info(
+            "Filling in login-ui credentials: %s, %s",
+            test_credentials.email,
+            test_credentials.password,
+        )
         await page.get_by_label("Email", exact=True).fill(test_credentials.email)
         await page.get_by_label("Password", exact=True).fill(test_credentials.password)
         await page.get_by_role("button", name="Sign in").click()
+        logger.info("Signing in...")
 
     async with page.expect_navigation():
+        logger.info("Authenticating with TOTP")
         await page.get_by_label("Authentication code", exact=True).fill(totp.now())
         await page.get_by_role("button", name="Sign in").click()
+        logger.info("Signing in...")
 
     await expect(page).to_have_url(re.compile(r"https://jenkins.test/*"))
