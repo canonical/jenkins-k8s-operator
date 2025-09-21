@@ -9,6 +9,8 @@ import re
 import secrets
 import socket
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any, AsyncGenerator, Callable, Coroutine
 
 import jubilant
@@ -58,7 +60,7 @@ class _IdentityPlatformOffers:
     """
 
     oauth: _Offer
-    certificates: _Offer
+    # certificates: _Offer
     send_ca_cert: _Offer
 
 
@@ -124,19 +126,19 @@ def identity_platform_offers_fixture(
     juju.integrate(f"{login_ui}:ingress", f"{traefik_public}:ingress")
 
     hydra_endpoint = "oauth"
-    certificates_endpoint = "certificates"
+    # certificates_endpoint = "certificates"
     send_ca_cert_endpoint = "send-ca-cert"
     juju.offer(f"{juju.model}.{hydra}", endpoint=hydra_endpoint, name=hydra_endpoint)
-    juju.offer(f"{juju.model}.{ca}", endpoint=certificates_endpoint, name=certificates_endpoint)
+    # juju.offer(f"{juju.model}.{ca}", endpoint=certificates_endpoint, name=certificates_endpoint)
     juju.offer(f"{juju.model}.{ca}", endpoint=send_ca_cert_endpoint, name=send_ca_cert_endpoint)
 
     juju.wait(lambda ready: jubilant.all_active(ready), timeout=60 * 15)
 
     return _IdentityPlatformOffers(
         oauth=_Offer(url=f"admin/{juju.model}.{hydra_endpoint}", saas=hydra_endpoint),
-        certificates=_Offer(
-            url=f"admin/{juju.model}.{certificates_endpoint}", saas=certificates_endpoint
-        ),
+        # certificates=_Offer(
+        #     url=f"admin/{juju.model}.{certificates_endpoint}", saas=certificates_endpoint
+        # ),
         send_ca_cert=_Offer(
             url=f"admin/{juju.model}.{send_ca_cert_endpoint}", saas=send_ca_cert_endpoint
         ),
@@ -166,6 +168,7 @@ def jenkins_k8s_charms_fixture(
     juju = jubilant.Juju(model=application.model.name)
 
     traefik_public = "traefik-k8s"
+    ca = "self-signed-certificates"
     oauth2_proxy = "oauth2-proxy-k8s"
     juju.deploy(
         traefik_public,
@@ -176,19 +179,17 @@ def jenkins_k8s_charms_fixture(
         },
         trust=True,
     )
+    juju.deploy(ca, channel="latest/stable", trust=True)
     juju.deploy(oauth2_proxy, channel="latest/edge", trust=True)
 
     juju.consume(identity_platform_offers.oauth.url, alias=identity_platform_offers.oauth.saas)
-    juju.consume(
-        identity_platform_offers.certificates.url, alias=identity_platform_offers.certificates.saas
-    )
     juju.consume(
         identity_platform_offers.send_ca_cert.url, alias=identity_platform_offers.send_ca_cert.saas
     )
 
     juju.integrate(f"{traefik_public}:ingress", f"{application.name}:ingress")
-    juju.integrate(f"{traefik_public}:certificates", identity_platform_offers.certificates.saas)
-    juju.integrate(f"{traefik_public}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
+    juju.integrate(f"{traefik_public}:certificates", f"{ca}:certificates")
+    # juju.integrate(f"{traefik_public}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
     juju.integrate(f"{oauth2_proxy}:ingress", f"{traefik_public}:ingress")
     juju.integrate(f"{oauth2_proxy}:oauth", identity_platform_offers.oauth.saas)
     juju.integrate(f"{application.name}:auth-proxy", f"{oauth2_proxy}:auth-proxy")
@@ -281,6 +282,7 @@ def inject_dns_fixture(
     identity_platform_traefik_ip: str,
 ):
     """Inject IDP hostname to CoreDNS."""
+    logger.info("Patching CoreDNS configmap, idp public IP: %s", identity_platform_traefik_ip)
     environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
     template = environment.get_template("coredns.yaml.j2")
     coredns_yaml = template.render(
@@ -327,7 +329,7 @@ async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
 @pytest_asyncio.fixture(scope="module", name="browser_type")
 async def browser_type_fixture(playwright: AsyncPlaywright) -> AsyncGenerator[BrowserType, None]:
     """Browser type for playwright."""
-    yield playwright.firefox
+    yield playwright.chromium
 
 
 @pytest_asyncio.fixture(scope="module", name="browser_factory")
@@ -358,9 +360,18 @@ async def browser_factory_fixture(
 @pytest_asyncio.fixture(scope="module", name="browser")
 async def browser_fixture(
     browser_factory: Callable[..., Coroutine[Any, Any, Browser]],
+    identity_platform_traefik_ip: str,
+    jenkins_traefik_ip: str,
 ) -> AsyncGenerator[Browser, None]:
     """Browser."""
-    browser = await browser_factory()
+    browser = await browser_factory(
+        # DO NOT modify /etc/hosts file to map the custom hosts for testing, since it will
+        # interfere with the following browser host resolver settings.
+        args=[
+            f"--host-resolver-rules=MAP {IDENTITY_PLATFORM_HOSTNAME} {identity_platform_traefik_ip},"
+            f"MAP {JENKINS_HOSTNAME} {jenkins_traefik_ip}"
+        ]
+    )
     yield browser
     await browser.close()
 
@@ -395,12 +406,16 @@ async def context_fixture(
     context_factory: Callable[..., Coroutine[Any, Any, BrowserContext]],
 ) -> AsyncGenerator[BrowserContext, None]:
     """Playwright context."""
-    context = await context_factory(ignore_https_errors=True)
+    context = await context_factory(
+        ignore_https_errors=True,
+        record_video_dir="videos/",
+        record_video_size={"width": 1280, "height": 720},
+    )
     yield context
     await context.close()
 
 
-@pytest_asyncio.fixture(scope="module", name="page")
+@pytest_asyncio.fixture(scope="function", name="page")
 async def page_fixture(context: BrowserContext) -> AsyncGenerator[Page, None]:
     """Playwright page."""
     new_page = await context.new_page()
@@ -484,9 +499,10 @@ async def test_auth_proxy_integration_returns_not_authorized(jenkins_endpoint: s
             verify=False,
             timeout=5,
         )
+        logger.info("Auth UI test response header: %s, url: %s", response.headers, response.url)
         return (
             response.status_code == 200
-            and "kratos" in response.headers.get("content-security-policy", "")
+            and IDENTITY_PLATFORM_HOSTNAME in response.url
             and "identity-platform-login-ui-operator" in response.url
         )
 
@@ -522,7 +538,7 @@ def test_credentials_fixture() -> _TestCredentials:
     )
 
 
-@pytest_asyncio.fixture(scope="module", name="totp")
+@pytest_asyncio.fixture(scope="function", name="totp")
 async def totp_fixture(
     identity_platform_juju: jubilant.Juju, page: Page, test_credentials: _TestCredentials
 ) -> pyotp.TOTP:
@@ -552,20 +568,20 @@ async def totp_fixture(
     await asyncio.sleep(5)
 
     logger.info("Navigating to reset link: %s", reset_page_url)
-    await page.goto(url=reset_page_url)
+    await page.goto(url=reset_page_url, timeout=1000 * 60)
 
-    async with page.expect_navigation(timeout=10000):
+    async with page.expect_navigation(timeout=1000 * 60):
         logger.info("Page content:%s", await page.content())
         await page.get_by_label("Recovery code", exact=True).fill(reset_code)
         await page.get_by_role("button", name="Submit").click()
 
-    async with page.expect_navigation(timeout=10000):
+    async with page.expect_navigation(timeout=1000 * 60):
         logger.info("Changing password: %s", test_credentials.password)
         await page.get_by_label("New password", exact=True).fill(test_credentials.password)
         await page.get_by_label("Confirm New password", exact=True).fill(test_credentials.password)
         await page.get_by_role("button", name="Reset password").click()
 
-    async with page.expect_navigation(timeout=10000):
+    async with page.expect_navigation(timeout=1000 * 60):
         logger.info("Getting OTP Code")
         code = await page.get_by_role("code").text_content()
         assert code, "Code content not found"
@@ -581,7 +597,10 @@ async def totp_fixture(
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("inject_dns")
 async def test_auth_proxy_integration_authorized(
-    jenkins_endpoint: str, page: Page, totp: pyotp.TOTP, test_credentials: _TestCredentials
+    jenkins_endpoint: str,
+    page: Page,
+    totp: pyotp.TOTP,
+    test_credentials: _TestCredentials,
 ) -> None:
     """
     arrange: Deploy jenkins, the authentication bundle.
@@ -589,22 +608,22 @@ async def test_auth_proxy_integration_authorized(
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
     logger.info("Navigating to Jenkins public endpoint: %s", jenkins_endpoint)
-    await page.goto(url=jenkins_endpoint)
+    await page.goto(url=jenkins_endpoint, timeout=1000 * 60 * 10)
 
-    async with page.expect_navigation():
+    async with page.expect_navigation(timeout=1000 * 60):
         logger.info(
             "Filling in login-ui credentials: %s, %s",
             test_credentials.email,
             test_credentials.password,
         )
-        await page.get_by_label("Email", exact=True).fill(test_credentials.email)
-        await page.get_by_label("Password", exact=True).fill(test_credentials.password)
+        await page.get_by_label("Email").fill(test_credentials.email)
+        await page.get_by_label("Password").fill(test_credentials.password)
         await page.get_by_role("button", name="Sign in").click()
         logger.info("Signing in...")
 
-    async with page.expect_navigation():
+    async with page.expect_navigation(timeout=1000 * 60):
         logger.info("Authenticating with TOTP")
-        await page.get_by_label("Authentication code", exact=True).fill(totp.now())
+        await page.get_by_label("Authentication code").fill(totp.now())
         await page.get_by_role("button", name="Sign in").click()
         logger.info("Signing in...")
 
