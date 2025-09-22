@@ -282,7 +282,7 @@ def inject_dns_fixture(
 
     coredns_configmap_manifest["data"]["Corefile"] = original_manifest.data.get("Corefile", "")
     kube_core_client.replace_namespaced_config_map(
-        name="coredns", namespace="kube-system", body=original_manifest
+        name="coredns", namespace="kube-system", body=coredns_configmap_manifest
     )
     pods = kube_core_client.list_namespaced_pod(
         namespace="kube-system", label_selector="k8s-app=kube-dns"
