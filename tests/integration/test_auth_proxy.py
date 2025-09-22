@@ -153,7 +153,11 @@ class _JenkinsCharms:
 
 @pytest.fixture(scope="module", name="jenkins_k8s_charms")
 def jenkins_k8s_charms_fixture(
-    application: Application, identity_platform_offers: _IdentityPlatformOffers
+    application: Application,
+    identity_platform_offers: _IdentityPlatformOffers,
+    # This fixture was deliberately chosen to be added as an argument here to explicitly show the
+    # dependency.
+    inject_dns: None,  # pylint: disable=unused-argument
 ):
     """The Jenkins K8s charms model."""
     juju = jubilant.Juju(model=application.model.name)
@@ -216,7 +220,7 @@ def jenkins_traefik_ip_fixture(
     return jenkins_traefik_loadbalancer_service.status.load_balancer.ingress[0].ip
 
 
-@pytest.fixture(scope="module", name="patch_dns_resolver", autouse=True)
+@pytest.fixture(scope="module", name="patch_dns_resolver")
 def patch_dns_resolver_fixture(identity_platform_traefik_ip: str, jenkins_traefik_ip: str):
     """Patch DNS resolution."""
     dns_cache = {
@@ -450,7 +454,7 @@ def jenkins_endpoint_fixture(model: Model, jenkins_k8s_charms: _JenkinsCharms):
 
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("inject_dns")
+@pytest.mark.usefixtures("patch_dns_resolver")
 async def test_auth_proxy_integration_returns_not_authorized(jenkins_endpoint: str) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
