@@ -126,19 +126,14 @@ def identity_platform_offers_fixture(
     juju.integrate(f"{login_ui}:ingress", f"{traefik_public}:ingress")
 
     hydra_endpoint = "oauth"
-    # certificates_endpoint = "certificates"
     send_ca_cert_endpoint = "send-ca-cert"
     juju.offer(f"{juju.model}.{hydra}", endpoint=hydra_endpoint, name=hydra_endpoint)
-    # juju.offer(f"{juju.model}.{ca}", endpoint=certificates_endpoint, name=certificates_endpoint)
     juju.offer(f"{juju.model}.{ca}", endpoint=send_ca_cert_endpoint, name=send_ca_cert_endpoint)
 
     juju.wait(lambda ready: jubilant.all_active(ready), timeout=60 * 30)
 
     return _IdentityPlatformOffers(
         oauth=_Offer(url=f"admin/{juju.model}.{hydra_endpoint}", saas=hydra_endpoint),
-        # certificates=_Offer(
-        #     url=f"admin/{juju.model}.{certificates_endpoint}", saas=certificates_endpoint
-        # ),
         send_ca_cert=_Offer(
             url=f"admin/{juju.model}.{send_ca_cert_endpoint}", saas=send_ca_cert_endpoint
         ),
