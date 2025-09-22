@@ -280,6 +280,7 @@ def inject_dns_fixture(
 
     yield
 
+    coredns_configmap_manifest.data["Corefile"] = original_manifest.data.get("Corefile", "")
     kube_core_client.replace_namespaced_config_map(
         name="coredns", namespace="kube-system", body=original_manifest
     )
