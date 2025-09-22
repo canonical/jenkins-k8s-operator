@@ -55,12 +55,10 @@ class _IdentityPlatformOffers:
 
     Attributes:
         oauth: The OAuth endpoint from hydra.
-        certificates: The Certificates endpoint fro self-signed-ceritificates.
         send_ca_cert: The send-ca-cert endpoint fro self-signed-ceritificates.
     """
 
     oauth: _Offer
-    # certificates: _Offer
     send_ca_cert: _Offer
 
 
