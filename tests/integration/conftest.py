@@ -175,7 +175,7 @@ async def jenkins_k8s_agents_fixture(model: Model):
     """The Jenkins k8s agent."""
     agent: Application = await model.deploy(
         "jenkins-agent-k8s",
-        base="ubuntu@22.04",
+        base="ubuntu@24.04",
         config={"jenkins_agent_labels": "k8s"},
         channel="latest/edge",
     )
@@ -203,7 +203,7 @@ async def extra_jenkins_k8s_agents_fixture(model: Model) -> AsyncGenerator[Appli
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
-        base="ubuntu@22.04",
+        base="ubuntu@24.04",
         config={"jenkins_agent_labels": "k8s-extra"},
         channel="latest/edge",
         application_name="jenkins-agent-k8s-extra",

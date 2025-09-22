@@ -185,15 +185,15 @@ def _parametrize_jenkins_container_states():
     not_connectable_container.can_connect.return_value = False
 
     service_not_ready_container = MagicMock()
-    service_not_ready_container.get_service.side_effect = [ops.ModelError()]
+    service_not_ready_container.get_check.side_effect = [ops.ModelError()]
 
     service_not_running_container = MagicMock()
-    service_not_running_container.get_service.return_value = (service_mock := MagicMock())
-    service_mock.is_running.return_value = False
+    service_not_running_container.get_check.return_value = (check_mock := MagicMock())
+    check_mock.status = ops.pebble.CheckStatus.DOWN
 
     happy_container = MagicMock()
-    happy_container.get_service.return_value = (happy_service_mock := MagicMock())
-    happy_service_mock.is_running.return_value = True
+    happy_container.get_check.return_value = (happy_service_mock := MagicMock())
+    happy_service_mock.status = ops.pebble.CheckStatus.UP
     return [
         pytest.param(None, False, id="No container"),
         pytest.param(not_connectable_container, False, id="Container not yet connectable"),
@@ -834,6 +834,35 @@ def test_get_client(admin_credentials: jenkins.Credentials, mock_env: jenkins.En
             password=admin_credentials.password_or_token,
             timeout=60,
         )
+
+
+def test_list_agent_nodes_error(
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
+):
+    """
+    arrange: given a mock client that raises an API exception.
+    act: when list_agent_nodes is called.
+    assert: JenkinsError is raised.
+    """
+    mock_client.get_nodes.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
+        with pytest.raises(jenkins.JenkinsError):
+            jenkins.Jenkins(mock_env).list_agent_nodes(container)
+
+
+def test_list_agent_nodes(
+    container: ops.Container, mock_client: MagicMock, mock_env: jenkins.Environment
+):
+    """
+    arrange: given a mock client returns mock nodes.
+    act: when list_agent_nodes is called.
+    assert: expected nodes are returned.
+    """
+    mock_client.get_nodes.return_value = {"node": (mock_node := MagicMock())}
+    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+        get_client_mock.return_value = mock_client
+        assert list(jenkins.Jenkins(mock_env).list_agent_nodes(container)) == [mock_node]
 
 
 def test_get_node_secret_api_error(

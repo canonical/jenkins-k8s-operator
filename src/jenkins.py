@@ -73,6 +73,8 @@ AUTH_PROXY_JENKINS_CONFIG = "templates/jenkins-auth-proxy-config.xml"
 DEFAULT_JENKINS_CONFIG = "templates/jenkins-config.xml"
 JENKINS_LOGGING_CONFIG = "templates/logging.properties"
 
+ONLINE_CHECK_NAME = "online"
+
 
 class JenkinsError(Exception):
     """Base exception for Jenkins errors."""
@@ -455,6 +457,25 @@ class Jenkins:
             logger.error("Failed to add agent node, %s", exc)
             raise JenkinsError("Failed to add agent node.") from exc
 
+    def list_agent_nodes(self, container: ops.Container) -> list[jenkinsapi.node.Node]:
+        """Get agent nodes from Jenkins.
+
+        Args:
+            container: The Jenkins workload container.
+
+        Raises:
+            JenkinsError: if there was an error listing agent nodes.
+
+        Returns:
+            Registered Jenkins agent nodes.
+        """
+        client = self._get_client(_get_api_credentials(container))
+        try:
+            return client.get_nodes().values()
+        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+            logger.error("Failed to list agent nodes, %s", exc)
+            raise JenkinsError("Failed to list agent nodes.") from exc
+
     def remove_agent_node(self, agent_name: str, container: ops.Container) -> None:
         """Remove a Jenkins agent node.
 
@@ -727,12 +748,11 @@ def is_jenkins_ready(container: typing.Optional[ops.Container]) -> bool:
     if not container or not container.can_connect():
         return False
     try:
-        jenkins_service = container.get_service(state.JENKINS_SERVICE_NAME)
-        print(jenkins_service)
+        online_check = container.get_check(ONLINE_CHECK_NAME)
     except ops.ModelError:
         logger.warning("Jenkins service not yet initialized", exc_info=True)
         return False
-    return jenkins_service.is_running()
+    return online_check.status == ops.pebble.CheckStatus.UP
 
 
 def _install_config(container: ops.Container, filename: str, destination_path: Path) -> None:
@@ -884,18 +904,6 @@ def _install_plugins(
     except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
         logger.error("Failed to install plugins, %s", exc)
         raise JenkinsBootstrapError("Failed to install plugins.") from exc
-
-
-def get_agent_name(unit_name: str) -> str:
-    """Infer agent name from unit name.
-
-    Args:
-        unit_name: The agent unit name.
-
-    Returns:
-        The agent node name registered on Jenkins server.
-    """
-    return unit_name.replace("/", "-")
 
 
 PLUGIN_NAME_GROUP = r"^([a-zA-Z0-9-_]+)"

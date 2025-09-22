@@ -89,7 +89,7 @@ def _get_pebble_layer(jenkins_instance: jenkins.Jenkins) -> ops.pebble.Layer:
             },
         },
         "checks": {
-            "online": {
+            jenkins.ONLINE_CHECK_NAME: {
                 "override": "replace",
                 "level": "ready",
                 "http": {"url": jenkins_instance.login_url},

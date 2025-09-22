@@ -3,7 +3,6 @@
 
 """Jenkins States."""
 import dataclasses
-import functools
 import logging
 import os
 import typing
@@ -121,43 +120,24 @@ class AgentMeta(BaseModel):
         return cls(executors=num_executors, labels=labels, name=name)
 
 
-def _is_remote_unit(app_name: str, unit: ops.Unit) -> bool:
-    """Return whether the unit is a remote unit in a relation.
-
-    Args:
-        app_name: The current application name.
-        unit: The unit to check in a relation.
-
-    Returns:
-        True if is remote unit. False otherwise.
-    """
-    return app_name not in unit.name
-
-
 def _get_agent_meta_map_from_relation(
-    relations: typing.List[ops.Relation], current_app_name: str
-) -> typing.Optional[typing.Mapping[str, typing.Optional[AgentMeta]]]:
+    relations: typing.List[ops.Relation],
+) -> typing.Optional[typing.Mapping[ops.Relation, list[AgentMeta]]]:
     """Return a mapping of unit name to AgentMetadata from agent relation.
 
     Args:
         relations: The agent relations.
-        current_app_name: Current application name, i.e. "jenkins-k8s-operator".
 
     Returns:
         A mapping of ops.Unit to AgentMetadata.
     """
     if not relations:
         return None
-    unit_metadata_mapping = {}
+    relation_agents_map = {}
     for relation in relations:
-        remote_units = filter(functools.partial(_is_remote_unit, current_app_name), relation.units)
-        unit_metadata_mapping.update(
-            {
-                unit.name: AgentMeta.from_agent_relation(relation.data[unit])
-                for unit in remote_units
-            }
-        )
-    return unit_metadata_mapping
+        agents = [AgentMeta.from_agent_relation(relation.data[unit]) for unit in relation.units]
+        relation_agents_map.update({relation: [agent for agent in agents if agent]})
+    return relation_agents_map
 
 
 def _is_auth_proxy_integrated(relation: typing.Optional[ops.Relation]) -> bool:
@@ -218,7 +198,7 @@ class State:
     """
 
     restart_time_range: typing.Optional[Range]
-    agent_relation_meta: typing.Optional[typing.Mapping[str, typing.Optional[AgentMeta]]]
+    agent_relation_meta: typing.Optional[typing.Mapping[ops.Relation, list[AgentMeta]]]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
     auth_proxy_integrated: bool
@@ -250,7 +230,7 @@ class State:
 
         try:
             agent_relation_meta_map = _get_agent_meta_map_from_relation(
-                charm.model.relations[AGENT_RELATION], charm.app.name
+                charm.model.relations[AGENT_RELATION]
             )
             is_auth_proxy_integrated = _is_auth_proxy_integrated(
                 charm.model.get_relation(AUTH_PROXY_RELATION)
