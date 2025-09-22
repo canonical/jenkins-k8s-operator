@@ -9,8 +9,6 @@ import re
 import secrets
 import socket
 from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
 from typing import Any, AsyncGenerator, Callable, Coroutine
 
 import jubilant
@@ -55,7 +53,7 @@ class _IdentityPlatformOffers:
 
     Attributes:
         oauth: The OAuth endpoint from hydra.
-        send_ca_cert: The send-ca-cert endpoint fro self-signed-ceritificates.
+        send_ca_cert: The send-ca-cert endpoint for self-signed-ceritificates.
     """
 
     oauth: _Offer
@@ -128,7 +126,7 @@ def identity_platform_offers_fixture(
     juju.offer(f"{juju.model}.{hydra}", endpoint=hydra_endpoint, name=hydra_endpoint)
     juju.offer(f"{juju.model}.{ca}", endpoint=send_ca_cert_endpoint, name=send_ca_cert_endpoint)
 
-    juju.wait(lambda ready: jubilant.all_active(ready), timeout=60 * 30)
+    juju.wait(jubilant.all_active, timeout=60 * 30)
 
     return _IdentityPlatformOffers(
         oauth=_Offer(url=f"admin/{juju.model}.{hydra_endpoint}", saas=hydra_endpoint),
@@ -182,16 +180,13 @@ def jenkins_k8s_charms_fixture(
 
     juju.integrate(f"{traefik_public}:ingress", f"{application.name}:ingress")
     juju.integrate(f"{traefik_public}:certificates", f"{ca}:certificates")
-    # juju.integrate(f"{traefik_public}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
     juju.integrate(f"{oauth2_proxy}:ingress", f"{traefik_public}:ingress")
     juju.integrate(f"{oauth2_proxy}:oauth", identity_platform_offers.oauth.saas)
     juju.integrate(f"{application.name}:auth-proxy", f"{oauth2_proxy}:auth-proxy")
     juju.integrate(f"{oauth2_proxy}:forward-auth", f"{traefik_public}:experimental-forward-auth")
     juju.integrate(f"{oauth2_proxy}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
 
-    juju.wait(
-        lambda status: jubilant.all_agents_idle(status), timeout=15 * 60, successes=5, delay=5
-    )
+    juju.wait(jubilant.all_agents_idle, timeout=15 * 60, successes=5, delay=5)
 
     # Need to patch oauth2-proxy's certificates by patching
     # /etc/ssl/certs/ca-certificates.crt in workload container and
@@ -217,7 +212,7 @@ def jenkins_k8s_charms_fixture(
     )
     logger.info("Patched oauth2-proxy-k8s, out: %s", out)
 
-    juju.wait(lambda status: jubilant.all_active(status), timeout=15 * 60, successes=5, delay=5)
+    juju.wait(jubilant.all_active, timeout=15 * 60, successes=5, delay=5)
 
     return _JenkinsCharms(jenkins=application.name, traefik=traefik_public, oauth2=oauth2_proxy)
 
@@ -256,11 +251,18 @@ def patch_dns_resolver_fixture(identity_platform_traefik_ip: str, jenkins_traefi
     original_getaddrinfo = socket.getaddrinfo
 
     def new_getaddrinfo(*args):
+        """Patches getaddrinfo with custom DNS mapping.
+
+        Args:
+            args: The getaddrinfo arguments.
+
+        Returns:
+            The patched getaddrinfo function.
+        """
         if args[0] in dns_cache:
-            logger.info("Forcing FQDN: {} to IP: {}".format(args[0], dns_cache[args[0]]))
+            logger.info("Forcing FQDN: %s to IP: %s", args[0], dns_cache[args[0]])
             return original_getaddrinfo(dns_cache[args[0]], *args[1:])
-        else:
-            return original_getaddrinfo(*args)
+        return original_getaddrinfo(*args)
 
     socket.getaddrinfo = new_getaddrinfo
 
@@ -294,7 +296,7 @@ def inject_dns_fixture(
         namespace="kube-system", label_selector="k8s-app=kube-dns"
     )
     for pod in pods.items:
-        logger.info(f"Deleting pod for DNS restart: {pod.metadata.name}")
+        logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
         kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
 
     yield
@@ -306,7 +308,7 @@ def inject_dns_fixture(
         namespace="kube-system", label_selector="k8s-app=kube-dns"
     )
     for pod in pods.items:
-        logger.info(f"Deleting pod for DNS restart: {pod.metadata.name}")
+        logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
         kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
 
 
@@ -361,7 +363,8 @@ async def browser_fixture(
         # DO NOT modify /etc/hosts file to map the custom hosts for testing, since it will
         # interfere with the following browser host resolver settings.
         args=[
-            f"--host-resolver-rules=MAP {IDENTITY_PLATFORM_HOSTNAME} {identity_platform_traefik_ip},"
+            f"--host-resolver-rules=MAP "
+            f"{IDENTITY_PLATFORM_HOSTNAME} {identity_platform_traefik_ip},"
             f"MAP {JENKINS_HOSTNAME} {jenkins_traefik_ip}"
         ]
     )
@@ -435,7 +438,7 @@ def _get_traefik_proxied_endpoints(juju: jubilant.Juju, traefik_app_name: str) -
     """Get traefik's proxied endpoints via running show-proxied-endpoints action.
 
     Args:
-        model: The Juju model to search traefik application for.
+        juju: The Juju model connected Jubilant Juju instance to search traefik application for.
         traefik_app_name: Deployed traefik application name.
 
     Returns:
