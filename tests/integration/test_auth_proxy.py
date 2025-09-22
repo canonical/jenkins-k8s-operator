@@ -76,7 +76,7 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
     juju.deploy(
         "traefik-k8s",
         traefik_public,
-        channel="latest/stable",
+        channel="latest/edge",
         config={
             "enable_experimental_forward_auth": "true",
             "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
@@ -107,7 +107,7 @@ def identity_platform_offers_fixture(
     juju.deploy(login_ui, channel="latest/stable", trust=True)
     juju.deploy(kratos, channel="latest/stable", trust=True)
     juju.deploy(postgresql, channel="14/stable", trust=True)
-    juju.deploy(ca, channel="latest/stable", trust=True)
+    juju.deploy(ca, channel="1/stable", trust=True)
 
     juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
     juju.integrate(f"{postgresql}:database", f"{kratos}:pg-database")
@@ -163,14 +163,14 @@ def jenkins_k8s_charms_fixture(
     oauth2_proxy = "oauth2-proxy-k8s"
     juju.deploy(
         traefik_public,
-        channel="latest/stable",
+        channel="latest/edge",
         config={
             "enable_experimental_forward_auth": "true",
             "external_hostname": JENKINS_HOSTNAME,
         },
         trust=True,
     )
-    juju.deploy(ca, channel="latest/stable", trust=True)
+    juju.deploy(ca, channel="1/stable", trust=True)
     juju.deploy(oauth2_proxy, channel="latest/edge", trust=True)
 
     juju.consume(identity_platform_offers.oauth.url, alias=identity_platform_offers.oauth.saas)
@@ -187,31 +187,6 @@ def jenkins_k8s_charms_fixture(
     juju.integrate(f"{oauth2_proxy}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
 
     juju.wait(jubilant.all_agents_idle, timeout=15 * 60, successes=5, delay=5)
-
-    # Need to patch oauth2-proxy's certificates by patching
-    # /etc/ssl/certs/ca-certificates.crt in workload container and
-    # /usr/local/share/ca-certificates/ca-certificates.crt in charm container
-    # then in charm container exec update-ca-certificates --fresh
-    # This is an issue in auth2-proxy-k8s charm in relation to send-ca-cert charm versions.
-    oauth2_proxy_unit_data = juju.cli("show-unit", "oauth2-proxy-k8s/0", include_model=True)
-    unit_contensts = yaml.safe_load(oauth2_proxy_unit_data)
-    unit_relations = unit_contensts["oauth2-proxy-k8s/0"]["relation-info"]
-    receive_relation = [
-        relation for relation in unit_relations if relation["endpoint"] == "receive-ca-cert"
-    ][0]
-    cert_contents: str = receive_relation["related-units"]["send-ca-cert/0"]["data"]["ca"]
-    out = juju.ssh(
-        f"{oauth2_proxy}/0",
-        "export PEBBLE_SOCKET=/charm/containers/oauth2-proxy/pebble.socket;"
-        f"echo '{cert_contents}' >> /charm/containers/oauth2-proxy/certs.crt;"
-        "/charm/bin/pebble push /charm/containers/oauth2-proxy/certs.crt "
-        "/etc/ssl/certs/ca-certificates.crt;"
-        "cp /charm/containers/oauth2-proxy/certs.crt "
-        "/usr/local/share/ca-certificates/ca-certificates.crt;",
-        "update-ca-certificates --fresh;",
-    )
-    logger.info("Patched oauth2-proxy-k8s, out: %s", out)
-
     juju.wait(jubilant.all_active, timeout=15 * 60, successes=5, delay=5)
 
     return _JenkinsCharms(jenkins=application.name, traefik=traefik_public, oauth2=oauth2_proxy)
