@@ -3,40 +3,30 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
-import asyncio
 import os
 import random
 import secrets
 import string
 from pathlib import Path
-from typing import AsyncGenerator, Generator, Iterable, Optional
+from typing import AsyncGenerator, Iterable, Optional
 
 import jenkinsapi.jenkins
 import kubernetes.config
-import kubernetes.stream
 import pytest
 import pytest_asyncio
 import requests
 from juju.action import Action
 from juju.application import Application
-from juju.model import Controller, Model
+from juju.controller import Controller
+from juju.model import Model
 from juju.unit import Unit
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
-from lightkube import Client, KubeConfig
-from lightkube.core.exceptions import ApiError
 from pytest import FixtureRequest
 from pytest_operator.plugin import OpsTest
 
 import state
 
 from .constants import ALLOWED_PLUGINS
-from .dex import (
-    apply_dex_resources,
-    create_dex_resources,
-    get_dex_manifest,
-    get_dex_service_url,
-    update_redirect_uri,
-)
 from .helpers import generate_jenkins_client_from_application, get_model_unit_addresses, get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
@@ -744,176 +734,3 @@ async def traefik_application_fixture(model: Model):
     unit_ips = await get_model_unit_addresses(model=model, app_name=traefik.name)
     assert unit_ips, f"Unit IP address not found for {traefik.name}"
     return (traefik, unit_ips[0])
-
-
-@pytest_asyncio.fixture(scope="module", name="oathkeeper_related")
-async def oathkeeper_application_related_fixture(
-    application: Application, client: Client, ext_idp_service: str, model: Model
-):
-    """The application related to Jenkins via auth_proxy v0 relation."""
-    oathkeeper = await model.deploy("oathkeeper", channel="edge", trust=True)
-    kratos_app = await model.deploy(
-        "kratos",
-        channel="0.4/edge",
-        # Needed per https://github.com/canonical/oathkeeper-operator/issues/49
-        config={"dev": "True"},
-        trust=True,
-    )
-    kratos_external_idp_integrator_app = await model.deploy(
-        "kratos-external-idp-integrator",
-        channel="latest/edge",
-        config={
-            "client_id": "client_id",
-            "client_secret": "client_secret",
-            "provider": "generic",
-            "issuer_url": ext_idp_service,
-            "scope": "profile email",
-            "provider_id": "Dex",
-        },
-    )
-    hydra_app = await model.deploy("hydra", channel="edge", series="jammy", trust=True)
-    postgresql_app = await model.deploy(
-        entity_url="postgresql-k8s",
-        channel="14/stable",
-        series="jammy",
-        trust=True,
-    )
-    traefik_public_app = await model.deploy(
-        "traefik-k8s",
-        application_name="traefik-public",
-        channel="latest/edge",
-        config={
-            "enable_experimental_forward_auth": "True",
-        },
-        trust=True,
-    )
-    traefik_admin_app = await model.deploy(
-        "traefik-k8s",
-        application_name="traefik-admin",
-        channel="latest/edge",
-        trust=True,
-    )
-    ca_app = await model.deploy(
-        "self-signed-certificates",
-        channel="latest/stable",
-        trust=True,
-    )
-    login_ui_app = await model.deploy(
-        "identity-platform-login-ui-operator",
-        channel="latest/edge",
-        trust=True,
-    )
-
-    await model.add_relation(f"{hydra_app.name}:pg-database", postgresql_app.name)
-    await model.add_relation(f"{kratos_app.name}:pg-database", postgresql_app.name)
-    await model.add_relation(
-        f"{kratos_app.name}:hydra-endpoint-info", f"{hydra_app.name}:hydra-endpoint-info"
-    )
-    await model.add_relation(f"{application.name}:ingress", traefik_public_app.name)
-    await model.add_relation(
-        f"{hydra_app.name}:admin-ingress", f"{traefik_admin_app.name}:ingress"
-    )
-    await model.add_relation(
-        f"{hydra_app.name}:public-ingress", f"{traefik_public_app.name}:ingress"
-    )
-    await model.add_relation(
-        f"{kratos_app.name}:admin-ingress", f"{traefik_admin_app.name}:ingress"
-    )
-    await model.add_relation(
-        f"{kratos_app.name}:public-ingress", f"{traefik_public_app.name}:ingress"
-    )
-    await model.add_relation(f"{login_ui_app.name}:ingress", traefik_public_app.name)
-    await model.add_relation(
-        f"{login_ui_app.name}:hydra-endpoint-info", f"{hydra_app.name}:hydra-endpoint-info"
-    )
-    await model.add_relation(
-        f"{login_ui_app.name}:ui-endpoint-info", f"{hydra_app.name}:ui-endpoint-info"
-    )
-    await model.add_relation(
-        f"{login_ui_app.name}:ui-endpoint-info", f"{kratos_app.name}:ui-endpoint-info"
-    )
-    await model.add_relation(f"{login_ui_app.name}:kratos-info", f"{kratos_app.name}:kratos-info")
-    await model.add_relation(
-        f"{oathkeeper.name}", f"{traefik_public_app.name}:experimental-forward-auth"
-    )
-    await model.add_relation(f"{oathkeeper.name}:certificates", f"{ca_app.name}:certificates")
-    await model.add_relation(f"{oathkeeper.name}:kratos-info", kratos_app.name)
-    await model.add_relation(f"{oathkeeper.name}:auth-proxy", application.name)
-    await model.add_relation(
-        f"{traefik_admin_app.name}:certificates", f"{ca_app.name}:certificates"
-    )
-    await model.add_relation(
-        f"{traefik_public_app.name}:certificates", f"{ca_app.name}:certificates"
-    )
-    # Wait for idle before running actions to unblock buggy postgresql
-    # "awaiting for primary endpoint to be ready"
-    # Wait for idle before running actions to unblock buggy kratos-external-idp-integrator
-    # "Waiting for Kratos to register provider"
-    await model.wait_for_idle(
-        raise_on_error=False,
-        timeout=30 * 60,
-        idle_period=30,
-    )
-
-    # try sleeping since the kratos relation does not work well.
-    await asyncio.sleep(10)
-    await model.add_relation(
-        f"{kratos_external_idp_integrator_app.name}:kratos-external-idp",
-        f"{kratos_app.name}:kratos-external-idp",
-    )
-    await model.wait_for_idle(
-        status="active",
-        apps=[application.name, oathkeeper.name] + IDENTITY_PLATFORM_APPS,
-        raise_on_error=False,
-        timeout=30 * 60,
-        idle_period=30,
-    )
-
-    get_redirect_uri_action = await kratos_external_idp_integrator_app.units[0].run_action(
-        "get-redirect-uri"
-    )
-    action_output = await get_redirect_uri_action.wait()
-    update_redirect_uri(client, action_output.results["redirect-uri"])
-    return oathkeeper
-
-
-@pytest.fixture(scope="session", name="client")
-def client_fixture() -> Client:
-    """k8s client."""
-    return Client(config=KubeConfig.from_file(KUBECONFIG), field_manager="dex-test")
-
-
-@pytest.fixture(scope="module", name="ext_idp_service")
-def ext_idp_service_fixture(ops_test: OpsTest, client: Client) -> Generator[str, None, None]:
-    """Deploy a DEX service on top of k8s for authentication."""
-    try:
-        create_dex_resources(client)
-        # We need to set the dex issuer_url to be the IP that was assigned to
-        # the dex service by metallb. We can't know that before hand, so we
-        # reapply the dex manifests.
-        apply_dex_resources(client)
-        yield get_dex_service_url(client)
-    finally:
-        if not ops_test.keep_model:
-            for obj in get_dex_manifest():
-                try:
-                    # mypy doesn't work well with lightkube
-                    client.delete(
-                        type(obj),
-                        obj.metadata.name,  # type: ignore
-                        namespace=obj.metadata.namespace,  # type: ignore
-                    )
-                except ApiError:
-                    pass
-
-
-@pytest.fixture()
-def external_user_email() -> str:
-    """Username for testing proxy authentication."""
-    return "admin@example.com"
-
-
-@pytest.fixture()
-def external_user_password() -> str:
-    """Password for testing proxy authentication."""
-    return "password"

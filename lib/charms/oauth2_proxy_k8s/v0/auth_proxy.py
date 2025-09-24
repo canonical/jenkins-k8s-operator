@@ -2,7 +2,7 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Interface library for providing Oathkeeper with downstream charms' auth-proxy information.
+"""Interface library for providing OAuth2 Proxy with downstream charms' auth-proxy information.
 
 It is required to integrate a charm into an Identity and Access Proxy (IAP).
 
@@ -13,7 +13,7 @@ To get started using the library, you need to fetch the library using `charmcraf
 
 ```shell
 cd some-charm
-charmcraft fetch-lib charms.oathkeeper.v0.auth_proxy
+charmcraft fetch-lib charms.oauth2_proxy_k8s.v0.auth_proxy
 ```
 
 To use the library from the requirer side, add the following to the `metadata.yaml` of the charm:
@@ -27,10 +27,12 @@ requires:
 
 Then, to initialise the library:
 ```python
-from charms.oathkeeper.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
+from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
 
 AUTH_PROXY_ALLOWED_ENDPOINTS = ["welcome", "about/app"]
-AUTH_PROXY_HEADERS = ["X-User", "X-Some-Header"]
+AUTH_PROXY_HEADERS = ["X-Auth-Request-User", "X-Auth-Request-Email"]
+AUTH_PROXY_AUTHENTICATED_EMAILS = ["test@example.com", "test@canonical.com"]
+AUTH_PROXY_AUTHENTICATED_EMAIL_DOMAINS = ["canonical.com"]
 
 class SomeCharm(CharmBase):
     def __init__(self, *args):
@@ -48,7 +50,9 @@ class SomeCharm(CharmBase):
             return AuthProxyConfig(
                 protected_urls=self.external_urls,
                 allowed_endpoints=AUTH_PROXY_ALLOWED_ENDPOINTS,
-                headers=AUTH_PROXY_HEADERS
+                headers=AUTH_PROXY_HEADERS,
+                authenticated_emails=AUTH_PROXY_AUTHENTICATED_EMAILS,
+                authenticated_email_domains=AUTH_PROXY_AUTHENTICATED_EMAIL_DOMAINS
             )
 
         def _on_ingress_ready(self, event):
@@ -71,21 +75,21 @@ from ops.framework import EventBase, EventSource, Handle, Object, ObjectEvents
 from ops.model import Relation, TooManyRelatedAppsError
 
 # The unique Charmhub library identifier, never change it
-LIBID = "0e67a205d1c14d7a86d89f099d19c541"
+LIBID = "83df2500c289431aab1567ac1b780926"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 2
 
 RELATION_NAME = "auth-proxy"
 INTERFACE_NAME = "auth_proxy"
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_HEADERS = ["X-User", "X-Email", "X-Name"]
+ALLOWED_HEADERS = ["X-Auth-Request-User", "X-Auth-Request-Groups", "X-Auth-Request-Email", "X-Auth-Request-Preferred-Username"]
 
 url_regex = re.compile(
     r"(^http://)|(^https://)"  # http:// or https://
@@ -106,14 +110,17 @@ AUTH_PROXY_REQUIRER_JSON_SCHEMA = {
         "allowed_endpoints": {"type": "array", "default": [], "items": {"type": "string"}},
         "headers": {
             "type": "array",
-            "default": ["X-User"],
+            "default": ["X-Auth-Request-User"],
             "items": {
                 "enum": ALLOWED_HEADERS,
                 "type": "string",
             },
         },
+        "authenticated_emails": {"type": "array", "default": [], "items": {"type": "string"}},
+        "authenticated_email_domains": {"type": "array", "default": [], "items": {"type": "string"}},
+        "app_name": {"type": "string", "default": None},
     },
-    "required": ["protected_urls", "allowed_endpoints", "headers"],
+    "required": ["protected_urls", "allowed_endpoints", "headers", "authenticated_emails", "authenticated_email_domains"],
 }
 
 
@@ -173,7 +180,7 @@ class AuthProxyRelation(Object):
             for data in list(relation.data[self.model.app]):
                 relation.data[self.model.app].pop(data, "")
         except Exception as e:
-            logger.info(f"Failed to pop the relation data: {e}")
+            logger.info("Failed to pop the relation data: %s", e)
 
 
 def _validate_data(data: Dict, schema: Dict) -> None:
@@ -189,11 +196,14 @@ def _validate_data(data: Dict, schema: Dict) -> None:
 
 @dataclass
 class AuthProxyConfig:
-    """Helper class containing a configuration for the charm related with Oathkeeper."""
+    """Helper class containing a configuration for the charm related with OAuth2 Proxy."""
 
     protected_urls: List[str]
-    headers: List[str]
+    headers: List[str] = field(default_factory=lambda: [])
     allowed_endpoints: List[str] = field(default_factory=lambda: [])
+    authenticated_emails: List[str] = field(default_factory=lambda: [])
+    authenticated_email_domains: List[str] = field(default_factory=lambda: [])
+    app_name: Optional[str] = None
 
     def validate(self) -> None:
         """Validate the auth proxy configuration."""
@@ -204,9 +214,7 @@ class AuthProxyConfig:
 
         for url in self.protected_urls:
             if url.startswith("http://"):
-                logger.warning(
-                    f"Provided URL {url} uses http scheme. In order to make the Identity Platform work with the Proxy, run kratos in dev mode: `juju config kratos dev=True`. Don't do this in production"
-                )
+                logger.warning("Provided URL %s uses http scheme. Don't do this in production", url)
 
         # Validate headers
         for header in self.headers:
@@ -229,6 +237,8 @@ class AuthProxyConfigChangedEvent(EventBase):
         protected_urls: List[str],
         headers: List[str],
         allowed_endpoints: List[str],
+        authenticated_emails: List[str],
+        authenticated_email_domains: List[str],
         relation_id: int,
         relation_app_name: str,
     ) -> None:
@@ -236,6 +246,8 @@ class AuthProxyConfigChangedEvent(EventBase):
         self.protected_urls = protected_urls
         self.allowed_endpoints = allowed_endpoints
         self.headers = headers
+        self.authenticated_emails = authenticated_emails
+        self.authenticated_email_domains = authenticated_email_domains
         self.relation_id = relation_id
         self.relation_app_name = relation_app_name
 
@@ -245,6 +257,8 @@ class AuthProxyConfigChangedEvent(EventBase):
             "protected_urls": self.protected_urls,
             "headers": self.headers,
             "allowed_endpoints": self.allowed_endpoints,
+            "authenticated_emails": self.authenticated_emails,
+            "authenticated_email_domains": self.authenticated_email_domains,
             "relation_id": self.relation_id,
             "relation_app_name": self.relation_app_name,
         }
@@ -254,6 +268,8 @@ class AuthProxyConfigChangedEvent(EventBase):
         self.protected_urls = snapshot["protected_urls"]
         self.headers = snapshot["headers"]
         self.allowed_endpoints = snapshot["allowed_endpoints"]
+        self.authenticated_emails = snapshot["authenticated_emails"]
+        self.authenticated_email_domains = snapshot["authenticated_email_domains"]
         self.relation_id = snapshot["relation_id"]
         self.relation_app_name = snapshot["relation_app_name"]
 
@@ -263,6 +279,8 @@ class AuthProxyConfigChangedEvent(EventBase):
             self.protected_urls,
             self.allowed_endpoints,
             self.headers,
+            self.authenticated_emails,
+            self.authenticated_email_domains,
         )
 
 
@@ -322,53 +340,58 @@ class AuthProxyProvider(AuthProxyRelation):
             auth_proxy_data = _load_data(data, AUTH_PROXY_REQUIRER_JSON_SCHEMA)
         except DataValidationError as e:
             logger.error(
-                f"Received invalid config from the requirer: {e}. Config-changed will not be emitted"
+                "Received invalid config from the requirer: %s. Config-changed will not be emitted", e
             )
             return
 
         protected_urls = auth_proxy_data.get("protected_urls")
         allowed_endpoints = auth_proxy_data.get("allowed_endpoints")
         headers = auth_proxy_data.get("headers")
+        authenticated_emails = auth_proxy_data.get("authenticated_emails")
+        authenticated_email_domains = auth_proxy_data.get("authenticated_email_domains")
 
         relation_id = event.relation.id
         relation_app_name = event.relation.app.name
 
-        # Notify Oathkeeper to create access rules
+        # Notify OAuth2 Proxy to reconfigure
         self.on.proxy_config_changed.emit(
-            protected_urls, headers, allowed_endpoints, relation_id, relation_app_name
+            protected_urls, headers, allowed_endpoints, authenticated_emails, authenticated_email_domains, relation_id, relation_app_name
         )
 
     def _on_relation_broken_event(self, event: RelationBrokenEvent) -> None:
-        """Wipe the relation databag and notify Oathkeeper that the relation is broken."""
+        """Wipe the relation databag and notify OAuth2 Proxy that the relation is broken."""
         # Workaround for https://github.com/canonical/operator/issues/888
         self._pop_relation_data(event.relation.id)
 
         self.on.config_removed.emit(event.relation.id)
-
-    def get_headers(self) -> List[str]:
-        """Returns the list of headers from all relations."""
-        if not self._charm.model.relations[self._relation_name]:
-            return []
-
-        headers = set()
-        for relation in self._charm.model.relations[self._relation_name]:
-            if relation.data[relation.app]:
-                for header in json.loads(relation.data[relation.app]["headers"]):
-                    headers.add(header)
-
-        return list(headers)
 
     def get_app_names(self) -> List[str]:
         """Returns the list of all related app names."""
         if not self._charm.model.relations[self._relation_name]:
             return []
 
-        app_names = list()
+        app_names = []
         for relation in self._charm.model.relations[self._relation_name]:
             if relation.data[relation.app]:
-                app_names.append(relation.app.name)
+                app_names.append(relation.data[relation.app]["app_name"])
 
         return app_names
+
+    def get_relations_data(self, key: str) -> Optional[List[str]]:
+        """Returns a list of key values from all auth-proxy relations."""
+        if not self._charm.model.relations[self._relation_name]:
+            return None
+
+        relations_data = set()
+        for relation in self._charm.model.relations[self._relation_name]:
+            if relation.data[relation.app]:
+                if values := json.loads(relation.data[relation.app][key]):
+                    for v in values:
+                        relations_data.add(v)
+                else:
+                    return None
+
+        return list(relations_data)
 
 
 class InvalidAuthProxyConfigEvent(EventBase):
@@ -472,6 +495,7 @@ class AuthProxyRequirer(AuthProxyRelation):
             return
 
         data = _dump_data(auth_proxy_config.to_dict(), AUTH_PROXY_REQUIRER_JSON_SCHEMA)
+        data["app_name"] = self._charm.app.name
         relation.data[self.model.app].update(data)
 
     def update_auth_proxy_config(
