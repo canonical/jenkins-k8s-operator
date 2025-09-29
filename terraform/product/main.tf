@@ -170,12 +170,3 @@ resource "juju_integration" "public_ingress_certificates" {
     endpoint = "certificates"
   }
 }
-
-# # If auth-proxy SaaS given
-# resource "juju_integration" "auth_proxy_receive_certs" {
-
-# }
-
-# resource "juju_integration" "auth_proxy_receive_certs" {
-
-# }
