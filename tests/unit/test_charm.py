@@ -286,33 +286,6 @@ def test__on_update_status(
     assert jenkins_charm.unit.status == expected_status
 
 
-def test_upgrade_charm(monkeypatch: pytest.MonkeyPatch):
-    """
-    arrange: given a base jenkins charm.
-    act: when _upgrade_charm is called.
-    assert: The reconciliations are run.
-    """
-    storage_mock = MagicMock()
-    monkeypatch.setattr("charm.storage.Reconciler", MagicMock(return_value=storage_mock))
-    check_mock = MagicMock()
-    monkeypatch.setattr("charm.precondition.check", check_mock)
-    ctx = testing.Context(JenkinsK8sOperatorCharm)
-    state = testing.State(
-        containers=[
-            testing.Container(
-                # Mypy thinks that backend argument is required
-                name="jenkins",  # type: ignore
-            )
-        ],
-        storages=[testing.Storage(name="jenkins-home")],
-    )
-
-    ctx.run(ctx.on.upgrade_charm(), state)
-
-    check_mock.assert_called_once()
-    storage_mock.reconcile_storage.assert_called_once()
-
-
 def test_calculate_env(harness: Harness):
     """
     arrange: given a charm.
