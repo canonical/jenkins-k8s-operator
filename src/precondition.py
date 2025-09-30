@@ -38,10 +38,12 @@ def check(*, container: ops.Container, storages: ops.StorageMapping) -> _CheckRe
     """
     logger.info("Running precondition check")
     failed_components: list[str] = []
+
     container_connectable = container.can_connect()
     logger.info("Container connectivity status: %s", container_connectable)
     if not container_connectable:
         failed_components.append("pebble")
+
     jenkins_home_storages = storages.get(JENKINS_HOME_STORAGE_NAME, [])
     logger.info("Available storages %s", jenkins_home_storages)
     if not jenkins_home_storages:
