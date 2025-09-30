@@ -40,7 +40,7 @@ class Reconciler(ops.Object):
         Returns:
             Whether the Jenkins storage is mounted.
         """
-        return JENKINS_HOME_STORAGE_NAME in self.model.storages
+        return bool(self.model.storages.get(JENKINS_HOME_STORAGE_NAME, []))
 
     def reconcile_storage(self, *, container: ops.Container) -> None:
         """Reconcile Jenkins home path from storage.
