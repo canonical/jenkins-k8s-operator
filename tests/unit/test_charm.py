@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import ops
 import pytest
 import requests
-from ops import testing
 
 import ingress
 import jenkins
