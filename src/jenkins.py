@@ -769,7 +769,9 @@ def _install_config(container: ops.Container, filename: str, destination_path: P
     """
     try:
         jenkins_config_file = Path(filename).read_text(encoding="utf-8")
-        container.push(destination_path, jenkins_config_file, user=USER, group=GROUP)
+        container.push(
+            destination_path, jenkins_config_file, user=USER, group=GROUP, make_dirs=True
+        )
     except ops.pebble.PathError as exc:
         raise JenkinsBootstrapError("Failed to install configuration.") from exc
 
@@ -808,7 +810,6 @@ def install_logging_config(container: ops.Container) -> None:
     Args:
         container: The Jenkins workload container.
     """
-    container.make_dir(LOGGING_PATH.parent, make_parents=True, user=USER, group=GROUP)
     _install_config(container, JENKINS_LOGGING_CONFIG, LOGGING_CONFIG_PATH)
 
 

@@ -175,8 +175,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The event fired when the charm is upgraded.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_storage_ready(container):
-            self.jenkins_set_storage_config(event)
+        if not container.can_connect():
+            self.unit.status = ops.WaitingStatus("Waiting for pebble.")
+            # This event should be handled again once the container becomes available.
+            event.defer()
+            return
+
+        if not self.storage.is_storage_ready():  # pragma: nocover
+            self.unit.status = ops.WaitingStatus("Waiting for storage to be ready.")
+            event.defer()
+            return
+
+        self.jenkins_set_storage_config(event)
         # Update the agent discovery address.
         # Updating the secret is not required since it's calculated using the agent's node name.
         self.agent_observer.reconfigure_agent_discovery(event)
