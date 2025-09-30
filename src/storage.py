@@ -34,14 +34,6 @@ class Reconciler(ops.Object):
         container_meta = self.framework.meta.containers["jenkins"]
         return container_meta.mounts["jenkins-home"].location
 
-    def is_storage_ready(self) -> bool:
-        """Check if storage is mounted and ready for operations.
-
-        Returns:
-            Whether the Jenkins storage is mounted.
-        """
-        return JENKINS_HOME_STORAGE_NAME in self.model.storages
-
     def reconcile_storage(self, *, container: ops.Container) -> None:
         """Reconcile Jenkins home path from storage.
 
