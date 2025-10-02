@@ -93,7 +93,7 @@ async def application_fixture(
     """Deploy the charm."""
     resources = {"jenkins-image": jenkins_image}
     # Deploy the charm and wait for active/idle status
-    application = await model.deploy(charm, resources=resources, series="jammy")
+    application = await model.deploy(charm, resources=resources)
     await model.wait_for_idle(
         apps=[application.name],
         raise_on_error=False,
