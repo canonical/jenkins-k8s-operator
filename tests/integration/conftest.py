@@ -77,7 +77,8 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Pat
         charm = await ops_test.build_charm(".")
         assert charm, "Charm not built"
         return charm
-    return charms[0]
+    # Charms with multiple bases are passed in (22.04, 24.04), choose the latest base.
+    return sorted(charms)[-1]
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
