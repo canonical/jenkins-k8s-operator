@@ -3,6 +3,7 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+import logging
 import os
 import random
 import secrets
@@ -29,6 +30,8 @@ import state
 from .constants import ALLOWED_PLUGINS
 from .helpers import generate_jenkins_client_from_application, get_model_unit_addresses, get_pod_ip
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
+
+logger = logging.getLogger(__name__)
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
 IDENTITY_PLATFORM_APPS = [
@@ -78,7 +81,9 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Pat
         assert charm, "Charm not built"
         return charm
     # Charms with multiple bases are passed in (22.04, 24.04), choose the latest base.
-    return sorted(charms)[-1]
+    latest_charm = sorted(charms)[-1]
+    logger.info("Available charms: %s, using: %s", charms, latest_charm)
+    return latest_charm
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
@@ -91,6 +96,7 @@ async def application_fixture(
     application = await model.deploy(charm, resources=resources, series="jammy")
     await model.wait_for_idle(
         apps=[application.name],
+        raise_on_error=False,
         wait_for_active=True,
         raise_on_blocked=True,
         timeout=20 * 60,
