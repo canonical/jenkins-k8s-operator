@@ -425,7 +425,7 @@ async def jenkins_with_proxy_fixture(
     resources = {"jenkins-image": jenkins_image}
     # Deploy the charm and wait for active/idle status
     application = await model_with_proxy.deploy(
-        charm, resources=resources, series="jammy", application_name="jenkins-proxy-k8s"
+        charm, resources=resources, application_name="jenkins-proxy-k8s"
     )
     await model_with_proxy.wait_for_idle(
         apps=[application.name],
