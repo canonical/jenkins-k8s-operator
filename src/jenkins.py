@@ -810,6 +810,8 @@ def install_logging_config(container: ops.Container) -> None:
     Args:
         container: The Jenkins workload container.
     """
+    # Logs directory needs to be created for Jenkins to write logs upon initialization
+    container.make_dir(LOGGING_PATH.parent, make_parents=True, user=USER, group=GROUP)
     _install_config(container, JENKINS_LOGGING_CONFIG, LOGGING_CONFIG_PATH)
 
 
