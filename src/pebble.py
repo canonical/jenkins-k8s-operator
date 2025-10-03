@@ -34,11 +34,15 @@ def replan_jenkins(
     Raises:
         JenkinsBootstrapError: if an error occurs while bootstrapping Jenkins.
     """
+    logger.info("Installing Jenkins logging configuration")
     jenkins.install_logging_config(container=container)
     container.add_layer("jenkins", _get_pebble_layer(jenkins_instance), combine=True)
     container.replan()
+    logger.info("Starting Jenkins service")
     try:
+        logger.info("Waiting for Jenkins service to be initialized")
         jenkins_instance.wait_ready()
+        logger.info("Bootstrapping Jenkins")
         # Tested in integration
         if disable_security:  # pragma: no cover
             jenkins_instance.bootstrap(
@@ -48,8 +52,10 @@ def replan_jenkins(
             jenkins_instance.bootstrap(
                 container, jenkins.DEFAULT_JENKINS_CONFIG, state.proxy_config
             )
+        logger.info("Restarting Jenkins for configuration to take effect")
         # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
         container.restart(JENKINS_SERVICE_NAME)
+        logger.info("Waiting for Jenkins service to be restarted")
         jenkins_instance.wait_ready()
     except TimeoutError as exc:
         logger.error("Timed out waiting for Jenkins, %s", exc)
@@ -57,6 +63,7 @@ def replan_jenkins(
     except jenkins.JenkinsBootstrapError as exc:
         logger.error("Error installing Jenkins, %s", exc)
         raise
+    logger.info("Jenkins ready")
 
 
 def _get_pebble_layer(jenkins_instance: jenkins.Jenkins) -> ops.pebble.Layer:
