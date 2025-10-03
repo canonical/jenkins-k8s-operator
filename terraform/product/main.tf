@@ -175,7 +175,7 @@ resource "juju_integration" "public_ingress_certificates" {
 
 resource "null_resource" "wait_for_certs_settle" {
   provisioner "local-exec" {
-    command = "juju wait-for application ${module.jenkins_k8s.app_name} ${juju_application.certificate_provider.name}"
+    command = "juju wait-for application ${module.jenkins_k8s.app_name}; juju wait-for application ${juju_application.certificate_provider.name}"
   }
 }
 
