@@ -19,6 +19,7 @@ import cos
 import ingress
 import jenkins
 import pebble
+import storage
 import timerange
 from state import (
     INGRESS_RELATION_NAME,
@@ -53,6 +54,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
 
+        self.storage = storage.Reconciler(charm=self)
         # Ingress dedicated to agent discovery
         self.agent_discovery_ingress_observer = ingress.Observer(
             self, "agent-discovery-ingress-observer", agent.AGENT_DISCOVERY_INGRESS_RELATION_NAME
@@ -173,8 +175,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The event fired when the charm is upgraded.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_storage_ready(container):
-            self.jenkins_set_storage_config(event)
+        if not container.can_connect():
+            self.unit.status = ops.WaitingStatus("Waiting for pebble.")
+            # This event should be handled again once the container becomes available.
+            event.defer()
+            return
+
+        if not self.storage.is_storage_ready():  # pragma: nocover
+            self.unit.status = ops.WaitingStatus("Waiting for storage to be ready.")
+            event.defer()
+            return
+
+        self.jenkins_set_storage_config(event)
         # Update the agent discovery address.
         # Updating the secret is not required since it's calculated using the agent's node name.
         self.agent_observer.reconfigure_agent_discovery(event)
@@ -187,25 +199,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The event fired when the permission change is needed.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        container_meta = self.framework.meta.containers["jenkins"]
-        storage_path = container_meta.mounts["jenkins-home"].location
         if not container.can_connect():
             self.unit.status = ops.WaitingStatus("Waiting for pebble.")
             # This event should be handled again once the container becomes available.
             event.defer()
             return
 
-        command = [
-            "chown",
-            "-R",
-            f"{jenkins.USER}:{jenkins.GROUP}",
-            str(storage_path),
-        ]
+        if not self.storage.is_storage_ready():  # pragma: nocover
+            self.unit.status = ops.WaitingStatus("Waiting for storage to be ready.")
+            event.defer()
+            return
 
-        container.exec(
-            command,
-            timeout=120,
-        ).wait()
+        self.storage.reconcile_storage(container=container)
 
 
 if __name__ == "__main__":  # pragma: nocover
