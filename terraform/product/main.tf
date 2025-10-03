@@ -28,19 +28,12 @@ module "jenkins_agent_k8s" {
   units       = var.jenkins_agent_k8s.units
 }
 
-resource "juju_integration" "jenkins_k8s_jenkins_agent_k8s_agent" {
-  model = var.model
-
-  application {
-    name     = module.jenkins_k8s.app_name
-    endpoint = module.jenkins_k8s.requires.agent
-  }
-
-  application {
-    name     = module.jenkins_agent_k8s.app_name
-    endpoint = module.jenkins_agent_k8s.provides.agent
+resource "null_resource" "wait_for_jenkins_up" {
+  provisioner "local-exec" {
+    command = "juju wait-for application ${module.jenkins_k8s.app_name}"
   }
 }
+
 
 resource "juju_application" "public_ingress" {
   name  = var.public_ingress.app_name
@@ -62,6 +55,9 @@ resource "juju_application" "public_ingress" {
 
 resource "juju_integration" "jenkins_k8s_public_ingress" {
   model = var.model
+
+  depends_on = [null_resource.wait_for_jenkins_up]
+
   application {
     name     = module.jenkins_k8s.app_name
     endpoint = module.jenkins_k8s.requires.ingress
@@ -93,6 +89,9 @@ resource "juju_application" "agent_discovery_ingress" {
 
 resource "juju_integration" "jenkins_k8s_agent_discovery_ingress" {
   model = var.model
+
+  depends_on = [null_resource.wait_for_jenkins_up]
+
   application {
     name     = module.jenkins_k8s.app_name
     endpoint = module.jenkins_k8s.requires.agent_discovery_ingress
@@ -121,6 +120,9 @@ resource "juju_application" "oauth2_proxy_k8s" {
 
 resource "juju_integration" "jenkins_k8s_oauth2_proxy_k8s" {
   model = var.model
+
+  depends_on = [null_resource.wait_for_jenkins_up]
+
   application {
     name     = module.jenkins_k8s.app_name
     endpoint = module.jenkins_k8s.requires.auth_proxy
@@ -168,5 +170,28 @@ resource "juju_integration" "public_ingress_certificates" {
   application {
     name     = juju_application.public_ingress.name
     endpoint = "certificates"
+  }
+}
+
+resource "null_resource" "wait_for_certs_settle" {
+  provisioner "local-exec" {
+    command = "juju wait-for application ${module.jenkins_k8s.app_name} ${juju_application.certificate_provider.name}"
+  }
+}
+
+
+resource "juju_integration" "jenkins_k8s_jenkins_agent_k8s_agent" {
+  model = var.model
+
+  depends_on = [null_resource.wait_for_jenkins_up, null_resource.wait_for_certs_settle]
+
+  application {
+    name     = module.jenkins_k8s.app_name
+    endpoint = module.jenkins_k8s.requires.agent
+  }
+
+  application {
+    name     = module.jenkins_agent_k8s.app_name
+    endpoint = module.jenkins_agent_k8s.provides.agent
   }
 }
