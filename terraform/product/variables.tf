@@ -16,6 +16,7 @@ variable "jenkins_agent_k8s" {
     base        = optional(string, "ubuntu@24.04")
     units       = optional(number, 3)
   })
+  default = {}
 }
 
 variable "jenkins_k8s" {
@@ -27,6 +28,7 @@ variable "jenkins_k8s" {
     revision    = optional(number)
     base        = optional(string, "ubuntu@24.04")
   })
+  default = {}
 }
 
 variable "public_ingress" {
@@ -41,6 +43,7 @@ variable "public_ingress" {
     revision    = optional(number)
     base        = optional(string, "ubuntu@20.04")
   })
+  default = {}
 }
 
 variable "agent_discovery_ingress" {
@@ -52,6 +55,7 @@ variable "agent_discovery_ingress" {
     revision    = optional(number)
     base        = optional(string, "ubuntu@20.04")
   })
+  default = {}
 }
 
 variable "oauth2_proxy" {
@@ -63,6 +67,7 @@ variable "oauth2_proxy" {
     revision    = optional(number)
     base        = optional(string, "ubuntu@22.04")
   })
+  default = {}
 }
 
 variable "httprequest_lego_k8s" {
@@ -81,6 +86,7 @@ variable "httprequest_lego_k8s" {
     revision    = optional(number)
     base        = optional(string, "ubuntu@24.04")
   })
+  default = {}
 }
 
 variable "self_signed_ceritificates" {
@@ -92,6 +98,7 @@ variable "self_signed_ceritificates" {
     revision    = optional(number)
     base        = optional(string, "ubuntu@24.04")
   })
+  default = {}
 }
 
 variable "use_httprequest_lego_k8s_certificates" {
