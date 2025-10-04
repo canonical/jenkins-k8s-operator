@@ -13,6 +13,7 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerApp
 
 import ingress
 import jenkins
+import precondition
 from state import (
     AGENT_DISCOVERY_INGRESS_RELATION_NAME,
     AGENT_RELATION,
@@ -154,12 +155,11 @@ class Observer(ops.Object):
             event: The event that triggered the agent reconcile.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if (
-            not jenkins.is_storage_ready(container)
-            or not jenkins.is_jenkins_ready(container=container)
-            or not self.state.agent_relation_meta
-        ):
-            logger.warning("Service not yet ready, agents not reconciled.")
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        if not check_result.success or not self.state.agent_relation_meta:
+            self.charm.unit.status = ops.WaitingStatus(
+                check_result.reason or "Agent relation metadata not yet ready."
+            )
             event.defer()
             return
 

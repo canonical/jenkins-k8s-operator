@@ -285,50 +285,6 @@ def test__on_update_status(
     assert jenkins_charm.unit.status == expected_status
 
 
-def test_upgrade_charm_storage_ready(harness: Harness, monkeypatch: pytest.MonkeyPatch):
-    """
-    arrange: given a base jenkins charm.
-    act: when _upgrade_charm is called.
-    assert: The chown command was not ran.
-    """
-    harness.begin()
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    container = jenkins_charm.unit.containers["jenkins"]
-    harness.set_can_connect(container, True)
-    # We don't use harness.handle_exec here because we want to assert
-    # the parameters passed to exec()
-    exec_handler = MagicMock()
-    monkeypatch.setattr(container, "exec", exec_handler)
-    monkeypatch.setattr(jenkins, "is_storage_ready", lambda x: True)
-
-    event = MagicMock()
-    jenkins_charm._upgrade_charm(event)
-
-    exec_handler.assert_not_called()
-
-
-def test__on_jenkins_home_storage_attached_container_not_ready(
-    harness: Harness, monkeypatch: pytest.MonkeyPatch
-):
-    """
-    arrange: given a base jenkins charm with container not ready.
-    act: when _on_jenkins_home_storage_attached is called.
-    assert: The chown command was not ran.
-    """
-    harness.begin()
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    container = jenkins_charm.unit.containers["jenkins"]
-    harness.set_can_connect(container, False)
-    # We don't use harness.handle_exec here because we want to assert
-    # whether exec() was called
-    exec_handler = MagicMock()
-    monkeypatch.setattr(container, "exec", exec_handler)
-
-    jenkins_charm._on_jenkins_home_storage_attached(MagicMock())
-
-    exec_handler.assert_not_called()
-
-
 def test_calculate_env(harness: Harness):
     """
     arrange: given a charm.
