@@ -1,574 +1,423 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Jenkins-k8s charm agent unit tests."""
+"""Jenkins-k8s charm agent relation tests."""
 
-# Need access to protected functions for testing
-# pylint:disable=protected-access
-
-import ipaddress
-import json
 import secrets
 import socket
-from typing import cast
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from ops import Model, Network
-from ops.charm import PebbleReadyEvent
+from ops import testing
 
 import jenkins
-import state
 from charm import JenkinsK8sOperatorCharm
+from state import AgentMeta
 
-from .helpers import ACTIVE_STATUS_NAME, MAINTENANCE_STATUS_NAME
-from .types_ import Harness, HarnessWithContainer
+_MONKEYPATCHED_FQDN = "192.0.2.0"
 
 
-def test__on_agent_relation_joined_no_container(harness_container: HarnessWithContainer):
+class FakeJenkinsService:
+    """Fake Jenkins class for testing.
+
+    Attributes:
+        environment: Fake Jenkins environment.
     """
-    arrange: given a charm with no connectable container.
-    act: when agent relation joined event is fired.
-    assert: the event is deferred.
-    """
-    harness_container.harness.set_can_connect(
-        harness_container.harness.model.unit.containers["jenkins"], False
+
+    def __init__(self, initial_agents: list[str]) -> None:
+        """Initialize the fake with agent nodes.
+
+        Args:
+            initial_agents: Initial Jenkins agents.
+        """
+        self.agents_secret_map: dict[str, str] = {
+            agent: secrets.token_hex(16) for agent in initial_agents
+        }
+
+    # The kwargs are used for testing placeholder
+    def add_agent_node(self, agent_meta: AgentMeta, **kwargs):  # pylint: disable=unused-argument
+        """Add agent node to fake service.
+
+        Args:
+            agent_meta: The agent to add.
+            kwargs: other arguments placeholder.
+        """
+        self.agents_secret_map[agent_meta.name] = secrets.token_hex(16)
+
+    # The kwargs are used for testing placeholder
+    def get_node_secret(self, node_name: str, **kwargs):  # pylint: disable=unused-argument
+        """Return a fake node secret.
+
+        Args:
+            node_name: The node to return fake secret for.
+            kwargs: other arguments placeholder.
+
+        Returns:
+            Fake Jenkins secret.
+        """
+        return self.agents_secret_map.get(node_name)
+
+    # The kwargs are used for testing placeholder
+    def remove_agent_node(self, agent_name: str, **kwargs):  # pylint: disable=unused-argument
+        """Remove agent node from fake service.
+
+        Args:
+            agent_name: The agent to remove.
+            kwargs: other arguments placeholder.
+        """
+        self.agents_secret_map.pop(agent_name)
+
+    def wait_ready(self):
+        """Fake wait for Jenkins."""
+        return
+
+    # The kwargs are used for testing placeholder
+    def list_agent_nodes(self, **kwargs):  # pylint: disable=unused-argument
+        """List agent nodes managed by fake Jenkins service..
+
+        Args:
+            kwargs: other arguments placeholder.
+
+        Returns:
+            Fake Jenkins nodes.
+        """
+        mock_nodes = []
+        for node_name in list(self.agents_secret_map.keys()):
+            mock_node = MagicMock()
+            mock_node.name = node_name
+            mock_nodes.append(mock_node)
+        return mock_nodes
+
+    @property
+    def environment(self):
+        """Fake Jenkins environment."""
+        return {"JENKINS_PREFIX": "", "JENKINS_HOME": "/var/lib/jenkins/"}
+
+
+def _generate_reconcile_agents_test_params():
+    """Generate testing parameters for reconcile_agents test."""
+    testing_containers = [
+        # mypy thinks can_connect argument doesn't exist.
+        testing.Container("jenkins", can_connect=True),  # type: ignore
+    ]
+    fail_precondition_state = testing.State(
+        # there's incorrect container type inference in scenario.state.Container vs
+        # ops.model.Container
+        containers=testing_containers,  # type: ignore
     )
-    harness_container.harness.begin()
-    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    mock_event = MagicMock(spec=PebbleReadyEvent)
 
-    jenkins_charm.agent_observer._on_agent_relation_joined(mock_event)
-
-    assert mock_event.defer.to_be_called_once()
-    assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
-
-
-@pytest.mark.parametrize(
-    "relation",
-    [
-        pytest.param(state.AGENT_RELATION, id="agent relation"),
-    ],
-)
-def test__on_agent_relation_joined_relation_data_not_set(
-    harness_container: HarnessWithContainer, relation: str
-):
-    """
-    arrange: given a charm instance.
-    act: when an agent relation joined event is fired without required data.
-    assert: the event is deferred.
-    """
-    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
-    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness_container.harness.begin()
-
-    model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
-    harness_container.harness.charm.on[relation].relation_joined.emit(
-        model_relation,
-        app=harness_container.harness.model.get_app("jenkins-agent"),
-        unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
+    testing_storages = {
+        testing.Storage("jenkins-home"),
+    }
+    no_relation_state = testing.State(
+        containers=testing_containers, storages=testing_storages  # type: ignore
     )
 
-    jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    assert jenkins_charm.unit.status.name == MAINTENANCE_STATUS_NAME
-
-
-@pytest.mark.parametrize(
-    "relation_data, relation",
-    [
+    first_agent_name = "0"
+    second_agent_name = "1"
+    one_relation_state = testing.State(
+        containers=testing_containers,  # type: ignore
+        storages=testing_storages,
+        relations=[
+            testing.Relation(
+                endpoint="agent",
+                interface="jenkins_agent_v0",
+                remote_units_data={
+                    0: {"executors": "1", "labels": "testing", "name": first_agent_name}
+                },
+            )
+        ],
+    )
+    multiple_relation_state = testing.State(
+        containers=testing_containers,  # type: ignore
+        storages=testing_storages,
+        relations=[
+            testing.Relation(
+                endpoint="agent",
+                interface="jenkins_agent_v0",
+                remote_units_data={
+                    0: {"executors": "1", "labels": "testing", "name": first_agent_name},
+                    1: {"executors": "1", "labels": "testing", "name": second_agent_name},
+                },
+            )
+        ],
+    )
+    return [
+        pytest.param([], fail_precondition_state, [], id="fail precondition"),
+        pytest.param([], no_relation_state, [], id="no agent from relation"),
+        pytest.param([], one_relation_state, [first_agent_name], id="one agent relation"),
         pytest.param(
-            {
-                "executors": "non-numeric",
-                "labels": "x84_64",
-                "name": "http://sample-address:8080",
-            },
-            state.AGENT_RELATION,
-            id="non-numeric executor(agent)",
+            [],
+            multiple_relation_state,
+            [first_agent_name, second_agent_name],
+            id="multiple agents relation",
         ),
         pytest.param(
-            {
-                "executors": "3.14",
-                "labels": "x84_64",
-                "name": "http://sample-address:8080",
-            },
-            state.AGENT_RELATION,
-            id="Non int convertible(agent)",
+            [first_agent_name],
+            one_relation_state,
+            [first_agent_name],
+            id="one agent relation, already exists",
         ),
-    ],
-)
-def test__on_agent_relation_joined_relation_data_not_valid(
-    harness_container: HarnessWithContainer, relation_data: dict[str, str], relation: str
-):
-    """
-    arrange: given a charm instance.
-    act: when a relation joined event is fired with invalid data.
-    assert: the unit raises RuntimeError since corrupt data was received.
-    """
-    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
-    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness_container.harness.update_relation_data(
-        relation_id,
-        "jenkins-agent/0",
-        relation_data,
-    )
-    with pytest.raises(RuntimeError):
-        harness_container.harness.begin()
+        pytest.param(
+            [first_agent_name, second_agent_name],
+            multiple_relation_state,
+            [first_agent_name, second_agent_name],
+            id="multiple agent relation, already exists",
+        ),
+        pytest.param(
+            ["3", "4"],
+            multiple_relation_state,
+            [first_agent_name, second_agent_name],
+            id="multiple agent relation, none from initial exists",
+        ),
+    ]
 
 
 @pytest.mark.parametrize(
-    "relation",
-    [
-        pytest.param(state.AGENT_RELATION, id="agent relation"),
-    ],
+    ("initial_agents", "state", "expected_agents"), _generate_reconcile_agents_test_params()
 )
-@pytest.mark.usefixtures("patch_is_jenkins_ready")
-def test__on_agent_relation_joined_client_error(
-    harness_container: HarnessWithContainer,
-    relation_data: dict[str, str],
-    relation: str,
+def test_reconcile_agents(
+    initial_agents: list[str], state: testing.State, expected_agents: list[str]
 ):
     """
-    arrange: given a mocked patched jenkins client that raises an error.
-    act: when an agent relation joined event is fired.
-    assert: the unit falls to BlockedStatus.
+    arrange: given test agent relations.
+    act: when reconcile_agents is called.
+    assert: expected agents are registered.
     """
-    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
-    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness_container.harness.update_relation_data(
-        relation_id,
-        "jenkins-agent/0",
-        relation_data,
-    )
-    harness_container.harness.begin()
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    with ctx(ctx.on.config_changed(), state) as mgr:
+        # Ignore the mismatching type for FakeJenkinsService since this is a fake service for
+        # testing.
+        fake_jenkins_service = FakeJenkinsService(initial_agents=initial_agents)
+        mgr.charm.agent_observer.jenkins = fake_jenkins_service  # type: ignore
+        mgr.charm.agent_observer.reconcile_agents(event=MagicMock())
 
-    model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
+    all_agent_names = [node.name for node in fake_jenkins_service.list_agent_nodes()]
+    assert len(all_agent_names) == len(expected_agents)
+    assert all(agent in all_agent_names for agent in expected_agents)
+
+
+def _generate_reconcile_agent_error_params():
+    """Generate testing parameters for reconcile_agent_error test."""
+    add_agent_node_fail = MagicMock()
+    add_agent_node_fail.get_node_secret.return_value = ""
+    add_agent_node_fail.add_agent_node.side_effect = [jenkins.JenkinsError()]
+
+    get_node_secret_fail = MagicMock()
+    get_node_secret_fail.get_node_secret.return_value = ""
+    get_node_secret_fail.get_node_secret.side_effect = [jenkins.JenkinsError()]
+
+    remove_node_fail = MagicMock()
+    remove_node_fail.get_node_secret.return_value = ""
+    mock_agent_node = MagicMock()
+    mock_agent_node.name = "3"
+    remove_node_fail.list_agent_nodes.return_value = [mock_agent_node]
+    remove_node_fail.remove_agent_node.side_effect = [jenkins.JenkinsError()]
+
+    return [
+        pytest.param(add_agent_node_fail, id="add_agent_node error"),
+        pytest.param(get_node_secret_fail, id="get_node_secret error"),
+        pytest.param(remove_node_fail, id="remove_node error"),
+    ]
+
+
+@pytest.mark.parametrize(("mock_jenkins_service",), _generate_reconcile_agent_error_params())
+def test_reconcile_agents_error(mock_jenkins_service: MagicMock):
+    """
+    arrange: given fake Jenkins service mock that errors.
+    act: when reconcile is called.
+    assert: Jenkins exception is raised.
+    """
+    testing_containers = [
+        # mypy thinks can_connect argument doesn't exist.
+        testing.Container(
+            "jenkins",
+            can_connect=True,  # type: ignore
+        ),
+    ]
+    testing_storages = {
+        testing.Storage("jenkins-home"),
+    }
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
     with (
-        patch.object(jenkins.Jenkins, "wait_ready"),
-        patch.object(jenkins.Jenkins, "list_agent_nodes"),
-        patch.object(jenkins.Jenkins, "get_node_secret"),
-        patch.object(jenkins.Jenkins, "remove_agent_node"),
-        patch.object(jenkins.Jenkins, "add_agent_node") as add_agent_node_mock,
+        ctx(
+            ctx.on.config_changed(),
+            testing.State(
+                # there's incorrect container type inference in scenario.state.Container vs
+                # ops.model.Container
+                containers=testing_containers,  # type: ignore
+                storages=testing_storages,
+                relations=[
+                    testing.Relation(
+                        endpoint="agent",
+                        interface="jenkins_agent_v0",
+                        remote_units_data={
+                            0: {"executors": "1", "labels": "testing", "name": "0"},
+                            1: {"executors": "1", "labels": "testing", "name": "1"},
+                        },
+                    )
+                ],
+            ),
+        ) as mgr,
         pytest.raises(jenkins.JenkinsError),
     ):
-        add_agent_node_mock.side_effect = jenkins.JenkinsError()
-
-        harness_container.harness.charm.on[relation].relation_joined.emit(
-            model_relation,
-            app=harness_container.harness.model.get_app("jenkins-agent"),
-            unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
-        )
+        # Ignore the mismatching type for FakeJenkinsService since this is a fake service for
+        # testing.
+        fake_jenkins_service = mock_jenkins_service
+        mgr.charm.agent_observer.jenkins = fake_jenkins_service  # type: ignore
+        mgr.charm.agent_observer.reconcile_agents(event=MagicMock())
 
 
-@pytest.mark.usefixtures("patch_is_jenkins_ready")
-def test__on_agent_relation_joined_get_secret_error(
-    harness_container: HarnessWithContainer,
-    relation_data: dict[str, str],
-):
-    """
-    arrange: given a mocked patched jenkins client that raises an error.
-    act: when an agent relation joined event is fired.
-    assert: the unit falls to BlockedStatus.
-    """
-    relation_id = harness_container.harness.add_relation(state.AGENT_RELATION, "jenkins-agent")
-    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness_container.harness.update_relation_data(
-        relation_id,
-        "jenkins-agent/0",
-        relation_data,
-    )
-    harness_container.harness.begin()
-
-    model_relation = harness_container.harness.charm.model.get_relation(
-        state.AGENT_RELATION, relation_id
-    )
-    with (
-        patch.object(jenkins.Jenkins, "wait_ready"),
-        patch.object(jenkins.Jenkins, "list_agent_nodes"),
-        patch.object(jenkins.Jenkins, "remove_agent_node"),
-        patch.object(jenkins.Jenkins, "get_node_secret") as get_node_secret_mock,
-        patch.object(jenkins.Jenkins, "add_agent_node"),
-        pytest.raises(jenkins.JenkinsError),
-    ):
-        get_node_secret_mock.side_effect = jenkins.JenkinsError()
-
-        harness_container.harness.charm.on[state.AGENT_RELATION].relation_joined.emit(
-            model_relation,
-            app=harness_container.harness.model.get_app("jenkins-agent"),
-            unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
-        )
-
-
-@pytest.mark.parametrize(
-    "relation, event",
-    [
-        pytest.param(state.AGENT_RELATION, "relation_joined", id="agent relation joined"),
-        pytest.param(state.AGENT_RELATION, "relation_changed", id="agent relation changed"),
-    ],
-)
-@pytest.mark.usefixtures("patch_is_jenkins_ready")
-def test__on_agent_relation_events(
-    harness_container: HarnessWithContainer,
-    relation_data: dict[str, str],
-    relation: str,
-    event: str,
-):
-    """
-    arrange: given a charm instance.
-    act: when an agent relation joined event is fired.
-    assert: the unit becomes Active and sets required agent relation data.
-    """
-    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
-    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness_container.harness.update_relation_data(relation_id, "jenkins-agent/0", relation_data)
-    with (
-        patch.object(jenkins.Jenkins, "wait_ready"),
-        patch.object(jenkins.Jenkins, "list_agent_nodes"),
-        patch.object(jenkins.Jenkins, "remove_agent_node"),
-        patch.object(jenkins.Jenkins, "add_agent_node"),
-        patch.object(jenkins.Jenkins, "get_node_secret") as get_node_secret_mock,
-    ):
-        get_node_secret_mock.return_value = secrets.token_hex()
-        harness_container.harness.begin()
-        jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-
-        model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
-        getattr(harness_container.harness.charm.on[relation], event).emit(
-            model_relation,
-            app=harness_container.harness.model.get_app("jenkins-agent"),
-            unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
-        )
-
-        assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
-
-
-@pytest.mark.parametrize(
-    "relation",
-    [
-        pytest.param(state.AGENT_RELATION, id="agent relation"),
-    ],
-)
-def test__on_agent_relation_departed_no_container(
-    harness_container: HarnessWithContainer,
-    relation: str,
-):
-    """
-    arrange: given a charm with established relation but no container.
-    act: when an agent relation departed event is fired.
-    assert: nothing happens since the workload doesn't exist.
-    """
-    harness_container.harness.begin()
-    harness_container.harness.set_can_connect("jenkins", False)
-    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
-    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
-
-    with (
-        patch.object(jenkins.Jenkins, "wait_ready"),
-        patch.object(jenkins.Jenkins, "list_agent_nodes"),
-        patch.object(jenkins.Jenkins, "add_agent_node"),
-        patch.object(jenkins.Jenkins, "get_node_secret"),
-        patch.object(jenkins.Jenkins, "remove_agent_node") as remove_agent_node_mock,
-    ):
-
-        model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
-        harness_container.harness.charm.on[relation].relation_departed.emit(
-            model_relation,
-            app=harness_container.harness.model.get_app("jenkins-agent"),
-            unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
-        )
-
-        remove_agent_node_mock.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    "relation",
-    [
-        pytest.param(state.AGENT_RELATION, id="agent relation"),
-    ],
-)
-@pytest.mark.usefixtures("patch_is_jenkins_ready")
-def test__on_agent_relation_departed_remove_agent_node_error(
-    harness_container: HarnessWithContainer,
-    relation_data: dict[str, str],
-    relation: str,
-):
-    """
-    arrange: given a charm with established relation but no container.
-    act: when an agent relation departed event is fired.
-    assert: nothing happens since the workload doesn't exist.
-    """
-    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
-    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness_container.harness.update_relation_data(relation_id, "jenkins-agent/0", relation_data)
-    with (
-        patch.object(jenkins.Jenkins, "wait_ready"),
-        patch.object(jenkins.Jenkins, "list_agent_nodes") as list_agent_nodes_mock,
-        patch.object(jenkins.Jenkins, "add_agent_node"),
-        patch.object(jenkins.Jenkins, "get_node_secret") as get_node_secret_mock,
-        patch.object(jenkins.Jenkins, "remove_agent_node") as remove_agent_node_mock,
-        pytest.raises(jenkins.JenkinsError),
-    ):
-        get_node_secret_mock.return_value = "test"
-        list_agent_nodes_mock.return_value = [
-            state.AgentMeta(executors="1", labels="test", name="test")
+def _generate_agent_discovery_url_test_params():
+    """Generate testing params for agent discovery URL."""
+    public_ingress_address = "https://public-ingress.com"
+    agent_discovery_ingress_address = "https://agent-discovery-ingress.com"
+    agent_discovery_and_public_ingress = testing.State(
+        relations=[
+            testing.Relation(
+                endpoint="ingress",
+                interface="ingress",
+                remote_app_data={"ingress": f'{{"url":"{public_ingress_address}"}}'},
+            ),
+            testing.Relation(
+                endpoint="agent-discovery-ingress",
+                interface="ingress",
+                remote_app_data={"ingress": f'{{"url":"{agent_discovery_ingress_address}"}}'},
+            ),
         ]
-        remove_agent_node_mock.side_effect = [jenkins.JenkinsError()]
-        harness_container.harness.begin()
+    )
+    public_ingress_only = testing.State(
+        relations=[
+            testing.Relation(
+                endpoint="ingress",
+                interface="ingress",
+                remote_app_data={"ingress": f'{{"url":"{public_ingress_address}"}}'},
+            ),
+        ]
+    )
+    juju_network_address = "192.168.0.1"
+    juju_network = testing.State(
+        networks={
+            testing.Network(
+                binding_name="juju-info",
+                bind_addresses=[
+                    testing.BindAddress(addresses=[testing.Address(juju_network_address)])
+                ],
+            )
+        }
+    )
+    juju_network_invalid_address = testing.State(
+        networks={
+            testing.Network(
+                binding_name="juju-info",
+                bind_addresses=[
+                    testing.BindAddress(addresses=[testing.Address("invalidaddress")])
+                ],
+            )
+        }
+    )
+    return [
+        pytest.param(
+            agent_discovery_and_public_ingress,
+            agent_discovery_ingress_address,
+            id="agent_discovery ingress url prioritized",
+        ),
+        pytest.param(
+            public_ingress_only,
+            public_ingress_address,
+            id="public ingress only",
+        ),
+        pytest.param(
+            juju_network,
+            f"http://{juju_network_address}:8080",
+            id="juju (kubernetes) pod IP",
+        ),
+        pytest.param(
+            juju_network_invalid_address,
+            f"http://{_MONKEYPATCHED_FQDN}:8080",
+            id="invalid juju (kubernetes) pod IP",
+        ),
+        pytest.param(
+            testing.State(networks={}),
+            f"http://{_MONKEYPATCHED_FQDN}:8080",
+            id="socket fqdn",
+        ),
+    ]
 
-        model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
-        harness_container.harness.charm.on[relation].relation_departed.emit(
-            model_relation,
-            app=harness_container.harness.model.get_app("jenkins-agent"),
-            unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
-        )
+
+@pytest.fixture(name="patch_fqdn")
+def patch_fqdn_fixture(monkeypatch: pytest.MonkeyPatch):
+    """Patch socket.fqdn."""
+    monkeypatch.setattr(socket, "getfqdn", lambda: _MONKEYPATCHED_FQDN)
 
 
 @pytest.mark.parametrize(
-    "relation",
-    [
-        pytest.param(state.AGENT_RELATION, id="agent relation"),
-    ],
+    ("state", "expected_discovery_url"), _generate_agent_discovery_url_test_params()
 )
-@pytest.mark.usefixtures("patch_is_jenkins_ready")
-def test__on_agent_relation_departed(
-    harness_container: HarnessWithContainer,
-    relation_data: dict[str, str],
-    relation: str,
+@pytest.mark.usefixtures("patch_fqdn")
+def test_reconfigure_agent_discovery(
+    state: testing.State,
+    expected_discovery_url: str,
 ):
     """
-    arrange: given a charm with established relation.
-    act: when an agent relation departed event is fired.
-    assert: the remove_agent_node is called and unit falls into ActiveStatus.
+    arrange: given an ingress relation state.
+    act: when agent_discovery_url property is accessed.
+    assert: expected agent discovery URL is returned.
     """
-    relation_id = harness_container.harness.add_relation(relation, "jenkins-agent")
-    harness_container.harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness_container.harness.update_relation_data(relation_id, "jenkins-agent/0", relation_data)
-    with (
-        patch.object(jenkins.Jenkins, "wait_ready"),
-        patch.object(jenkins.Jenkins, "list_agent_nodes") as list_agent_nodes_mock,
-        patch.object(jenkins.Jenkins, "add_agent_node"),
-        patch.object(jenkins.Jenkins, "get_node_secret") as get_node_secret_mock,
-        patch.object(jenkins.Jenkins, "remove_agent_node") as remove_agent_node_mock,
-    ):
-        get_node_secret_mock.return_value = "test"
-        list_agent_nodes_mock.return_value = [
-            state.AgentMeta(executors="1", labels="test", name="test")
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    with ctx(ctx.on.config_changed(), state) as mgr:
+        mgr.charm.agent_observer.reconfigure_agent_discovery(MagicMock())
+        assert mgr.charm.agent_observer.agent_discovery_url == expected_discovery_url
+
+
+def _generate_status_message_test_params():
+    """Generate testing parameters for status message for ingress statuses."""
+    public_ingress_address = "https://public-ingress.com"
+    agent_discovery_ingress_address = "https://agent-discovery-ingress.com"
+    agent_discovery_and_public_ingress = testing.State(
+        relations=[
+            testing.Relation(
+                endpoint="ingress",
+                interface="ingress",
+                remote_app_data={"ingress": f'{{"url":"{public_ingress_address}"}}'},
+            ),
+            testing.Relation(
+                endpoint="agent-discovery-ingress",
+                interface="ingress",
+                remote_app_data={"ingress": f'{{"url":"{agent_discovery_ingress_address}"}}'},
+            ),
         ]
-        harness_container.harness.begin()
-
-        model_relation = harness_container.harness.charm.model.get_relation(relation, relation_id)
-        harness_container.harness.charm.on[relation].relation_departed.emit(
-            model_relation,
-            app=harness_container.harness.model.get_app("jenkins-agent"),
-            unit=harness_container.harness.model.get_unit("jenkins-agent/0"),
-        )
-
-        jenkins_charm = cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-        assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
-        assert not jenkins_charm.unit.status.message
-        remove_agent_node_mock.assert_called_once()
-
-
-def test_agent_discovery_url_with_ingress(harness: Harness):
-    """
-    arrange: given a base jenkins charm with ingress integration.
-    act: start the charm and add an ingress integration with traefik.
-    assert: charm.agent_observer.agent_discovery_url is the value
-    from the ingress integration databag.
-    """
-    harness.begin()
-
-    mock_ingress_url = "http://ingress.test"
-    harness.add_relation(
-        "agent-discovery-ingress",
-        "traefik-k8s",
-        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
     )
-
-    assert harness.charm.agent_observer.agent_discovery_url == mock_ingress_url
-
-
-def test_agent_discovery_url_with_server_ingress(harness: Harness):
-    """
-    arrange: given a base jenkins charm with server ingress integration.
-    act: start the charm and add an server ingress integration with traefik.
-    assert: charm.agent_observer.agent_discovery_url is the value
-    from the ingress integration databag.
-    """
-    harness.begin()
-
-    mock_ingress_url = "http://ingress.test"
-    harness.add_relation(
-        "ingress",
-        "traefik-k8s",
-        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
+    public_ingress_only = testing.State(
+        relations=[
+            testing.Relation(
+                endpoint="ingress",
+                interface="ingress",
+                remote_app_data={"ingress": f'{{"url":"{public_ingress_address}"}}'},
+            ),
+        ]
     )
+    return [
+        pytest.param(agent_discovery_and_public_ingress, "", id="both ingresses"),
+        pytest.param(
+            public_ingress_only,
+            "Consider separating ingress for agents (agent-discovery-ingress)",
+            id="public ingress only",
+        ),
+    ]
 
-    assert harness.charm.agent_observer.agent_discovery_url == mock_ingress_url
-    assert "Consider separating ingress for agents" in harness.charm.agent_observer._status_message
 
-
-def test_agent_discovery_url_fqdn_fallback(harness: Harness, monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize(
+    ("state", "expected_status_message"), _generate_status_message_test_params()
+)
+def test_status_message(state: testing.State, expected_status_message: str):
     """
-    arrange: given a base jenkins charm with no ingress and an invalid ip.
-    act: access the charm's agent_discovery_url property.
-    assert: the charm returns the value from socket.get_fqdn().
+    arrange: given ingress relations.
+    act: when _status_message property is accessed.
+    assert: expected status message is returned.
     """
-    harness.begin()
-    mock_fqdn = "test"
-    monkeypatch.setattr(socket, "getfqdn", MagicMock(return_value=mock_fqdn))
-    monkeypatch.setattr(ipaddress, "ip_address", MagicMock(side_effect=ValueError))
-
-    assert (
-        harness.charm.agent_observer.agent_discovery_url
-        == f"http://{mock_fqdn}:{jenkins.WEB_PORT}"
-    )
-
-
-def test_agent_discovery_url_model_error_null_binding(
-    harness: Harness, monkeypatch: pytest.MonkeyPatch
-):
-    """
-    arrange: given a base jenkins charm and mocked ingress requirer to return None.
-    act: start the charm and add an ingress integration with traefik.
-    assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
-    """
-    mock_fqdn = "test"
-    monkeypatch.setattr(IngressPerAppRequirer, "url", PropertyMock(return_value=None))
-    monkeypatch.setattr(Model, "get_binding", MagicMock(return_value=None))
-    monkeypatch.setattr(socket, "getfqdn", MagicMock(return_value=mock_fqdn))
-
-    harness.begin()
-    harness.add_relation(
-        "agent-discovery-ingress",
-        "traefik-k8s",
-        app_data={"ingress": json.dumps({"url": "http://ingress.test"})},
-    )
-
-    assert (
-        harness.charm.agent_observer.agent_discovery_url
-        == f"http://{mock_fqdn}:{jenkins.WEB_PORT}"
-    )
-
-
-def test_agent_discovery_url_with_ingress_ip_validation_error(
-    harness: Harness, monkeypatch: pytest.MonkeyPatch
-):
-    """
-    arrange: given a base jenkins charm and mocked ingress requirer to return None.
-    act: start the charm and add an ingress integration with traefik.
-    assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
-    """
-    monkeypatch.setattr(IngressPerAppRequirer, "url", PropertyMock(return_value=None))
-    monkeypatch.setattr(ipaddress, "ip_address", MagicMock(side_effect=ValueError))
-    mock_fqdn = "test"
-    monkeypatch.setattr(socket, "getfqdn", MagicMock(return_value=mock_fqdn))
-
-    harness.begin()
-    harness.add_relation(
-        "agent-discovery-ingress",
-        "traefik-k8s",
-        app_data={"ingress": json.dumps({"url": "http://ingress.test"})},
-    )
-
-    assert (
-        harness.charm.agent_observer.agent_discovery_url
-        == f"http://{mock_fqdn}:{jenkins.WEB_PORT}"
-    )
-
-
-def test_agent_discovery_url_pod_ip(harness: Harness, monkeypatch: pytest.MonkeyPatch):
-    """
-    arrange: given a base jenkins charm and mocked ingress requirer to return None.
-    act: start the charm and add an ingress integration with traefik.
-    assert: charm.agent_observer.agent_discovery_url is the value from socket.get_fqdn().
-    """
-    mock_pod_ip = "10.10.10.10"
-    monkeypatch.setattr(IngressPerAppRequirer, "url", PropertyMock(return_value=None))
-    monkeypatch.setattr(Network, "bind_address", PropertyMock(return_value=mock_pod_ip))
-
-    harness.begin()
-    harness.add_relation(
-        "agent-discovery-ingress",
-        "traefik-k8s",
-        app_data={"ingress": json.dumps({"url": "http://ingress.test"})},
-    )
-
-    assert (
-        harness.charm.agent_observer.agent_discovery_url
-        == f"http://{mock_pod_ip}:{jenkins.WEB_PORT}"
-    )
-
-
-def test_reconfigure_agent_discovery_url(harness: Harness, relation_data: dict[str, str]):
-    """
-    arrange: given a base jenkins charm integrated with the jenkins-agent charm.
-    act: add an integration with traefik.
-    assert: the discovery url in the integration databag is changed to the ingress url.
-    """
-    relation_id = harness.add_relation(state.AGENT_RELATION, "jenkins-agent")
-    harness.add_relation_unit(relation_id, "jenkins-agent/0")
-    harness.update_relation_data(relation_id, "jenkins-agent/0", relation_data)
-    harness.begin()
-
-    mock_ingress_url = "http://ingress.test"
-    harness.add_relation(
-        "agent-discovery-ingress",
-        "traefik-k8s",
-        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
-    )
-
-    assert (
-        harness.get_relation_data(relation_id, harness.model.unit.name)["url"] == mock_ingress_url
-    )
-
-
-def test_reconfigure_agent_discovery_url_ingress_revoked(
-    harness: Harness, relation_data: dict[str, str]
-):
-    """
-    arrange: given a base jenkins charm integrated with the jenkins-agent charm with ingress.
-    act: remove the traefik integration.
-    assert: the discovery url in the integration databag is different from the ingress url.
-    """
-    mock_ingress_url = "http://ingress.test"
-    ingress_relation_id = harness.add_relation(
-        "ingress",
-        "traefik-k8s",
-        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
-    )
-    relation_id = harness.add_relation(
-        state.AGENT_RELATION, "jenkins-agent", unit_data=relation_data
-    )
-    harness.begin()
-
-    harness.remove_relation(ingress_relation_id)
-    assert (
-        harness.get_relation_data(relation_id, harness.model.unit.name)["url"] != mock_ingress_url
-    )
-
-
-def test_reconfigure_agent_discovery_url_unchanged(
-    harness: Harness, relation_data: dict[str, str]
-):
-    """
-    arrange: given a base jenkins charm integrated with the jenkins-agent charm.
-    The integration databag contains an agent discovery url.
-    act: add an integration with traefik providing the same url.
-    assert: the discovery url in the integration databag is not changed.
-    """
-    mock_ingress_url = "http://ingress.test"
-    relation_id = harness.add_relation(
-        state.AGENT_RELATION, "jenkins-agent", unit_data=relation_data
-    )
-    harness.update_relation_data(relation_id, harness.model.unit.name, {"url": mock_ingress_url})
-    harness.begin()
-    harness.add_relation(
-        "agent-discovery-ingress",
-        "traefik-k8s",
-        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
-    )
-
-    assert (
-        harness.get_relation_data(relation_id, harness.model.unit.name)["url"] == mock_ingress_url
-    )
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    with ctx(ctx.on.config_changed(), state) as mgr:
+        # Need access to protected functions for testing
+        # pylint:disable=protected-access
+        assert mgr.charm.agent_observer._status_message == expected_status_message
