@@ -8,17 +8,17 @@ output "app_name" {
 
 output "requires" {
   value = {
-    agent = "agent"
-    ingress = "ingress"
-    agent_discovery_ingress = "ingress"
-    auth_proxy = "auth_proxy"
-    logging = "loki_push_api"
+    agent                   = "agent"
+    ingress                 = "ingress"
+    agent_discovery_ingress = "agent-discovery-ingress"
+    auth_proxy              = "auth-proxy"
+    logging                 = "loki_push_api"
   }
 }
 
 output "provides" {
   value = {
-    metrics_endpoint = "prometheus_scrape"
+    metrics_endpoint  = "prometheus_scrape"
     grafana_dashboard = "grafana_dashboard"
   }
 }
