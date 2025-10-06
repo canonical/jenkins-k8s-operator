@@ -19,6 +19,7 @@ import cos
 import ingress
 import jenkins
 import pebble
+import precondition
 import storage
 import timerange
 from state import (
@@ -104,9 +105,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             JenkinsError: if there was an error fetching Jenkins version.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_storage_ready(container):
-            self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
-            event.defer()  # Jenkins installation should be retried until preconditions are met.
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        if not check_result.success:
+            self.unit.status = ops.WaitingStatus(check_result.reason or "")
+            event.defer()
             return
 
         self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
@@ -141,16 +143,21 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ops.BlockedStatus("Failed to remove plugins.")
         return ops.ActiveStatus()
 
-    def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
+    def _on_update_status(self, event: ops.UpdateStatusEvent) -> None:
         """Handle update status event.
 
         On Update status:
         1. Remove plugins that are installed but are not allowed by plugins config value.
         2. Update Jenkins patch version if available and is within restart-time-range config value.
+
+        Args:
+            event: The update status hook event.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_storage_ready(container):
-            self.unit.status = ops.WaitingStatus("Waiting for container/storage.")
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        if not check_result.success:
+            self.unit.status = ops.WaitingStatus(check_result.reason or "")
+            event.defer()
             return
 
         if self.state.restart_time_range and not timerange.check_now_within_bound_hours(
@@ -166,7 +173,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The event fired when the storage is attached.
         """
-        self.jenkins_set_storage_config(event)
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        if not check_result.success:
+            self.unit.status = ops.WaitingStatus(check_result.reason or "")
+            event.defer()
+            return
+
+        # There are no logical changes, this function will be refactored into part of th reconcile
+        self.storage.reconcile_storage(container=container)  # pragma: nocover
 
     def _upgrade_charm(self, event: ops.UpgradeCharmEvent) -> None:
         """Correctly set permissions when charm is upgraded.
@@ -175,42 +190,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The event fired when the charm is upgraded.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect():
-            self.unit.status = ops.WaitingStatus("Waiting for pebble.")
-            # This event should be handled again once the container becomes available.
-            event.defer()
-            return
-
-        if not self.storage.is_storage_ready():  # pragma: nocover
-            self.unit.status = ops.WaitingStatus("Waiting for storage to be ready.")
-            event.defer()
-            return
-
-        self.jenkins_set_storage_config(event)
-        # Update the agent discovery address.
-        # Updating the secret is not required since it's calculated using the agent's node name.
-        self.agent_observer.reconfigure_agent_discovery(event)
-        self.agent_observer.reconcile_agents(event)
-
-    def jenkins_set_storage_config(self, event: ops.framework.EventBase) -> None:
-        """Correctly set permissions when storage is attached.
-
-        Args:
-            event: The event fired when the permission change is needed.
-        """
-        container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not container.can_connect():
-            self.unit.status = ops.WaitingStatus("Waiting for pebble.")
-            # This event should be handled again once the container becomes available.
-            event.defer()
-            return
-
-        if not self.storage.is_storage_ready():  # pragma: nocover
-            self.unit.status = ops.WaitingStatus("Waiting for storage to be ready.")
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        # There are no logical changes, this function will be refactored into part of th reconcile
+        if not check_result.success:  # pragma: nocover
+            self.unit.status = ops.WaitingStatus(check_result.reason or "")
             event.defer()
             return
 
         self.storage.reconcile_storage(container=container)
+        # Update the agent discovery address.
+        # Updating the secret is not required since it's calculated using the agent's node name.
+        self.agent_observer.reconfigure_agent_discovery(event)
+        self.agent_observer.reconcile_agents(event)
 
 
 if __name__ == "__main__":  # pragma: nocover

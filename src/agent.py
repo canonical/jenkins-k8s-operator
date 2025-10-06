@@ -13,6 +13,7 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerApp
 
 import ingress
 import jenkins
+import precondition
 from state import (
     AGENT_DISCOVERY_INGRESS_RELATION_NAME,
     AGENT_RELATION,
@@ -122,8 +123,8 @@ class Observer(ops.Object):
 
         # Fallback to pod IP
         if binding := self.charm.model.get_binding("juju-info"):
-            unit_ip = str(binding.network.bind_address)
             try:
+                unit_ip = str(binding.network.bind_address)
                 ipaddress.ip_address(unit_ip)
                 env_dict = typing.cast(typing.Dict[str, str], self.jenkins.environment)
                 return f"http://{unit_ip}:{jenkins.WEB_PORT}{env_dict['JENKINS_PREFIX']}"
@@ -154,13 +155,16 @@ class Observer(ops.Object):
             event: The event that triggered the agent reconcile.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
-        if (
-            not jenkins.is_storage_ready(container)
-            or not jenkins.is_jenkins_ready(container=container)
-            or not self.state.agent_relation_meta
-        ):
-            logger.warning("Service not yet ready, agents not reconciled.")
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        if not check_result.success:
+            self.charm.unit.status = ops.WaitingStatus(
+                check_result.reason or "Agent relation metadata not yet ready."
+            )
             event.defer()
+            return
+
+        if not self.state.agent_relation_meta:
+            logger.info("No agent relation found.")
             return
 
         # Make sure Jenkins is fully up and running before interacting with it.
@@ -261,7 +265,8 @@ class Observer(ops.Object):
         Args:
             event: The event fired on agent relation joined.
         """
-        self.reconcile_agents(event=event)
+        # There's no need to test whether the hook is fired.
+        self.reconcile_agents(event=event)  # pragma: nocover
 
     def _on_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
         """Handle agent relation departed event.
@@ -269,7 +274,8 @@ class Observer(ops.Object):
         Args:
             event: The event fired on agent relation departed.
         """
-        self.reconcile_agents(event=event)
+        # There's no need to test whether the hook is fired.
+        self.reconcile_agents(event=event)  # pragma: nocover
 
     def _on_agent_relation_changed(self, event: ops.RelationChangedEvent) -> None:
         """Handle agent relation changed event.
@@ -277,7 +283,8 @@ class Observer(ops.Object):
         Args:
             event: The event fired on agent relation changed.
         """
-        self.reconcile_agents(event=event)
+        # There's no need to test whether the hook is fired.
+        self.reconcile_agents(event=event)  # pragma: nocover
 
     def reconfigure_agent_discovery(self, _: ops.EventBase) -> None:
         """Update the agent discovery URL in each of the connected agent's integration data.
