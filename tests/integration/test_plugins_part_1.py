@@ -184,7 +184,7 @@ async def test_ldap_plugin(
     data = {
         "securityRealm": {
             "configurations": {
-                "server": f"ldap://{ldap_server_ip}:{ldap_settings.container_port}",
+                "server": f"ldap://{ldap_server_ip}:{ldap_settings.container_ports[0]}",
                 "rootDN": "dc=example,dc=org",  # default example server settings.
                 "inhibitInferRootDN": False,
                 "userSearchBase": "",
