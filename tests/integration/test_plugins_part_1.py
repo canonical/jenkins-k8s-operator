@@ -3,16 +3,22 @@
 
 """Integration tests for jenkins-k8s-operator charm."""
 
+import base64
+import hashlib
 import json
 import logging
+import secrets
 import typing
 
 import jenkinsapi.plugin
+import kubernetes
 import pytest
 import requests
 import urllib3.exceptions
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
+from juju.model import Model
+from kubernetes.stream import stream
 from pytest_operator.plugin import OpsTest
 
 from .constants import (
@@ -166,7 +172,52 @@ async def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
     ) == "<div/>", f"Non-empty error message returned, {check_url_content}"
 
 
-@pytest.mark.usefixtures("app_with_allowed_plugins")
+@pytest.fixture(name="seed_ldap_user")
+def seed_ldap_user_fixture(
+    model: Model,
+    kube_core_client: kubernetes.client.CoreV1Api,
+    ldap_settings: LDAPSettings,
+):
+    """Seed user into ldap server."""
+    command = [
+        "ldapadd",
+        "-x",
+        "-H",
+        "ldap://localhost:389",
+        "-D",
+        "cn=admin,dc=example,dc=org",
+        "-w",
+        f"{ldap_settings.password}",
+        f"""<<EOF
+dn: uid={ldap_settings.username},dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: organizationalPerson
+uid: {ldap_settings.username}
+cn: Testing User
+sn: Test
+userPassword: {ldap_settings.password}
+mail: testing@example.org
+uidNumber: 1001
+gidNumber: 1001
+homeDirectory: /home/{ldap_settings.username}
+EOF""",
+    ]
+    pods = kube_core_client.list_namespaced_pod(namespace=model.name, label_selector="app=ldap")
+    pod_name = pods.items[0].metadata.name
+    response = stream(
+        kube_core_client.connect_get_namespaced_pod_exec,
+        name=pod_name,
+        namespace=model.name,
+        command=["sh", "-c", " ".join(command)],
+        stderr=True,
+        stdin=True,
+        stdout=True,
+    )
+    assert "adding new entry" in response
+
+
+@pytest.mark.usefixtures("app_with_allowed_plugins", "seed_ldap_user")
 async def test_ldap_plugin(
     unit_web_client: UnitWebClient,
     ldap_server_ip: str,
@@ -199,8 +250,8 @@ async def test_ldap_plugin(
                     "$class": "jenkins.security.plugins.ldap"
                     ".FromGroupSearchLDAPGroupMembershipStrategy",
                 },
-                "managerDN": "",
-                "managerPasswordSecret": "",
+                "managerDN": "cn=admin,dc=example,dc=org",  # default example server settings.
+                "managerPasswordSecret": ldap_settings.password,
                 "$redact": "managerPasswordSecret",
                 "displayNameAttributeName": "displayname",
                 "mailAddressAttributeName": "mail",

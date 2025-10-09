@@ -509,14 +509,8 @@ async def ldap_server_fixture(
             for container_port in ldap_settings.container_ports
         ],
         env=[
-            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_USERNAME", value="admin"),
-            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_PASSWORD", value=secrets.token_hex(16)),
-            kubernetes.client.V1EnvVar(
-                name="LDAP_READONLY_USER_USERNAME", value=ldap_settings.username
-            ),
-            kubernetes.client.V1EnvVar(
-                name="LDAP_READONLY_USER_PASSWORD", value=ldap_settings.password
-            ),
+            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_USERNAME", value=ldap_settings.username),
+            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_PASSWORD", value=ldap_settings.password),
         ],
     )
     template = kubernetes.client.V1PodTemplateSpec(
