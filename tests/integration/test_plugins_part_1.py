@@ -3,11 +3,8 @@
 
 """Integration tests for jenkins-k8s-operator charm."""
 
-import base64
-import hashlib
 import json
 import logging
-import secrets
 import typing
 
 import jenkinsapi.plugin
