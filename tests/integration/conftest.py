@@ -490,7 +490,9 @@ async def app_with_allowed_plugins_fixture(
 @pytest.fixture(scope="module", name="ldap_settings")
 def ldap_settings_fixture() -> LDAPSettings:
     """LDAP user for testing."""
-    return LDAPSettings(container_port=1389, username="customuser", password=secrets.token_hex(16))
+    return LDAPSettings(
+        container_ports=[389, 636], username="customuser", password=secrets.token_hex(16)
+    )
 
 
 @pytest_asyncio.fixture(scope="module", name="ldap_server")
@@ -500,14 +502,15 @@ async def ldap_server_fixture(
     """Testing LDAP server pod."""
     container = kubernetes.client.V1Container(
         name="ldap",
-        image="bitnami/openldap:2.5.16-debian-11-r46",
+        image="osixia/openldap",
         image_pull_policy="IfNotPresent",
-        ports=[kubernetes.client.V1ContainerPort(container_port=ldap_settings.container_port)],
+        ports=[
+            kubernetes.client.V1ContainerPort(container_port=container_port)
+            for container_port in ldap_settings.container_ports
+        ],
         env=[
-            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_USERNAME", value="admin"),
-            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_PASSWORD", value=secrets.token_hex(16)),
-            kubernetes.client.V1EnvVar(name="LDAP_USERS", value=ldap_settings.username),
-            kubernetes.client.V1EnvVar(name="LDAP_PASSWORDS", value=ldap_settings.password),
+            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_USERNAME", value=ldap_settings.username),
+            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_PASSWORD", value=ldap_settings.password),
         ],
     )
     template = kubernetes.client.V1PodTemplateSpec(

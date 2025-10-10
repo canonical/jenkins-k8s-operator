@@ -46,12 +46,12 @@ class LDAPSettings:
     """The testing LDAP settings.
 
     Attributes:
-        container_port: The LDAP server container port.
+        container_ports: The LDAP server container ports.
         username: The LDAP test user.
         password: The LDAP test user password.
     """
 
-    container_port: int
+    container_ports: list[int]
     username: str
     password: str
 
