@@ -173,11 +173,20 @@ def _generate_reconcile_agents_test_params():
     ]
 
 
+@pytest.fixture(name="patch_is_jenkins_ready")
+def patch_is_jenkins_ready_fixture(monkeypatch: pytest.MonkeyPatch):
+    """Patch jenkins module is_jenkins_ready function."""
+    monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock())
+
+
 @pytest.mark.parametrize(
     ("initial_agents", "state", "expected_agents"), _generate_reconcile_agents_test_params()
 )
+@pytest.mark.usefixtures("patch_is_jenkins_ready")
 def test_reconcile_agents(
-    initial_agents: list[str], state: testing.State, expected_agents: list[str]
+    initial_agents: list[str],
+    state: testing.State,
+    expected_agents: list[str],
 ):
     """
     arrange: given test agent relations.
@@ -221,6 +230,7 @@ def _generate_reconcile_agent_error_params():
     ]
 
 
+@pytest.mark.usefixtures("patch_is_jenkins_ready")
 @pytest.mark.parametrize(("mock_jenkins_service",), _generate_reconcile_agent_error_params())
 def test_reconcile_agents_error(mock_jenkins_service: MagicMock):
     """
