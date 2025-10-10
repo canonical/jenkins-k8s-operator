@@ -156,9 +156,9 @@ class Observer(ops.Object):
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
-        if not check_result.success:
+        if not check_result.success or not jenkins.is_jenkins_ready(container=container):
             self.charm.unit.status = ops.WaitingStatus(
-                check_result.reason or "Agent relation metadata not yet ready."
+                check_result.reason or "Jenkins service not yet ready."
             )
             event.defer()
             return
