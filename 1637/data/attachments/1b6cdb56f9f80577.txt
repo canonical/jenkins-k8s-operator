@@ -1,0 +1,18 @@
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:259 Patching CoreDNS configmap, idp public IP: 10.15.119.2
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:278 Deleting pod for DNS restart: coredns-66ffc85ffb-zrqpn
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:291 Deleting pod for DNS restart: coredns-66ffc85ffb-zrqpn
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model    Controller                Cloud/Region        Version  SLA          Timestamp
+testing  github-pr-1ed91-microk8s  microk8s/localhost  3.6.11   unsupported  11:15:43Z
+
+App          Version  Status  Scale  Charm        Channel  Rev  Address         Exposed  Message
+jenkins-k8s  2.528.1  active      1  jenkins-k8s             0  10.152.183.176  no       
+
+Unit            Workload  Agent  Address     Ports  Message
+jenkins-k8s/0*  active    idle   10.1.53.16         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
