@@ -37,4 +37,3 @@ output "public_ingress_provides" {
     metrics_endpoint  = "metrics-endpoint"
   }
 }
-
