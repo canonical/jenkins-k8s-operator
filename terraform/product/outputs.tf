@@ -24,6 +24,10 @@ output "jenkins_k8s_provides" {
   }
 }
 
+output "public_ingress_app_name" {
+  value = juju_application.public_ingress.name
+}
+
 output "public_ingress_requires" {
   value = {
     certificates = "certificates"
