@@ -8,7 +8,7 @@ Each revision is versioned by the date of the revision.
 
 ### 2025-11-11
 
-- Add missing outsputs to the Terraform product module.
+- Add missing outputs to the Terraform product module.
 
 ### 2025-09-29
 
