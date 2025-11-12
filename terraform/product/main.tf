@@ -145,41 +145,6 @@ resource "juju_integration" "public_ingress_oauth2_proxy_k8s" {
   }
 }
 
-resource "juju_application" "certificate_provider" {
-  name  = var.use_httprequest_lego_k8s_certificates ? var.httprequest_lego_k8s.app_name : var.self_signed_ceritificates.app_name
-  model = var.model
-
-  charm {
-    name     = var.use_httprequest_lego_k8s_certificates ? "httprequest-lego-k8s" : "self-signed-certificates"
-    channel  = var.use_httprequest_lego_k8s_certificates ? var.httprequest_lego_k8s.channel : var.self_signed_ceritificates.channel
-    revision = var.use_httprequest_lego_k8s_certificates ? var.httprequest_lego_k8s.revision : var.self_signed_ceritificates.revision
-    base     = var.use_httprequest_lego_k8s_certificates ? var.httprequest_lego_k8s.base : var.self_signed_ceritificates.base
-  }
-
-  config      = var.use_httprequest_lego_k8s_certificates ? var.httprequest_lego_k8s.config : var.self_signed_ceritificates.config
-  constraints = var.use_httprequest_lego_k8s_certificates ? var.httprequest_lego_k8s.constraints : var.self_signed_ceritificates.constraints
-  units       = 1
-}
-
-resource "juju_integration" "public_ingress_certificates" {
-  model = var.model
-  application {
-    name     = juju_application.certificate_provider.name
-    endpoint = "certificates"
-  }
-  application {
-    name     = juju_application.public_ingress.name
-    endpoint = "certificates"
-  }
-}
-
-resource "null_resource" "wait_for_certs_settle" {
-  provisioner "local-exec" {
-    command = "juju wait-for application ${module.jenkins_k8s.app_name}; juju wait-for application ${juju_application.certificate_provider.name}"
-  }
-}
-
-
 resource "juju_integration" "jenkins_k8s_jenkins_agent_k8s_agent" {
   model = var.model
 
