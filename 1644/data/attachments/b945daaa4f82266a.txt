@@ -1,0 +1,68 @@
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m pytest_operator.plugin:plugin.py:806 Connecting to existing model github-pr-aa237-microk8s:testing on unspecified cloud
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m tests.integration.conftest:conftest.py:85 Available charms: ['./jenkins-k8s_ubuntu@22.04-amd64.charm', './jenkins-k8s_ubuntu@24.04-amd64.charm'], using: ./jenkins-k8s_ubuntu@24.04-amd64.charm
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:jenkins-k8s-0
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [idle] maintenance: Installing Jenkins.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [idle] active: 
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/noble/jenkins-agent-92
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-txnh/0 [allocating] waiting: waiting for machine
+  jenkins-agent-txnh/1 [allocating] waiting: waiting for machine
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-txnh/0 [allocating] waiting: waiting for machine
+  jenkins-agent-txnh/1 [allocating] waiting: agent initialising
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-txnh/0 [executing] maintenance: installing charm software
+  jenkins-agent-txnh/1 [executing] maintenance: installing charm software
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-txnh/0 [idle] blocked: Waiting for relation.
+  jenkins-agent-txnh/1 [idle] blocked: Waiting for relation.
+[33mWARNING [0m juju.model:__init__.py:1683 relate is deprecated and will be removed. Use integrate instead.
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-txnh/0 [idle] blocked: Waiting for relation.
+  jenkins-agent-txnh/1 [idle] blocked: Waiting for relation.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-txnh/0 [idle] blocked: Waiting for config/relation.
+  jenkins-agent-txnh/1 [idle] blocked: Waiting for config/relation.
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model    Controller                Cloud/Region        Version  SLA          Timestamp
+testing  github-pr-aa237-microk8s  microk8s/localhost  3.6.11   unsupported  09:37:36Z
+
+SAAS   Status      Store      URL
+agent  terminated  localhost  admin/jenkins-agent-machine-2836.agent
+
+App          Version  Status  Scale  Charm        Channel  Rev  Address         Exposed  Message
+jenkins-k8s  2.528.1  active      1  jenkins-k8s             0  10.152.183.204  no       
+
+Unit            Workload  Agent  Address     Ports  Message
+jenkins-k8s/0*  active    idle   10.1.53.14         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...

@@ -1,0 +1,46 @@
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:531 Creating admin account: testinguser testingemail@test.com
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju run --model jubilant-12a6d33d --format json kratos/0 create-admin-account --params /home/ubuntu/snap/juju/common/tmpyf3q5xi8
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:541 Created admin account, reset link: https://idp.test/jubilant-12a6d33d-identity-platform-login-ui-operator/ui/reset_email?flow=b0face26-5e8f-4e21-af7e-bd954b1fec55, code: 804447
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:546 Navigating to reset link: https://idp.test/jubilant-12a6d33d-identity-platform-login-ui-operator/ui/reset_email?flow=b0face26-5e8f-4e21-af7e-bd954b1fec55
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:550 Page content:<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="icon" type="image/png" sizes="32x32" href="https://assets.ubuntu.com/v1/be7e4cc6-COF-favicon-32x32.png"><link rel="icon" type="image/png" sizes="16x16" href="https://assets.ubuntu.com/v1/16c27f81-COF%20favicon-16x16.png"><title>Enter the code you received via email</title><meta name="next-head-count" content="5"><link rel="preload" href="./_next/static/css/23c99358cfa1f1b0.css" as="style"><link rel="stylesheet" href="./_next/static/css/23c99358cfa1f1b0.css" data-n-g=""><link rel="preload" href="./_next/static/css/e7c87927b4243a4b.css" as="style"><link rel="stylesheet" href="./_next/static/css/e7c87927b4243a4b.css" data-n-p=""><noscript data-n-css=""></noscript><script defer="" nomodule="" src="./_next/static/chunks/polyfills-78c92fac7aa8fdd8.js"></script><script src="./_next/static/chunks/webpack-81463a6d4cb50295.js" defer=""></script><script src="./_next/static/chunks/framework-b3ccc429eff58328.js" defer=""></script><script src="./_next/static/chunks/main-a2b2e101fd227c05.js" defer=""></script><script src="./_next/static/chunks/pages/_app-ee782e53e09cee99.js" defer=""></script><script src="./_next/static/chunks/1b8f9dc1-9f8537718cedb3f0.js" defer=""></script><script src="./_next/static/chunks/48c79778-0b484f01c3056c11.js" defer=""></script><script src="./_next/static/chunks/65291039-736fa87dc4d99388.js" defer=""></script><script src="./_next/static/chunks/13b8a98b-12619f1eea14af2b.js" defer=""></script><script src="./_next/static/chunks/731-1def6dddecd7cb81.js" defer=""></script><script src="./_next/static/chunks/68-239692b17686cc36.js" defer=""></script><script src="./_next/static/chunks/99-6386a5119d4d1305.js" defer=""></script><script src="./_next/static/chunks/127-949d418fce652658.js" defer=""></script><script src="./_next/static/chunks/pages/reset_email-f6893604ebe83c80.js" defer=""></script><script src="./_next/static/jVQXbySSEj-et9FHjVGHp/_buildManifest.js" defer=""></script><script src="./_next/static/jVQXbySSEj-et9FHjVGHp/_ssgManifest.js" defer=""></script></head><body class="is-paper"><div id="__next"><div class="p-strip page-row row"><div class="col-6 col-start-large-4"><div class="u-no-padding page-card p-card" role="group"><div class="p-card__content"><header class="p-navigation is-dark"><div class="p-navigation__row"><div class="p-navigation__banner"><div class="p-navigation__tagged-logo"><a class="p-navigation__link" href="/"><div class="p-navigation__logo-tag"><img class="p-navigation__logo-icon" src="https://assets.ubuntu.com/v1/82818827-CoF_white.svg" alt="Logo"></div><span class="p-navigation__logo-title">Canonical</span></a></div><ul class="p-navigation__items"></ul></div><nav class="p-navigation__nav"><ul class="p-navigation__items"></ul></nav></div></header><div class="p-card__inner page-inner"><h1 class="p-heading--4">Enter the code you received via email</h1><div><form action="https://idp.test/jubilant-12a6d33d-kratos/self-service/recovery?flow=b0face26-5e8f-4e21-af7e-bd954b1fec55" method="POST"><div class="p-form__group p-form-validation"><label class="p-form__label" for=":r0:">Recovery code</label><div class="p-form__control u-clearfix"><input class="p-form-validation__input" type="text" aria-invalid="false" id=":r0:" tabindex="1" name="code" value=""></div></div><button class="p-button--positive u-no-print" tabindex="4">Submit</button></form></div></div></div></div></div></div><div class="Toastify"></div></div><script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{}},"page":"/reset_email","query":{},"buildId":"jVQXbySSEj-et9FHjVGHp","assetPrefix":".","nextExport":true,"autoExport":true,"isFallback":false,"scriptLoader":[]}</script><next-route-announcer><p aria-live="assertive" id="__next-route-announcer__" role="alert" style="border: 0px; clip: rect(0px, 0px, 0px, 0px); height: 1px; margin: -1px; overflow: hidden; padding: 0px; position: absolute; top: 0px; width: 1px; white-space: nowrap; overflow-wrap: normal;"></p></next-route-announcer></body></html>
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:555 Changing password: lCvosX2ZYZnw-Q0k3jZG5nzTs6UB1N6BQKib_rP1WGM
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:561 Getting OTP Code
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:564 Got OTP Code: RKRLESCSBA2WAA4W6OGFUSZOFZPTLQU2
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:586 Navigating to Jenkins public endpoint: https://jenkins.test/testing-jenkins-k8s
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:590 Filling in login-ui credentials: testingemail@test.com, lCvosX2ZYZnw-Q0k3jZG5nzTs6UB1N6BQKib_rP1WGM
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:598 Signing in...
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:601 Authenticating with TOTP
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:604 Signing in...
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:291 Deleting pod for DNS restart: coredns-66ffc85ffb-q28n4
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model    Controller                Cloud/Region        Version  SLA          Timestamp
+testing  github-pr-aa237-microk8s  microk8s/localhost  3.6.11   unsupported  09:43:27Z
+
+SAAS          Status  Store                     URL
+oauth         active  github-pr-aa237-microk8s  admin/jubilant-12a6d33d.oauth
+send-ca-cert  active  github-pr-aa237-microk8s  admin/jubilant-12a6d33d.send-ca-cert
+
+App                       Version  Status  Scale  Charm                     Channel      Rev  Address         Exposed  Message
+jenkins-k8s               2.528.1  active      1  jenkins-k8s                              0  10.152.183.33   no       
+oauth2-proxy-k8s          v7.8.1   active      1  oauth2-proxy-k8s          latest/edge   21  10.152.183.132  no       
+self-signed-certificates           active      1  self-signed-certificates  1/stable     317  10.152.183.21   no       
+traefik-k8s               2.11.0   active      1  traefik-k8s               latest/edge  259  10.152.183.140  no       Serving at https://jenkins.test
+
+Unit                         Workload  Agent  Address     Ports  Message
+jenkins-k8s/0*               active    idle   10.1.53.16         
+oauth2-proxy-k8s/0*          active    idle   10.1.53.28         
+self-signed-certificates/0*  active    idle   10.1.53.27         
+traefik-k8s/0*               active    idle   10.1.53.26         Serving at https://jenkins.test
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+unit-self-signed-certificates-0: 09:38:36 ERROR unit.self-signed-certificates/0.juju-log certificates:3: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+unit-traefik-k8s-0: 09:38:42 ERROR unit.traefik-k8s/0.juju-log ingress:2: failed processing the ingress relation <ops.model.Relation ingress:4>: 'provider is not ready: ingress for <ops.model.Relation ingress:4> wiped.'
+unit-traefik-k8s-0: 09:38:45 ERROR unit.traefik-k8s/0.juju-log ingress:2: failed processing the ingress relation <ops.model.Relation ingress:4>: 'provider is not ready: ingress for <ops.model.Relation ingress:4> wiped.'
+unit-traefik-k8s-0: 09:38:45 ERROR unit.traefik-k8s/0.juju-log ingress:2: The setup of some ingress relation failed, see previous logs
+unit-oauth2-proxy-k8s-0: 09:38:51 ERROR unit.oauth2-proxy-k8s/0.juju-log Failed obtaining resource limit spec: Invalid default requests spec: {'cpu': '100m', 'mem': '200Mi'}
+unit-oauth2-proxy-k8s-0: 09:38:51 ERROR unit.oauth2-proxy-k8s/0.juju-log Failed to patch resource constraints: Failed obtaining resource limit spec: Invalid default requests spec: {'cpu': '100m', 'mem': '200Mi'}
+unit-self-signed-certificates-0: 09:39:35 ERROR unit.self-signed-certificates/0.juju-log certificates:3: At least 1 matching relation ID not found with the relation name 'send-ca-cert'
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
