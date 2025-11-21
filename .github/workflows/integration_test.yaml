@@ -31,7 +31,7 @@ jobs:
       self-hosted-runner-label: "xlarge"
       microk8s-addons: "dns ingress rbac hostpath-storage registry"
   allure-report:
-    if: ${{ (success() || failure()) && github.event_name == 'schedule' }}
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
     needs:
     - integration-tests
     uses: canonical/operator-workflows/.github/workflows/allure_report.yaml@main
