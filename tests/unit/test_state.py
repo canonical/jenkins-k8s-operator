@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Jenkins-k8s state module tests."""
+
 import typing
 from unittest.mock import MagicMock
 
@@ -40,9 +41,9 @@ def test_no_time_range_config(time_range: str, mock_charm: MagicMock):
 
     returned_state = state.State.from_charm(mock_charm)
 
-    assert (
-        returned_state.restart_time_range is None
-    ), "Restart time range should not be instantiated."
+    assert returned_state.restart_time_range is None, (
+        "Restart time range should not be instantiated."
+    )
 
 
 class TestAgentMeta(typing.TypedDict):

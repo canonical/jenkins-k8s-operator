@@ -71,7 +71,7 @@ async def test_jenkins_k8s_agent_relation(
     )
 
     # 2. Assert that the agent nodes are deregistered from Jenkins.
-    assert not any((jenkins_k8s_agents.name in key for key in jenkins_client.get_nodes().keys()))
+    assert not any(jenkins_k8s_agents.name in key for key in jenkins_client.get_nodes().keys())
     assert not any(
-        (extra_jenkins_k8s_agents.name in key for key in jenkins_client.get_nodes().keys())
+        extra_jenkins_k8s_agents.name in key for key in jenkins_client.get_nodes().keys()
     )

@@ -139,9 +139,9 @@ def test__on_jenkins_pebble_ready(harness_container: HarnessWithContainer):
         jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
         jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
 
-        assert (
-            jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
-        ), f"unit should be in {ACTIVE_STATUS_NAME}"
+        assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME, (
+            f"unit should be in {ACTIVE_STATUS_NAME}"
+        )
 
 
 @pytest.mark.parametrize(
@@ -247,9 +247,7 @@ def test__on_update_status_not_in_time_range(
         # walrus operator is initialized with another status, mypy complains about
         # incompatible types in assignment
         pytest.param(
-            expected_status := ops.ActiveStatus(
-                "Failed to remove unlisted plugin."
-            ),  # type: ignore
+            expected_status := ops.ActiveStatus("Failed to remove unlisted plugin."),  # type: ignore
             expected_status,
             id="Failed update jenkins status (waiting status).",
         ),

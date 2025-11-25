@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """The module for checking time ranges."""
+
 import typing
 from datetime import datetime
 
@@ -26,7 +27,8 @@ class Range(BaseModel):
     # pylint don't quite understand that this is a classmethod using Pydantic.
     @root_validator(skip_on_failure=True)
     def validate_range(  # pylint: disable=no-self-argument
-        cls: "Range", values: dict  # noqa: N805
+        cls: "Range",
+        values: dict,
     ) -> dict:
         """Validate the time range.
 

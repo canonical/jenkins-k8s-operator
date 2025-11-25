@@ -36,19 +36,23 @@ links:
 
 parts:
   charm:
+    source: .
+    plugin: uv
     build-snaps:
-      - rustup
-    override-build: |
-      rustup default stable
-      craftctl default
+    - astral-uv
   templates:
     plugin: dump
     source: .
     prime:
-      - templates/jenkins-auth-proxy-config.xml
-      - templates/jenkins-config.xml
-      - templates/logging.properties
+    - templates/jenkins-auth-proxy-config.xml
+    - templates/jenkins-config.xml
+    - templates/logging.properties
 
+  dump:
+    plugin: templates
+    source: .
+    stage:
+    - templates
 platforms:
   ubuntu@24.04:amd64:
   ubuntu@22.04:amd64:

@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Jenkins States."""
+
 import dataclasses
 import logging
 import os
@@ -180,7 +181,9 @@ class ProxyConfig(BaseModel):
             return None
         # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
         return cls(
-            http_proxy=http_proxy, https_proxy=https_proxy, no_proxy=no_proxy  # type: ignore
+            http_proxy=http_proxy,
+            https_proxy=https_proxy,
+            no_proxy=no_proxy,  # type: ignore
         )
 
 

@@ -7,7 +7,6 @@
 # All tests belong to single jenkins module
 # pylint:disable=protected-access, too-many-lines
 
-
 import io
 import re
 import secrets
@@ -166,7 +165,7 @@ def test_is_storage_ready_proc_error():
     assert: StorageMountError is raised.
     """
     mock_container = MagicMock(ops.Container)
-    mock_container.pull.return_value = io.StringIO(str((jenkins.JENKINS_HOME_PATH)))
+    mock_container.pull.return_value = io.StringIO(str(jenkins.JENKINS_HOME_PATH))
     mock_proc = MagicMock(ops.pebble.ExecProcess)
     mock_proc.wait_output.side_effect = [ops.pebble.ChangeError(err="", change=MagicMock())]
     mock_container.exec.return_value = mock_proc
@@ -683,9 +682,9 @@ def test__configure_proxy_partial(
             harness_container.container, partial_proxy_config
         )
 
-        assert (
-            partial_proxy_config.https_proxy
-        ), "Https value for proxy config fixture cannot be None."
+        assert partial_proxy_config.https_proxy, (
+            "Https value for proxy config fixture cannot be None."
+        )
         mock_run_groovy_script.assert_called_once_with(
             f"proxy = new ProxyConfiguration('{partial_proxy_config.https_proxy.host}', "
             f"{partial_proxy_config.https_proxy.port}, '', '')\n"
@@ -713,9 +712,9 @@ def test__configure_proxy_http(
             harness_container.container, http_partial_proxy_config
         )
 
-        assert (
-            http_partial_proxy_config.http_proxy
-        ), "Http value for proxy config fixture cannot be None."
+        assert http_partial_proxy_config.http_proxy, (
+            "Http value for proxy config fixture cannot be None."
+        )
         mock_run_groovy_script.assert_called_once_with(
             f"proxy = new ProxyConfiguration('{http_partial_proxy_config.http_proxy.host}', "
             f"{http_partial_proxy_config.http_proxy.port}, '', '')\n"
@@ -1081,7 +1080,6 @@ def test__wait_jenkins_job_shutdown(mock_env: jenkins.Environment):
     """
     mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
     with patch.object(jenkins.Jenkins, "_is_shutdown"):
-
         jenkins.Jenkins(mock_env)._wait_jenkins_job_shutdown(mock_client)
 
 
@@ -1600,9 +1598,8 @@ def test_rotate_credentials(container: ops.Container, mock_env: jenkins.Environm
         patch.object(jenkins.Jenkins, "_invalidate_sessions"),
         patch.object(jenkins.Jenkins, "_set_new_password"),
     ):
-
         old_password = container.pull(jenkins.PASSWORD_FILE_PATH, encoding="utf-8").read()
-        assert old_password != jenkins.Jenkins(mock_env).rotate_credentials(
-            container
-        ), "Password not newly generated"
+        assert old_password != jenkins.Jenkins(mock_env).rotate_credentials(container), (
+            "Password not newly generated"
+        )
         assert old_password != container.pull(jenkins.PASSWORD_FILE_PATH, encoding="utf-8").read()

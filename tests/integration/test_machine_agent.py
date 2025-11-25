@@ -48,4 +48,4 @@ async def test_jenkins_machine_agent_relation(
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name])
 
     # 2. Assert that the agent nodes are deregistered from Jenkins.
-    assert not any((application.name in key for key in jenkins_client.get_nodes().keys()))
+    assert not any(application.name in key for key in jenkins_client.get_nodes().keys())

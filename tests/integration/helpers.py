@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Helpers for Jenkins-k8s-operator charm integration tests."""
+
 import inspect
 import logging
 import secrets
@@ -143,9 +144,9 @@ def assert_job_success(
         test_target_label: The Jenkins agent node label.
     """
     nodes = client.get_nodes()
-    assert any(
-        (agent_name in key for key in nodes.keys())
-    ), f"Jenkins {agent_name} node not registered."
+    assert any(agent_name in key for key in nodes.keys()), (
+        f"Jenkins {agent_name} node not registered."
+    )
 
     job = client.create_job(agent_name, gen_test_job_xml(test_target_label))
     queue_item = job.invoke()

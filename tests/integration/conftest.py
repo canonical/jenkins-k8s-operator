@@ -60,9 +60,9 @@ def cloud_fixture(ops_test: OpsTest) -> Optional[str]:
 def jenkins_image_fixture(request: FixtureRequest) -> str:
     """The OCI image for Jenkins charm."""
     jenkins_image = request.config.getoption("--jenkins-image")
-    assert (
-        jenkins_image
-    ), "--jenkins-image argument is required which should contain the name of the OCI image."
+    assert jenkins_image, (
+        "--jenkins-image argument is required which should contain the name of the OCI image."
+    )
     return jenkins_image
 
 
@@ -331,9 +331,9 @@ def update_status_env_fixture(model: Model, unit: Unit) -> Iterable[str]:
 def kube_config_fixture(request: FixtureRequest) -> str:
     """The kubernetes config file path."""
     kube_config = request.config.getoption("--kube-config")
-    assert (
-        kube_config
-    ), "--kube-confg argument is required which should contain the path to kube config."
+    assert kube_config, (
+        "--kube-confg argument is required which should contain the path to kube config."
+    )
     return kube_config
 
 
