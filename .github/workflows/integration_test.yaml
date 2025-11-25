@@ -2,20 +2,26 @@ name: Integration tests
 
 on:
   pull_request:
+  schedule:
+  - cron: "0 15 * * SAT"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || 
+    github.ref }}
   cancel-in-progress: true
 
 jobs:
   integration-tests:
-    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
+    uses: 
+      canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
       channel: 1.34-strict/stable
       extra-arguments: |
         --kube-config=${GITHUB_WORKSPACE}/kube-config
-      modules: '["test_auth_proxy.py", "test_cos.py", "test_ingress.py", "test_jenkins.py", "test_k8s_agent.py", "test_machine_agent.py", "test_plugins_part_1.py", "test_plugins_part_2.py", "test_proxy.py", "test_upgrade.py", "test_external_agent.py"]'
+      modules: '["test_auth_proxy.py", "test_cos.py", "test_ingress.py", "test_jenkins.py",
+        "test_k8s_agent.py", "test_machine_agent.py", "test_plugins_part_1.py", "test_plugins_part_2.py",
+        "test_proxy.py", "test_upgrade.py", "test_external_agent.py"]'
       pre-run-script: |
         -c "sudo microk8s config > ${GITHUB_WORKSPACE}/kube-config
         chmod +x tests/integration/pre_run_script.sh
@@ -25,7 +31,7 @@ jobs:
       self-hosted-runner-label: "xlarge"
       microk8s-addons: "dns ingress rbac hostpath-storage registry"
   allure-report:
-    if: always() && !cancelled()
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
     needs:
-      - integration-tests
+    - integration-tests
     uses: canonical/operator-workflows/.github/workflows/allure_report.yaml@main
