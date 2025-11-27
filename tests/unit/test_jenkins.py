@@ -390,7 +390,7 @@ def test_version_error(
     jenking_instance = jenkins.Jenkins(mock_env)
 
     with pytest.raises(jenkins.JenkinsError):
-        jenking_instance.version  # pylint: disable=pointless-statement
+        jenking_instance.version  # pylint: disable=pointless-statement  # noqa: B018
 
 
 def test_version(
@@ -1351,7 +1351,7 @@ def test__get_allowed_plugins(
                 "dep-b-a": ("dep-b-b"),
                 "dep-b-b": (),
             },
-            set(("plugin-a", "plugin-b")),
+            {"plugin-a", "plugin-b"},
             id="plugins a, b",
         ),
     ],
@@ -1506,7 +1506,7 @@ def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-argu
                     Plugin:dep-a-b, Plugin:dep-b-a, Plugin:dep-b-b]
                 """
             ),
-            set(("plugin-c",)),
+            {"plugin-c"},
             id="plugin-c not expected",
         ),
         pytest.param(
@@ -1530,13 +1530,13 @@ def test_remove_unlisted_plugins_restart_error(  # pylint: disable=too-many-argu
             """
             Result: []
             """,
-            set(()),
+            set(),
             id="no plugins installed",
         ),
         pytest.param(
             (),
             "",
-            set(()),
+            set(),
             id="plugins config not set (all allowed)",
         ),
     ],

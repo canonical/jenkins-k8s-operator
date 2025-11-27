@@ -110,7 +110,7 @@ def _generate_reconcile_agents_test_params():
         testing.Storage("jenkins-home"),
     }
     no_relation_state = testing.State(
-        containers=testing_containers,
+        containers=testing_containers,  # type: ignore[arg-type]
         storages=testing_storages,  # type: ignore
     )
 
