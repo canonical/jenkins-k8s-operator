@@ -21,7 +21,7 @@ import timerange
         pytest.param("00:01-00:02", id="Hour:minute format"),
         pytest.param("3PM-4PM", id="Non 24H format"),
         pytest.param("01--02", id="Invalid input (extra dash)"),
-        pytest.param("2023‐06‐20T15:31:23Z-2023‐09‐20T15:31:23Z", id="ISO timestamp range"),
+        pytest.param("2023-06-20T15:31:23Z-2023-09-20T15:31:23Z", id="ISO timestamp range"),
     ],
 )
 def test_restart_time_range_invalid_time(time_range: str):
