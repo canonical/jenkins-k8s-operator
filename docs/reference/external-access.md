@@ -16,4 +16,4 @@ The Jenkins charm requires access to the following domains to install Jenkins an
 
 Depending on the localisation, some region-specific external mirrors might also be used. You can find more information on the [list of mirrors for Jenkins](https://get.jenkins.io/war/2.456/jenkins.war?mirrorstats).
 
-Some plugins can also require external access, such as `github.com` for the [Github branch source plugin](https://plugins.jenkins.io/github-branch-source/) or an external Kubernetes cluster if you are using the [Kubernetes plugin](https://plugins.jenkins.io/kubernetes/). Refer to the plugin's documentation for more details.
+Some plugins can also require external access, such as `github.com` for the [GitHub branch source plugin](https://plugins.jenkins.io/github-branch-source/) or an external Kubernetes cluster if you are using the [Kubernetes plugin](https://plugins.jenkins.io/kubernetes/). Refer to the plugin's documentation for more details.
