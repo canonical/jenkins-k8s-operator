@@ -51,6 +51,7 @@ Thinking about using the Jenkins-k8s Operator for your next project? [Get in tou
   1. [Rotate credentials](how-to/rotate-credentials.md)
   1. [Integrate with IAM](how-to/integrate-with-iam.md)
   1. [Backup and restore](how-to/backup-and-restore-jenkins.md)
+  1. [Upgrade](how-to/upgrade.md)
   1. [Redeploy](how-to/redeploy.md)
 1. [Reference](reference)
   1. [Actions](reference/actions.md)
