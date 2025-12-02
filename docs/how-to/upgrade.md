@@ -1,6 +1,6 @@
 # How to upgrade
 
-Upgrade to a new revision of the Jenkins charm using the `juju refresh` command:
+Upgrade to the latest revision of the Jenkins charm using the `juju refresh` command:
 
 ```bash
 juju refresh jenkins-k8s
