@@ -164,9 +164,9 @@ async def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
             "credentialsId": "",
         },
     )
-    assert (
-        check_url_content := str(check_url_res.content, encoding="utf-8")
-    ) == "<div/>", f"Non-empty error message returned, {check_url_content}"
+    assert (check_url_content := str(check_url_res.content, encoding="utf-8")) == "<div/>", (
+        f"Non-empty error message returned, {check_url_content}"
+    )
 
 
 @pytest.fixture(name="seed_ldap_user")
@@ -277,9 +277,9 @@ async def test_ldap_plugin(
         json=data,
     )
 
-    assert "User lookup: successful" in str(
-        res.content, encoding="utf-8"
-    ), f"User lookup unsuccessful, {res.content}"
+    assert "User lookup: successful" in str(res.content, encoding="utf-8"), (
+        f"User lookup unsuccessful, {res.content}"
+    )
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -311,9 +311,9 @@ async def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClie
         ).content,
         encoding="utf-8",
     )
-    assert (
-        "Configuration Matrix" in test_page
-    ), f"Configuration matrix table not found, {test_page}"
+    assert "Configuration Matrix" in test_page, (
+        f"Configuration matrix table not found, {test_page}"
+    )
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
@@ -379,9 +379,9 @@ async def test_blueocean_plugin(unit_web_client: UnitWebClient):
         f"{unit_web_client.web}/blue/organizations/jenkins/"
     )
 
-    assert (
-        res.status_code == 200
-    ), f"Failed to access Blueocean frontend, {str(res.content, encoding='utf-8')}"
+    assert res.status_code == 200, (
+        f"Failed to access Blueocean frontend, {str(res.content, encoding='utf-8')}"
+    )
 
 
 async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):

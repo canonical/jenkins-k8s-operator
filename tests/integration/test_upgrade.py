@@ -3,7 +3,6 @@
 
 """Integration test relation file."""
 
-
 import logging
 import pathlib
 
