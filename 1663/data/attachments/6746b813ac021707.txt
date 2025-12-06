@@ -1,0 +1,19 @@
+[1m[31mERROR   [0m jenkinsapi.jenkinsbase:jenkinsbase.py:85 Failed request at http://10.1.53.14:8080/api/python with params: {'tree': 'jobs[name,color,url]'} jobs[name,color,url]
+[1m[31mERROR   [0m jenkinsapi.jenkinsbase:jenkinsbase.py:85 Failed request at http://10.1.53.14:8080/api/python with params: {'tree': 'jobs[name,color,url]'} jobs[name,color,url]
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model    Controller                Cloud/Region        Version  SLA          Timestamp
+testing  github-pr-7504c-microk8s  microk8s/localhost  3.6.12   unsupported  15:34:11Z
+
+App                Version  Status  Scale  Charm              Channel      Rev  Address         Exposed  Message
+jenkins-agent-k8s           active      1  jenkins-agent-k8s  latest/edge   43  10.152.183.131  no       
+jenkins-k8s        2.528.2  active      1  jenkins-k8s                       0  10.152.183.196  no       
+
+Unit                  Workload  Agent  Address     Ports  Message
+jenkins-agent-k8s/0*  active    idle   10.1.53.15         
+jenkins-k8s/0*        active    idle   10.1.53.14         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
