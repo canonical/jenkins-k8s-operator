@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """The Jenkins agent relation observer."""
+
 import ipaddress
 import logging
 import socket

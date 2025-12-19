@@ -375,9 +375,7 @@ def rss_feed_fixture(current_version: str, patched_version: str, minor_updated_v
             </item>
         </channel>
     </rss>
-    """.encode(
-        encoding="utf-8"
-    )
+    """.encode()
 
 
 @pytest.fixture(scope="function", name="partial_proxy_config")

@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Integration tests for jenkins-k8s-operator with auth_proxy."""
+
 import asyncio
 import json
 import logging

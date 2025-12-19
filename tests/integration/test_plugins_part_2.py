@@ -38,9 +38,9 @@ async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
         f"{unit_web_client.web}/job/docker_plugin_test/configure"
     )
     config_page = str(res.content, "utf-8")
-    assert (
-        "Docker Build and Publish" in config_page
-    ), f"docker-build-publish configuration option not found. {config_page}"
+    assert "Docker Build and Publish" in config_page, (
+        f"docker-build-publish configuration option not found. {config_page}"
+    )
 
 
 async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
@@ -56,9 +56,9 @@ async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
     )
     config_page = str(res.content, "utf-8")
 
-    assert (
-        "HTTP Header by reverse proxy" in config_page
-    ), f"reverse-proxy-auth-plugin configuration option not found. {config_page}"
+    assert "HTTP Header by reverse proxy" in config_page, (
+        f"reverse-proxy-auth-plugin configuration option not found. {config_page}"
+    )
 
 
 async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
@@ -73,14 +73,14 @@ async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
         f"{unit_web_client.web}/job/deps_plugin_test/configure"
     )
     job_page = str(res.content, "utf-8")
-    assert (
-        "Invoke Dependency-Check" in job_page
-    ), f"Dependency check job configuration option not found. {job_page}"
+    assert "Invoke Dependency-Check" in job_page, (
+        f"Dependency check job configuration option not found. {job_page}"
+    )
     res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configureTools/")
     tools_page = str(res.content, "utf-8")
-    assert (
-        "Dependency-Check installations" in tools_page
-    ), f"Dependency check tool configuration option not found. {tools_page}"
+    assert "Dependency-Check installations" in tools_page, (
+        f"Dependency check tool configuration option not found. {tools_page}"
+    )
 
 
 async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
@@ -95,9 +95,9 @@ async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
     config_page = str(res.content, "utf-8")
     # The string is now "Global Trusted Pipeline Libraries" and
     # "Global Untrusted Pipeline Libraries" for v727.ve832a_9244dfa_
-    assert (
-        "Pipeline Libraries" in config_page
-    ), f"Groovy libs configuration option not found. {config_page}"
+    assert "Pipeline Libraries" in config_page, (
+        f"Groovy libs configuration option not found. {config_page}"
+    )
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")

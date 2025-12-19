@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Jenkins States."""
+
 import dataclasses
 import logging
 import os
@@ -180,7 +181,9 @@ class ProxyConfig(BaseModel):
             return None
         # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
         return cls(
-            http_proxy=http_proxy, https_proxy=https_proxy, no_proxy=no_proxy  # type: ignore
+            http_proxy=http_proxy,  # type: ignore[arg-type]
+            https_proxy=https_proxy,  # type: ignore[arg-type]
+            no_proxy=no_proxy,
         )
 
 
@@ -220,10 +223,7 @@ class State:
         """
         try:
             time_range_str = typing.cast(str, charm.config.get("restart-time-range"))
-            if time_range_str:
-                restart_time_range = Range.from_str(time_range_str)
-            else:
-                restart_time_range = None
+            restart_time_range = Range.from_str(time_range_str) if time_range_str else None
         except InvalidTimeRangeError as exc:
             logger.error("Invalid config value for restart-time-range, %s", exc)
             raise CharmConfigInvalidError("Invalid config value for restart-time range.") from exc
