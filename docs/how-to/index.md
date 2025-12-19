@@ -20,6 +20,7 @@ and using the Jenkins K8s charm.
 
 ## Upgrade and redeployment 
 * [Backup and restore]
+* [Upgrade]
 * [Redeploy]
 
 
@@ -36,4 +37,5 @@ and using the Jenkins K8s charm.
 [Rotate credentials]: rotate-credentials.md
 [Integrate with IAM]: integrate-with-iam.md
 [Backup and restore]: backup-and-restore-jenkins.md
+[Upgrade]: upgrade.md
 [Redeploy]: redeploy.md
