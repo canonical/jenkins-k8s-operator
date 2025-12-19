@@ -48,11 +48,6 @@ parts:
     - templates/jenkins-config.xml
     - templates/logging.properties
 
-  dump:
-    plugin: templates
-    source: .
-    stage:
-    - templates
 platforms:
   ubuntu@24.04:amd64:
   ubuntu@22.04:amd64:
