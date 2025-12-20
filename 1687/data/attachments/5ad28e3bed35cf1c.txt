@@ -1,0 +1,38 @@
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/focal/grafana-k8s-160
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  grafana-k8s/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  grafana-k8s/0 [idle] maintenance: installing charm software
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  grafana-k8s/0 [idle] maintenance: installing charm software
+[33mWARNING [0m juju.model:__init__.py:1683 relate is deprecated and will be removed. Use integrate instead.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  grafana-k8s/0 [idle] active: 
+  jenkins-k8s/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  grafana-k8s/0 [idle] active: 
+  jenkins-k8s/0 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model    Controller                Cloud/Region        Version  SLA          Timestamp
+testing  github-pr-70f2f-microk8s  microk8s/localhost  3.6.12   unsupported  15:33:12Z
+
+App             Version  Status  Scale  Charm           Channel   Rev  Address         Exposed  Message
+grafana-k8s     9.5.21   active      1  grafana-k8s     1/stable  160  10.152.183.214  no       
+jenkins-k8s     2.528.3  active      1  jenkins-k8s                 0  10.152.183.186  no       
+loki-k8s        2.9.6    active      1  loki-k8s        1/stable  199  10.152.183.237  no       
+prometheus-k8s  2.52.0   active      1  prometheus-k8s  1/stable  247  10.152.183.66   no       
+
+Unit               Workload  Agent  Address     Ports  Message
+grafana-k8s/0*     active    idle   10.1.53.23         
+jenkins-k8s/0*     active    idle   10.1.53.13         
+loki-k8s/0*        active    idle   10.1.53.20         
+prometheus-k8s/0*  active    idle   10.1.53.16         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+unit-loki-k8s-0: 15:28:47 ERROR juju.worker.uniter pebble poll failed for container "node-exporter": failed to send pebble-ready event: terminated
+unit-jenkins-k8s-0: 15:30:23 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+model-fb0e8fb2-abf3-49d4-86a6-f2d0a94fa723: 15:30:24 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
