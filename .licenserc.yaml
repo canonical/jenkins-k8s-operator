@@ -5,36 +5,39 @@ header:
     content: |
       Copyright [year] [owner]
       See LICENSE file for licensing details.
+    pattern: |
+      Copyright \d{4} Canonical Ltd.
+      See LICENSE file for licensing details.
   paths:
-  - '**'
+    - "**"
   paths-ignore:
-  - '.github/**'
-  - '**/.gitkeep'
-  - '**/*.cfg'
-  - '**/*.conf'
-  - '**/*.j2'
-  - '**/*.json'
-  - '**/*.md'
-  - '**/*.rule'
-  - '**/*.tmpl'
-  - '**/*.txt'
-  - '**/*.xml'
-  - '.codespellignore'
-  - '.dockerignore'
-  - '.flake8'
-  - '.jujuignore'
-  - '.gitignore'
-  - '.licenserc.yaml'
-  - '.trivyignore'
-  - '.woke.yaml'
-  - '.woke.yml'
-  - 'CODEOWNERS'
-  - 'icon.svg'
-  - 'LICENSE'
-  - 'trivy.yaml'
-  - 'zap_rules.tsv'
-  - 'lib/**'
-  - tests/integration/files/dex.yaml
-  - tests/integration/files/identity-bundle-edge-patched.yaml
-  - 'uv.lock'
+    - ".github/**"
+    - "**/.gitkeep"
+    - "**/*.cfg"
+    - "**/*.conf"
+    - "**/*.j2"
+    - "**/*.json"
+    - "**/*.md"
+    - "**/*.rule"
+    - "**/*.tmpl"
+    - "**/*.txt"
+    - "**/*.xml"
+    - ".codespellignore"
+    - ".dockerignore"
+    - ".flake8"
+    - ".jujuignore"
+    - ".gitignore"
+    - ".licenserc.yaml"
+    - ".trivyignore"
+    - ".woke.yaml"
+    - ".woke.yml"
+    - "CODEOWNERS"
+    - "icon.svg"
+    - "LICENSE"
+    - "trivy.yaml"
+    - "zap_rules.tsv"
+    - "lib/**"
+    - tests/integration/files/dex.yaml
+    - tests/integration/files/identity-bundle-edge-patched.yaml
+    - "uv.lock"
   comment: on-failure
