@@ -1,0 +1,197 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"
+    arrange: given a Jenkins charm with rebuilder plugin installed.
+    act: when a job is built and a rebuild is triggered.
+    assert: last job is rebuilt.
+    ","36362","test_rebuilder_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_2","",""
+"
+    arrange: given jenkins-k8s-agent and jenkins server charms.
+    act:
+        1. when the server charm is related to the k8s agent charm.
+        2. when the relation is removed.
+    assert:
+        1. the relation succeeds and the k8s agent is able to run jobs successfully.
+        2. the k8s agent is deregistered from Jenkins.
+    ","65401","test_jenkins_k8s_agent_relation","tests.integration","2026-01-17","passed","2026-01-17","","test_k8s_agent","",""
+"
+    arrange: Deploy jenkins, the authentication bundle.
+    act: log in via IDP UI
+    assert: the browser is redirected to the Jenkins URL with response code 200
+    ","31","test_auth_proxy_integration_authorized","tests.integration","2026-01-17","broken","2026-01-17","","test_auth_proxy","",""
+"
+    arrange: a bare Jenkins charm.
+    act: Add a job, scale the charm to 0 unit and scale back to 1.
+    assert: The job configuration persists and is the same as the one used.
+    ","76846","test_storage_mount","tests.integration","2026-01-17","passed","2026-01-17","","test_jenkins","",""
+"
+    arrange: given charm has been built, deployed and a job has been defined.
+
+    act: get Jenkins' version and upgrade the charm.
+
+    assert: if Jenkins versions differ, the job persists.
+    ","71290","test_jenkins_upgrade_check_job","tests.integration","2026-01-17","passed","2026-01-17","","test_upgrade","",""
+"
+    arrange: given a jenkins deployed under juju model with proxy settings.
+    act: when plugin manager page w/ proxy settings is fetched.
+    assert: proxy server host and port exists in configuration value.
+    ","1186","test_jenkins_ui_proxy_config","tests.integration","2026-01-17","passed","2026-01-17","","test_proxy","",""
+"
+    arrange: a Jenkins deployment.
+    act: -
+    assert: The UI with update suggestion does not pop out
+    ","563","test_jenkins_update_ui_disabled","tests.integration","2026-01-17","passed","2026-01-17","","test_jenkins","",""
+"
+    arrange: given a Jenkins charm with openid plugin installed.
+    act: when an openid endpoint is validated using the plugin.
+    assert: the response returns a 200 status code.
+    ","26574","test_openid_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_2","",""
+"
+    arrange: given a Jenkins charm with kubernetes plugin installed and credentials from microk8s.
+    act: Run a job using an agent provided by the kubernetes plugin.
+    assert: Job succeeds.
+    ","51465","test_kubernetes_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_2","",""
+"
+    arrange: given a Jenkins charm with reverse-proxy-auth-plugin plugin installed.
+    act: when the security configuration is accessed.
+    assert: reverse-proxy-auth-plugin plugin option exists.
+    ","26669","test_reverse_proxy_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_2","",""
+"
+    arrange: given an active Jenkins charm's unit ip.
+    act: when web application is accessed
+    assert: wizard is bypassed and a login screen is shown.
+    ","7","test_jenkins_wizard_bypass","tests.integration","2026-01-17","passed","2026-01-17","","test_k8s_agent","",""
+"
+    arrange: given a Jenkins charm with dependency-check-jenkins-plugin plugin installed.
+    act: when a job configuration page is accessed.
+    assert: dependency-check-jenkins-plugin plugin option exists.
+    ","27003","test_dependency_check_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_2","",""
+"
+    arrange: given a jenkins charm with postbuildscript plugin installed and related to an agent.
+    act: when a postbuildscript job that writes a file to a /tmp folder is dispatched.
+    assert: the file is written on the /tmp folder of the job host.
+    ","36322","test_postbuildscript_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_1","",""
+"
+    arrange: given a cross controller cross model jenkins machine agent with an offer.
+    act:
+        1. when the server charm is related to the machine agent charm.
+        2. when the relation is removed.
+    assert:
+        1. the relation succeeds and the machine agent is able to run jobs successfully.
+        2. the machine agent is deregistered from Jenkins.
+    ","81444","test_jenkins_machine_agent_relation","tests.integration","2026-01-17","passed","2026-01-17","","test_machine_agent","",""
+"
+    arrange: deploy the Jenkins charm and establish relations with prometheus.
+    act: send a request to the metrics endpoint (/prometheus).
+    assert: prometheus metrics endpoint for prometheus is active and prometheus has active scrape
+        targets.
+    ","32","test_prometheus_integration","tests.integration","2026-01-17","passed","2026-01-17","","test_cos","",""
+"
+    arrange: after Jenkins charm has been deployed and relations established.
+    act: loki charm joins relation
+    assert: loki joins relation successfully, logs are being output to container and to files for
+        loki to scrape.
+    ","47","test_loki_integration","tests.integration","2026-01-17","passed","2026-01-17","","test_cos","",""
+"
+    arrange: given a jenkins server with matrix-combinations-parameter plugin installed.
+    act: when a multi-configuration job is created.
+    assert: a matrix based test is created.
+    ","26835","test_matrix_combinations_parameter_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_1","",""
+"
+    arrange: given jenkins charm with ssh_agent plugin installed.
+    act: when a job is being configured.
+    assert: ssh-agent configuration is visible.
+    ","27525","test_ssh_agent_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_1","",""
+"
+    arrange: deploy the Jenkins charm and establish relations via ingress.
+    act: send a request to the ingress in /.
+    assert: the response succeeds.
+    ","43304","test_ingress_integration","tests.integration","2026-01-17","passed","2026-01-17","","test_ingress","",""
+"
+    arrange: given a jenkins charm with blueocean plugin installed.
+    act: when blueocean frontend url is accessed.
+    assert: 200 response is returned.
+    ","203","test_blueocean_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_1","",""
+"
+    arrange: given a Jenkins charm with thinbackup plugin installed and backup configured.
+    act: when a backup action is run.
+    assert: the backup is made on a configured directory.
+    ","37104","test_thinbackup_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_1","",""
+"
+    arrange: given a Jenkins charm with declarative pipeline plugin installed.
+    act: Run a job using a declarative pipeline script.
+    assert: Job succeeds.
+    ","43136","test_pipeline_model_definition_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_2","",""
+"
+    arrange: given a jenkins API session that is connected.
+    act: when rotate password action is called.
+    assert: the session is invalidated and new password is returned.
+    ","3131","test_rotate_password_action","tests.integration","2026-01-17","passed","2026-01-17","","test_jenkins","",""
+"
+    arrange: after Jenkins charm has been deployed and storage mounted.
+    act: get jenkins_home directory owner.
+    assert: jenkins_home belongs to jenkins user.
+    ","1019","test_storage_mount_owner","tests.integration","2026-01-17","passed","2026-01-17","","test_jenkins","",""
+"
+    arrange: given a Jenkins charm with oic-auth plugin installed and a Keycloak oidc server.
+    act:
+        1. when jenkins security realm is configured with oidc server and login page is requested.
+        2. when jenkins security realm is reset and login page is requested.
+    assert:
+        1. a redirection to Keycloak SSO is made.
+        2. native Jenkins login ui is loaded.
+    ","26935","test_openid_connect_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_2","",""
+"
+    arrange: given a jenkins charm with plugin config and plugins installed not in the config.
+    act: when update_status_hook is fired.
+    assert: the plugin is uninstalled and the system message is set on Jenkins.
+    ","50683","test_jenkins_plugins_config","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_1","",""
+"
+    arrange: given an ldap server with user setup and ldap plugin installed on Jenkins server.
+    act: when ldap plugin is configured and the user is queried.
+    assert: the user is authenticated successfully.
+    ","26260","test_ldap_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_1","",""
+"
+    arrange: given jenkins charm with frozen time to 15:00 UTC.
+    act: when restart-time-range between 3AM to 5AM is applied.
+    assert: the maintenance (plugins removal) does not take place.
+    ","27018","test_jenkins_automatic_update_out_of_range","tests.integration","2026-01-17","passed","2026-01-17","","test_jenkins","",""
+"
+    arrange: given a Jenkins charm with docker-build-publish plugin installed.
+    act: when a job configuration page is accessed.
+    assert: docker-build-publish plugin option exists.
+    ","27034","test_docker_build_publish_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_2","",""
+"
+    arrange: given a jenkins charm with git plugin installed.
+    act: when a job is dispatched with a git workflow.
+    assert: job completes successfully.
+    ","26465","test_git_plugin_k8s_agent","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_1","",""
+"
+    arrange: deploy the Jenkins charm and establish auth_proxy relations.
+    act: send a request Jenkins.
+    assert: a 401 is returned.
+    ","51","test_auth_proxy_integration_returns_not_authorized","tests.integration","2026-01-17","passed","2026-01-17","","test_auth_proxy","",""
+"
+    arrange: given a Jenkins charm with bazaar plugin installed.
+    act: when a job configuration page is accessed.
+    assert: bazaar plugin option exists.
+    ","27253","test_bzr_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_1","",""
+"
+    arrange: deploy the Jenkins charm, ingress, and a machine agent.
+    act: integrate the charms with each other.
+    assert: All units should be in active status.
+    ","73101","test_agent_discovery_ingress_integration","tests.integration","2026-01-17","passed","2026-01-17","","test_external_agent","",""
+"
+    arrange: after Jenkins charm has been deployed and relations established with Grafana.
+    act: grafana charm joins relation
+    assert: grafana Jenkins dashboard can be found
+    ","2048","test_grafana_integration","tests.integration","2026-01-17","passed","2026-01-17","","test_cos","",""
+"
+    arrange: given a Jenkins charm with pipeline-groovy-lib plugin installed.
+    act: when a job configuration page is accessed.
+    assert: pipeline-groovy-lib plugin option exists.
+    ","27071","test_groovy_libs_plugin","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_2","",""
+"
+    arrange: given a Jenkins with plugins being installed through UI.
+    act: when update_status_hook is fired.
+    assert: the plugin removal delayed warning is logged until plugin installation is settled.
+    ","88495","test_plugins_remove_delay","tests.integration","2026-01-17","passed","2026-01-17","","test_plugins_part_1","",""
