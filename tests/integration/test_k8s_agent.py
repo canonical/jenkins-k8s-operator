@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 async def test_jenkins_wizard_bypass(web_address: str):
-    """
+    """Verify Jenkins wizard is bypassed and login is shown.
+
     arrange: given an active Jenkins charm's unit ip.
     act: when web application is accessed
     assert: wizard is bypassed and a login screen is shown.
@@ -40,7 +41,8 @@ async def test_jenkins_k8s_agent_relation(
     extra_jenkins_k8s_agents: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ):
-    """
+    """Verify k8s agent relation lifecycle and deregistration.
+
     arrange: given jenkins-k8s-agent and jenkins server charms.
     act:
         1. when the server charm is related to the k8s agent charm.

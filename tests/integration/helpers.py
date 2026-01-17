@@ -459,6 +459,7 @@ def create_secret_file_credentials(
     unit_web_client: UnitWebClient, kube_config: str
 ) -> typing.Optional[str]:
     """Use the jenkins client to create a new secretfile credential.
+
     plain-credentials plugin is required.
 
     Args:
@@ -502,6 +503,7 @@ def create_kubernetes_cloud(
     unit_web_client: UnitWebClient, kube_config_credentials_id: str
 ) -> typing.Optional[str]:
     """Use the Jenkins client to add a Kubernetes cloud.
+
     For dynamic agent provisioning through pods.
 
     Args:
