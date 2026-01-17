@@ -28,9 +28,7 @@ async def test_jenkins_wizard_bypass(web_address: str):
 
     # This should not appear since when Jenkins setup is complete, the wizard should have been
     # bypassed.
-    assert "Unlock Jenkins" not in str(
-        response.content
-    ), "Jenkins setup wizard not bypassed."
+    assert "Unlock Jenkins" not in str(response.content), "Jenkins setup wizard not bypassed."
     assert "Sign in to Jenkins" in str(response.content)
 
 
@@ -75,9 +73,5 @@ async def test_jenkins_k8s_agent_relation(
     )
 
     # 2. Assert that the agent nodes are deregistered from Jenkins.
-    assert not any(
-        jenkins_k8s_agents.name in key for key in jenkins_client.nodes.iterkeys()
-    )
-    assert not any(
-        extra_jenkins_k8s_agents.name in key for key in jenkins_client.nodes.iterkeys()
-    )
+    assert not any(jenkins_k8s_agents.name in key for key in jenkins_client.nodes.iterkeys())
+    assert not any(extra_jenkins_k8s_agents.name in key for key in jenkins_client.nodes.iterkeys())
