@@ -35,9 +35,7 @@ async def test_jenkins_machine_agent_relation(
         f"{application.name}:{state.AGENT_RELATION}",
         f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
-    await machine_model.wait_for_idle(
-        apps=[jenkins_machine_agents.name], wait_for_active=True
-    )
+    await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
     # pylint: enable=duplicate-code
 
