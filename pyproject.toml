@@ -41,7 +41,7 @@ lint = [
   "pytest",
   "pytest-asyncio",
   "pytest-operator",
-  "pytest-playwright==0.4.4",
+  "pytest-playwright==0.7.2",
   "python-keycloak==3.12",
   "ruff",
   "tenacity==8.5.0",
@@ -71,7 +71,7 @@ integration = [
   "pytest",
   "pytest-asyncio",
   "pytest-operator",
-  "pytest-playwright==0.4.4",
+  "pytest-playwright==0.7.2",
   "python-keycloak==3.12",
   "tenacity==8.5.0",
 ]
