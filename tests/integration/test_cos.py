@@ -56,9 +56,9 @@ def log_files_exist(
         True if log files with logs exists. False otherwise.
     """
     series = requests.get(f"http://{unit_address}:3100/loki/api/v1/series", timeout=10).json()
-    log_files = set(
+    log_files = {
         series_data["filename"] for series_data in series["data"] if "filename" in series_data
-    )
+    }
     logger.info("Loki log files: %s", log_files)
     if not all(filename in log_files for filename in filenames):
         return False
@@ -120,7 +120,7 @@ def datasources_exist(
     response = loggedin_session.get(
         f"http://{unit_address}:3000/api/datasources", timeout=10
     ).json()
-    datasource_types = set(datasource["type"] for datasource in response)
+    datasource_types = {datasource["type"] for datasource in response}
     return all(datasource in datasource_types for datasource in datasources)
 
 

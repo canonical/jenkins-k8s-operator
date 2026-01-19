@@ -50,13 +50,13 @@ async def test_jenkins_automatic_update_out_of_range(
         f"-- {' '.join(libfaketime_env)} {' '.join(update_status_env)} ./dispatch"
     )
     await action.wait()
-    assert (
-        action.status == "completed"
-    ), f"Failed to execute update-status-hook, {action.data['message']}"
+    assert action.status == "completed", (
+        f"Failed to execute update-status-hook, {action.data['message']}"
+    )
 
-    assert unit_web_client.client.has_plugin(
-        extra_plugin
-    ), "additionally installed plugin cleanedup."
+    assert unit_web_client.client.has_plugin(extra_plugin), (
+        "additionally installed plugin cleanedup."
+    )
 
 
 async def test_rotate_password_action(jenkins_user_client: jenkinsapi.jenkins.Jenkins, unit: Unit):

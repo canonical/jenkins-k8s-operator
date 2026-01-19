@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Jenkins charm actions."""
+
 import logging
 
 import ops

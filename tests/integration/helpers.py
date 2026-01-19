@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Helpers for Jenkins-k8s-operator charm integration tests."""
+
 import inspect
 import logging
 import secrets
@@ -41,7 +42,11 @@ async def install_plugins(
         unit_web_client: The wrapper around unit, web_address and jenkins_client.
         plugins: Desired plugins to install.
     """
-    unit, web, client = unit_web_client.unit, unit_web_client.web, unit_web_client.client
+    unit, web, client = (
+        unit_web_client.unit,
+        unit_web_client.web,
+        unit_web_client.client,
+    )
     plugins = tuple(plugin for plugin in plugins if not client.has_plugin(plugin))
     if not plugins:
         return
@@ -142,10 +147,8 @@ def assert_job_success(
         agent_name: The registered Jenkins agent node to check.
         test_target_label: The Jenkins agent node label.
     """
-    nodes = client.get_nodes()
-    assert any(
-        (agent_name in key for key in nodes.keys())
-    ), f"Jenkins {agent_name} node not registered."
+    nodes = client.nodes.iterkeys()
+    assert any(agent_name in key for key in nodes), f"Jenkins {agent_name} node not registered."
 
     job = client.create_job(agent_name, gen_test_job_xml(test_target_label))
     queue_item = job.invoke()
@@ -442,6 +445,7 @@ def create_secret_file_credentials(
     unit_web_client: UnitWebClient, kube_config: str
 ) -> typing.Optional[str]:
     """Use the jenkins client to create a new secretfile credential.
+
     plain-credentials plugin is required.
 
     Args:
@@ -483,6 +487,7 @@ def create_kubernetes_cloud(
     unit_web_client: UnitWebClient, kube_config_credentials_id: str
 ) -> typing.Optional[str]:
     """Use the Jenkins client to add a Kubernetes cloud.
+
     For dynamic agent provisioning through pods.
 
     Args:

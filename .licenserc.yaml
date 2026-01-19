@@ -39,4 +39,5 @@ header:
     - "lib/**"
     - tests/integration/files/dex.yaml
     - tests/integration/files/identity-bundle-edge-patched.yaml
+    - "uv.lock"
   comment: on-failure
