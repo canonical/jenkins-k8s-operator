@@ -1005,7 +1005,7 @@ integration = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-operator" },
-    { name = "pytest-playwright", specifier = "==0.4.4" },
+    { name = "pytest-playwright", specifier = "==0.7.2" },
     { name = "python-keycloak", specifier = "==3.12" },
     { name = "tenacity", specifier = "==8.5.0" },
 ]
@@ -1022,7 +1022,7 @@ lint = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-operator" },
-    { name = "pytest-playwright", specifier = "==0.4.4" },
+    { name = "pytest-playwright", specifier = "==0.7.2" },
     { name = "python-keycloak", specifier = "==3.12" },
     { name = "ruff" },
     { name = "tenacity", specifier = "==8.5.0" },
@@ -1812,7 +1812,7 @@ wheels = [
 
 [[package]]
 name = "pytest-playwright"
-version = "0.4.4"
+version = "0.7.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "playwright" },
@@ -1820,9 +1820,9 @@ dependencies = [
     { name = "pytest-base-url" },
     { name = "python-slugify" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/a8/810ff67ec8ec14c3aa598936911130fb335acde9b7102b775ef639be90d5/pytest-playwright-0.4.4.tar.gz", hash = "sha256:5488db4cc49028491c5130af0a2bb6b1d0b222a202217f6d14491d4c9aa67ff9", size = 19917, upload-time = "2024-02-02T13:01:20.053Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/6b/913e36aa421b35689ec95ed953ff7e8df3f2ee1c7b8ab2a3f1fd39d95faf/pytest_playwright-0.7.2.tar.gz", hash = "sha256:247b61123b28c7e8febb993a187a07e54f14a9aa04edc166f7a976d88f04c770", size = 16928, upload-time = "2025-11-24T03:43:22.53Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a1/85/323568cd7f139551bd9b9a776e67ffbd5164a254870d27c3645ecc47a7d8/pytest_playwright-0.4.4-py3-none-any.whl", hash = "sha256:df306f3a60a8631a3cfde1b95a2ed5a89203a3408dfa1154de049ca7de87c90b", size = 10668, upload-time = "2024-02-02T13:01:18.472Z" },
+    { url = "https://files.pythonhosted.org/packages/76/61/4d333d8354ea2bea2c2f01bad0a4aa3c1262de20e1241f78e73360e9b620/pytest_playwright-0.7.2-py3-none-any.whl", hash = "sha256:8084e015b2b3ecff483c2160f1c8219b38b66c0d4578b23c0f700d1b0240ea38", size = 16881, upload-time = "2025-11-24T03:43:24.423Z" },
 ]
 
 [[package]]
