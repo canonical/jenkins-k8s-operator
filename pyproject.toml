@@ -42,7 +42,7 @@ lint = [
   "pytest-asyncio",
   "pytest-operator",
   "pytest-playwright==0.7.2",
-  "python-keycloak==3.12",
+  "python-keycloak==7.0.2",
   "ruff",
   "tenacity==8.5.0",
   "toml",
@@ -72,7 +72,7 @@ integration = [
   "pytest-asyncio",
   "pytest-operator",
   "pytest-playwright==0.7.2",
-  "python-keycloak==3.12",
+  "python-keycloak==7.0.2",
   "tenacity==8.5.0",
 ]
 static = [
