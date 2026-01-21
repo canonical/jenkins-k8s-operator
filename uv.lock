@@ -749,6 +749,28 @@ wheels = [
 ]
 
 [[package]]
+name = "h2"
+version = "4.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "hpack" },
+    { name = "hyperframe" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1d/17/afa56379f94ad0fe8defd37d6eb3f89a25404ffc71d4d848893d270325fc/h2-4.3.0.tar.gz", hash = "sha256:6c59efe4323fa18b47a632221a1888bd7fde6249819beda254aeca909f221bf1", size = 2152026, upload-time = "2025-08-23T18:12:19.778Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/b2/119f6e6dcbd96f9069ce9a2665e0146588dc9f88f29549711853645e736a/h2-4.3.0-py3-none-any.whl", hash = "sha256:c438f029a25f7945c69e0ccf0fb951dc3f73a5f6412981daee861431b70e2bdd", size = 61779, upload-time = "2025-08-23T18:12:17.779Z" },
+]
+
+[[package]]
+name = "hpack"
+version = "4.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/48/71de9ed269fdae9c8057e5a4c0aa7402e8bb16f2c6e90b3aa53327b113f8/hpack-4.1.0.tar.gz", hash = "sha256:ec5eca154f7056aa06f196a557655c5b009b382873ac8d1e66e79e87535f1dca", size = 51276, upload-time = "2025-01-22T21:44:58.347Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/c6/80c95b1b2b94682a72cbdbfb85b81ae2daffa4291fbfa1b1464502ede10d/hpack-4.1.0-py3-none-any.whl", hash = "sha256:157ac792668d995c657d93111f46b4535ed114f0c9c8d672271bbec7eae1b496", size = 34357, upload-time = "2025-01-22T21:44:56.92Z" },
+]
+
+[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -776,6 +798,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad", size = 73517, upload-time = "2024-12-06T15:37:21.509Z" },
 ]
 
+[package.optional-dependencies]
+http2 = [
+    { name = "h2" },
+]
+
 [[package]]
 name = "hvac"
 version = "2.4.0"
@@ -786,6 +813,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e2/57/b46c397fb3842cfb02a44609aa834c887f38dd75f290c2fc5a34da4b2fee/hvac-2.4.0.tar.gz", hash = "sha256:e0056ad9064e7923e874e6769015b032580b639e29246f5ab1044f7959c1c7e0", size = 332543, upload-time = "2025-10-30T12:57:47.512Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/55/33/71e45a6bd6875f44a26f99da31c63b6840123e88bedf2c0b1ce429b8be12/hvac-2.4.0-py3-none-any.whl", hash = "sha256:008db5efd8c2f77bd37d2368ea5f713edceae1c65f11fd608393179478649e0f", size = 155921, upload-time = "2025-10-30T12:57:46.253Z" },
+]
+
+[[package]]
+name = "hyperframe"
+version = "6.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/02/e7/94f8232d4a74cc99514c13a9f995811485a6903d48e5d952771ef6322e30/hyperframe-6.1.0.tar.gz", hash = "sha256:f630908a00854a7adeabd6382b43923a4c4cd4b821fcb527e6ab9e15382a3b08", size = 26566, upload-time = "2025-01-22T21:41:49.302Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/30/47d0bf6072f7252e6521f3447ccfa40b421b6824517f82854703d0f5a98b/hyperframe-6.1.0-py3-none-any.whl", hash = "sha256:b03380493a519fce58ea5af42e4a42317bf9bd425596f7a0835ffce80f1a42e5", size = 13007, upload-time = "2025-01-22T21:41:47.295Z" },
 ]
 
 [[package]]
@@ -1007,7 +1043,7 @@ integration = [
     { name = "jinja2", specifier = "==3.1.4" },
     { name = "jubilant" },
     { name = "juju", specifier = ">=3,<4" },
-    { name = "lightkube", specifier = "==0.15.4" },
+    { name = "lightkube", specifier = "==0.19.1" },
     { name = "macaroonbakery" },
     { name = "pyotp", specifier = "==2.9" },
     { name = "pytest" },
@@ -1022,7 +1058,7 @@ lint = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "jinja2", specifier = "==3.1.4" },
     { name = "jubilant" },
-    { name = "lightkube", specifier = "==0.15.4" },
+    { name = "lightkube", specifier = "==0.19.1" },
     { name = "mypy" },
     { name = "ops", extras = ["testing"] },
     { name = "pep8-naming" },
@@ -1169,16 +1205,16 @@ wheels = [
 
 [[package]]
 name = "lightkube"
-version = "0.15.4"
+version = "0.19.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "lightkube-models" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8b/ab/0c0640f8cc862933763b40d2aa899b9862ee97dbb6dfd2dd1c57ab72e5f7/lightkube-0.15.4.tar.gz", hash = "sha256:fe7939f8da5b68d80809243c9abf601fca2e5425228bb02c2ad23ed3e56401a8", size = 44224, upload-time = "2024-08-25T10:09:10.705Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/44/fbac9db896899b687b078cdd053462d56df05de0e27523b45dafd495fcf5/lightkube-0.19.1.tar.gz", hash = "sha256:4c8526068024c194c02fbc0ca6021922feb4b1b9d741d330129f873b27e0fe97", size = 29790, upload-time = "2026-01-08T14:15:53.937Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ff/e9/374f895aa42c6b9b34755996764549daed424d30841469a1530bd0429a75/lightkube-0.15.4-py3-none-any.whl", hash = "sha256:7dde49694f2933b757ee6dfee0e028a56d7a13f47476bf54a21ec7cee343b09b", size = 38033, upload-time = "2024-08-25T10:09:13.15Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/ef/7faeb245e50e79452bc1f52b90931e7f6ccbcc19c884721f352c7abb4321/lightkube-0.19.1-py3-none-any.whl", hash = "sha256:49fef08a1c7aa42082820111ffd5dbbaf78f54c99385810690fc9d94eef5c80d", size = 42396, upload-time = "2026-01-08T14:15:56.043Z" },
 ]
 
 [[package]]
