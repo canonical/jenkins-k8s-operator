@@ -31,7 +31,7 @@ fmt = [
 lint = [
   "codespell",
   "httpx==0.28.1",
-  "jinja2==3.1.4",
+  "jinja2==3.1.6",
   "jubilant",
   "lightkube==0.19.1",
   "mypy",
@@ -62,7 +62,7 @@ integration = [
   "allure-pytest>=2.8.18",
   "allure-pytest-collection-report @ git+https://github.com/canonical/data-platform-workflows@v24.0.0#subdirectory=python/pytest_plugins/allure_pytest_collection_report",
   "httpx==0.28.1",
-  "jinja2==3.1.4",
+  "jinja2==3.1.6",
   "jubilant",
   "juju>=3,<4",
   "lightkube==0.19.1",
