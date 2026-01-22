@@ -60,7 +60,7 @@ parts:
     build-environment:
       # Modifying the following format will break renovate configuration for auto-patching Jenkins.
       # See renovate.json "customManagers" section.
-      - JENKINS_VERSION: 2.528.3
+      - JENKINS_VERSION: 2.541.1
       - JENKINS_PLUGIN_MANAGER_VERSION: 2.13.2
     override-build: |
       mkdir -p ${CRAFT_PART_INSTALL}/{srv/jenkins/,etc/default/jenkins/}
