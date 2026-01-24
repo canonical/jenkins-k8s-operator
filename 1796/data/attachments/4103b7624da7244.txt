@@ -1,0 +1,218 @@
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m pytest_operator.plugin:plugin.py:806 Connecting to existing model github-pr-86e07-microk8s:testing on unspecified cloud
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m tests.integration.conftest:conftest.py:85 Available charms: ['./jenkins-k8s_ubuntu@22.04-amd64.charm', './jenkins-k8s_ubuntu@24.04-amd64.charm'], using: ./jenkins-k8s_ubuntu@24.04-amd64.charm
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:jenkins-k8s-0
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [idle] maintenance: Installing Jenkins.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/focal/traefik-k8s-266
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/focal/traefik-k8s-266
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  agent-discovery-traefik/0 [allocating] waiting: installing agent
+  server-traefik/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  agent-discovery-traefik/0 [allocating] waiting: installing agent
+  server-traefik/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  agent-discovery-traefik/0 [executing] maintenance: restarting traefik...
+  server-traefik/0 [idle] blocked: Traefik load balancer is unable to obtain an IP or hostname from the cluster.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  agent-discovery-traefik/0 [idle] active: Serving at http://10.15.119.2
+  server-traefik/0 [idle] active: Serving at http://10.15.119.3
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/noble/jenkins-agent-92
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [allocating] waiting: waiting for machine
+  jenkins-agent-eadh/1 [allocating] waiting: waiting for machine
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [allocating] waiting: waiting for machine
+  jenkins-agent-eadh/1 [allocating] waiting: waiting for machine
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [allocating] waiting: waiting for machine
+  jenkins-agent-eadh/1 [allocating] waiting: waiting for machine
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [allocating] waiting: waiting for machine
+  jenkins-agent-eadh/1 [allocating] waiting: waiting for machine
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [executing] maintenance: installing charm software
+  jenkins-agent-eadh/1 [executing] maintenance: installing charm software
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] blocked: Waiting for relation.
+  jenkins-agent-eadh/1 [idle] blocked: Waiting for relation.
+[33mWARNING [0m juju.model:__init__.py:1683 relate is deprecated and will be removed. Use integrate instead.
+[33mWARNING [0m juju.model:__init__.py:1683 relate is deprecated and will be removed. Use integrate instead.
+[33mWARNING [0m juju.model:__init__.py:1683 relate is deprecated and will be removed. Use integrate instead.
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] blocked: Waiting for relation.
+  jenkins-agent-eadh/1 [idle] blocked: Waiting for relation.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] waiting: Waiting for complete relation data.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] waiting: Waiting for complete relation data.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] waiting: Waiting for complete relation data.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] waiting: Waiting for complete relation data.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] waiting: Waiting for complete relation data.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] waiting: Waiting for complete relation data.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-agent-eadh/0 [idle] active: 
+  jenkins-agent-eadh/1 [idle] error: hook failed: "update-status"
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model    Controller                Cloud/Region        Version  SLA          Timestamp
+testing  github-pr-86e07-microk8s  microk8s/localhost  3.6.13   unsupported  15:39:35Z
+
+SAAS   Status      Store      URL
+agent  terminated  localhost  admin/jenkins-agent-machine-46aa.agent
+
+App                      Version  Status  Scale  Charm        Channel      Rev  Address         Exposed  Message
+agent-discovery-traefik  2.11.0   active      1  traefik-k8s  latest/edge  266  10.152.183.242  no       Serving at http://10.15.119.2
+jenkins-k8s              2.541.1  error       1  jenkins-k8s                 0  10.152.183.143  no       hook failed: "agent-relation-changed"
+server-traefik           2.11.0   active      1  traefik-k8s  latest/edge  266  10.152.183.51   no       Serving at http://10.15.119.3
+
+Unit                        Workload  Agent  Address     Ports  Message
+agent-discovery-traefik/0*  active    idle   10.1.53.18         Serving at http://10.15.119.2
+jenkins-k8s/0*              error     idle   10.1.53.14         hook failed: "agent-relation-changed"
+server-traefik/0*           active    idle   10.1.53.19         Serving at http://10.15.119.3
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+unit-agent-discovery-traefik-0: 15:25:59 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:25:59 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:25:59 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:00 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-server-traefik-0: 15:26:00 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:00 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:00 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:00 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:01 ERROR unit.agent-discovery-traefik/0.juju-log peers:0: Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:01 ERROR unit.agent-discovery-traefik/0.juju-log peers:0: Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:01 ERROR unit.agent-discovery-traefik/0.juju-log peers:0: Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:01 ERROR unit.agent-discovery-traefik/0.juju-log peers:0: Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-server-traefik-0: 15:26:01 ERROR unit.server-traefik/0.juju-log peers:1: Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:01 ERROR unit.server-traefik/0.juju-log peers:1: Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:01 ERROR unit.server-traefik/0.juju-log peers:1: Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:01 ERROR unit.server-traefik/0.juju-log peers:1: Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:02 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:02 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:02 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:02 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-server-traefik-0: 15:26:02 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:02 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:02 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:02 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:03 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:03 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:03 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-agent-discovery-traefik-0: 15:26:03 ERROR unit.agent-discovery-traefik/0.juju-log Failed to fetch LoadBalancer agent-discovery-traefik-lb: services "agent-discovery-traefik-lb" not found
+unit-server-traefik-0: 15:26:03 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:03 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:03 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-server-traefik-0: 15:26:03 ERROR unit.server-traefik/0.juju-log Failed to fetch LoadBalancer server-traefik-lb: services "server-traefik-lb" not found
+unit-jenkins-k8s-0: 15:34:48 ERROR unit.jenkins-k8s/0.juju-log agent:4: Uncaught exception while in charm code:
+Traceback (most recent call last):
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/src/jenkins.py", line 237, in wait_ready
+    _wait_for(self._is_ready, timeout=timeout, check_interval=check_interval)
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/src/jenkins.py", line 695, in _wait_for
+    raise TimeoutError()
+TimeoutError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/src/charm.py", line 208, in <module>
+    ops.main.main(JenkinsK8sOperatorCharm)
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/venv/lib/python3.12/site-packages/ops/__init__.py", line 363, in main
+    return _legacy_main.main(
+           ^^^^^^^^^^^^^^^^^^
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/venv/lib/python3.12/site-packages/ops/main.py", line 39, in main
+    return _main.main(charm_class=charm_class, use_juju_for_storage=use_juju_for_storage)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/venv/lib/python3.12/site-packages/ops/_main.py", line 507, in main
+    manager.run()
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/venv/lib/python3.12/site-packages/ops/_main.py", line 491, in run
+    self._emit()
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/venv/lib/python3.12/site-packages/ops/_main.py", line 426, in _emit
+    self._emit_charm_event(self.dispatcher.event_name)
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/venv/lib/python3.12/site-packages/ops/_main.py", line 470, in _emit_charm_event
+    event_to_emit.emit(*args, **kwargs)
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/venv/lib/python3.12/site-packages/ops/framework.py", line 337, in emit
+    framework._emit(event)
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/venv/lib/python3.12/site-packages/ops/framework.py", line 910, in _emit
+    self._reemit(event_path)
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/venv/lib/python3.12/site-packages/ops/framework.py", line 1028, in _reemit
+    custom_handler(event)
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/src/agent.py", line 288, in _on_agent_relation_changed
+    self.reconcile_agents(event=event)  # pragma: nocover
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/src/agent.py", line 172, in reconcile_agents
+    self.jenkins.wait_ready()
+  File "/var/lib/juju/agents/unit-jenkins-k8s-0/charm/src/jenkins.py", line 239, in wait_ready
+    raise TimeoutError("Timed out waiting for Jenkins to become ready.") from exc
+TimeoutError: Timed out waiting for Jenkins to become ready.
+unit-jenkins-k8s-0: 15:34:49 ERROR juju.worker.uniter.operation hook "agent-relation-changed" (via hook dispatching script: dispatch) failed: exit status 1
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
