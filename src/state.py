@@ -9,7 +9,7 @@ import os
 import typing
 
 import ops
-from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, field_validator
 
 from timerange import InvalidTimeRangeError, Range
 
@@ -88,9 +88,9 @@ class AgentMeta(BaseModel):
     labels: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
 
-    @validator("executors")
-    # The decorated method does not need a self argument.
-    def numeric_executors(cls, value: str) -> int:  # noqa: N805 pylint: disable=no-self-argument
+    @field_validator("executors")
+    @classmethod
+    def numeric_executors(cls, value: str) -> int:
         """Validate executors field can be converted to int.
 
         Args:
