@@ -81,6 +81,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.upgrade_charm, self._upgrade_charm)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
 
     def calculate_env(self) -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
@@ -122,6 +123,39 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.unit.set_workload_version(version)
         self.unit.status = ops.ActiveStatus()
+
+    def _on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
+        """Apply configuration changes impacting Jenkins start flags.
+
+        This replans the Pebble layer with any updated JVM system properties
+        and restarts the Jenkins service.
+        """
+        try:
+            self.state = State.from_charm(self)
+        except CharmConfigInvalidError as exc:
+            self.unit.status = ops.BlockedStatus(exc.msg)
+            return
+        except CharmRelationDataInvalidError as exc:  # pragma: no cover - unlikely on config
+            raise RuntimeError("Invalid relation data received.") from exc
+
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        if not check_result.success:
+            self.unit.status = ops.WaitingStatus(check_result.reason or "")
+            event.defer()
+            return
+
+        # Re-apply the layer and restart Jenkins to pick up new flags
+        container.add_layer(
+            "jenkins",
+            pebble.get_pebble_layer(self.jenkins, self.state),
+            combine=True,
+        )
+        container.replan()
+        try:
+            container.restart(JENKINS_SERVICE_NAME)
+        except ops.pebble.APIError as exc:  # pragma: no cover - best-effort restart
+            logger.warning("Failed to restart Jenkins on config-changed: %s", exc)
 
     def _remove_unlisted_plugins(self, container: ops.Container) -> ops.StatusBase:
         """Remove plugins that are installed but not allowed.
