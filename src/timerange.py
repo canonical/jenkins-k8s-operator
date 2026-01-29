@@ -6,7 +6,7 @@
 import typing
 from datetime import datetime
 
-from pydantic import BaseModel, Field, ValidationError, root_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 
 class InvalidTimeRangeError(Exception):
@@ -24,29 +24,19 @@ class Range(BaseModel):
     start: int = Field(..., ge=0, lt=24)
     end: int = Field(..., ge=0, lt=24)
 
-    # pylint don't quite understand that this is a classmethod using Pydantic.
-    @root_validator(skip_on_failure=True)
-    def validate_range(  # pylint: disable=no-self-argument
-        cls: "Range",
-        values: dict,
-    ) -> dict:
+    @model_validator(mode="after")
+    def validate_range(self) -> "Range":
         """Validate the time range.
 
-        Args:
-            values: The value keys of the model.
-
         Returns:
-            A dictionary validated values.
+            The validated model instance.
 
         Raises:
             ValueError: if the time range are out of bounds of 24H format.
         """
-        # it is okay to cast it since the field level validation has ran before root validation.
-        start = typing.cast(int, values["start"])
-        end = typing.cast(int, values["end"])
-        if start == end:
+        if self.start == self.end:
             raise ValueError("Time range cannot be equal. Minimum 1 hour range is required.")
-        return values
+        return self
 
     @classmethod
     def from_str(cls, time_range: str) -> "Range":
