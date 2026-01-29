@@ -20,7 +20,7 @@ dependencies = [
   "jenkinsapi==0.3.17",
   "jsonschema==4.26.0",
   "ops==3.5.0",
-  "pydantic==1.10.26",
+  "pydantic==2.12.5",
   "requests==2.32.5",
 ]
 
