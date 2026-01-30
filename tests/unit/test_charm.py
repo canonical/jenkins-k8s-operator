@@ -17,6 +17,8 @@ import requests
 
 import ingress
 import jenkins
+import precondition
+import state
 import timerange
 from charm import JenkinsK8sOperatorCharm
 
@@ -25,7 +27,8 @@ from .types_ import Harness, HarnessWithContainer
 
 
 @pytest.mark.parametrize(
-    "charm_config", [pytest.param({"restart-time-range": "-2"}, id="invalid restart-time-range")]
+    "charm_config",
+    [pytest.param({"restart-time-range": "-2"}, id="invalid restart-time-range")],
 )
 def test___init___invailid_config(
     harness_container: HarnessWithContainer, charm_config: dict[str, str]
@@ -297,3 +300,119 @@ def test_calculate_env(harness: Harness):
     env = jenkins_charm.calculate_env()
 
     assert env == {"JENKINS_HOME": str(jenkins.JENKINS_HOME_PATH), "JENKINS_PREFIX": ""}
+
+
+def test__on_config_changed_invalid_config_blocked(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given State.from_charm raises CharmConfigInvalidError during config-changed.
+    act: when _on_config_changed is invoked.
+    assert: unit falls into BlockedStatus and no container actions are performed.
+    """
+    # Start charm normally so __init__ completes and observers are registered.
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    with (
+        patch("state.State.from_charm") as from_charm_mock,
+        patch.object(harness_container.container, "add_layer") as add_layer_mock,
+        patch.object(harness_container.container, "replan") as replan_mock,
+        patch.object(harness_container.container, "restart") as restart_mock,
+    ):
+        from_charm_mock.side_effect = state.CharmConfigInvalidError("bad sysprops")
+
+        jenkins_charm._on_config_changed(MagicMock(spec=ops.ConfigChangedEvent))
+
+        assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
+        assert jenkins_charm.unit.status.message == "bad sysprops"
+        add_layer_mock.assert_not_called()
+        replan_mock.assert_not_called()
+        restart_mock.assert_not_called()
+
+
+def test__on_config_changed_relation_data_invalid_raises(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given State.from_charm raises CharmRelationDataInvalidError.
+    act: when _on_config_changed is invoked.
+    assert: a RuntimeError is raised by the handler.
+    """
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    with patch("state.State.from_charm") as from_charm_mock:
+        from_charm_mock.side_effect = state.CharmRelationDataInvalidError("bad relation")
+
+        with pytest.raises(RuntimeError):
+            jenkins_charm._on_config_changed(MagicMock(spec=ops.ConfigChangedEvent))
+
+
+def test__on_config_changed_precondition_waits_and_defers(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given precondition.check indicates not ready.
+    act: when _on_config_changed is invoked.
+    assert: unit is in WaitingStatus and the event is deferred.
+    """
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    event = MagicMock(spec=ops.ConfigChangedEvent)
+
+    with (
+        patch("state.State.from_charm", wraps=state.State.from_charm),
+        patch("precondition.check") as check_mock,
+        patch.object(harness_container.container, "add_layer") as add_layer_mock,
+        patch.object(harness_container.container, "replan") as replan_mock,
+        patch.object(harness_container.container, "restart") as restart_mock,
+    ):
+        check_mock.return_value = precondition._CheckResult(success=False, reason="not ready")
+
+        jenkins_charm._on_config_changed(event)
+
+        assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
+        assert jenkins_charm.unit.status.message == "not ready"
+        event.defer.assert_called_once_with()
+        add_layer_mock.assert_not_called()
+        replan_mock.assert_not_called()
+        restart_mock.assert_not_called()
+
+
+def test__on_config_changed_success_replans_and_restarts(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given precondition.check success and a valid pebble layer builder.
+    act: when _on_config_changed is invoked.
+    assert: container.add_layer, container.replan and container.restart are called.
+    """
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    with (
+        patch("state.State.from_charm", wraps=state.State.from_charm),
+        patch("precondition.check") as check_mock,
+        patch("pebble.get_pebble_layer") as layer_mock,
+        patch.object(harness_container.container, "add_layer") as add_layer_mock,
+        patch.object(harness_container.container, "replan") as replan_mock,
+        patch.object(harness_container.container, "restart") as restart_mock,
+    ):
+        check_mock.return_value = precondition._CheckResult(success=True, reason=None)
+        # Minimal viable layer for add_layer
+        layer_mock.return_value = ops.pebble.Layer({"services": {"jenkins": {}}})
+
+        jenkins_charm._on_config_changed(MagicMock(spec=ops.ConfigChangedEvent))
+
+        add_layer_mock.assert_called_once()
+        replan_mock.assert_called_once()
+        restart_mock.assert_called_once_with(state.JENKINS_SERVICE_NAME)

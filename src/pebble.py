@@ -36,7 +36,7 @@ def replan_jenkins(
     """
     logger.info("Installing Jenkins logging configuration")
     jenkins.install_logging_config(container=container)
-    container.add_layer("jenkins", _get_pebble_layer(jenkins_instance), combine=True)
+    container.add_layer("jenkins", get_pebble_layer(jenkins_instance, state), combine=True)
     container.replan()
     logger.info("Starting Jenkins service")
     try:
@@ -66,17 +66,20 @@ def replan_jenkins(
     logger.info("Jenkins ready")
 
 
-def _get_pebble_layer(jenkins_instance: jenkins.Jenkins) -> ops.pebble.Layer:
+def get_pebble_layer(jenkins_instance: jenkins.Jenkins, state: State) -> ops.pebble.Layer:
     """Return a dictionary representing a Pebble layer.
 
     Args:
         jenkins_instance: the Jenkins instance.
+        state: the charm state.
 
     Returns:
         The pebble layer defining Jenkins service layer.
     """
     # TypedDict and Dict[str,str] are not compatible.
     env_dict = typing.cast(typing.Dict[str, str], jenkins_instance.environment)
+    system_props = " ".join(state.system_properties) if state.system_properties else ""
+    system_props = f"{system_props} " if system_props else ""
     layer: LayerDict = {
         "summary": "jenkins layer",
         "description": "pebble config layer for jenkins",
@@ -86,6 +89,7 @@ def _get_pebble_layer(jenkins_instance: jenkins.Jenkins) -> ops.pebble.Layer:
                 "summary": "jenkins",
                 "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
                 f"-D{jenkins.SYSTEM_PROPERTY_LOGGING} "
+                f"{system_props}"
                 "-XX:MaxRAMPercentage=50.0 -XX:InitialRAMPercentage=50.0 "
                 f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war "
                 f"--prefix={env_dict['JENKINS_PREFIX']}",

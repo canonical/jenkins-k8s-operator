@@ -197,6 +197,7 @@ class State:
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
         auth_proxy_integrated: if an auth proxy integrated has been set.
+        system_properties: Additional JVM system properties as -D flags.
 
     """
 
@@ -205,6 +206,7 @@ class State:
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
     auth_proxy_integrated: bool
+    system_properties: typing.List[str] = dataclasses.field(default_factory=list)
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -250,6 +252,20 @@ class State:
         plugins_str = typing.cast(str, charm.config.get("allowed-plugins"))
         plugins = (plugin.strip() for plugin in plugins_str.split(",")) if plugins_str else None
 
+        # Parse custom JVM system properties to pass as -D flags
+        system_properties_cfg = typing.cast(str, charm.config.get("system-properties"))
+        system_properties: list[str] = []
+        if system_properties_cfg:
+            for entry in (part.strip() for part in system_properties_cfg.split(",")):
+                if not entry:
+                    continue
+                if "=" not in entry or entry.startswith("="):
+                    raise CharmConfigInvalidError(
+                        "Invalid system-properties entry; expected key=value pairs "
+                        "separated by commas."
+                    )
+                system_properties.append(f"-D{entry}")
+
         if charm.app.planned_units() > 1:
             raise CharmIllegalNumUnitsError(
                 "The Jenkins charm supports only 1 unit of deployment."
@@ -268,4 +284,5 @@ class State:
             plugins=plugins,
             proxy_config=proxy_config,
             auth_proxy_integrated=is_auth_proxy_integrated,
+            system_properties=system_properties,
         )
