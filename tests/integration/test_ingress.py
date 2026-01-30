@@ -9,6 +9,7 @@ import pytest
 import requests
 from juju.application import Application
 from juju.model import Model
+from pytest_operator.plugin import OpsTest
 
 from .helpers import ensure_relation
 
@@ -43,6 +44,7 @@ async def test_ingress_integration(
 async def test_ingress_system_properties_flag_present(
     model: Model,
     application: Application,
+    ops_test: OpsTest,
     traefik_application_and_unit_ip: typing.Tuple[Application, str],
 ):
     """
@@ -70,8 +72,12 @@ async def test_ingress_system_properties_flag_present(
 
     # Inspect the running java command line inside the unit
     unit = application.units[0]
-    action = await unit.run(command="ps -ef | grep '[j]ava'", timeout=60)
-    await action.wait()
-    assert action.results.get("return-code") == 0
-    stdout = str(action.results.get("stdout"))
+    ret, stdout, stderr = await ops_test.juju(
+        "ssh",
+        "--container",
+        "jenkins",
+        unit.name,
+        "ps -aux | cat",
+    )
+    assert ret == 0, f"Failed to exec in container, {stderr}"
     assert f"-D{prop}" in stdout
