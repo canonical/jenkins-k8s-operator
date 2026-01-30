@@ -9,6 +9,7 @@ import pytest
 import requests
 from juju.application import Application
 from juju.model import Model
+
 from .helpers import ensure_relation
 
 
