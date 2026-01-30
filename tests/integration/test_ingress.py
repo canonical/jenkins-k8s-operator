@@ -9,6 +9,7 @@ import pytest
 import requests
 from juju.application import Application
 from juju.model import Model
+from .helpers import ensure_relation
 
 
 @pytest.mark.abort_on_fail
@@ -23,11 +24,11 @@ async def test_ingress_integration(
     assert: the response succeeds.
     """
     traefik_application, traefik_address = traefik_application_and_unit_ip
-    await application.relate("ingress", traefik_application.name)
-    await model.wait_for_idle(
-        apps=[application.name, traefik_application.name],
-        wait_for_active=True,
-        timeout=20 * 60,
+    await ensure_relation(
+        model=model,
+        application=application,
+        other_application=traefik_application,
+        relation_name="ingress",
     )
     response = requests.get(
         f"http://{traefik_address}/{model.name}-{application.name}",
@@ -52,11 +53,11 @@ async def test_ingress_system_properties_flag_present(
     """
     traefik_application, _ = traefik_application_and_unit_ip
     # Ensure relation exists
-    await application.relate("ingress", traefik_application.name)
-    await model.wait_for_idle(
-        apps=[application.name, traefik_application.name],
-        wait_for_active=True,
-        timeout=20 * 60,
+    await ensure_relation(
+        model=model,
+        application=application,
+        other_application=traefik_application,
+        relation_name="ingress",
     )
 
     # Apply the system property via charm config

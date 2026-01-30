@@ -286,6 +286,42 @@ async def wait_for(
     raise TimeoutError()
 
 
+async def ensure_relation(
+    *,
+    model: Model,
+    application: Application,
+    other_application: Application,
+    relation_name: str,
+    apps: typing.Optional[typing.Iterable[str]] = None,
+    wait_for_active: bool = True,
+    timeout: int = 20 * 60,
+    idle_period: typing.Optional[int] = None,
+) -> None:
+    """Ensure a relation exists and the model becomes idle.
+
+    Args:
+        model: The Juju model.
+        application: The primary application to relate from.
+        other_application: The target application to relate to.
+        relation_name: The relation endpoint name (e.g., "ingress").
+        apps: Optional explicit list of app names to wait on; defaults to both apps.
+        wait_for_active: Whether to wait until applications are active.
+        timeout: Max seconds to wait for idle.
+        idle_period: Optional idle period to pass to wait_for_idle.
+    """
+    await application.relate(relation_name, other_application.name)
+    app_list = list(apps) if apps is not None else [application.name, other_application.name]
+    if idle_period is not None:
+        await model.wait_for_idle(
+            apps=app_list,
+            wait_for_active=wait_for_active,
+            timeout=timeout,
+            idle_period=idle_period,
+        )
+    else:
+        await model.wait_for_idle(apps=app_list, wait_for_active=wait_for_active, timeout=timeout)
+
+
 async def generate_jenkins_client_from_application(
     ops_test: OpsTest, jenkins_app: Application, address: str
 ):
