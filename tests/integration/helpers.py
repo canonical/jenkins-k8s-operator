@@ -309,7 +309,20 @@ async def ensure_relation(
         timeout: Max seconds to wait for idle.
         idle_period: Optional idle period to pass to wait_for_idle.
     """
-    await application.relate(relation_name, other_application.name)
+    # Relate only if not already related to avoid duplicate relations.
+    status: FullStatus = await model.get_status()
+    app_status: ApplicationStatus | None = status.applications.get(application.name)  # type: ignore[attr-defined]
+    related_apps: typing.Iterable[str] = []
+    if app_status and getattr(app_status, "relations", None):
+        rels = typing.cast(dict[str, typing.Any], app_status.relations)
+        targets = rels.get(relation_name) or []
+        related_apps = [str(t) for t in targets]
+    already_related = any(
+        (ra == other_application.name) or ra.startswith(f"{other_application.name}:")
+        for ra in related_apps
+    )
+    if not already_related:
+        await application.relate(relation_name, other_application.name)
     app_list = list(apps) if apps is not None else [application.name, other_application.name]
     if idle_period is not None:
         await model.wait_for_idle(
