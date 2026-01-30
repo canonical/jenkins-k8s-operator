@@ -185,27 +185,117 @@ def test_auth_proxy_integrated_true(mock_charm: MagicMock):
     assert not config.auth_proxy_integrated
 
 
-def test_agent_discovery_ingress_without_server_ingress(mock_charm: MagicMock):
+def test_agent_discovery_ingress_without_server_ingress(
+    mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
     """
     arrange: a charm with agent discovery ingress but no server ingress.
     act: when state.from_charm is called.
     assert: CharmConfigInvalidError is raised.
     """
-    mock_charm.model.get_relation = lambda relation_name: (
-        None if relation_name == state.INGRESS_RELATION_NAME else MagicMock()
+    monkeypatch.setattr(
+        mock_charm.model,
+        "get_relation",
+        lambda relation_name: (
+            None if relation_name == state.INGRESS_RELATION_NAME else MagicMock()
+        ),
     )
 
     with pytest.raises(state.CharmConfigInvalidError):
         state.State.from_charm(mock_charm)
 
 
-def test_invalid_num_units(mock_charm: MagicMock):
+def test_invalid_num_units(mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch):
     """
     arrange: given a mock charm with more than 1 unit of deployment.
     act: when state is initialized from charm.
     assert: CharmIllegalNumUnitsError is raised.
     """
-    mock_charm.app.planned_units.return_value = 2
+    mock_charm.config = {}
+    mock_charm.model.get_relation.return_value = None
+    monkeypatch.setattr(mock_charm.app, "planned_units", MagicMock(return_value=2))
 
     with pytest.raises(state.CharmIllegalNumUnitsError):
         state.State.from_charm(mock_charm)
+
+
+def test_system_properties_no_config(mock_charm: MagicMock):
+    """
+    arrange: given no system-properties config set.
+    act: when state is initialized from charm.
+    assert: system_properties is an empty list.
+    """
+    mock_charm.config = {}
+    # Ensure no auth-proxy integration is detected
+    mock_charm.model.get_relation.return_value = None
+
+    config = state.State.from_charm(mock_charm)
+    assert config.system_properties == []
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("", id="empty string"),
+        pytest.param(" , , ", id="whitespace and commas"),
+    ],
+)
+def test_system_properties_empty_values_ignored(mock_charm: MagicMock, value: str):
+    """
+    arrange: given empty or whitespace-only system-properties entries.
+    act: when state is initialized from charm.
+    assert: system_properties is an empty list.
+    """
+    mock_charm.config = {"system-properties": value}
+    mock_charm.model.get_relation.return_value = None
+
+    config = state.State.from_charm(mock_charm)
+    assert config.system_properties == []
+
+
+def test_system_properties_parsing_and_trimming(mock_charm: MagicMock):
+    """
+    arrange: given mixed system-properties with spaces and empties.
+    act: when state is initialized from charm.
+    assert: properties are trimmed, ordered, and prefixed with -D.
+    """
+    mock_charm.config = {"system-properties": "a=b, foo.bar=true , ,baz=qux"}
+    mock_charm.model.get_relation.return_value = None
+
+    config = state.State.from_charm(mock_charm)
+    assert config.system_properties == ["-Da=b", "-Dfoo.bar=true", "-Dbaz=qux"]
+
+
+def test_system_properties_empty_value_allowed(mock_charm: MagicMock):
+    """
+    arrange: given a key with an empty value.
+    act: when state is initialized from charm.
+    assert: entry is accepted and prefixed with -D.
+    """
+    mock_charm.config = {"system-properties": "x="}
+    mock_charm.model.get_relation.return_value = None
+
+    config = state.State.from_charm(mock_charm)
+    assert config.system_properties == ["-Dx="]
+
+
+@pytest.mark.parametrize(
+    "bad_value",
+    [
+        pytest.param("bad", id="missing equals"),
+        pytest.param("=bad", id="starts with equals"),
+    ],
+)
+def test_system_properties_invalid_entries_raise(mock_charm: MagicMock, bad_value: str):
+    """
+    arrange: given invalid system-properties entries.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised with message about key=value pairs.
+    """
+    mock_charm.config = {"system-properties": bad_value}
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(state.CharmConfigInvalidError) as excinfo:
+        state.State.from_charm(mock_charm)
+
+    assert "expected key=value" in str(excinfo.value.msg)

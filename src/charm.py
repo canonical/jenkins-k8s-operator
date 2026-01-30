@@ -58,7 +58,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.storage = storage.Reconciler(charm=self)
         # Ingress dedicated to agent discovery
         self.agent_discovery_ingress_observer = ingress.Observer(
-            self, "agent-discovery-ingress-observer", agent.AGENT_DISCOVERY_INGRESS_RELATION_NAME
+            self,
+            "agent-discovery-ingress-observer",
+            agent.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
         )
         self.ingress_observer = ingress.Observer(self, "ingress-observer", INGRESS_RELATION_NAME)
         self.jenkins = jenkins.Jenkins(self.calculate_env())
@@ -67,7 +69,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             charm=self,
             state=self.state,
             observers=agent.IngressObservers(
-                agent_discovery=self.agent_discovery_ingress_observer, server=self.ingress_observer
+                agent_discovery=self.agent_discovery_ingress_observer,
+                server=self.ingress_observer,
             ),
             jenkins_instance=self.jenkins,
         )
@@ -76,7 +79,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self, self.ingress_observer.ingress, self.jenkins, self.state
         )
         self.framework.observe(
-            self.on.jenkins_home_storage_attached, self._on_jenkins_home_storage_attached
+            self.on.jenkins_home_storage_attached,
+            self._on_jenkins_home_storage_attached,
         )
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.update_status, self._on_update_status)
@@ -147,7 +151,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         # Re-apply the layer and restart Jenkins to pick up new flags
         container.add_layer(
-            "jenkins",
+            JENKINS_SERVICE_NAME,
             pebble.get_pebble_layer(self.jenkins, self.state),
             combine=True,
         )

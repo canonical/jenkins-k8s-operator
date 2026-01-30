@@ -78,9 +78,7 @@ def get_pebble_layer(jenkins_instance: jenkins.Jenkins, state: State) -> ops.peb
     """
     # TypedDict and Dict[str,str] are not compatible.
     env_dict = typing.cast(typing.Dict[str, str], jenkins_instance.environment)
-    system_props = (
-        " ".join(state.system_properties) if getattr(state, "system_properties", None) else ""
-    )
+    system_props = " ".join(state.system_properties) if state.system_properties else ""
     system_props = f"{system_props} " if system_props else ""
     layer: LayerDict = {
         "summary": "jenkins layer",
