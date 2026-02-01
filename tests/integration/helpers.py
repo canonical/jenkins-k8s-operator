@@ -9,6 +9,7 @@ import secrets
 import textwrap
 import time
 import typing
+from enum import Enum
 
 import jenkinsapi.jenkins
 import kubernetes.client
@@ -335,35 +336,55 @@ async def ensure_relation(
         await model.wait_for_idle(apps=app_list, wait_for_active=wait_for_active, timeout=timeout)
 
 
+class AuthMethod(Enum):
+    """Authentication method for Jenkins client generation."""
+
+    TOKEN = "token"
+    PASSWORD = "password"
+
+
 @tenacity.retry(
     wait=tenacity.wait_exponential(multiplier=2, max=60),
     reraise=True,
     stop=tenacity.stop_after_attempt(5),
 )
-async def generate_jenkins_client_from_application(
-    ops_test: OpsTest, jenkins_app: Application, address: str
-):
-    """Generate a Jenkins client directly from the Juju application.
+async def generate_jenkins_client(
+    ops_test: OpsTest,
+    jenkins_app: Application,
+    address: str,
+    method: AuthMethod = AuthMethod.TOKEN,
+) -> jenkinsapi.jenkins.Jenkins:
+    """Generate a Jenkins client using either API token or admin password.
 
     Args:
-        ops_test: OpsTest framework
+        ops_test: OpsTest framework.
         jenkins_app: Juju Jenkins-k8s application.
-        address: IP address of the jenkins unit.
+        address: Base URL of the Jenkins server (e.g., http://IP:8080).
+        method: Authentication method enum (`AuthMethod.TOKEN` or `AuthMethod.PASSWORD`).
 
     Returns:
         A Jenkins web client.
     """
     jenkins_unit = jenkins_app.units[0]
-    ret, api_token, stderr = await ops_test.juju(
-        "ssh",
-        "--container",
-        "jenkins",
-        jenkins_unit.name,
-        "cat",
-        str(jenkins.API_TOKEN_PATH),
-    )
-    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
-    return jenkinsapi.jenkins.Jenkins(address, "admin", api_token, timeout=60)
+    if method == AuthMethod.TOKEN:
+        ret, api_token, stderr = await ops_test.juju(
+            "ssh",
+            "--container",
+            "jenkins",
+            jenkins_unit.name,
+            "cat",
+            str(jenkins.API_TOKEN_PATH),
+        )
+        assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
+        secret = api_token
+    elif method == AuthMethod.PASSWORD:
+        action = await jenkins_unit.run_action("get-admin-password")
+        await action.wait()
+        secret = action.results["password"]
+    else:
+        raise ValueError(f"Unsupported auth method: {method}")
+
+    return jenkinsapi.jenkins.Jenkins(address, "admin", secret, timeout=60)
 
 
 async def generate_unit_web_client_from_application(
@@ -384,7 +405,7 @@ async def generate_unit_web_client_from_application(
     assert unit_ips, f"Unit IP address not found for {jenkins_app.name}"
     address = f"http://{unit_ips[0]}:8080"
     jenkins_unit = jenkins_app.units[0]
-    jenkins_client = await generate_jenkins_client_from_application(ops_test, jenkins_app, address)
+    jenkins_client = await generate_jenkins_client(ops_test, jenkins_app, address)
     unit_web_client = UnitWebClient(unit=jenkins_unit, web=address, client=jenkins_client)
     return unit_web_client
 
