@@ -53,14 +53,18 @@ async def install_plugins(
 
     post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
     post_data["dynamic_load"] = ""
-    res = client.requester.post_url(f"{web}/manage/pluginManager/install", data=post_data)
+    res = client.requester.post_url(
+        f"{web}/manage/pluginManager/install", data=post_data
+    )
     assert res.status_code == 200, "Failed to request plugins install"
 
     # block until the UI does not have "Pending" in download progress column.
     await wait_for(
         lambda: "Pending"
         not in str(
-            client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
+            client.requester.post_url(
+                f"{web}/manage/pluginManager/updates/body"
+            ).content,
             encoding="utf-8",
         ),
         timeout=60 * 10,
@@ -148,7 +152,9 @@ def assert_job_success(
         test_target_label: The Jenkins agent node label.
     """
     nodes = client.nodes.iterkeys()
-    assert any(agent_name in key for key in nodes), f"Jenkins {agent_name} node not registered."
+    assert any(
+        agent_name in key for key in nodes
+    ), f"Jenkins {agent_name} node not registered."
 
     job = client.create_job(agent_name, gen_test_job_xml(test_target_label))
     queue_item = job.invoke()
@@ -211,7 +217,9 @@ def gen_git_test_job_xml(node_label: str):
     )
 
 
-async def get_pod_ip(model: Model, kube_core_client: kubernetes.client.CoreV1Api, app_label: str):
+async def get_pod_ip(
+    model: Model, kube_core_client: kubernetes.client.CoreV1Api, app_label: str
+):
     """Get pod IP of a kubernetes application.
 
     Args:
@@ -323,7 +331,9 @@ async def ensure_relation(
     )
     if not already_related:
         await application.relate(relation_name, other_application.name)
-    app_list = list(apps) if apps is not None else [application.name, other_application.name]
+    app_list = (
+        list(apps) if apps is not None else [application.name, other_application.name]
+    )
     if idle_period is not None:
         await model.wait_for_idle(
             apps=app_list,
@@ -332,9 +342,16 @@ async def ensure_relation(
             idle_period=idle_period,
         )
     else:
-        await model.wait_for_idle(apps=app_list, wait_for_active=wait_for_active, timeout=timeout)
+        await model.wait_for_idle(
+            apps=app_list, wait_for_active=wait_for_active, timeout=timeout
+        )
 
 
+@tenacity.retry(
+    wait=tenacity.wait_exponential(multiplier=2, max=60),
+    reraise=True,
+    stop=tenacity.stop_after_attempt(5),
+)
 async def generate_jenkins_client_from_application(
     ops_test: OpsTest, jenkins_app: Application, address: str
 ):
@@ -379,12 +396,18 @@ async def generate_unit_web_client_from_application(
     assert unit_ips, f"Unit IP address not found for {jenkins_app.name}"
     address = f"http://{unit_ips[0]}:8080"
     jenkins_unit = jenkins_app.units[0]
-    jenkins_client = await generate_jenkins_client_from_application(ops_test, jenkins_app, address)
-    unit_web_client = UnitWebClient(unit=jenkins_unit, web=address, client=jenkins_client)
+    jenkins_client = await generate_jenkins_client_from_application(
+        ops_test, jenkins_app, address
+    )
+    unit_web_client = UnitWebClient(
+        unit=jenkins_unit, web=address, client=jenkins_client
+    )
     return unit_web_client
 
 
-def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Unit]) -> Unit | None:
+def get_job_invoked_unit(
+    job: jenkins.jenkinsapi.job.Job, units: typing.List[Unit]
+) -> Unit | None:
     """Get the jenkins unit that has run the latest job.
 
     Args:
@@ -524,7 +547,9 @@ def create_secret_file_credentials(
 
     with open(kube_config, "rb") as kube_config_file:
         files = [("file0", ("config", kube_config_file, "application/octet-stream"))]
-        logger.debug("Creating jenkins credentials, params: %s %s %s", headers, files, payload)
+        logger.debug(
+            "Creating jenkins credentials, params: %s %s %s", headers, files, payload
+        )
         res = unit_web_client.client.requester.post_url(
             url=url, headers=headers, data=payload, files=files, timeout=30
         )
