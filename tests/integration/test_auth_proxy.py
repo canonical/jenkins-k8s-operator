@@ -85,9 +85,7 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
         trust=True,
     )
 
-    juju.wait(
-        lambda status: jubilant.all_active(status, traefik_public), timeout=60 * 30
-    )
+    juju.wait(lambda status: jubilant.all_active(status, traefik_public), timeout=60 * 30)
 
     return traefik_public
 
@@ -127,9 +125,7 @@ def identity_platform_offers_fixture(
     hydra_endpoint = "oauth"
     send_ca_cert_endpoint = "send-ca-cert"
     juju.offer(f"{juju.model}.{hydra}", endpoint=hydra_endpoint, name=hydra_endpoint)
-    juju.offer(
-        f"{juju.model}.{ca}", endpoint=send_ca_cert_endpoint, name=send_ca_cert_endpoint
-    )
+    juju.offer(f"{juju.model}.{ca}", endpoint=send_ca_cert_endpoint, name=send_ca_cert_endpoint)
 
     juju.wait(jubilant.all_active, timeout=60 * 30)
 
@@ -183,9 +179,7 @@ def jenkins_k8s_charms_fixture(
     juju.deploy(ca, channel="1/stable", trust=True)
     juju.deploy(oauth2_proxy, channel="latest/edge", trust=True)
 
-    juju.consume(
-        identity_platform_offers.oauth.url, alias=identity_platform_offers.oauth.saas
-    )
+    juju.consume(identity_platform_offers.oauth.url, alias=identity_platform_offers.oauth.saas)
     juju.consume(
         identity_platform_offers.send_ca_cert.url,
         alias=identity_platform_offers.send_ca_cert.saas,
@@ -196,19 +190,13 @@ def jenkins_k8s_charms_fixture(
     juju.integrate(f"{oauth2_proxy}:ingress", f"{traefik_public}:ingress")
     juju.integrate(f"{oauth2_proxy}:oauth", identity_platform_offers.oauth.saas)
     juju.integrate(f"{application.name}:auth-proxy", f"{oauth2_proxy}:auth-proxy")
-    juju.integrate(
-        f"{oauth2_proxy}:forward-auth", f"{traefik_public}:experimental-forward-auth"
-    )
-    juju.integrate(
-        f"{oauth2_proxy}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas
-    )
+    juju.integrate(f"{oauth2_proxy}:forward-auth", f"{traefik_public}:experimental-forward-auth")
+    juju.integrate(f"{oauth2_proxy}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
 
     juju.wait(jubilant.all_agents_idle, timeout=15 * 60, successes=5, delay=5)
     juju.wait(jubilant.all_active, timeout=15 * 60, successes=5, delay=5)
 
-    return _JenkinsCharms(
-        jenkins=application.name, traefik=traefik_public, oauth2=oauth2_proxy
-    )
+    return _JenkinsCharms(jenkins=application.name, traefik=traefik_public, oauth2=oauth2_proxy)
 
 
 @pytest.fixture(scope="module", name="identity_platform_traefik_ip")
@@ -239,9 +227,7 @@ def jenkins_traefik_ip_fixture(
 
 
 @pytest.fixture(scope="module", name="patch_dns_resolver")
-def patch_dns_resolver_fixture(
-    identity_platform_traefik_ip: str, jenkins_traefik_ip: str
-):
+def patch_dns_resolver_fixture(identity_platform_traefik_ip: str, jenkins_traefik_ip: str):
     """Patch DNS resolution."""
     dns_cache = {
         IDENTITY_PLATFORM_HOSTNAME: identity_platform_traefik_ip,
@@ -276,12 +262,8 @@ def inject_dns_fixture(
     identity_platform_traefik_ip: str,
 ):
     """Inject IDP hostname to CoreDNS."""
-    logger.info(
-        "Patching CoreDNS configmap, idp public IP: %s", identity_platform_traefik_ip
-    )
-    environment = Environment(
-        loader=FileSystemLoader("tests/integration/files/"), autoescape=True
-    )
+    logger.info("Patching CoreDNS configmap, idp public IP: %s", identity_platform_traefik_ip)
+    environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
     template = environment.get_template("coredns.yaml.j2")
     coredns_yaml = template.render(
         hostname=IDENTITY_PLATFORM_HOSTNAME, ip=identity_platform_traefik_ip
@@ -300,15 +282,11 @@ def inject_dns_fixture(
     )
     for pod in pods.items:
         logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-        kube_core_client.delete_namespaced_pod(
-            name=pod.metadata.name, namespace="kube-system"
-        )
+        kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
 
     yield
 
-    coredns_configmap_manifest["data"]["Corefile"] = original_manifest.data.get(
-        "Corefile", ""
-    )
+    coredns_configmap_manifest["data"]["Corefile"] = original_manifest.data.get("Corefile", "")
     kube_core_client.replace_namespaced_config_map(
         name="coredns", namespace="kube-system", body=coredns_configmap_manifest
     )
@@ -317,9 +295,7 @@ def inject_dns_fixture(
     )
     for pod in pods.items:
         logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-        kube_core_client.delete_namespaced_pod(
-            name=pod.metadata.name, namespace="kube-system"
-        )
+        kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
 
 
 # The playwright fixtures are taken from:
@@ -442,9 +418,7 @@ async def get_application_unit_status(model: Model, application: str) -> UnitSta
         The application first unit's status.
     """
     status = await model.get_status()
-    unit_status: UnitStatus = status["applications"][application]["units"][
-        f"{application}/0"
-    ]
+    unit_status: UnitStatus = status["applications"][application]["units"][f"{application}/0"]
     return unit_status
 
 
@@ -511,9 +485,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
             verify=False,
             timeout=5,
         )
-        logger.info(
-            "Auth UI test response header: %s, url: %s", response.headers, response.url
-        )
+        logger.info("Auth UI test response header: %s, url: %s", response.headers, response.url)
         return (
             response.status_code == 200
             and IDENTITY_PLATFORM_HOSTNAME in response.url
@@ -584,9 +556,7 @@ async def totp_fixture(
     assert reset_page_url, f"Reset page link not found in results {result.results}"
     reset_code: str | None = result.results.get("password-reset-code")
     assert reset_code is not None, f"Reset code not found in results {result.results}"
-    logger.info(
-        "Created admin account, reset link: %s, code: %s", reset_page_url, reset_code
-    )
+    logger.info("Created admin account, reset link: %s, code: %s", reset_page_url, reset_code)
 
     # sleep for 5 seconds to prevent weird behavior with reset link giving 500 errors.
     await asyncio.sleep(5)
@@ -601,12 +571,8 @@ async def totp_fixture(
 
     async with page.expect_navigation(timeout=1000 * 60):
         logger.info("Changing password: %s", test_credentials.password)
-        await page.get_by_label("New password", exact=True).fill(
-            test_credentials.password
-        )
-        await page.get_by_label("Confirm New password", exact=True).fill(
-            test_credentials.password
-        )
+        await page.get_by_label("New password", exact=True).fill(test_credentials.password)
+        await page.get_by_label("Confirm New password", exact=True).fill(test_credentials.password)
         await page.get_by_role("button", name="Reset password").click()
 
     async with page.expect_navigation(timeout=1000 * 60):
