@@ -339,8 +339,9 @@ async def ensure_relation(
 class AuthMethod(Enum):
     """Authentication method for Jenkins client generation."""
 
-    TOKEN = "token"
-    PASSWORD = "password"
+    # These fields are not hardcoded passwords which bandit thinks it is.
+    TOKEN = "token"  # nosec: B105
+    PASSWORD = "password"  # nosec: B105
 
 
 @tenacity.retry(
