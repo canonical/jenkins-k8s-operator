@@ -9,6 +9,7 @@ import secrets
 import textwrap
 import time
 import typing
+from enum import Enum
 
 import jenkinsapi.jenkins
 import kubernetes.client
@@ -286,30 +287,105 @@ async def wait_for(
     raise TimeoutError()
 
 
-async def generate_jenkins_client_from_application(
-    ops_test: OpsTest, jenkins_app: Application, address: str
-):
-    """Generate a Jenkins client directly from the Juju application.
+async def ensure_relation(
+    *,
+    model: Model,
+    application: Application,
+    other_application: Application,
+    relation_name: str,
+    apps: typing.Optional[typing.Iterable[str]] = None,
+    wait_for_active: bool = True,
+    timeout: int = 20 * 60,
+    idle_period: typing.Optional[int] = None,
+) -> None:
+    """Ensure a relation exists and the model becomes idle.
 
     Args:
-        ops_test: OpsTest framework
+        model: The Juju model.
+        application: The primary application to relate from.
+        other_application: The target application to relate to.
+        relation_name: The relation endpoint name (e.g., "ingress").
+        apps: Optional explicit list of app names to wait on; defaults to both apps.
+        wait_for_active: Whether to wait until applications are active.
+        timeout: Max seconds to wait for idle.
+        idle_period: Optional idle period to pass to wait_for_idle.
+    """
+    # Relate only if not already related to avoid duplicate relations.
+    status: FullStatus = await model.get_status()
+    app_status: ApplicationStatus | None = status.applications.get(application.name)  # type: ignore[attr-defined]
+    related_apps: typing.Iterable[str] = []
+    if app_status and getattr(app_status, "relations", None):
+        rels = typing.cast(dict[str, typing.Any], app_status.relations)
+        targets = rels.get(relation_name) or []
+        related_apps = [str(t) for t in targets]
+    already_related = any(
+        (ra == other_application.name) or ra.startswith(f"{other_application.name}:")
+        for ra in related_apps
+    )
+    if not already_related:
+        await application.relate(relation_name, other_application.name)
+    app_list = list(apps) if apps is not None else [application.name, other_application.name]
+    if idle_period is not None:
+        await model.wait_for_idle(
+            apps=app_list,
+            wait_for_active=wait_for_active,
+            timeout=timeout,
+            idle_period=idle_period,
+        )
+    else:
+        await model.wait_for_idle(apps=app_list, wait_for_active=wait_for_active, timeout=timeout)
+
+
+class AuthMethod(Enum):
+    """Authentication method for Jenkins client generation."""
+
+    # These fields are not hardcoded passwords which bandit thinks it is.
+    TOKEN = "token"  # nosec: B105
+    PASSWORD = "password"  # nosec: B105
+
+
+@tenacity.retry(
+    wait=tenacity.wait_exponential(multiplier=2, max=60),
+    reraise=True,
+    stop=tenacity.stop_after_attempt(5),
+)
+async def generate_jenkins_client(
+    ops_test: OpsTest,
+    jenkins_app: Application,
+    address: str,
+    method: AuthMethod = AuthMethod.TOKEN,
+) -> jenkinsapi.jenkins.Jenkins:
+    """Generate a Jenkins client using either API token or admin password.
+
+    Args:
+        ops_test: OpsTest framework.
         jenkins_app: Juju Jenkins-k8s application.
-        address: IP address of the jenkins unit.
+        address: Base URL of the Jenkins server (e.g., http://IP:8080).
+        method: Authentication method enum (`AuthMethod.TOKEN` or `AuthMethod.PASSWORD`).
 
     Returns:
         A Jenkins web client.
     """
     jenkins_unit = jenkins_app.units[0]
-    ret, api_token, stderr = await ops_test.juju(
-        "ssh",
-        "--container",
-        "jenkins",
-        jenkins_unit.name,
-        "cat",
-        str(jenkins.API_TOKEN_PATH),
-    )
-    assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
-    return jenkinsapi.jenkins.Jenkins(address, "admin", api_token, timeout=60)
+    if method == AuthMethod.TOKEN:
+        ret, api_token, stderr = await ops_test.juju(
+            "ssh",
+            "--container",
+            "jenkins",
+            jenkins_unit.name,
+            "cat",
+            str(jenkins.API_TOKEN_PATH),
+        )
+        assert ret == 0, f"Failed to get Jenkins API token, {stderr}"
+        secret = api_token
+    elif method == AuthMethod.PASSWORD:
+        action = await jenkins_unit.run_action("get-admin-password")
+        await action.wait()
+        secret = action.results["password"]
+    else:
+        raise ValueError(f"Unsupported auth method: {method}")
+
+    return jenkinsapi.jenkins.Jenkins(address, "admin", secret, timeout=60)
 
 
 async def generate_unit_web_client_from_application(
@@ -330,7 +406,7 @@ async def generate_unit_web_client_from_application(
     assert unit_ips, f"Unit IP address not found for {jenkins_app.name}"
     address = f"http://{unit_ips[0]}:8080"
     jenkins_unit = jenkins_app.units[0]
-    jenkins_client = await generate_jenkins_client_from_application(ops_test, jenkins_app, address)
+    jenkins_client = await generate_jenkins_client(ops_test, jenkins_app, address)
     unit_web_client = UnitWebClient(unit=jenkins_unit, web=address, client=jenkins_client)
     return unit_web_client
 

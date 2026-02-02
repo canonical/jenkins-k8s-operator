@@ -12,7 +12,7 @@ from ops import testing
 
 import jenkins
 from charm import JenkinsK8sOperatorCharm
-from state import AgentMeta
+from state import JENKINS_SERVICE_NAME, AgentMeta
 
 _MONKEYPATCHED_FQDN = "192.0.2.0"
 
@@ -137,8 +137,16 @@ def _generate_reconcile_agents_test_params():
                 endpoint="agent",
                 interface="jenkins_agent_v0",
                 remote_units_data={
-                    0: {"executors": "1", "labels": "testing", "name": first_agent_name},
-                    1: {"executors": "1", "labels": "testing", "name": second_agent_name},
+                    0: {
+                        "executors": "1",
+                        "labels": "testing",
+                        "name": first_agent_name,
+                    },
+                    1: {
+                        "executors": "1",
+                        "labels": "testing",
+                        "name": second_agent_name,
+                    },
                 },
             )
         ],
@@ -181,7 +189,8 @@ def patch_is_jenkins_ready_fixture(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.parametrize(
-    ("initial_agents", "state", "expected_agents"), _generate_reconcile_agents_test_params()
+    ("initial_agents", "state", "expected_agents"),
+    _generate_reconcile_agents_test_params(),
 )
 @pytest.mark.usefixtures("patch_is_jenkins_ready")
 def test_reconcile_agents(
@@ -284,6 +293,13 @@ def _generate_agent_discovery_url_test_params():
     public_ingress_address = "https://public-ingress.com"
     agent_discovery_ingress_address = "https://agent-discovery-ingress.com"
     agent_discovery_and_public_ingress = testing.State(
+        containers=[
+            testing.Container(
+                # Mypy thinks that can_connect argument doesn't exist.
+                name=JENKINS_SERVICE_NAME,
+                can_connect=True,  # type: ignore
+            )
+        ],
         relations=[
             testing.Relation(
                 endpoint="ingress",
@@ -295,19 +311,33 @@ def _generate_agent_discovery_url_test_params():
                 interface="ingress",
                 remote_app_data={"ingress": f'{{"url":"{agent_discovery_ingress_address}"}}'},
             ),
-        ]
+        ],
     )
     public_ingress_only = testing.State(
+        containers=[
+            testing.Container(
+                # Mypy thinks that can_connect argument doesn't exist.
+                name=JENKINS_SERVICE_NAME,
+                can_connect=True,  # type: ignore
+            )
+        ],
         relations=[
             testing.Relation(
                 endpoint="ingress",
                 interface="ingress",
                 remote_app_data={"ingress": f'{{"url":"{public_ingress_address}"}}'},
             ),
-        ]
+        ],
     )
     juju_network_address = "192.168.0.1"
     juju_network = testing.State(
+        containers=[
+            testing.Container(
+                # Mypy thinks that can_connect argument doesn't exist.
+                name=JENKINS_SERVICE_NAME,
+                can_connect=True,  # type: ignore
+            )
+        ],
         networks={
             testing.Network(
                 binding_name="juju-info",
@@ -315,9 +345,16 @@ def _generate_agent_discovery_url_test_params():
                     testing.BindAddress(addresses=[testing.Address(juju_network_address)])
                 ],
             )
-        }
+        },
     )
     juju_network_invalid_address = testing.State(
+        containers=[
+            testing.Container(
+                # Mypy thinks that can_connect argument doesn't exist.
+                name=JENKINS_SERVICE_NAME,
+                can_connect=True,  # type: ignore
+            )
+        ],
         networks={
             testing.Network(
                 binding_name="juju-info",
@@ -325,7 +362,7 @@ def _generate_agent_discovery_url_test_params():
                     testing.BindAddress(addresses=[testing.Address("invalidaddress")])
                 ],
             )
-        }
+        },
     )
     return [
         pytest.param(
@@ -349,7 +386,16 @@ def _generate_agent_discovery_url_test_params():
             id="invalid juju (kubernetes) pod IP",
         ),
         pytest.param(
-            testing.State(networks={}),
+            testing.State(
+                containers=[
+                    testing.Container(
+                        # Mypy thinks that can_connect argument doesn't exist.
+                        name=JENKINS_SERVICE_NAME,
+                        can_connect=True,  # type: ignore
+                    )
+                ],
+                networks={},
+            ),
             f"http://{_MONKEYPATCHED_FQDN}:8080",
             id="socket fqdn",
         ),
@@ -386,6 +432,13 @@ def _generate_status_message_test_params():
     public_ingress_address = "https://public-ingress.com"
     agent_discovery_ingress_address = "https://agent-discovery-ingress.com"
     agent_discovery_and_public_ingress = testing.State(
+        containers=[
+            testing.Container(
+                # Mypy thinks that can_connect argument doesn't exist.
+                name=JENKINS_SERVICE_NAME,
+                can_connect=True,  # type: ignore
+            )
+        ],
         relations=[
             testing.Relation(
                 endpoint="ingress",
@@ -397,16 +450,23 @@ def _generate_status_message_test_params():
                 interface="ingress",
                 remote_app_data={"ingress": f'{{"url":"{agent_discovery_ingress_address}"}}'},
             ),
-        ]
+        ],
     )
     public_ingress_only = testing.State(
+        containers=[
+            testing.Container(
+                # Mypy thinks that can_connect argument doesn't exist.
+                name=JENKINS_SERVICE_NAME,
+                can_connect=True,  # type: ignore
+            )
+        ],
         relations=[
             testing.Relation(
                 endpoint="ingress",
                 interface="ingress",
                 remote_app_data={"ingress": f'{{"url":"{public_ingress_address}"}}'},
             ),
-        ]
+        ],
     )
     return [
         pytest.param(agent_discovery_and_public_ingress, "", id="both ingresses"),

@@ -28,7 +28,12 @@ from pytest_operator.plugin import OpsTest
 import state
 
 from .constants import ALLOWED_PLUGINS
-from .helpers import generate_jenkins_client_from_application, get_model_unit_addresses, get_pod_ip
+from .helpers import (
+    AuthMethod,
+    generate_jenkins_client,
+    get_model_unit_addresses,
+    get_pod_ip,
+)
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
 logger = logging.getLogger(__name__)
@@ -143,22 +148,19 @@ async def jenkins_client_fixture(
     web_address: str,
 ) -> jenkinsapi.jenkins.Jenkins:
     """The Jenkins API client."""
-    jenkins_client = await generate_jenkins_client_from_application(
-        ops_test, application, web_address
-    )
+    jenkins_client = await generate_jenkins_client(ops_test, application, web_address)
     return jenkins_client
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_user_client")
 async def jenkins_user_client_fixture(
-    application: Application, web_address: str
+    ops_test: OpsTest, application: Application, web_address: str
 ) -> jenkinsapi.jenkins.Jenkins:
     """The Jenkins user client for mocking web browsing behavior."""
-    jenkins_unit: Unit = application.units[0]
-    action: Action = await jenkins_unit.run_action("get-admin-password")
-    await action.wait()
-    password = action.results["password"]
-    return jenkinsapi.jenkins.Jenkins(web_address, "admin", password, timeout=60)
+    # Use generic helper with admin password to reduce duplication and add retry.
+    return await generate_jenkins_client(
+        ops_test, application, web_address, method=AuthMethod.PASSWORD
+    )
 
 
 @pytest.fixture(scope="function", name="unit_web_client")
@@ -200,13 +202,17 @@ async def k8s_agent_related_app_fixture(
         f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}",
     )
     await model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True, check_freq=5
+        apps=[application.name, jenkins_k8s_agents.name],
+        wait_for_active=True,
+        check_freq=5,
     )
     return application
 
 
 @pytest_asyncio.fixture(scope="function", name="extra_jenkins_k8s_agents")
-async def extra_jenkins_k8s_agents_fixture(model: Model) -> AsyncGenerator[Application, None]:
+async def extra_jenkins_k8s_agents_fixture(
+    model: Model,
+) -> AsyncGenerator[Application, None]:
     """The Jenkins k8s agent."""
     agent_app: Application = await model.deploy(
         "jenkins-agent-k8s",
@@ -467,7 +473,10 @@ async def jenkins_with_proxy_client_fixture(
     # Initialization of the jenkins client will raise an exception if unable to connect to the
     # server.
     return jenkinsapi.jenkins.Jenkins(
-        baseurl=proxy_jenkins_web_address, username="admin", password=password, timeout=60
+        baseurl=proxy_jenkins_web_address,
+        username="admin",
+        password=password,
+        timeout=60,
     )
 
 
@@ -491,13 +500,17 @@ async def app_with_allowed_plugins_fixture(
 def ldap_settings_fixture() -> LDAPSettings:
     """LDAP user for testing."""
     return LDAPSettings(
-        container_ports=[389, 636], username="customuser", password=secrets.token_hex(16)
+        container_ports=[389, 636],
+        username="customuser",
+        password=secrets.token_hex(16),
     )
 
 
 @pytest_asyncio.fixture(scope="module", name="ldap_server")
 async def ldap_server_fixture(
-    model: Model, kube_apps_client: kubernetes.client.AppsV1Api, ldap_settings: LDAPSettings
+    model: Model,
+    kube_apps_client: kubernetes.client.AppsV1Api,
+    ldap_settings: LDAPSettings,
 ):
     """Testing LDAP server pod."""
     container = kubernetes.client.V1Container(
@@ -652,7 +665,9 @@ async def keycloak_ip_fixture(
 ) -> str:
     """The keycloak deployment pod IP."""
     return await get_pod_ip(
-        model, kube_core_client, keycloak_deployment.spec.template.metadata.labels["app"]
+        model,
+        kube_core_client,
+        keycloak_deployment.spec.template.metadata.labels["app"],
     )
 
 
@@ -739,7 +754,11 @@ async def traefik_application_fixture(model: Model):
         "traefik-k8s", channel="edge", trust=True, config={"routing_mode": "path"}
     )
     await model.wait_for_idle(
-        status="active", apps=[traefik.name], timeout=20 * 60, idle_period=30, raise_on_error=False
+        status="active",
+        apps=[traefik.name],
+        timeout=20 * 60,
+        idle_period=30,
+        raise_on_error=False,
     )
     unit_ips = await get_model_unit_addresses(model=model, app_name=traefik.name)
     assert unit_ips, f"Unit IP address not found for {traefik.name}"
