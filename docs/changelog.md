@@ -8,7 +8,7 @@ Each revision is versioned by the date of the revision.
 
 ## 2026-02-02
 
-- Add Java `custom_properties` configuration to charm config.
+- Add Java `system-properties` configuration to charm config.
 
 ## 2026-01-11
 
