@@ -39,14 +39,14 @@ parts:
     source: .
     plugin: uv
     build-snaps:
-    - astral-uv
+      - astral-uv
   templates:
     plugin: dump
     source: .
     prime:
-    - templates/jenkins-auth-proxy-config.xml
-    - templates/jenkins-config.xml
-    - templates/logging.properties
+      - templates/jenkins-auth-proxy-config.xml
+      - templates/jenkins-config.xml
+      - templates/logging.properties
 
 platforms:
   ubuntu@24.04:amd64:
@@ -111,6 +111,13 @@ config:
         Plugins installed by the user and their dependencies will be removed automatically if not on
         the list. Included plugins are not automatically installed.
       default: "bazaar,blueocean,dependency-check-jenkins-plugin,docker-build-publish,git,kubernetes,ldap,matrix-combinations-parameter,oic-auth,openid,pipeline-groovy-lib,postbuildscript,rebuild,reverse-proxy-auth-plugin,ssh-agent,thinBackup,pipeline-model-definition"
+    system-properties:
+      type: string
+      default: ""
+      description: |
+        Comma-separated JVM system properties to pass to the Jenkins process at startup.
+        Specify entries as key=value without the -D prefix. These are appended as -Dkey=value.
+        Example: jenkins.model.Jenkins.crumbIssuerProxyCompatibility=true
 
 actions:
   get-admin-password:

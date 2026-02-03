@@ -85,7 +85,7 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
         trust=True,
     )
 
-    juju.wait(lambda status: jubilant.all_active(status, traefik_public))
+    juju.wait(lambda status: jubilant.all_active(status, traefik_public), timeout=60 * 30)
 
     return traefik_public
 
@@ -132,7 +132,8 @@ def identity_platform_offers_fixture(
     return _IdentityPlatformOffers(
         oauth=_Offer(url=f"admin/{juju.model}.{hydra_endpoint}", saas=hydra_endpoint),
         send_ca_cert=_Offer(
-            url=f"admin/{juju.model}.{send_ca_cert_endpoint}", saas=send_ca_cert_endpoint
+            url=f"admin/{juju.model}.{send_ca_cert_endpoint}",
+            saas=send_ca_cert_endpoint,
         ),
     )
 
@@ -180,7 +181,8 @@ def jenkins_k8s_charms_fixture(
 
     juju.consume(identity_platform_offers.oauth.url, alias=identity_platform_offers.oauth.saas)
     juju.consume(
-        identity_platform_offers.send_ca_cert.url, alias=identity_platform_offers.send_ca_cert.saas
+        identity_platform_offers.send_ca_cert.url,
+        alias=identity_platform_offers.send_ca_cert.saas,
     )
 
     juju.integrate(f"{traefik_public}:ingress", f"{application.name}:ingress")
@@ -205,14 +207,17 @@ def identity_platform_traefik_ip_fixture(
 ):
     """Identity platform traefik ip."""
     idp_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
-        name=f"{identity_platform_public_traefik}-lb", namespace=identity_platform_juju.model
+        name=f"{identity_platform_public_traefik}-lb",
+        namespace=identity_platform_juju.model,
     )
     return idp_traefik_loadbalancer_service.status.load_balancer.ingress[0].ip
 
 
 @pytest.fixture(scope="module", name="jenkins_traefik_ip")
 def jenkins_traefik_ip_fixture(
-    kube_core_client: kubernetes.client.CoreV1Api, jenkins_k8s_charms: _JenkinsCharms, model: Model
+    kube_core_client: kubernetes.client.CoreV1Api,
+    jenkins_k8s_charms: _JenkinsCharms,
+    model: Model,
 ):
     """Jenkins traefik ip."""
     jenkins_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
@@ -303,7 +308,9 @@ async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
 
 
 @pytest_asyncio.fixture(scope="module", name="browser_type")
-async def browser_type_fixture(playwright: AsyncPlaywright) -> AsyncGenerator[BrowserType, None]:
+async def browser_type_fixture(
+    playwright: AsyncPlaywright,
+) -> AsyncGenerator[BrowserType, None]:
     """Browser type for playwright."""
     yield playwright.chromium
 
@@ -457,7 +464,9 @@ def jenkins_endpoint_fixture(model: Model, jenkins_k8s_charms: _JenkinsCharms):
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("patch_dns_resolver")
-async def test_auth_proxy_integration_returns_not_authorized(jenkins_endpoint: str) -> None:
+async def test_auth_proxy_integration_returns_not_authorized(
+    jenkins_endpoint: str,
+) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
     act: send a request Jenkins.
@@ -511,13 +520,17 @@ def test_credentials_fixture() -> _TestCredentials:
     Password must contain uppercase, lowercase, number and should be greater than 8 chars.
     """
     return _TestCredentials(
-        username="testinguser", email="testingemail@test.com", password=secrets.token_urlsafe(32)
+        username="testinguser",
+        email="testingemail@test.com",
+        password=secrets.token_urlsafe(32),
     )
 
 
 @pytest_asyncio.fixture(scope="function", name="totp")
 async def totp_fixture(
-    identity_platform_juju: jubilant.Juju, page: Page, test_credentials: _TestCredentials
+    identity_platform_juju: jubilant.Juju,
+    page: Page,
+    test_credentials: _TestCredentials,
 ) -> pyotp.TOTP:
     """User OTP fixture."""
     juju = identity_platform_juju
@@ -529,7 +542,11 @@ async def totp_fixture(
     # identity-id: 165d553f-61f4-40da-97cb-24ac3179b6a7
     # password-reset-code: "042474"
     # password-reset-link: https://idp.test/.../ui/reset_email?flow=...
-    logger.info("Creating admin account: %s %s", test_credentials.username, test_credentials.email)
+    logger.info(
+        "Creating admin account: %s %s",
+        test_credentials.username,
+        test_credentials.email,
+    )
     result = juju.run(
         "kratos/0",
         "create-admin-account",

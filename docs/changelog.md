@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+## 2026-02-02
+
+- Add Java `system-properties` configuration to charm config.
+
 ## 2026-01-11
 
 - Remove agent number of relations limit.
