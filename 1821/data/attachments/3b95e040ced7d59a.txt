@@ -1,0 +1,193 @@
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju add-model --no-switch jubilant-ffab2354
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju deploy --model jubilant-ffab2354 traefik-k8s traefik-public --channel latest/edge --config enable_experimental_forward_auth=true --config external_hostname=idp.test --trust
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
++ .model.name = 'jubilant-ffab2354'
++ .model.type = 'caas'
++ .model.controller = 'github-pr-4a019-microk8s'
++ .model.cloud = 'microk8s'
++ .model.version = '3.6.14'
++ .model.region = 'localhost'
++ .model.model_status.current = 'available'
++ .apps['traefik-public'].charm = 'traefik-k8s'
++ .apps['traefik-public'].charm_origin = 'charmhub'
++ .apps['traefik-public'].charm_name = 'traefik-k8s'
++ .apps['traefik-public'].charm_rev = 270
++ .apps['traefik-public'].exposed = False
++ .apps['traefik-public'].base.name = 'ubuntu'
++ .apps['traefik-public'].base.channel = '20.04'
++ .apps['traefik-public'].charm_channel = 'latest/edge'
++ .apps['traefik-public'].scale = 1
++ .apps['traefik-public'].app_status.current = 'waiting'
++ .apps['traefik-public'].app_status.message = 'installing agent'
++ .apps['traefik-public'].relations['peers'][0].related_app = 'traefik-public'
++ .apps['traefik-public'].relations['peers'][0].interface = 'traefik_peers'
++ .apps['traefik-public'].relations['peers'][0].scope = 'global'
++ .apps['traefik-public'].units['traefik-public/0'].workload_status.current = 'waiting'
++ .apps['traefik-public'].units['traefik-public/0'].workload_status.message = 'installing agent'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.current = 'allocating'
++ .apps['traefik-public'].endpoint_bindings[''] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['certificates'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['charm-tracing'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['experimental-forward-auth'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['grafana-dashboard'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['ingress'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['ingress-per-unit'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['logging'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['metrics-endpoint'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['peers'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['receive-ca-cert'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['traefik-route'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['upstream-ingress'] = 'alpha'
++ .apps['traefik-public'].endpoint_bindings['workload-tracing'] = 'alpha'
++ .storage.storage['configurations/0'].kind = 'filesystem'
++ .storage.storage['configurations/0'].status.current = 'pending'
++ .storage.storage['configurations/0'].persistent = False
++ .storage.storage['configurations/0'].life = 'alive'
++ .storage.storage['configurations/0'].attachments.units['traefik-public/0'].life = 'alive'
++ .storage.filesystems['0'].size = 0
++ .storage.filesystems['0'].volume = '0'
++ .storage.filesystems['0'].storage = 'configurations/0'
++ .storage.filesystems['0'].attachments.containers['traefik-public/0'].mount_point = ''
++ .storage.filesystems['0'].attachments.containers['traefik-public/0'].read_only = False
++ .storage.filesystems['0'].attachments.containers['traefik-public/0'].life = 'alive'
++ .storage.filesystems['0'].attachments.units['traefik-public/0'].life = 'alive'
++ .storage.filesystems['0'].life = 'alive'
++ .storage.filesystems['0'].status.current = 'pending'
++ .storage.volumes['0'].size = 0
++ .storage.volumes['0'].persistent = False
++ .storage.volumes['0'].storage = 'configurations/0'
++ .storage.volumes['0'].attachments.containers['traefik-public/0'].read_only = False
++ .storage.volumes['0'].attachments.containers['traefik-public/0'].life = 'alive'
++ .storage.volumes['0'].attachments.units['traefik-public/0'].life = 'alive'
++ .storage.volumes['0'].life = 'alive'
++ .storage.volumes['0'].status.current = 'pending'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
++ .apps['traefik-public'].charm_version = '6d2cb3a'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
++ .apps['traefik-public'].provider_id = '096bf594-f90a-431c-ab9e-e31b0174e920'
++ .apps['traefik-public'].address = '10.152.183.146'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
++ .apps['traefik-public'].units['traefik-public/0'].provider_id = 'traefik-public-0'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
++ .apps['traefik-public'].units['traefik-public/0'].address = '10.1.53.15'
+- .storage.storage['configurations/0'].status.current = 'pending'
++ .storage.storage['configurations/0'].status.current = 'attached'
++ .storage.storage['configurations/0'].status.message = 'Successfully provisioned volume pvc-b03230ec-4a53-4cbb-8883-09b4311fa680'
+- .storage.filesystems['0'].size = 0
++ .storage.filesystems['0'].size = 1024
++ .storage.filesystems['0'].provider_id = 'b03230ec-4a53-4cbb-8883-09b4311fa680'
+- .storage.filesystems['0'].attachments.containers['traefik-public/0'].mount_point = ''
++ .storage.filesystems['0'].attachments.containers['traefik-public/0'].mount_point = '/var/lib/juju/storage/configurations/0'
++ .storage.filesystems['0'].pool = 'kubernetes'
+- .storage.filesystems['0'].status.current = 'pending'
+- .storage.volumes['0'].size = 0
+- .storage.volumes['0'].persistent = False
++ .storage.filesystems['0'].status.current = 'attached'
++ .storage.filesystems['0'].status.message = 'Successfully provisioned volume pvc-b03230ec-4a53-4cbb-8883-09b4311fa680'
++ .storage.volumes['0'].size = 1024
++ .storage.volumes['0'].persistent = True
++ .storage.volumes['0'].provider_id = 'pvc-b03230ec-4a53-4cbb-8883-09b4311fa680'
++ .storage.volumes['0'].pool = 'kubernetes'
+- .storage.volumes['0'].status.current = 'pending'
++ .storage.volumes['0'].status.current = 'attached'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].app_status.message = 'installing agent'
++ .apps['traefik-public'].app_status.message = 'agent initialising'
+- .apps['traefik-public'].units['traefik-public/0'].workload_status.message = 'installing agent'
++ .apps['traefik-public'].units['traefik-public/0'].workload_status.message = 'agent initialising'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.version = '3.6.14'
++ .apps['traefik-public'].units['traefik-public/0'].leader = True
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].app_status.current = 'waiting'
+- .apps['traefik-public'].app_status.message = 'agent initialising'
++ .apps['traefik-public'].app_status.current = 'maintenance'
++ .apps['traefik-public'].app_status.message = 'installing charm software'
+- .apps['traefik-public'].units['traefik-public/0'].workload_status.current = 'waiting'
+- .apps['traefik-public'].units['traefik-public/0'].workload_status.message = 'agent initialising'
+- .apps['traefik-public'].units['traefik-public/0'].juju_status.current = 'allocating'
++ .apps['traefik-public'].units['traefik-public/0'].workload_status.current = 'maintenance'
++ .apps['traefik-public'].units['traefik-public/0'].workload_status.message = 'installing charm software'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.current = 'executing'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running install hook'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].app_status.current = 'maintenance'
+- .apps['traefik-public'].app_status.message = 'installing charm software'
++ .apps['traefik-public'].app_status.current = 'waiting'
++ .apps['traefik-public'].app_status.message = "waiting for service: 'traefik'"
+- .apps['traefik-public'].units['traefik-public/0'].workload_status.current = 'maintenance'
+- .apps['traefik-public'].units['traefik-public/0'].workload_status.message = 'installing charm software'
++ .apps['traefik-public'].units['traefik-public/0'].workload_status.current = 'waiting'
++ .apps['traefik-public'].units['traefik-public/0'].workload_status.message = "waiting for service: 'traefik'"
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running install hook'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running peers-relation-created hook'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running peers-relation-created hook'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running leader-elected hook'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running leader-elected hook'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running config-changed hook'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running config-changed hook'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running start hook'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].units['traefik-public/0'].juju_status.current = 'executing'
+- .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running start hook'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.current = 'idle'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].units['traefik-public/0'].juju_status.current = 'idle'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.current = 'executing'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running traefik-pebble-ready hook'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].app_status.current = 'waiting'
+- .apps['traefik-public'].app_status.message = "waiting for service: 'traefik'"
++ .apps['traefik-public'].app_status.current = 'maintenance'
++ .apps['traefik-public'].app_status.message = 'restarting traefik...'
+- .apps['traefik-public'].units['traefik-public/0'].workload_status.current = 'waiting'
+- .apps['traefik-public'].units['traefik-public/0'].workload_status.message = "waiting for service: 'traefik'"
+- .apps['traefik-public'].units['traefik-public/0'].juju_status.current = 'executing'
+- .apps['traefik-public'].units['traefik-public/0'].juju_status.message = 'running traefik-pebble-ready hook'
++ .apps['traefik-public'].units['traefik-public/0'].workload_status.current = 'maintenance'
++ .apps['traefik-public'].units['traefik-public/0'].workload_status.message = 'restarting traefik...'
++ .apps['traefik-public'].units['traefik-public/0'].juju_status.current = 'idle'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].app_status.current = 'maintenance'
+- .apps['traefik-public'].app_status.message = 'restarting traefik...'
++ .apps['traefik-public'].app_status.current = 'waiting'
++ .apps['traefik-public'].app_status.message = 'installing agent'
+- .apps['traefik-public'].units['traefik-public/0'].workload_status.current = 'maintenance'
+- .apps['traefik-public'].units['traefik-public/0'].workload_status.message = 'restarting traefik...'
++ .apps['traefik-public'].units['traefik-public/0'].workload_status.current = 'active'
++ .apps['traefik-public'].units['traefik-public/0'].workload_status.message = 'Serving at http://idp.test'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
++ .apps['traefik-public'].version = '2.11.0'
+[32mINFO    [0m jubilant.wait:_juju.py:1254 wait: status changed:
+- .apps['traefik-public'].app_status.current = 'waiting'
+- .apps['traefik-public'].app_status.message = 'installing agent'
++ .apps['traefik-public'].app_status.current = 'active'
++ .apps['traefik-public'].app_status.message = 'Serving at http://idp.test'
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m pytest_operator.plugin:plugin.py:806 Connecting to existing model github-pr-4a019-microk8s:testing on unspecified cloud
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHSession received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHTunneler received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[33mWARNING [0m juju.client.connection:connection.py:858 unexpected facade SSHServer received from the controller
+[32mINFO    [0m tests.integration.conftest:conftest.py:90 Available charms: ['./jenkins-k8s_ubuntu@22.04-amd64.charm', './jenkins-k8s_ubuntu@24.04-amd64.charm'], using: ./jenkins-k8s_ubuntu@24.04-amd64.charm
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying local:jenkins-k8s-0
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [idle] maintenance: Installing Jenkins.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [idle] maintenance: Installing Jenkins.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  jenkins-k8s/0 [idle] active: 
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju deploy --model jubilant-ffab2354 hydra --channel latest/stable --trust
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju deploy --model jubilant-ffab2354 identity-platform-login-ui-operator --channel latest/stable --trust
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju deploy --model jubilant-ffab2354 kratos --channel latest/stable --trust
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju deploy --model jubilant-ffab2354 postgresql-k8s --channel 14/stable --trust
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju deploy --model jubilant-ffab2354 self-signed-certificates --channel 1/stable --trust
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju integrate --model jubilant-ffab2354 postgresql-k8s:database hydra:pg-database
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju integrate --model jubilant-ffab2354 postgresql-k8s:database kratos:pg-database
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju integrate --model jubilant-ffab2354 hydra:public-ingress traefik-public:ingress

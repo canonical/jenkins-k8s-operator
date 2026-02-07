@@ -1,0 +1,5 @@
+[31m[1mERROR   [0m jenkinsapi.jenkinsbase:jenkinsbase.py:85 Failed request at http://10.1.53.14:8080/api/python with params: {'tree': 'jobs[name,color,url]'} jobs[name,color,url]
+[31m[1mERROR   [0m jenkinsapi.jenkinsbase:jenkinsbase.py:85 Failed request at http://10.1.53.14:8080/api/python with params: {'tree': 'jobs[name,color,url]'} jobs[name,color,url]
+[32mINFO    [0m jenkinsapi.build:build.py:399 Waited 0s for kubernetes_plugin_test #kubernetes_plugin_test #1 to complete
+[32mINFO    [0m jenkinsapi.build:build.py:399 Waited 5s for kubernetes_plugin_test #kubernetes_plugin_test #1 to complete
+[32mINFO    [0m jenkinsapi.build:build.py:399 Waited 10s for kubernetes_plugin_test #kubernetes_plugin_test #1 to complete

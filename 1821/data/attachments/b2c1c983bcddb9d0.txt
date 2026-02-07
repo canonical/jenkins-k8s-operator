@@ -1,0 +1,3 @@
+[1m[31mERROR   [0m jenkinsapi.jenkinsbase:jenkinsbase.py:85 Failed request at http://10.1.53.14:8080/pluginManager/api/python?depth=1 with params: None 
+[1m[31mERROR   [0m jenkinsapi.jenkinsbase:jenkinsbase.py:85 Failed request at http://10.1.53.14:8080/api/python with params: {'tree': 'jobs[name,color,url]'} jobs[name,color,url]
+[1m[31mERROR   [0m jenkinsapi.jenkinsbase:jenkinsbase.py:85 Failed request at http://10.1.53.14:8080/api/python with params: {'tree': 'jobs[name,color,url]'} jobs[name,color,url]
