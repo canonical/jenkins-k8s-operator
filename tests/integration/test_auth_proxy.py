@@ -112,7 +112,7 @@ def identity_platform_offers_fixture(
 
     juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
     juju.integrate(f"{postgresql}:database", f"{kratos}:pg-database")
-    juju.integrate(f"{hydra}:public-ingress", f"{traefik_public}:ingress")
+    juju.integrate(f"{hydra}:ingress", f"{traefik_public}:ingress")
     juju.integrate(f"{traefik_public}:certificates", f"{ca}:certificates")
     juju.integrate(f"{kratos}:hydra-endpoint-info", f"{hydra}:hydra-endpoint-info")
     juju.integrate(f"{kratos}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info")
