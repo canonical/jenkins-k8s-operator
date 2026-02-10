@@ -104,23 +104,25 @@ def identity_platform_offers_fixture(
     ca = "self-signed-certificates"
     traefik_public = identity_platform_public_traefik
 
-    juju.deploy(hydra, channel="latest/stable", trust=True)
-    juju.deploy(login_ui, channel="latest/stable", trust=True)
-    juju.deploy(kratos, channel="latest/stable", trust=True)
+    juju.deploy(hydra, channel="latest/edge", revision=399, trust=True)
+    juju.deploy(kratos, channel="latest/edge", revision=567, trust=True)
+    juju.deploy(login_ui, channel="latest/edge", revision=200, trust=True)
     juju.deploy(postgresql, channel="14/stable", trust=True)
-    juju.deploy(ca, channel="1/stable", trust=True)
+    juju.deploy(ca, channel="1/stable", revision=317, trust=True)
 
     juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
     juju.integrate(f"{postgresql}:database", f"{kratos}:pg-database")
-    juju.integrate(f"{hydra}:public-ingress", f"{traefik_public}:ingress")
     juju.integrate(f"{traefik_public}:certificates", f"{ca}:certificates")
     juju.integrate(f"{kratos}:hydra-endpoint-info", f"{hydra}:hydra-endpoint-info")
     juju.integrate(f"{kratos}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info")
     juju.integrate(f"{kratos}:kratos-info", f"{login_ui}:kratos-info")
-    juju.integrate(f"{kratos}:public-ingress", f"{traefik_public}:ingress")
     juju.integrate(f"{hydra}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info")
     juju.integrate(f"{hydra}:hydra-endpoint-info", f"{login_ui}:hydra-endpoint-info")
-    juju.integrate(f"{login_ui}:ingress", f"{traefik_public}:ingress")
+    juju.integrate(f"{traefik_public}:traefik-route", f"{hydra}:public-route")
+    juju.integrate(f"{traefik_public}:traefik-route", f"{kratos}:public-route")
+    juju.integrate(
+        f"{traefik_public}:traefik-route", f"{login_ui}:public-route"
+    )
 
     hydra_endpoint = "oauth"
     send_ca_cert_endpoint = "send-ca-cert"
