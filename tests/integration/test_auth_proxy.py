@@ -78,6 +78,7 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
         "traefik-k8s",
         traefik_public,
         channel="latest/edge",
+        revision=270, 
         config={
             "enable_experimental_forward_auth": "true",
             "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
