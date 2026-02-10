@@ -78,7 +78,7 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
         "traefik-k8s",
         traefik_public,
         channel="latest/edge",
-        revision=270, 
+        revision=270,
         config={
             "enable_experimental_forward_auth": "true",
             "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
@@ -121,9 +121,7 @@ def identity_platform_offers_fixture(
     juju.integrate(f"{hydra}:hydra-endpoint-info", f"{login_ui}:hydra-endpoint-info")
     juju.integrate(f"{traefik_public}:traefik-route", f"{hydra}:public-route")
     juju.integrate(f"{traefik_public}:traefik-route", f"{kratos}:public-route")
-    juju.integrate(
-        f"{traefik_public}:traefik-route", f"{login_ui}:public-route"
-    )
+    juju.integrate(f"{traefik_public}:traefik-route", f"{login_ui}:public-route")
 
     hydra_endpoint = "oauth"
     send_ca_cert_endpoint = "send-ca-cert"
