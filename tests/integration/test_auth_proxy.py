@@ -80,7 +80,7 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
         channel="latest/edge",
         revision=270,
         config={
-            "enable_experimental_forward_auth": "true",
+            # "enable_experimental_forward_auth": "true",
             "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
         },
         trust=True,
@@ -486,7 +486,9 @@ async def test_auth_proxy_integration_returns_not_authorized(
             verify=False,
             timeout=5,
         )
-        logger.info("Auth UI test response header: %s, url: %s", response.headers, response.url)
+        logger.info(
+            "Auth UI test response header: %s, url: %s, status code: %s",
+            response.headers, response.url, response.status_code)
         return (
             response.status_code == 200
             and IDENTITY_PLATFORM_HOSTNAME in response.url
