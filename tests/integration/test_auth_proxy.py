@@ -497,7 +497,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
 
     await wait_for(
         is_auth_ui,
-        timeout=60 * 3,
+        timeout=60 * 2,
     )
 
 
