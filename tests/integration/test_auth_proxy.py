@@ -172,7 +172,7 @@ def jenkins_k8s_charms_fixture(
         traefik_public,
         channel="latest/edge",
         config={
-            "enable_experimental_forward_auth": "true",
+            # "enable_experimental_forward_auth": "true",
             "external_hostname": JENKINS_HOSTNAME,
         },
         trust=True,
