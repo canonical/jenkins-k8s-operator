@@ -487,8 +487,8 @@ async def test_auth_proxy_integration_returns_not_authorized(
             timeout=5,
         )
         logger.info(
-            "Auth UI test response header: %s, url: %s, status code: %s",
-            response.headers, response.url, response.status_code)
+            "Auth UI test status code: %s, url: %s End",
+            response.status_code, response.url)
         return (
             response.status_code == 200
             and IDENTITY_PLATFORM_HOSTNAME in response.url
