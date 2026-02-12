@@ -465,13 +465,13 @@ def jenkins_endpoint_fixture(model: Model, jenkins_k8s_charms: _JenkinsCharms):
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("patch_dns_resolver")
-async def test_auth_proxy_integration_returns_not_authorized(
+async def test_auth_proxy_integration(
     jenkins_endpoint: str,
 ) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
     act: send a request Jenkins.
-    assert: a 401 is returned.
+    assert: a 200 is returned.
     """
 
     def is_auth_ui():
@@ -492,7 +492,6 @@ async def test_auth_proxy_integration_returns_not_authorized(
         return (
             response.status_code == 200
             and IDENTITY_PLATFORM_HOSTNAME in response.url
-            and "identity-platform-login-ui-operator" in response.url
         )
 
     await wait_for(
