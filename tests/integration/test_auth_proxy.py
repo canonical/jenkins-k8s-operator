@@ -487,12 +487,9 @@ async def test_auth_proxy_integration(
             timeout=5,
         )
         logger.info(
-            "Auth UI test status code: %s, url: %s End",
-            response.status_code, response.url)
-        return (
-            response.status_code == 200
-            and IDENTITY_PLATFORM_HOSTNAME in response.url
+            "Auth UI test status code: %s, url: %s End", response.status_code, response.url
         )
+        return response.status_code == 200 and IDENTITY_PLATFORM_HOSTNAME in response.url
 
     await wait_for(
         is_auth_ui,
@@ -554,9 +551,9 @@ async def totp_fixture(
         "create-admin-account",
         params={"username": test_credentials.username, "email": test_credentials.email},
     )
-    reset_page_url: str | None = result.results.get("password-reset-link")
+    reset_page_url: str | None = result.results.get("recovery-link")
     assert reset_page_url, f"Reset page link not found in results {result.results}"
-    reset_code: str | None = result.results.get("password-reset-code")
+    reset_code: str | None = result.results.get("recovery-code")
     assert reset_code is not None, f"Reset code not found in results {result.results}"
     logger.info("Created admin account, reset link: %s, code: %s", reset_page_url, reset_code)
 
