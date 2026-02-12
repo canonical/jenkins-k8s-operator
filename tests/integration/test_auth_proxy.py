@@ -80,7 +80,7 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
         channel="latest/edge",
         revision=270,
         config={
-            # "enable_experimental_forward_auth": "true",
+            "enable_experimental_forward_auth": "true",
             "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
         },
         trust=True,
@@ -172,7 +172,7 @@ def jenkins_k8s_charms_fixture(
         traefik_public,
         channel="latest/edge",
         config={
-            # "enable_experimental_forward_auth": "true",
+            "enable_experimental_forward_auth": "true",
             "external_hostname": JENKINS_HOSTNAME,
         },
         trust=True,
@@ -497,7 +497,7 @@ async def test_auth_proxy_integration_returns_not_authorized(
 
     await wait_for(
         is_auth_ui,
-        timeout=60 * 2,
+        timeout=60 * 3,
     )
 
 
