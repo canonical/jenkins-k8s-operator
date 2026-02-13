@@ -1023,7 +1023,7 @@ unit = [
 [package.metadata]
 requires-dist = [
     { name = "cosl", specifier = "==1.4.0" },
-    { name = "jenkinsapi", specifier = "==0.3.17" },
+    { name = "jenkinsapi", specifier = "==0.3.19" },
     { name = "jsonschema", specifier = "==4.26.0" },
     { name = "ops", specifier = "==3.5.2" },
     { name = "pydantic", specifier = "==1.10.26" },
@@ -1083,15 +1083,15 @@ unit = [
 
 [[package]]
 name = "jenkinsapi"
-version = "0.3.17"
+version = "0.3.19"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pytz" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/57/92/4bf312ee8b6cc4db4b256ab61d9694b9641c068c88237a2286e681b1447a/jenkinsapi-0.3.17.tar.gz", hash = "sha256:63333ecb6b1684433e34ade0d205c87dfcc378163cfd02428078620973315790", size = 403048, upload-time = "2025-11-01T02:24:56.637Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3a/8f/b74c653b649e14d9a144d189bb1377cb902ae1bb69326010d2f293ae5e88/jenkinsapi-0.3.19.tar.gz", hash = "sha256:c39deee467e05d1a6e82589d396e9e772cef7fb08726f8f7f2b619c85dcb78e7", size = 413621, upload-time = "2026-01-27T11:15:43.873Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/be/3d4f916ad5953a67803b7bba5d99c00dc6bb9f903c4beb2a13aaaad3a990/jenkinsapi-0.3.17-py3-none-any.whl", hash = "sha256:3f12733b60e86e6f06c06756e9d10eb3cc5bd7fb3eeb0e04104200d3a68d8eac", size = 70968, upload-time = "2025-11-01T02:24:54.885Z" },
+    { url = "https://files.pythonhosted.org/packages/6e/70/e382fe945184d5d2e9d49e0ab0fe7c7f78330397db3848235f948761149a/jenkinsapi-0.3.19-py3-none-any.whl", hash = "sha256:bf27c2a3277e435d182174dbd63171d10473586e208c13824dfbb5fa6d948424", size = 70935, upload-time = "2026-01-27T11:15:42.528Z" },
 ]
 
 [[package]]
