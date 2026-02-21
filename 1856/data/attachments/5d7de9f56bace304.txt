@@ -1,0 +1,37 @@
+[32mINFO    [0m juju.model:__init__.py:2301 Deploying ch:amd64/focal/grafana-k8s-160
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  grafana-k8s/0 [allocating] waiting: installing agent
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  grafana-k8s/0 [executing] maintenance: installing charm software
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  grafana-k8s/0 [idle] active: 
+[33mWARNING [0m juju.model:__init__.py:1683 relate is deprecated and will be removed. Use integrate instead.
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  grafana-k8s/0 [idle] active: 
+  jenkins-k8s/0 [idle] active: 
+[32mINFO    [0m juju.model:__init__.py:3254 Waiting for model:
+  grafana-k8s/0 [idle] active: 
+  jenkins-k8s/0 [idle] active:
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model    Controller                Cloud/Region        Version  SLA          Timestamp
+testing  github-pr-006d3-microk8s  microk8s/localhost  3.6.14   unsupported  15:31:06Z
+
+App             Version  Status  Scale  Charm           Channel   Rev  Address         Exposed  Message
+grafana-k8s     9.5.21   active      1  grafana-k8s     1/stable  160  10.152.183.244  no       
+jenkins-k8s     2.541.1  active      1  jenkins-k8s                 0  10.152.183.248  no       
+loki-k8s        2.9.6    active      1  loki-k8s        1/stable  199  10.152.183.53   no       
+prometheus-k8s  2.52.0   active      1  prometheus-k8s  1/stable  247  10.152.183.226  no       
+
+Unit               Workload  Agent  Address     Ports  Message
+grafana-k8s/0*     active    idle   10.1.53.27         
+jenkins-k8s/0*     active    idle   10.1.53.15         
+loki-k8s/0*        active    idle   10.1.53.24         
+prometheus-k8s/0*  active    idle   10.1.53.18         
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+model-90c6784d-8d53-4edb-8d43-79b94a3b09bb: 15:30:05 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-jenkins-k8s-0: 15:30:23 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
