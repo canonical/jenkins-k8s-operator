@@ -1,0 +1,7 @@
+[1m[31mERROR   [0m jenkinsapi.jenkinsbase:jenkinsbase.py:85 Failed request at http://10.1.53.14:8080/api/python with params: {'tree': 'jobs[name,color,url]'} jobs[name,color,url]
+[1m[31mERROR   [0m jenkinsapi.jenkinsbase:jenkinsbase.py:85 Failed request at http://10.1.53.14:8080/api/python with params: {'tree': 'jobs[name,color,url]'} jobs[name,color,url]
+[32mINFO    [0m tests.integration.test_plugins_part_1:test_plugins_part_1.py:427 Run backup path ls result: code: 1 stdout: , stderr: ls: cannot access '/srv/jenkins/backup/': No such file or directory
+ERROR command terminated with exit code 2
+
+[32mINFO    [0m tests.integration.test_plugins_part_1:test_plugins_part_1.py:427 Run backup path ls result: code: 0 stdout: FULL-2026-02-28_15-26
+, stderr:
