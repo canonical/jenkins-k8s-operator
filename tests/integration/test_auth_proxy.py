@@ -78,6 +78,7 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
         "traefik-k8s",
         traefik_public,
         channel="latest/edge",
+        revision=270,
         config={
             "enable_experimental_forward_auth": "true",
             "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
@@ -104,23 +105,23 @@ def identity_platform_offers_fixture(
     ca = "self-signed-certificates"
     traefik_public = identity_platform_public_traefik
 
-    juju.deploy(hydra, channel="latest/stable", trust=True)
-    juju.deploy(login_ui, channel="latest/stable", trust=True)
-    juju.deploy(kratos, channel="latest/stable", trust=True)
+    juju.deploy(hydra, channel="latest/edge", revision=399, trust=True)
+    juju.deploy(kratos, channel="latest/edge", revision=567, trust=True)
+    juju.deploy(login_ui, channel="latest/edge", revision=200, trust=True)
     juju.deploy(postgresql, channel="14/stable", trust=True)
-    juju.deploy(ca, channel="1/stable", trust=True)
+    juju.deploy(ca, channel="1/stable", revision=317, trust=True)
 
     juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
     juju.integrate(f"{postgresql}:database", f"{kratos}:pg-database")
-    juju.integrate(f"{hydra}:public-ingress", f"{traefik_public}:ingress")
     juju.integrate(f"{traefik_public}:certificates", f"{ca}:certificates")
     juju.integrate(f"{kratos}:hydra-endpoint-info", f"{hydra}:hydra-endpoint-info")
     juju.integrate(f"{kratos}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info")
     juju.integrate(f"{kratos}:kratos-info", f"{login_ui}:kratos-info")
-    juju.integrate(f"{kratos}:public-ingress", f"{traefik_public}:ingress")
     juju.integrate(f"{hydra}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info")
     juju.integrate(f"{hydra}:hydra-endpoint-info", f"{login_ui}:hydra-endpoint-info")
-    juju.integrate(f"{login_ui}:ingress", f"{traefik_public}:ingress")
+    juju.integrate(f"{traefik_public}:traefik-route", f"{hydra}:public-route")
+    juju.integrate(f"{traefik_public}:traefik-route", f"{kratos}:public-route")
+    juju.integrate(f"{traefik_public}:traefik-route", f"{login_ui}:public-route")
 
     hydra_endpoint = "oauth"
     send_ca_cert_endpoint = "send-ca-cert"
@@ -464,13 +465,13 @@ def jenkins_endpoint_fixture(model: Model, jenkins_k8s_charms: _JenkinsCharms):
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("patch_dns_resolver")
-async def test_auth_proxy_integration_returns_not_authorized(
+async def test_auth_proxy_integration(
     jenkins_endpoint: str,
 ) -> None:
     """
     arrange: deploy the Jenkins charm and establish auth_proxy relations.
     act: send a request Jenkins.
-    assert: a 401 is returned.
+    assert: a 200 is returned.
     """
 
     def is_auth_ui():
@@ -485,12 +486,10 @@ async def test_auth_proxy_integration_returns_not_authorized(
             verify=False,
             timeout=5,
         )
-        logger.info("Auth UI test response header: %s, url: %s", response.headers, response.url)
-        return (
-            response.status_code == 200
-            and IDENTITY_PLATFORM_HOSTNAME in response.url
-            and "identity-platform-login-ui-operator" in response.url
+        logger.info(
+            "Auth UI test status code: %s, url: %s End", response.status_code, response.url
         )
+        return response.status_code == 200 and IDENTITY_PLATFORM_HOSTNAME in response.url
 
     await wait_for(
         is_auth_ui,
@@ -552,9 +551,9 @@ async def totp_fixture(
         "create-admin-account",
         params={"username": test_credentials.username, "email": test_credentials.email},
     )
-    reset_page_url: str | None = result.results.get("password-reset-link")
+    reset_page_url: str | None = result.results.get("recovery-link")
     assert reset_page_url, f"Reset page link not found in results {result.results}"
-    reset_code: str | None = result.results.get("password-reset-code")
+    reset_code: str | None = result.results.get("recovery-code")
     assert reset_code is not None, f"Reset code not found in results {result.results}"
     logger.info("Created admin account, reset link: %s, code: %s", reset_page_url, reset_code)
 

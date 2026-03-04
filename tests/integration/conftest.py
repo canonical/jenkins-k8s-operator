@@ -39,13 +39,6 @@ from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebCli
 logger = logging.getLogger(__name__)
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
-IDENTITY_PLATFORM_APPS = [
-    "traefik-admin",
-    "traefik-public",
-    "hydra",
-    "kratos",
-    "kratos-external-idp-integrator",
-]
 
 
 @pytest.fixture(scope="module", name="model")
