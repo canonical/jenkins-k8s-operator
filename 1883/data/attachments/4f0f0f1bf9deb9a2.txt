@@ -1,0 +1,55 @@
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:544 Creating admin account: testinguser testingemail@test.com
+[32mINFO    [0m jubilant:_juju.py:313 cli: juju run --model jubilant-e79a3af1 --format json kratos/0 create-admin-account --params /home/ubuntu/snap/juju/common/tmp2logkik4
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:558 Created admin account, reset link: https://idp.test/ui/reset_email?flow=5e98d102-57ae-469e-b87f-f8d41c482c96, code: 659077
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:563 Navigating to reset link: https://idp.test/ui/reset_email?flow=5e98d102-57ae-469e-b87f-f8d41c482c96
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:567 Page content:<!DOCTYPE html><html><head><meta charset="utf-8" data-next-head=""><meta name="viewport" content="width=device-width" data-next-head=""><link rel="preload" href="./_next/static/css/6104b5e76d58eedc.css" as="style"><link rel="preload" href="./_next/static/css/9da8fb12399c58f6.css" as="style"><link rel="stylesheet" href="./_next/static/css/6104b5e76d58eedc.css" data-n-g=""><link rel="stylesheet" href="./_next/static/css/9da8fb12399c58f6.css"><noscript data-n-css=""></noscript><script defer="" nomodule="" src="./_next/static/chunks/polyfills-42372ed130431b0a.js"></script><script src="./_next/static/chunks/webpack-a3cbce65dab03667.js" defer=""></script><script src="./_next/static/chunks/framework-b1e5f14688f9ffe6.js" defer=""></script><script src="./_next/static/chunks/main-1f47325dad18d83a.js" defer=""></script><script src="./_next/static/chunks/pages/_app-35192eba4bb1cb95.js" defer=""></script><script src="./_next/static/chunks/adff19ab-80c8c2321e977a68.js" defer=""></script><script src="./_next/static/chunks/726-5e0c8d887a7b70ee.js" defer=""></script><script src="./_next/static/chunks/846-7d8ff5e7d1146d16.js" defer=""></script><script src="./_next/static/chunks/915-0bc4777f518fa933.js" defer=""></script><script src="./_next/static/chunks/746-481d645602173a85.js" defer=""></script><script src="./_next/static/chunks/190-8e074f72261614c1.js" defer=""></script><script src="./_next/static/chunks/pages/reset_email-06accdf211ea77ed.js" defer=""></script><script src="./_next/static/l1CaNSBrsKlBFrn3JCNX0/_buildManifest.js" defer=""></script><script src="./_next/static/l1CaNSBrsKlBFrn3JCNX0/_ssgManifest.js" defer=""></script><title>Enter an email to reset your password</title><link rel="icon" type="image/png" sizes="32x32" href="https://assets.ubuntu.com/v1/be7e4cc6-COF-favicon-32x32.png" data-next-head=""><link rel="icon" type="image/png" sizes="16x16" href="https://assets.ubuntu.com/v1/16c27f81-COF%20favicon-16x16.png" data-next-head=""><script src="../.well-known/webauthn.js" data-next-head=""></script></head><body><div id="__next"><div class="p-strip page-row row"><div class="col-6 col-start-large-4"><div class="u-no-padding page-card p-card" role="group"><div class="p-card__content"><header class="p-navigation is-dark"><div class="p-navigation__row"><div class="p-navigation__banner"><div class="p-navigation__tagged-logo"><a class="p-navigation__link" href="./login"><div class="p-navigation__logo-tag"><img class="p-navigation__logo-icon" alt="Logo" src="https://assets.ubuntu.com/v1/82818827-CoF_white.svg"></div><span class="p-navigation__logo-title">Canonical</span></a></div><ul class="p-navigation__items"></ul></div><nav class="p-navigation__nav"><ul class="p-navigation__items"></ul></nav></div></header><div class="p-card__inner page-inner"><h1 class="p-heading--4">Enter an email to reset your password</h1><div><span class="p-text--default" role="alert" aria-live="polite"><i class="p-icon--spinner u-animation--spin">Loading</i></span></div></div></div></div></div></div></div><script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{}},"page":"/reset_email","query":{},"buildId":"l1CaNSBrsKlBFrn3JCNX0","assetPrefix":".","nextExport":true,"autoExport":true,"isFallback":false,"scriptLoader":[]}</script><next-route-announcer><p aria-live="assertive" id="__next-route-announcer__" role="alert" style="border: 0px; clip: rect(0px, 0px, 0px, 0px); height: 1px; margin: -1px; overflow: hidden; padding: 0px; position: absolute; top: 0px; width: 1px; white-space: nowrap; overflow-wrap: normal;"></p></next-route-announcer></body></html>
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:572 Changing password: Xfi-BBf4v35C_zs0XCxLaEcpnHrww3EibvKfA0sh3HE
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:578 Getting OTP Code
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:581 Got OTP Code: VZUHFDLQYKKGSUHHAKUWSHJSE5AUKNDN
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:603 Navigating to Jenkins public endpoint: https://jenkins.test/testing-jenkins-k8s
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:607 Filling in login-ui credentials: testingemail@test.com, Xfi-BBf4v35C_zs0XCxLaEcpnHrww3EibvKfA0sh3HE
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:615 Signing in...
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:618 Authenticating with TOTP
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:621 Signing in...
+[32mINFO    [0m tests.integration.test_auth_proxy:test_auth_proxy.py:298 Deleting pod for DNS restart: coredns-66ffc85ffb-2hvsc
+[32mINFO    [0m pytest_operator.plugin:plugin.py:951 Model status:
+
+Model    Controller                Cloud/Region        Version  SLA          Timestamp
+testing  github-pr-006d3-microk8s  microk8s/localhost  3.6.19   unsupported  15:27:42Z
+
+SAAS          Status  Store                     URL
+oauth         active  github-pr-006d3-microk8s  admin/jubilant-e79a3af1.oauth
+send-ca-cert  active  github-pr-006d3-microk8s  admin/jubilant-e79a3af1.send-ca-cert
+
+App                       Version  Status  Scale  Charm                     Channel      Rev  Address         Exposed  Message
+jenkins-k8s               2.541.1  active      1  jenkins-k8s                              0  10.152.183.91   no       
+oauth2-proxy-k8s          v7.8.1   active      1  oauth2-proxy-k8s          latest/edge   25  10.152.183.49   no       
+self-signed-certificates           active      1  self-signed-certificates  1/stable     586  10.152.183.110  no       
+traefik-k8s               2.11.0   active      1  traefik-k8s               latest/edge  280  10.152.183.229  no       Serving at https://jenkins.test
+
+Unit                         Workload  Agent  Address     Ports  Message
+jenkins-k8s/0*               active    idle   10.1.53.17         
+oauth2-proxy-k8s/0*          active    idle   10.1.53.33         
+self-signed-certificates/0*  active    idle   10.1.53.31         
+traefik-k8s/0*               active    idle   10.1.53.30         Serving at https://jenkins.test
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:957 Juju error logs:
+
+unit-traefik-k8s-0: 15:25:21 ERROR unit.traefik-k8s/0.juju-log Failed to fetch LoadBalancer traefik-k8s-lb: services "traefik-k8s-lb" not found
+unit-traefik-k8s-0: 15:25:22 ERROR unit.traefik-k8s/0.juju-log ingress:4: Failed to fetch LoadBalancer traefik-k8s-lb: services "traefik-k8s-lb" not found
+unit-traefik-k8s-0: 15:25:23 ERROR unit.traefik-k8s/0.juju-log peers:0: Failed to fetch LoadBalancer traefik-k8s-lb: services "traefik-k8s-lb" not found
+unit-traefik-k8s-0: 15:25:25 ERROR unit.traefik-k8s/0.juju-log certificates:3: Failed to fetch LoadBalancer traefik-k8s-lb: services "traefik-k8s-lb" not found
+unit-traefik-k8s-0: 15:25:26 ERROR unit.traefik-k8s/0.juju-log experimental-forward-auth:7: Failed to fetch LoadBalancer traefik-k8s-lb: services "traefik-k8s-lb" not found
+unit-traefik-k8s-0: 15:25:27 ERROR unit.traefik-k8s/0.juju-log ingress:2: Failed to fetch LoadBalancer traefik-k8s-lb: services "traefik-k8s-lb" not found
+unit-traefik-k8s-0: 15:25:33 ERROR unit.traefik-k8s/0.juju-log ingress:2: failed processing the ingress relation <ops.model.Relation ingress:4>: 'provider is not ready: ingress for <ops.model.Relation ingress:4> wiped.'
+unit-traefik-k8s-0: 15:25:33 ERROR unit.traefik-k8s/0.juju-log ingress:2: failed processing the ingress relation <ops.model.Relation ingress:4>: 'provider is not ready: ingress for <ops.model.Relation ingress:4> wiped.'
+unit-traefik-k8s-0: 15:25:33 ERROR unit.traefik-k8s/0.juju-log ingress:2: The setup of some ingress relation failed, see previous logs
+unit-traefik-k8s-0: 15:25:45 ERROR unit.traefik-k8s/0.juju-log failed processing the ingress relation <ops.model.Relation ingress:4>: 'provider is not ready: ingress for <ops.model.Relation ingress:4> wiped.'
+unit-traefik-k8s-0: 15:25:45 ERROR unit.traefik-k8s/0.juju-log failed processing the ingress relation <ops.model.Relation ingress:4>: 'provider is not ready: ingress for <ops.model.Relation ingress:4> wiped.'
+unit-traefik-k8s-0: 15:25:46 ERROR unit.traefik-k8s/0.juju-log The setup of some ingress relation failed, see previous logs
+model-194aad7f-f931-4e16-8da5-4ee9cb83974d: 15:26:01 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-traefik-k8s-0: 15:26:01 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-jenkins-k8s-0: 15:26:01 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+unit-self-signed-certificates-0: 15:26:13 ERROR juju.worker.dependency "log-sender" manifold worker returned unexpected error: sending log message: websocket: close 1005 (no status): websocket: close sent
+
+[32mINFO    [0m pytest_operator.plugin:plugin.py:1039 Forgetting model main...
