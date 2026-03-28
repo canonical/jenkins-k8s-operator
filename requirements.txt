@@ -1,4 +1,4 @@
-cosl==1.7.0
+cosl==1.8.0
 jenkinsapi==0.3.17
 jsonschema==4.26.0
 ops==3.6.0
