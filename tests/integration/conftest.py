@@ -91,7 +91,7 @@ async def application_fixture(
     """Deploy the charm."""
     resources = {"jenkins-image": jenkins_image}
     # Deploy the charm and wait for active/idle status
-    application = await model.deploy(charm, resources=resources)
+    application = await model.deploy(charm, resources=resources, log=False)
     await model.wait_for_idle(
         apps=[application.name],
         raise_on_error=False,
@@ -180,6 +180,7 @@ async def jenkins_k8s_agents_fixture(model: Model):
         base="ubuntu@24.04",
         config={"jenkins_agent_labels": "k8s"},
         channel="latest/edge",
+        log=False,
     )
     await model.wait_for_idle(apps=[agent.name], status="blocked")
     return agent
@@ -213,6 +214,7 @@ async def extra_jenkins_k8s_agents_fixture(
         config={"jenkins_agent_labels": "k8s-extra"},
         channel="latest/edge",
         application_name="jenkins-agent-k8s-extra",
+        log=False,
     )
     await model.wait_for_idle(apps=[agent_app.name], status="blocked")
     yield agent_app
@@ -255,6 +257,7 @@ async def jenkins_machine_agents_fixture(
         config={"jenkins_agent_labels": "machine"},
         application_name=f"jenkins-agent-{app_suffix}",
         num_units=num_units,
+        log=False,
     )
     await machine_model.create_offer(f"{app.name}:{state.AGENT_RELATION}", state.AGENT_RELATION)
     await machine_model.wait_for_idle(
@@ -424,7 +427,7 @@ async def jenkins_with_proxy_fixture(
     resources = {"jenkins-image": jenkins_image}
     # Deploy the charm and wait for active/idle status
     application = await model_with_proxy.deploy(
-        charm, resources=resources, application_name="jenkins-proxy-k8s"
+        charm, resources=resources, application_name="jenkins-proxy-k8s", log=False
     )
     await model_with_proxy.wait_for_idle(
         apps=[application.name],
@@ -555,7 +558,7 @@ async def ldap_server_ip_fixture(
 @pytest_asyncio.fixture(scope="module", name="prometheus_related")
 async def prometheus_related_fixture(application: Application, model: Model):
     """The prometheus-k8s application related to Jenkins via metrics-endpoint relation."""
-    prometheus = await model.deploy("prometheus-k8s", channel="1/stable", trust=True)
+    prometheus = await model.deploy("prometheus-k8s", channel="1/stable", trust=True, log=False)
     await model.wait_for_idle(
         status="active", apps=[prometheus.name], raise_on_error=False, timeout=30 * 60
     )
@@ -573,7 +576,7 @@ async def prometheus_related_fixture(application: Application, model: Model):
 @pytest_asyncio.fixture(scope="module", name="loki_related")
 async def loki_related_fixture(application: Application, model: Model):
     """The loki-k8s application related to Jenkins via logging relation."""
-    loki = await model.deploy("loki-k8s", channel="1/stable", trust=True)
+    loki = await model.deploy("loki-k8s", channel="1/stable", trust=True, log=False)
     await model.wait_for_idle(
         status="active", apps=[loki.name], raise_on_error=False, timeout=30 * 60
     )
@@ -591,7 +594,7 @@ async def loki_related_fixture(application: Application, model: Model):
 @pytest_asyncio.fixture(scope="module", name="grafana_related")
 async def grafana_related_fixture(application: Application, model: Model):
     """The grafana-k8s application related to Jenkins via grafana-dashboard relation."""
-    grafana = await model.deploy("grafana-k8s", channel="1/stable", trust=True)
+    grafana = await model.deploy("grafana-k8s", channel="1/stable", trust=True, log=False)
     await model.wait_for_idle(
         status="active", apps=[grafana.name], raise_on_error=False, timeout=30 * 60
     )
@@ -744,7 +747,7 @@ def external_hostname_fixture() -> str:
 async def traefik_application_fixture(model: Model):
     """The application related to Jenkins via ingress v2 relation."""
     traefik = await model.deploy(
-        "traefik-k8s", channel="edge", trust=True, config={"routing_mode": "path"}
+        "traefik-k8s", channel="edge", trust=True, config={"routing_mode": "path"}, log=False
     )
     await model.wait_for_idle(
         status="active",

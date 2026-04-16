@@ -35,6 +35,7 @@ async def ingress_traefik_fixture(model: Model):
         trust=True,
         config={"routing_mode": "path"},
         application_name="agent-discovery-traefik",
+        log=False,
     )
     server_traefik = await model.deploy(
         "traefik-k8s",
@@ -42,6 +43,7 @@ async def ingress_traefik_fixture(model: Model):
         trust=True,
         config={"routing_mode": "path"},
         application_name="server-traefik",
+        log=False,
     )
     await model.wait_for_idle(
         status="active",

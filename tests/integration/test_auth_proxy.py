@@ -84,6 +84,7 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
             "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
         },
         trust=True,
+        log=False,
     )
 
     juju.wait(lambda status: jubilant.all_active(status, traefik_public), timeout=60 * 30)
@@ -105,11 +106,11 @@ def identity_platform_offers_fixture(
     ca = "self-signed-certificates"
     traefik_public = identity_platform_public_traefik
 
-    juju.deploy(hydra, channel="latest/edge", revision=399, trust=True)
-    juju.deploy(kratos, channel="latest/edge", revision=567, trust=True)
-    juju.deploy(login_ui, channel="latest/edge", revision=200, trust=True)
-    juju.deploy(postgresql, channel="14/stable", trust=True)
-    juju.deploy(ca, channel="1/stable", revision=317, trust=True)
+    juju.deploy(hydra, channel="latest/edge", revision=399, trust=True, log=False)
+    juju.deploy(kratos, channel="latest/edge", revision=567, trust=True, log=False)
+    juju.deploy(login_ui, channel="latest/edge", revision=200, trust=True, log=False)
+    juju.deploy(postgresql, channel="14/stable", trust=True, log=False)
+    juju.deploy(ca, channel="1/stable", revision=317, trust=True, log=False)
 
     juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
     juju.integrate(f"{postgresql}:database", f"{kratos}:pg-database")
@@ -176,9 +177,10 @@ def jenkins_k8s_charms_fixture(
             "external_hostname": JENKINS_HOSTNAME,
         },
         trust=True,
+        log=False,
     )
-    juju.deploy(ca, channel="1/stable", trust=True)
-    juju.deploy(oauth2_proxy, channel="latest/edge", trust=True)
+    juju.deploy(ca, channel="1/stable", trust=True, log=False)
+    juju.deploy(oauth2_proxy, channel="latest/edge", trust=True, log=False)
 
     juju.consume(identity_platform_offers.oauth.url, alias=identity_platform_offers.oauth.saas)
     juju.consume(

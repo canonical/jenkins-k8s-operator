@@ -34,9 +34,7 @@ async def jenkins_upgrade_depl(ops_test: OpsTest, model: Model):
     assert: the deployment has no errors.
     """
     application: Application = await model.deploy(
-        "jenkins-k8s",
-        application_name=JENKINS_APP_NAME,
-        channel="stable",
+        "jenkins-k8s", application_name=JENKINS_APP_NAME, channel="stable", log=False
     )
     await model.wait_for_idle(status="active", timeout=10 * 60)
     unit_web_client = await generate_unit_web_client_from_application(ops_test, model, application)
