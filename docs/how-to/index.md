@@ -1,14 +1,20 @@
 # How-to guides
 
-The following guides cover key processes and common tasks for managing
+These guides accompany you through key processes and common tasks for managing
 and using the Jenkins K8s charm.
 
 ## Initial setup
+
+These guides help you configure Jenkins after deployment, covering plugin management, resource allocation, and access setup.
+
 * [Configure installable plugins]
 * [Configure Jenkins memory usage]
 * [Get admin password]
 
 ## Basic operations
+
+Once your deployment is running, these guides cover day-to-day operations including scheduling, agent integration, storage management, and credential rotation.
+
 * [Configure restart-time-range]
 * [Integrate with external agents]
 * [Integrate with machine agents]
@@ -16,14 +22,18 @@ and using the Jenkins K8s charm.
 * [Rotate credentials]
 
 ## Security
+
+These guides cover identity and access management to help you secure your Jenkins deployment.
+
 * [Integrate with IAM]
 
-## Upgrade and redeployment 
+## Upgrade and redeployment
+
+These guides provide instructions for upgrading your deployment and recovering from backup, including full redeployment processes.
+
 * [Backup and restore]
 * [Upgrade]
 * [Redeploy]
-
-
 
 <!--Links-->
 
