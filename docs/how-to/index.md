@@ -13,19 +13,19 @@ These guides help you configure Jenkins after deployment, covering plugin manage
 
 ## Basic operations
 
-Once your deployment is running, these guides cover day-to-day operations including scheduling, agent integration, storage management, and credential rotation.
+Once your deployment is running, these guides cover day-to-day operations including scheduling, agent integration, and storage management.
 
 * [Configure restart-time-range]
 * [Integrate with external agents]
 * [Integrate with machine agents]
 * [Resize Jenkins storage]
-* [Rotate credentials]
 
 ## Security
 
-These guides cover identity and access management to help you secure your Jenkins deployment.
+These guides cover identity and access management, and credential management to help you secure your Jenkins deployment.
 
 * [Integrate with IAM]
+* [Rotate credentials]
 
 ## Upgrade and redeployment
 

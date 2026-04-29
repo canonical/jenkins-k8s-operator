@@ -4,18 +4,18 @@ This section contains technical details and information about the Jenkins K8s ch
 
 ## Charm usage
 
-The following pages provide technical details about the charm's features, including available actions, configuration options, and integration endpoints.
+The following pages provide technical details about the charm's features, including available actions, configuration options, and external access.
 
 * [Actions]
 * [Configurations]
-* [Integrations]
 * [External access]
 
-## Architecture
+## Architecture and design
 
-The following page provides an in-depth look at the charm's internal design and components.
+The following pages cover the charm's internal design and its relationships within the charming ecosystem.
 
 * [Charm architecture]
+* [Integrations]
 
 <!--Links-->
 
