@@ -136,6 +136,7 @@ dmypy.json
 # BEGIN VALE WORKFLOW IGNORE
 .vale/styles/*
 !.vale/styles/local
+!.vale/styles/Canonical
 !.vale/styles/config/
 
 .vale/styles/config/*
@@ -143,6 +144,7 @@ dmypy.json
 
 .vale/styles/config/vocabularies/*
 !.vale/styles/config/vocabularies/local
+!.vale/styles/config/vocabularies/Canonical
 # END VALE WORKFLOW IGNORE
 
 # OS artifacts
