@@ -30,18 +30,20 @@ from .types_ import Harness, HarnessWithContainer
     "charm_config",
     [pytest.param({"restart-time-range": "-2"}, id="invalid restart-time-range")],
 )
-def test___init___invailid_config(
+def test__on_config_changed_invalid_config_sets_blocked(
     harness_container: HarnessWithContainer, charm_config: dict[str, str]
 ):
     """
     arrange: given an invalid charm configuration.
-    act: when the Jenkins charm is initialized.
+    act: when the config-changed handler is triggered.
     assert: the charm falls into blocked status.
     """
     harness_container.harness.update_config(charm_config)
     harness_container.harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    jenkins_charm._on_config_changed(MagicMock(spec=ops.ConfigChangedEvent))
+
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
@@ -201,7 +203,10 @@ def test__remove_unlisted_plugins_error(
         harness_container.harness.begin()
 
         jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-        returned_status = jenkins_charm._remove_unlisted_plugins(harness_container.container)
+        dummy_state = state.State.from_charm(jenkins_charm)
+        returned_status = jenkins_charm._remove_unlisted_plugins(
+            harness_container.container, dummy_state
+        )
 
         assert returned_status == expected_status
 
@@ -216,7 +221,10 @@ def test__remove_unlisted_plugins(harness_container: HarnessWithContainer):
         harness_container.harness.begin()
 
         jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-        returned_status = jenkins_charm._remove_unlisted_plugins(harness_container.container)
+        dummy_state = state.State.from_charm(jenkins_charm)
+        returned_status = jenkins_charm._remove_unlisted_plugins(
+            harness_container.container, dummy_state
+        )
 
         assert returned_status.name == ACTIVE_STATUS_NAME
         assert returned_status.message == ""
