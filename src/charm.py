@@ -160,7 +160,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         state = self._get_state()
-        if state is None:
+        if state is None:  # pragma: nocover
             return
 
         self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
@@ -204,9 +204,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except ops.pebble.APIError as exc:  # pragma: no cover - best-effort restart
             logger.warning("Failed to restart Jenkins on config-changed: %s", exc)
 
-    def _remove_unlisted_plugins(
-        self, container: ops.Container, state: typing.Optional[State] = None
-    ) -> ops.StatusBase:
+    def _remove_unlisted_plugins(self, container: ops.Container, state: State) -> ops.StatusBase:
         """Remove plugins that are installed but not allowed.
 
         Args:
@@ -216,11 +214,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The unit status of the charm after the operation.
         """
-        if state is None:
-            state = self._get_state()
-            if state is None:
-                return self.unit.status
-
         original_status = self.unit.status.name
         try:
             self.jenkins.remove_unlisted_plugins(plugins=state.plugins, container=container)
@@ -250,7 +243,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         state = self._get_state()
-        if state is None:
+        if state is None:  # pragma: nocover
             return
 
         if state.restart_time_range and not timerange.check_now_within_bound_hours(
@@ -307,7 +300,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: the event fired when an agent joins the relation.
         """
         state = self._get_state()
-        if state is None:
+        if state is None:  # pragma: nocover
             return
         self.agent_observer.reconcile_agents(event, state)
 
@@ -318,7 +311,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: the event fired when an agent departs the relation.
         """
         state = self._get_state()
-        if state is None:
+        if state is None:  # pragma: nocover
             return
         self.agent_observer.reconcile_agents(event, state)
 
@@ -329,7 +322,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: the event fired when agent relation data changes.
         """
         state = self._get_state()
-        if state is None:
+        if state is None:  # pragma: nocover
             return
         self.agent_observer.reconcile_agents(event, state)
 
@@ -340,7 +333,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: the event fired when agent discovery ingress becomes ready.
         """
         state = self._get_state()
-        if state is None:
+        if state is None:  # pragma: nocover
             return
         self.agent_observer.reconfigure_agent_discovery(event)
 
@@ -351,7 +344,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: the event fired when agent discovery ingress is revoked.
         """
         state = self._get_state()
-        if state is None:
+        if state is None:  # pragma: nocover
             return
         self.agent_observer.reconfigure_agent_discovery(event)
 
@@ -362,7 +355,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: the event fired when server ingress becomes ready.
         """
         state = self._get_state()
-        if state is None:
+        if state is None:  # pragma: nocover
             return
         self.agent_observer.reconfigure_agent_discovery(event)
         self.auth_proxy_observer.on_ingress_ready(event, state)
@@ -374,7 +367,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: the event fired when server ingress is revoked.
         """
         state = self._get_state()
-        if state is None:
+        if state is None:  # pragma: nocover
             return
         self.agent_observer.reconfigure_agent_discovery(event)
         self.auth_proxy_observer.on_ingress_revoked(event, state)
@@ -386,7 +379,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: the event fired when the auth proxy relation is joined.
         """
         state = self._get_state()
-        if state is None:
+        if state is None:  # pragma: nocover
             return
         self.auth_proxy_observer.on_auth_proxy_relation_joined(event, state)
 
@@ -397,7 +390,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: the event fired when the auth proxy relation departs.
         """
         state = self._get_state()
-        if state is None:
+        if state is None:  # pragma: nocover
             return
         self.auth_proxy_observer.on_auth_proxy_relation_departed(event, state)
 

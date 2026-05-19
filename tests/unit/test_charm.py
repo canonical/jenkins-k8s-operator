@@ -443,3 +443,147 @@ def test__on_config_changed_success_replans_and_restarts(
         add_layer_mock.assert_called_once()
         replan_mock.assert_called_once()
         restart_mock.assert_called_once_with(state.JENKINS_SERVICE_NAME)
+
+
+def test__remove_unlisted_plugins_requires_state(harness_container: HarnessWithContainer):
+    """
+    arrange: given a started charm instance.
+    act: when _remove_unlisted_plugins is called without state.
+    assert: python rejects the call because state is required.
+    """
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    remove_unlisted_plugins = typing.cast(typing.Any, jenkins_charm._remove_unlisted_plugins)
+
+    with pytest.raises(TypeError):
+        remove_unlisted_plugins(harness_container.container)
+
+
+@pytest.mark.parametrize(
+    "handler_name, event_type",
+    [
+        pytest.param("_on_agent_relation_joined", ops.RelationJoinedEvent, id="joined"),
+        pytest.param("_on_agent_relation_departed", ops.RelationDepartedEvent, id="departed"),
+        pytest.param("_on_agent_relation_changed", ops.RelationChangedEvent, id="changed"),
+    ],
+)
+def test__agent_relation_handlers_reconcile_agents(
+    harness_container: HarnessWithContainer, handler_name: str, event_type: type[ops.EventBase]
+):
+    """
+    arrange: given a started charm and a valid derived state.
+    act: when an agent relation handler is called.
+    assert: the handler delegates to reconcile_agents with the event and state.
+    """
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    derived_state = state.State.from_charm(jenkins_charm)
+    event = MagicMock(spec=event_type)
+
+    with (
+        patch.object(jenkins_charm, "_get_state", return_value=derived_state),
+        patch.object(jenkins_charm.agent_observer, "reconcile_agents") as reconcile_mock,
+    ):
+        getattr(jenkins_charm, handler_name)(event)
+
+    reconcile_mock.assert_called_once_with(event, derived_state)
+
+
+@pytest.mark.parametrize(
+    "handler_name",
+    [
+        pytest.param("_on_agent_discovery_ingress_ready", id="ready"),
+        pytest.param("_on_agent_discovery_ingress_revoked", id="revoked"),
+    ],
+)
+def test__agent_discovery_ingress_handlers_reconfigure_agents(
+    harness_container: HarnessWithContainer, handler_name: str
+):
+    """
+    arrange: given a started charm and a valid derived state.
+    act: when an agent discovery ingress handler is called.
+    assert: the handler delegates to reconfigure_agent_discovery.
+    """
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    derived_state = state.State.from_charm(jenkins_charm)
+    event = MagicMock(spec=ops.EventBase)
+
+    with (
+        patch.object(jenkins_charm, "_get_state", return_value=derived_state),
+        patch.object(
+            jenkins_charm.agent_observer, "reconfigure_agent_discovery"
+        ) as reconfigure_mock,
+    ):
+        getattr(jenkins_charm, handler_name)(event)
+
+    reconfigure_mock.assert_called_once_with(event)
+
+
+def test__upgrade_charm_reconciles_storage_and_agents(harness_container: HarnessWithContainer):
+    """
+    arrange: given a started charm and a valid derived state.
+    act: when the upgrade-charm handler is called.
+    assert: storage, agent discovery and agents are reconciled.
+    """
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    derived_state = state.State.from_charm(jenkins_charm)
+    event = MagicMock(spec=ops.UpgradeCharmEvent)
+
+    with (
+        patch.object(jenkins_charm, "_get_state", return_value=derived_state),
+        patch.object(jenkins_charm.storage, "reconcile_storage") as reconcile_storage_mock,
+        patch.object(
+            jenkins_charm.agent_observer, "reconfigure_agent_discovery"
+        ) as reconfigure_mock,
+        patch.object(jenkins_charm.agent_observer, "reconcile_agents") as reconcile_agents_mock,
+    ):
+        jenkins_charm._upgrade_charm(event)
+
+    reconcile_storage_mock.assert_called_once_with(container=harness_container.container)
+    reconfigure_mock.assert_called_once_with(event)
+    reconcile_agents_mock.assert_called_once_with(event, derived_state)
+
+
+@pytest.mark.parametrize(
+    "handler_name, observer_name, event_type",
+    [
+        pytest.param(
+            "_on_auth_proxy_relation_joined",
+            "on_auth_proxy_relation_joined",
+            ops.RelationCreatedEvent,
+            id="joined",
+        ),
+        pytest.param(
+            "_on_auth_proxy_relation_departed",
+            "on_auth_proxy_relation_departed",
+            ops.RelationDepartedEvent,
+            id="departed",
+        ),
+    ],
+)
+def test__auth_proxy_relation_handlers_delegate(
+    harness_container: HarnessWithContainer,
+    handler_name: str,
+    observer_name: str,
+    event_type: type[ops.EventBase],
+):
+    """
+    arrange: given a started charm and a valid derived state.
+    act: when an auth-proxy relation handler is called.
+    assert: the handler delegates to the auth-proxy observer with the event and state.
+    """
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    derived_state = state.State.from_charm(jenkins_charm)
+    event = MagicMock(spec=event_type)
+
+    with (
+        patch.object(jenkins_charm, "_get_state", return_value=derived_state),
+        patch.object(jenkins_charm.auth_proxy_observer, observer_name) as observer_mock,
+    ):
+        getattr(jenkins_charm, handler_name)(event)
+
+    observer_mock.assert_called_once_with(event, derived_state)
