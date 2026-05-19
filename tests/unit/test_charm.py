@@ -97,6 +97,25 @@ def test_storage_not_ready(harness: Harness, event_handler: str):
     assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
 
 
+def test__get_state_returns_none_on_invalid_config(harness: Harness):
+    """
+    arrange: given an invalid charm config.
+    act: when _get_state() is called.
+    assert: unit is BlockedStatus and None is returned.
+    """
+    harness.update_config({"restart-time-range": "-2"})
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    with patch("state.State.from_charm") as from_charm_mock:
+        from_charm_mock.side_effect = state.CharmConfigInvalidError("bad config")
+        result = jenkins_charm._get_state()
+
+    assert result is None
+    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
+    assert jenkins_charm.unit.status.message == "bad config"
+
+
 def test__on_jenkins_pebble_ready_get_version_error(
     harness_container: HarnessWithContainer,
     mocked_get_request: typing.Callable[..., requests.Response],
