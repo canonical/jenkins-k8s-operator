@@ -10,7 +10,6 @@ import typing
 from dataclasses import dataclass
 
 import ops
-from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRevokedEvent
 
 import ingress
 import jenkins
@@ -139,6 +138,7 @@ class Observer(ops.Object):
             logger.info("No agent relation found.")
             return
 
+        # Make sure Jenkins is fully up and running before interacting with it.
         self.jenkins.wait_ready()
 
         self.charm.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")

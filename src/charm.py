@@ -235,6 +235,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         self.storage.reconcile_storage(container=container)
+        # Update the agent discovery address.
+        # Updating the secret is not required since it's calculated using the agent's node name.
         self.agent_observer.reconfigure_agent_discovery(event)
         self.agent_observer.reconcile_agents(event, self.state)
 

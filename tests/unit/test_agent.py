@@ -12,15 +12,15 @@ import pytest
 from ops import testing
 
 import jenkins
+from agent import Observer
 from charm import JenkinsK8sOperatorCharm
-from state import JENKINS_SERVICE_NAME, AgentMeta
+from state import JENKINS_SERVICE_NAME, AgentMeta, State
 
 _MONKEYPATCHED_FQDN = "192.0.2.0"
 
 
 def test_reconcile_agents_accepts_state_parameter():
     """reconcile_agents must accept state as an explicit keyword argument."""
-    from agent import Observer
     sig = inspect.signature(Observer.reconcile_agents)
     assert "state" in sig.parameters, "reconcile_agents must accept a 'state' parameter"
 
@@ -211,7 +211,6 @@ def test_reconcile_agents(
     act: when reconcile_agents is called.
     assert: expected agents are registered.
     """
-    from state import State
     ctx = testing.Context(JenkinsK8sOperatorCharm)
     with ctx(ctx.on.config_changed(), state) as mgr:
         # Ignore the mismatching type for FakeJenkinsService since this is a fake service for
@@ -258,7 +257,6 @@ def test_reconcile_agents_error(mock_jenkins_service: MagicMock):
     act: when reconcile is called.
     assert: Jenkins exception is raised.
     """
-    from state import State
     testing_containers = [
         # mypy thinks can_connect argument doesn't exist.
         testing.Container(
