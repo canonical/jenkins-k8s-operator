@@ -64,7 +64,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         )
         self.ingress_observer = ingress.Observer(self, "ingress-observer", INGRESS_RELATION_NAME)
         self.jenkins = jenkins.Jenkins(self.calculate_env())
-        self.actions_observer = actions.Observer(self, self.state, self.jenkins)
+        self.actions_observer = actions.Observer(self, self.jenkins)
         self.agent_observer = agent.Observer(
             charm=self,
             state=self.state,
