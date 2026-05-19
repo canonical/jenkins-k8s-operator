@@ -16,7 +16,7 @@ from charms.traefik_k8s.v2.ingress import (
 
 import jenkins
 import pebble
-from state import AUTH_PROXY_RELATION, JENKINS_SERVICE_NAME, State
+from state import JENKINS_SERVICE_NAME, State
 
 AUTH_PROXY_ALLOWED_ENDPOINTS: List[str] = []
 AUTH_PROXY_HEADERS = ["X-Auth-Request-User"]
@@ -33,48 +33,27 @@ class Observer(ops.Object):
         charm: ops.CharmBase,
         ingress: IngressPerAppRequirer,
         jenkins_instance: jenkins.Jenkins,
-        state: State,
     ):
-        """Initialize the observer and register event handlers.
+        """Initialize the observer.
 
         Args:
             charm: the parent charm to attach the observer to.
             ingress: the ingress object from which to extract the necessary settings.
             jenkins_instance: the Jenkins instance.
-            state: the charm state.
         """
         super().__init__(charm, "auth-proxy-observer")
         self.charm = charm
         self.ingress = ingress
         self.jenkins = jenkins_instance
-        self.state = state
 
         self.auth_proxy = AuthProxyRequirer(self.charm)
 
-        self.charm.framework.observe(
-            self.charm.on[AUTH_PROXY_RELATION].relation_joined,
-            self._on_auth_proxy_relation_joined,
-        )
-        self.charm.framework.observe(
-            self.charm.on[AUTH_PROXY_RELATION].relation_departed,
-            self._auth_proxy_relation_departed,
-        )
-
-        # Event hooks for agent-discovery-ingress
-        charm.framework.observe(
-            self.ingress.on.ready,
-            self._ingress_on_ready,
-        )
-        charm.framework.observe(
-            self.ingress.on.revoked,
-            self._ingress_on_revoked,
-        )
-
-    def _on_auth_proxy_relation_joined(self, event: ops.RelationCreatedEvent) -> None:
+    def on_auth_proxy_relation_joined(self, event: ops.RelationCreatedEvent, state: State) -> None:
         """Configure the auth proxy.
 
         Args:
             event: the event triggering the handler.
+            state: the current charm state.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         if not jenkins.is_storage_ready(container) or not self.ingress.url:
@@ -83,14 +62,17 @@ class Observer(ops.Object):
             return
 
         self._update_auth_proxy_config()
-        self._replan_jenkins(event)
+        self._replan_jenkins(event, state)
 
     # pylint: disable=duplicate-code
-    def _replan_jenkins(self, event: ops.EventBase, disable_security: bool = False) -> None:
+    def _replan_jenkins(
+        self, event: ops.EventBase, state: State, disable_security: bool = False
+    ) -> None:
         """Replan the jenkins service to account for prefix changes.
 
         Args:
             event: the event fired.
+            state: the current charm state.
             disable_security: Whether or not to replan with security disabled.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
@@ -98,7 +80,7 @@ class Observer(ops.Object):
             logger.warning("Service not yet ready. Deferring.")
             event.defer()
             return
-        pebble.replan_jenkins(container, self.jenkins, self.state, disable_security)
+        pebble.replan_jenkins(container, self.jenkins, state, disable_security)
 
     def _update_auth_proxy_config(self) -> None:
         """Update auth_proxy configuration with the correct jenkins url."""
@@ -109,35 +91,40 @@ class Observer(ops.Object):
         )
         self.auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
 
-    def _auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+    def on_auth_proxy_relation_departed(
+        self, event: ops.RelationDepartedEvent, state: State
+    ) -> None:
         """Unconfigure the auth proxy.
 
         Args:
             event: the event fired.
+            state: the current charm state.
         """
         # The charm still sees the relation when this hook is fired
         # We then force pebble to replan with security
-        self._replan_jenkins(event, False)
+        self._replan_jenkins(event, state, False)
 
-    def _ingress_on_ready(self, event: IngressPerAppReadyEvent) -> None:
+    def on_ingress_ready(self, event: IngressPerAppReadyEvent, state: State) -> None:
         """Handle ready event.
 
         Args:
             event: The event fired.
+            state: the current charm state.
         """
-        if self.state.auth_proxy_integrated:
+        if state.auth_proxy_integrated:
             self._update_auth_proxy_config()
-        self._replan_jenkins(event, self.state.auth_proxy_integrated)
+        self._replan_jenkins(event, state, state.auth_proxy_integrated)
 
-    def _ingress_on_revoked(self, event: IngressPerAppRevokedEvent) -> None:
+    def on_ingress_revoked(self, event: IngressPerAppRevokedEvent, state: State) -> None:
         """Handle revoked event.
 
         Args:
             event: The event fired.
+            state: the current charm state.
         """
         # call to update_prefix is needed here since the charm is not aware
         # That the prefix has changed during charm-init
         self.jenkins.update_prefix("")
-        if self.state.auth_proxy_integrated:
+        if state.auth_proxy_integrated:
             self._update_auth_proxy_config()
-        self._replan_jenkins(event, self.state.auth_proxy_integrated)
+        self._replan_jenkins(event, state, state.auth_proxy_integrated)

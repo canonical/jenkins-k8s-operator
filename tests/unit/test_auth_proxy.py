@@ -13,6 +13,7 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.testing import Harness
 
 from charm import JenkinsK8sOperatorCharm
+from state import State
 
 
 @patch("jenkins.is_storage_ready", return_value=False)
@@ -26,7 +27,8 @@ def test_on_auth_proxy_relation_joined_when_jenkins_storage_not_ready(_):
     harness.begin()
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
+    state_obj = State.from_charm(harness.charm)
+    harness.charm.auth_proxy_observer.on_auth_proxy_relation_joined(mock_event, state_obj)
 
     assert mock_event.defer.to_be_called_once()
 
@@ -42,7 +44,8 @@ def test_on_auth_proxy_relation_joined_when_ingress_not_ready(_):
     harness.begin()
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
+    state_obj = State.from_charm(harness.charm)
+    harness.charm.auth_proxy_observer.on_auth_proxy_relation_joined(mock_event, state_obj)
 
     assert mock_event.defer.to_be_called_once()
 
@@ -63,7 +66,8 @@ def test_on_auth_proxy_relation_joined(replan_mock, _):
     mock_ingress.url.return_value = "https://example.com"
     harness.charm.auth_proxy_observer.ingress = mock_ingress
     harness.charm.auth_proxy_observer.auth_proxy = MagicMock(spec=AuthProxyRequirer)
-    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
+    state_obj = State.from_charm(harness.charm)
+    harness.charm.auth_proxy_observer.on_auth_proxy_relation_joined(mock_event, state_obj)
 
     replan_mock.assert_called_once()
 
@@ -79,7 +83,8 @@ def test_auth_proxy_relation_departed_when_jenkins_storage_not_ready(_):
     harness.begin()
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    harness.charm.auth_proxy_observer._auth_proxy_relation_departed(mock_event)
+    state_obj = State.from_charm(harness.charm)
+    harness.charm.auth_proxy_observer.on_auth_proxy_relation_departed(mock_event, state_obj)
 
     assert mock_event.defer.to_be_called_once()
 
@@ -96,6 +101,7 @@ def test_auth_proxy_relation_departed(replan_mock, _):
     harness.begin()
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.RelationDepartedEvent)
-    harness.charm.auth_proxy_observer._auth_proxy_relation_departed(mock_event)
+    state_obj = State.from_charm(harness.charm)
+    harness.charm.auth_proxy_observer.on_auth_proxy_relation_departed(mock_event, state_obj)
 
     replan_mock.assert_called_once()

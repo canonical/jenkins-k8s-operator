@@ -75,7 +75,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         )
         self.cos_observer = cos.Observer(self)
         self.auth_proxy_observer = auth_proxy.Observer(
-            self, self.ingress_observer.ingress, self.jenkins, self.state
+            self, self.ingress_observer.ingress, self.jenkins
         )
         self.framework.observe(
             self.on.jenkins_home_storage_attached,
