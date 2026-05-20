@@ -11,7 +11,6 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.testing import Harness
 
 import jenkins
-import pebble
 from charm import JenkinsK8sOperatorCharm
 
 
@@ -43,12 +42,15 @@ def test_traefik_integration_added_replans_jenkins(
     assert: pebble replan should run twice, one for ingress ready, one for ingress revoked.
     """
     monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
-    replan_mock = MagicMock()
-    monkeypatch.setattr(pebble, "replan_jenkins", replan_mock)
     mock_ingress_url = "http://ingress.test/model-unit-0"
 
     harness.begin()
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
+
+    container = harness.model.unit.containers["jenkins"]
+    replan_mock = MagicMock()
+    monkeypatch.setattr(container, "replan", replan_mock)
+
     ingress_relation_id = harness.add_relation(
         "ingress",
         "traefik-k8s",
@@ -68,8 +70,6 @@ def test_traefik_integration_added_with_auth_proxy_replans_jenkins(
     assert: pebble replan should run twice, one for ingress ready, one for ingress revoked.
     """
     monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
-    replan_mock = MagicMock()
-    monkeypatch.setattr(pebble, "replan_jenkins", replan_mock)
     mock_ingress_url = "http://ingress.test/model-unit-0"
     harness.add_relation(
         "auth-proxy",
@@ -79,6 +79,11 @@ def test_traefik_integration_added_with_auth_proxy_replans_jenkins(
     harness.begin()
 
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
+
+    container = harness.model.unit.containers["jenkins"]
+    replan_mock = MagicMock()
+    monkeypatch.setattr(container, "replan", replan_mock)
+
     ingress_relation_id = harness.add_relation(
         "ingress",
         "traefik-k8s",

@@ -612,6 +612,6 @@ def create_kubernetes_cloud(
     res = unit_web_client.client.requester.post_url(
         url=url, headers=headers, data=payload, timeout=60 * 5
     )
-    logger.debug("Cloud created, %s", res.status_code)
+    logger.debug("Cloud created, status=%s body=%s", res.status_code, res.text)
 
     return kubernetes_test_cloud_name if res.status_code == 200 else None
