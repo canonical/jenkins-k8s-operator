@@ -72,15 +72,13 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.auth_proxy_observer = auth_proxy.Observer(
             self, self.ingress_observer.ingress, self.jenkins
         )
-
-        # Register all events to funnel through reconcile
         self.framework.observe(
             self.on.jenkins_home_storage_attached,
             self._on_jenkins_home_storage_attached,
         )
         self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.update_status, self._on_update_status)
-        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
+        self.framework.observe(self.on.upgrade_charm, self._upgrade_charm)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(
             self.on[AGENT_RELATION].relation_joined, self._on_agent_relation_joined
@@ -115,8 +113,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._on_auth_proxy_relation_departed,
         )
 
-    # ─── State derivation ───────────────────────────────────────────────
-
     def _get_state(self) -> typing.Optional[State]:
         """Derive the charm state fresh from current config and relation data.
 
@@ -145,130 +141,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             JENKINS_PREFIX=self.ingress_observer.get_path(),
         )
 
-    # ─── Reconciliation ─────────────────────────────────────────────────
-
-    def _reconcile(self, event: ops.EventBase) -> None:
-        """Single top-level reconcile method invoked by all event handlers.
-
-        This ensures all subsystems are reconciled to the desired state on every event,
-        making the charm converge regardless of event ordering.
+    def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
+        """Configure and start Jenkins server.
 
         Args:
-            event: The event that triggered reconciliation.
-        """
-        container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        check_result = precondition.check(container=container, storages=self.model.storages)
-        if not check_result.success:
-            self.unit.status = ops.WaitingStatus(check_result.reason or "")
-            event.defer()
-            return
-
-        state = self._get_state()
-        if state is None:
-            return
-
-        # Storage ownership only needs correction on attach/upgrade events
-        if isinstance(event, (ops.StorageAttachedEvent, ops.UpgradeCharmEvent)):
-            self._reconcile_storage(container)
-
-        self._reconcile_pebble(container, state)
-        self._reconcile_agents(event, state)
-        self._reconcile_agent_discovery()
-        self._reconcile_auth_proxy(event, state)
-        self._reconcile_plugins(container, state)
-
-        self.unit.status = ops.ActiveStatus()
-
-    def _reconcile_storage(self, container: ops.Container) -> None:
-        """Ensure storage permissions are correct.
-
-        Args:
-            container: The Jenkins workload container.
-        """
-        self.storage.reconcile_storage(container=container)
-
-    def _reconcile_pebble(self, container: ops.Container, charm_state: State) -> None:
-        """Ensure the Pebble layer matches desired state.
-
-        Args:
-            container: The Jenkins workload container.
-            charm_state: The current charm state.
-        """
-        desired_layer = pebble.get_pebble_layer(self.jenkins, charm_state)
-        try:
-            current_services = container.get_plan().services
-        except Exception:  # pylint: disable=broad-except
-            current_services = {}
-        desired_services = desired_layer.services
-
-        # Only replan if the layer has changed
-        if current_services != desired_services:
-            container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
-            container.replan()
-
-    def _reconcile_agents(self, event: ops.EventBase, state: State) -> None:
-        """Reconcile Jenkins agent nodes to match relation state.
-
-        Args:
-            event: The triggering event (for deferral if Jenkins not ready).
-            state: The current charm state.
-        """
-        if not state.agent_relation_meta:
-            return
-        self.agent_observer.reconcile_agents(event, state)
-
-    def _reconcile_agent_discovery(self) -> None:
-        """Update the agent discovery URL in all connected agent relations."""
-        for relation in self.model.relations[AGENT_RELATION]:
-            relation_discovery_url = relation.data[self.model.unit].get("url")
-            if (
-                relation_discovery_url
-                and relation_discovery_url == self.agent_observer.agent_discovery_url
-            ):
-                continue
-            relation.data[self.model.unit].update({"url": self.agent_observer.agent_discovery_url})
-
-    def _reconcile_auth_proxy(self, event: ops.EventBase, state: State) -> None:
-        """Reconcile auth proxy configuration.
-
-        Args:
-            event: The triggering event.
-            state: The current charm state.
-        """
-        if state.auth_proxy_integrated and self.ingress_observer.ingress.url:
-            self.auth_proxy_observer._update_auth_proxy_config()
-
-    def _reconcile_plugins(self, container: ops.Container, state: State) -> None:
-        """Remove plugins that are installed but not allowed.
-
-        Args:
-            container: The Jenkins workload container.
-            state: The current charm state.
-        """
-        if not state.restart_time_range:
-            return
-        if not timerange.check_now_within_bound_hours(
-            state.restart_time_range.start, state.restart_time_range.end
-        ):
-            return
-
-        try:
-            self.jenkins.remove_unlisted_plugins(plugins=state.plugins, container=container)
-        except (jenkins.JenkinsPluginError, jenkins.JenkinsError) as exc:
-            logger.error("Failed to remove unlisted plugin, %s", exc)
-        except TimeoutError as exc:
-            logger.error("Failed to remove plugins, %s", exc)
-
-    # ─── Bootstrap (first-run only) ─────────────────────────────────────
-
-    def _bootstrap_jenkins(self, event: ops.EventBase) -> None:
-        """Bootstrap Jenkins on first pebble-ready.
-
-        This performs the full install and version detection that only needs
-        to happen once (or on upgrade).
-
-        Args:
-            event: The event that triggered the bootstrap.
+            event: The event fired when pebble is ready.
 
         Raises:
             TimeoutError: if there was an error waiting for Jenkins service to come up.
@@ -287,6 +164,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
+        # First Jenkins server start installs Jenkins server.
         pebble.replan_jenkins(container, self.jenkins, state)
         try:
             version = self.jenkins.version
@@ -297,47 +175,123 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.unit.set_workload_version(version)
         self.unit.status = ops.ActiveStatus()
 
-    # ─── Event handlers (thin wrappers) ─────────────────────────────────
-
-    def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
-        """Configure and start Jenkins server on first pebble ready.
-
-        Args:
-            event: The event fired when pebble is ready.
-        """
-        self._bootstrap_jenkins(event)
-
     def _on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
-        """Handle configuration changes.
+        """Apply configuration changes impacting Jenkins start flags.
+
+        This replans the Pebble layer with any updated JVM system properties
+        and restarts the Jenkins service.
+        """
+        state = self._get_state()
+        if state is None:
+            return
+
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        if not check_result.success:
+            self.unit.status = ops.WaitingStatus(check_result.reason or "")
+            event.defer()
+            return
+
+        # Re-apply the layer and restart Jenkins to pick up new flags
+        container.add_layer(
+            JENKINS_SERVICE_NAME,
+            pebble.get_pebble_layer(self.jenkins, state),
+            combine=True,
+        )
+        container.replan()
+        try:
+            container.restart(JENKINS_SERVICE_NAME)
+        except ops.pebble.APIError as exc:  # pragma: no cover - best-effort restart
+            logger.warning("Failed to restart Jenkins on config-changed: %s", exc)
+
+    def _remove_unlisted_plugins(self, container: ops.Container, state: State) -> ops.StatusBase:
+        """Remove plugins that are installed but not allowed.
 
         Args:
-            event: The config-changed event.
+            container: The jenkins workload container.
+            state: The current charm state.
+
+        Returns:
+            The unit status of the charm after the operation.
         """
-        self._reconcile(event)
+        original_status = self.unit.status.name
+        try:
+            self.jenkins.remove_unlisted_plugins(plugins=state.plugins, container=container)
+        except (jenkins.JenkinsPluginError, jenkins.JenkinsError) as exc:
+            logger.error("Failed to remove unlisted plugin, %s", exc)
+            return ops.StatusBase.from_name(original_status, "Failed to remove unlisted plugin.")
+        except TimeoutError as exc:
+            logger.error("Failed to remove plugins, %s", exc)
+            return ops.BlockedStatus("Failed to remove plugins.")
+        return ops.ActiveStatus()
 
     def _on_update_status(self, event: ops.UpdateStatusEvent) -> None:
         """Handle update status event.
 
+        On Update status:
+        1. Remove plugins that are installed but are not allowed by plugins config value.
+        2. Update Jenkins patch version if available and is within restart-time-range config value.
+
         Args:
             event: The update status hook event.
         """
-        self._reconcile(event)
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        if not check_result.success:
+            self.unit.status = ops.WaitingStatus(check_result.reason or "")
+            event.defer()
+            return
+
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+
+        if state.restart_time_range and not timerange.check_now_within_bound_hours(
+            state.restart_time_range.start, state.restart_time_range.end
+        ):
+            return
+
+        self.unit.status = self._remove_unlisted_plugins(container=container, state=state)
 
     def _on_jenkins_home_storage_attached(self, event: ops.StorageAttachedEvent) -> None:
-        """Handle storage attached.
+        """Correctly set permission when storage is attached.
 
         Args:
             event: The event fired when the storage is attached.
         """
-        self._reconcile(event)
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        if not check_result.success:
+            self.unit.status = ops.WaitingStatus(check_result.reason or "")
+            event.defer()
+            return
 
-    def _on_upgrade_charm(self, event: ops.UpgradeCharmEvent) -> None:
-        """Handle charm upgrade.
+        # There are no logical changes, this function will be refactored into part of th reconcile
+        self.storage.reconcile_storage(container=container)  # pragma: nocover
+
+    def _upgrade_charm(self, event: ops.UpgradeCharmEvent) -> None:
+        """Correctly set permissions when charm is upgraded.
 
         Args:
             event: The event fired when the charm is upgraded.
         """
-        self._reconcile(event)
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        # There are no logical changes, this function will be refactored into part of th reconcile
+        if not check_result.success:  # pragma: nocover
+            self.unit.status = ops.WaitingStatus(check_result.reason or "")
+            event.defer()
+            return
+
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+
+        self.storage.reconcile_storage(container=container)
+        # Update the agent discovery address.
+        # Updating the secret is not required since it's calculated using the agent's node name.
+        self.agent_observer.reconfigure_agent_discovery(event)
+        self.agent_observer.reconcile_agents(event, state)
 
     def _on_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
         """Handle agent relation joined.
@@ -345,7 +299,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: the event fired when an agent joins the relation.
         """
-        self._reconcile(event)
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconcile_agents(event, state)
 
     def _on_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
         """Handle agent relation departed.
@@ -353,7 +310,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: the event fired when an agent departs the relation.
         """
-        self._reconcile(event)
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconcile_agents(event, state)
 
     def _on_agent_relation_changed(self, event: ops.RelationChangedEvent) -> None:
         """Handle agent relation changed.
@@ -361,7 +321,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: the event fired when agent relation data changes.
         """
-        self._reconcile(event)
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconcile_agents(event, state)
 
     def _on_agent_discovery_ingress_ready(self, event: ops.EventBase) -> None:
         """Handle agent discovery ingress ready event.
@@ -369,7 +332,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: the event fired when agent discovery ingress becomes ready.
         """
-        self._reconcile(event)
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconfigure_agent_discovery(event)
 
     def _on_agent_discovery_ingress_revoked(self, event: ops.EventBase) -> None:
         """Handle agent discovery ingress revoked event.
@@ -377,7 +343,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: the event fired when agent discovery ingress is revoked.
         """
-        self._reconcile(event)
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconfigure_agent_discovery(event)
 
     def _on_server_ingress_ready(self, event: ops.EventBase) -> None:
         """Handle server ingress ready event.
@@ -385,7 +354,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: the event fired when server ingress becomes ready.
         """
-        self._reconcile(event)
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconfigure_agent_discovery(event)
+        self.auth_proxy_observer.on_ingress_ready(event, state)
 
     def _on_server_ingress_revoked(self, event: ops.EventBase) -> None:
         """Handle server ingress revoked event.
@@ -393,7 +366,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: the event fired when server ingress is revoked.
         """
-        self._reconcile(event)
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconfigure_agent_discovery(event)
+        self.auth_proxy_observer.on_ingress_revoked(event, state)
 
     def _on_auth_proxy_relation_joined(self, event: ops.RelationCreatedEvent) -> None:
         """Handle auth proxy relation joined.
@@ -401,7 +378,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: the event fired when the auth proxy relation is joined.
         """
-        self._reconcile(event)
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.auth_proxy_observer.on_auth_proxy_relation_joined(event, state)
 
     def _on_auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
         """Handle auth proxy relation departed.
@@ -409,7 +389,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: the event fired when the auth proxy relation departs.
         """
-        self._reconcile(event)
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.auth_proxy_observer.on_auth_proxy_relation_departed(event, state)
 
 
 if __name__ == "__main__":  # pragma: nocover
