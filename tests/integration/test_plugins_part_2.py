@@ -227,10 +227,10 @@ async def test_kubernetes_plugin(
     # Use plain credentials to be able to create secret-file/secret-text credentials
     await install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
 
-    plugins = unit_web_client.client.get_plugins_info()
+    plugins = unit_web_client.client.plugins
     logger.info(
         "Installed plugins: %s",
-        {p["shortName"]: p["version"] for p in plugins.get("plugins", [])},
+        {name: plugin.version for name, plugin in plugins.items()},
     )
 
     logger.info("Jenkins info pre-build: %s", unit_web_client.client.get_info())
