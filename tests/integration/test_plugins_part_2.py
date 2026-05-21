@@ -253,10 +253,11 @@ async def test_kubernetes_plugin(
     build_status = _invoke_job_with_retry(job)
 
     try:
+        # /log/all is a UI page; /log/all/api/json returns structured log records
         system_log_resp = unit_web_client.client.requester.get_url(
-            f"{unit_web_client.web}/log/all"
+            f"{unit_web_client.web}/log/all/api/json?depth=1"
         )
-        logger.info("Jenkins system log:\n%s", system_log_resp.text)
+        logger.info("Jenkins system log (JSON): %s", system_log_resp.text[:5000])
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("Could not fetch Jenkins system log: %s", exc)
 
@@ -290,21 +291,18 @@ def _invoke_job_with_retry(job: jenkinsapi.job.Job) -> str:
 
 
 def _log_k8s_agent_pods(kube_core_client: kubernetes.client.CoreV1Api) -> None:
-    """Log K8s pod status, container logs and events for all jenkins agent pods.
+    """Log K8s pod status, container logs and events for all pods in all namespaces.
+
+    Logs every pod so dynamically-created Kubernetes plugin pods (which use
+    arbitrary names/labels) are visible alongside the Juju-deployed agent pods.
 
     Args:
         kube_core_client: The Kubernetes core API client.
     """
     try:
         pods = kube_core_client.list_pod_for_all_namespaces()
-        agent_pods = [
-            p
-            for p in pods.items
-            if any("jenkins" in (c.name or "") for c in (p.spec.containers or []))
-            or "jenkins" in (p.metadata.name or "")
-        ]
-        logger.info("Jenkins-related pods found: %s", [p.metadata.name for p in agent_pods])
-        for pod in agent_pods:
+        logger.info("All pods: %s", [(p.metadata.namespace, p.metadata.name) for p in pods.items])
+        for pod in pods.items:
             ns = pod.metadata.namespace
             name = pod.metadata.name
             logger.info(
