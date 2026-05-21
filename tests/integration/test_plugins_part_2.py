@@ -233,7 +233,7 @@ async def test_kubernetes_plugin(
         {name: plugin.version for name, plugin in plugins.iteritems()},
     )
 
-    logger.info("Jenkins info pre-build: %s", unit_web_client.client.get_info())
+    logger.info("Jenkins version pre-build: %s", unit_web_client.client.version)
 
     credentials_id = await wait_for(
         functools.partial(create_secret_file_credentials, unit_web_client, kube_config)
