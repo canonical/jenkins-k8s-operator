@@ -8,10 +8,12 @@ import json
 import logging
 
 import jenkinsapi.plugin
+import jenkinsapi.job
 import kubernetes.client
 import kubernetes.config
 import pytest
 import requests
+import tenacity
 
 from .helpers import (
     create_kubernetes_cloud,
@@ -248,14 +250,7 @@ async def test_kubernetes_plugin(
         gen_test_pipeline_with_custom_script_xml(kubernetes_test_pipeline_script()),
     )
 
-    queue_item = job.invoke()
-    queue_item.block_until_complete()
-
-    build: jenkinsapi.build.Build = queue_item.get_build()
-    build_status = build.get_status()
-    log_stream = build.stream_logs()
-    logs = "".join(log_stream)
-    logger.info("Build status: %s\nBuild logs:\n%s", build_status, logs)
+    build_status = _invoke_job_with_retry(job)
 
     try:
         system_log_resp = unit_web_client.client.requester.get_url(
@@ -268,6 +263,30 @@ async def test_kubernetes_plugin(
     _log_k8s_agent_pods(kube_core_client)
 
     assert build_status == "SUCCESS"
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda status: status == "ABORTED"),
+    stop=tenacity.stop_after_attempt(3),
+    reraise=True,
+)
+def _invoke_job_with_retry(job: jenkinsapi.job.Job) -> str:
+    """Invoke a Jenkins job and return the build status, retrying on ABORTED.
+
+    Args:
+        job: The Jenkins job to invoke.
+
+    Returns:
+        The build status string.
+    """
+    queue_item = job.invoke()
+    queue_item.block_until_complete()
+
+    build: jenkinsapi.build.Build = queue_item.get_build()
+    build_status = build.get_status()
+    logs = "".join(build.stream_logs())
+    logger.info("Build status: %s\nBuild logs:\n%s", build_status, logs)
+    return build_status
 
 
 def _log_k8s_agent_pods(kube_core_client: kubernetes.client.CoreV1Api) -> None:
