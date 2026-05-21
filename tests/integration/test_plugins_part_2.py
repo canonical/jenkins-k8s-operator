@@ -230,7 +230,7 @@ async def test_kubernetes_plugin(
     plugins = unit_web_client.client.plugins
     logger.info(
         "Installed plugins: %s",
-        {name: plugins[name].version for name in plugins.keys()},
+        {name: plugin.version for name, plugin in plugins.iteritems()},
     )
 
     logger.info("Jenkins info pre-build: %s", unit_web_client.client.get_info())
