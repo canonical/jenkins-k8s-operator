@@ -23,6 +23,8 @@ import precondition
 import storage
 import timerange
 from state import (
+    AGENT_RELATION,
+    AUTH_PROXY_RELATION,
     INGRESS_RELATION_NAME,
     JENKINS_SERVICE_NAME,
     CharmConfigInvalidError,
@@ -47,13 +49,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             RuntimeError: if invalid state value was encountered from relation.
         """
         super().__init__(*args)
-        try:
-            self.state = State.from_charm(self)
-        except (CharmConfigInvalidError, CharmIllegalNumUnitsError) as exc:
-            self.unit.status = ops.BlockedStatus(exc.msg)
-            return
-        except CharmRelationDataInvalidError as exc:
-            raise RuntimeError("Invalid relation data received.") from exc
 
         self.storage = storage.Reconciler(charm=self)
         # Ingress dedicated to agent discovery
@@ -64,10 +59,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         )
         self.ingress_observer = ingress.Observer(self, "ingress-observer", INGRESS_RELATION_NAME)
         self.jenkins = jenkins.Jenkins(self.calculate_env())
-        self.actions_observer = actions.Observer(self, self.state, self.jenkins)
+        self.actions_observer = actions.Observer(self, self.jenkins)
         self.agent_observer = agent.Observer(
             charm=self,
-            state=self.state,
             observers=agent.IngressObservers(
                 agent_discovery=self.agent_discovery_ingress_observer,
                 server=self.ingress_observer,
@@ -76,7 +70,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         )
         self.cos_observer = cos.Observer(self)
         self.auth_proxy_observer = auth_proxy.Observer(
-            self, self.ingress_observer.ingress, self.jenkins, self.state
+            self, self.ingress_observer.ingress, self.jenkins
         )
         self.framework.observe(
             self.on.jenkins_home_storage_attached,
@@ -86,6 +80,55 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.upgrade_charm, self._upgrade_charm)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(
+            self.on[AGENT_RELATION].relation_joined, self._on_agent_relation_joined
+        )
+        self.framework.observe(
+            self.on[AGENT_RELATION].relation_departed, self._on_agent_relation_departed
+        )
+        self.framework.observe(
+            self.on[AGENT_RELATION].relation_changed, self._on_agent_relation_changed
+        )
+        self.framework.observe(
+            self.agent_discovery_ingress_observer.ingress.on.ready,
+            self._on_agent_discovery_ingress_ready,
+        )
+        self.framework.observe(
+            self.agent_discovery_ingress_observer.ingress.on.revoked,
+            self._on_agent_discovery_ingress_revoked,
+        )
+        self.framework.observe(
+            self.ingress_observer.ingress.on.ready,
+            self._on_server_ingress_ready,
+        )
+        self.framework.observe(
+            self.ingress_observer.ingress.on.revoked,
+            self._on_server_ingress_revoked,
+        )
+        self.framework.observe(
+            self.on[AUTH_PROXY_RELATION].relation_joined, self._on_auth_proxy_relation_joined
+        )
+        self.framework.observe(
+            self.on[AUTH_PROXY_RELATION].relation_departed,
+            self._on_auth_proxy_relation_departed,
+        )
+
+    def _get_state(self) -> typing.Optional[State]:
+        """Derive the charm state fresh from current config and relation data.
+
+        Returns:
+            The current charm state, or None if config/units are invalid (unit set to BlockedStatus).
+
+        Raises:
+            RuntimeError: if invalid relation data was received.
+        """
+        try:
+            return State.from_charm(self)
+        except (CharmConfigInvalidError, CharmIllegalNumUnitsError) as exc:
+            self.unit.status = ops.BlockedStatus(exc.msg)
+            return None
+        except CharmRelationDataInvalidError as exc:
+            raise RuntimeError("Invalid relation data received.") from exc
 
     def calculate_env(self) -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
@@ -116,9 +159,13 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event.defer()
             return
 
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+
         self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
         # First Jenkins server start installs Jenkins server.
-        pebble.replan_jenkins(container, self.jenkins, self.state)
+        pebble.replan_jenkins(container, self.jenkins, state)
         try:
             version = self.jenkins.version
         except jenkins.JenkinsError as exc:
@@ -134,13 +181,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         This replans the Pebble layer with any updated JVM system properties
         and restarts the Jenkins service.
         """
-        try:
-            self.state = State.from_charm(self)
-        except CharmConfigInvalidError as exc:
-            self.unit.status = ops.BlockedStatus(exc.msg)
+        state = self._get_state()
+        if state is None:
             return
-        except CharmRelationDataInvalidError as exc:  # pragma: no cover - unlikely on config
-            raise RuntimeError("Invalid relation data received.") from exc
 
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
@@ -152,7 +195,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         # Re-apply the layer and restart Jenkins to pick up new flags
         container.add_layer(
             JENKINS_SERVICE_NAME,
-            pebble.get_pebble_layer(self.jenkins, self.state),
+            pebble.get_pebble_layer(self.jenkins, state),
             combine=True,
         )
         container.replan()
@@ -161,18 +204,19 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except ops.pebble.APIError as exc:  # pragma: no cover - best-effort restart
             logger.warning("Failed to restart Jenkins on config-changed: %s", exc)
 
-    def _remove_unlisted_plugins(self, container: ops.Container) -> ops.StatusBase:
+    def _remove_unlisted_plugins(self, container: ops.Container, state: State) -> ops.StatusBase:
         """Remove plugins that are installed but not allowed.
 
         Args:
             container: The jenkins workload container.
+            state: The current charm state.
 
         Returns:
             The unit status of the charm after the operation.
         """
         original_status = self.unit.status.name
         try:
-            self.jenkins.remove_unlisted_plugins(plugins=self.state.plugins, container=container)
+            self.jenkins.remove_unlisted_plugins(plugins=state.plugins, container=container)
         except (jenkins.JenkinsPluginError, jenkins.JenkinsError) as exc:
             logger.error("Failed to remove unlisted plugin, %s", exc)
             return ops.StatusBase.from_name(original_status, "Failed to remove unlisted plugin.")
@@ -198,12 +242,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event.defer()
             return
 
-        if self.state.restart_time_range and not timerange.check_now_within_bound_hours(
-            self.state.restart_time_range.start, self.state.restart_time_range.end
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+
+        if state.restart_time_range and not timerange.check_now_within_bound_hours(
+            state.restart_time_range.start, state.restart_time_range.end
         ):
             return
 
-        self.unit.status = self._remove_unlisted_plugins(container=container)
+        self.unit.status = self._remove_unlisted_plugins(container=container, state=state)
 
     def _on_jenkins_home_storage_attached(self, event: ops.StorageAttachedEvent) -> None:
         """Correctly set permission when storage is attached.
@@ -235,11 +283,116 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event.defer()
             return
 
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+
         self.storage.reconcile_storage(container=container)
         # Update the agent discovery address.
         # Updating the secret is not required since it's calculated using the agent's node name.
         self.agent_observer.reconfigure_agent_discovery(event)
-        self.agent_observer.reconcile_agents(event)
+        self.agent_observer.reconcile_agents(event, state)
+
+    def _on_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
+        """Handle agent relation joined.
+
+        Args:
+            event: the event fired when an agent joins the relation.
+        """
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconcile_agents(event, state)
+
+    def _on_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+        """Handle agent relation departed.
+
+        Args:
+            event: the event fired when an agent departs the relation.
+        """
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconcile_agents(event, state)
+
+    def _on_agent_relation_changed(self, event: ops.RelationChangedEvent) -> None:
+        """Handle agent relation changed.
+
+        Args:
+            event: the event fired when agent relation data changes.
+        """
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconcile_agents(event, state)
+
+    def _on_agent_discovery_ingress_ready(self, event: ops.EventBase) -> None:
+        """Handle agent discovery ingress ready event.
+
+        Args:
+            event: the event fired when agent discovery ingress becomes ready.
+        """
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconfigure_agent_discovery(event)
+
+    def _on_agent_discovery_ingress_revoked(self, event: ops.EventBase) -> None:
+        """Handle agent discovery ingress revoked event.
+
+        Args:
+            event: the event fired when agent discovery ingress is revoked.
+        """
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconfigure_agent_discovery(event)
+
+    def _on_server_ingress_ready(self, event: ops.EventBase) -> None:
+        """Handle server ingress ready event.
+
+        Args:
+            event: the event fired when server ingress becomes ready.
+        """
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconfigure_agent_discovery(event)
+        self.auth_proxy_observer.on_ingress_ready(event, state)
+
+    def _on_server_ingress_revoked(self, event: ops.EventBase) -> None:
+        """Handle server ingress revoked event.
+
+        Args:
+            event: the event fired when server ingress is revoked.
+        """
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.agent_observer.reconfigure_agent_discovery(event)
+        self.auth_proxy_observer.on_ingress_revoked(event, state)
+
+    def _on_auth_proxy_relation_joined(self, event: ops.RelationCreatedEvent) -> None:
+        """Handle auth proxy relation joined.
+
+        Args:
+            event: the event fired when the auth proxy relation is joined.
+        """
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.auth_proxy_observer.on_auth_proxy_relation_joined(event, state)
+
+    def _on_auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
+        """Handle auth proxy relation departed.
+
+        Args:
+            event: the event fired when the auth proxy relation departs.
+        """
+        state = self._get_state()
+        if state is None:  # pragma: nocover
+            return
+        self.auth_proxy_observer.on_auth_proxy_relation_departed(event, state)
 
 
 if __name__ == "__main__":  # pragma: nocover

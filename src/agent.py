@@ -10,7 +10,6 @@ import typing
 from dataclasses import dataclass
 
 import ops
-from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRevokedEvent
 
 import ingress
 import jenkins
@@ -49,51 +48,21 @@ class Observer(ops.Object):
     def __init__(
         self,
         charm: ops.CharmBase,
-        state: State,
         observers: IngressObservers,
         jenkins_instance: jenkins.Jenkins,
     ):
-        """Initialize the observer and register event handlers.
+        """Initialize the observer.
 
         Args:
             charm: The parent charm to attach the observer to.
-            state: The charm state.
             jenkins_instance: The Jenkins instance.
             observers: The ingress observers.
         """
         super().__init__(charm, "agent-observer")
         self.charm = charm
-        self.state = state
         self.jenkins = jenkins_instance
         self.agent_discovery_ingress_observer = observers.agent_discovery
         self.ingress_observer = observers.server
-
-        charm.framework.observe(
-            charm.on[AGENT_RELATION].relation_joined, self._on_agent_relation_joined
-        )
-        charm.framework.observe(
-            charm.on[AGENT_RELATION].relation_departed, self._on_agent_relation_departed
-        )
-        charm.framework.observe(
-            charm.on[AGENT_RELATION].relation_changed, self._on_agent_relation_changed
-        )
-        # Event hooks for agent-discovery-ingress
-        charm.framework.observe(
-            observers.agent_discovery.ingress.on.ready,
-            self._ingress_on_ready,
-        )
-        charm.framework.observe(
-            observers.agent_discovery.ingress.on.revoked,
-            self._ingress_on_revoked,
-        )
-        charm.framework.observe(
-            observers.server.ingress.on.ready,
-            self._ingress_on_ready,
-        )
-        charm.framework.observe(
-            observers.server.ingress.on.revoked,
-            self._ingress_on_revoked,
-        )
 
     @property
     def agent_discovery_url(self) -> str:
@@ -149,11 +118,12 @@ class Observer(ops.Object):
             )
         return ""
 
-    def reconcile_agents(self, event: ops.EventBase) -> None:
+    def reconcile_agents(self, event: ops.EventBase, state: State) -> None:
         """Reconcile agents from relation data.
 
         Args:
             event: The event that triggered the agent reconcile.
+            state: The current charm state.
         """
         container = self.charm.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
@@ -164,7 +134,7 @@ class Observer(ops.Object):
             event.defer()
             return
 
-        if not self.state.agent_relation_meta:
+        if not state.agent_relation_meta:
             logger.info("No agent relation found.")
             return
 
@@ -176,12 +146,12 @@ class Observer(ops.Object):
         agent_node_names = [node.name for node in agent_nodes]
 
         self._add_agent_nodes_from_relation(
-            agent_relation=self.state.agent_relation_meta,
+            agent_relation=state.agent_relation_meta,
             container=container,
             agent_node_names=agent_node_names,
         )
         self._remove_agent_nodes_not_in_relation(
-            agent_relation=self.state.agent_relation_meta,
+            agent_relation=state.agent_relation_meta,
             container=container,
             agent_node_names=agent_node_names,
         )
@@ -260,33 +230,6 @@ class Observer(ops.Object):
                 logger.exception("Failed to remove registered node: %s", agent)
                 raise
 
-    def _on_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
-        """Handle agent relation joined event.
-
-        Args:
-            event: The event fired on agent relation joined.
-        """
-        # There's no need to test whether the hook is fired.
-        self.reconcile_agents(event=event)  # pragma: nocover
-
-    def _on_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
-        """Handle agent relation departed event.
-
-        Args:
-            event: The event fired on agent relation departed.
-        """
-        # There's no need to test whether the hook is fired.
-        self.reconcile_agents(event=event)  # pragma: nocover
-
-    def _on_agent_relation_changed(self, event: ops.RelationChangedEvent) -> None:
-        """Handle agent relation changed event.
-
-        Args:
-            event: The event fired on agent relation changed.
-        """
-        # There's no need to test whether the hook is fired.
-        self.reconcile_agents(event=event)  # pragma: nocover
-
     def reconfigure_agent_discovery(self, _: ops.EventBase) -> None:
         """Update the agent discovery URL in each of the connected agent's integration data.
 
@@ -297,19 +240,3 @@ class Observer(ops.Object):
             if relation_discovery_url and relation_discovery_url == self.agent_discovery_url:
                 continue
             relation.data[self.model.unit].update({"url": self.agent_discovery_url})
-
-    def _ingress_on_ready(self, event: IngressPerAppReadyEvent) -> None:
-        """Handle ready event for agent-discovery-ingress.
-
-        Args:
-            event: The event fired.
-        """
-        self.reconfigure_agent_discovery(event)
-
-    def _ingress_on_revoked(self, event: IngressPerAppRevokedEvent) -> None:
-        """Handle revoked event for agent-discovery-ingress.
-
-        Args:
-            event: The event fired.
-        """
-        self.reconfigure_agent_discovery(event)

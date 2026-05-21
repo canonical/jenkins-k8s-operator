@@ -8,6 +8,8 @@ import json
 import logging
 
 import jenkinsapi.plugin
+import kubernetes.client
+import kubernetes.config
 import pytest
 import requests
 
@@ -38,9 +40,9 @@ async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
         f"{unit_web_client.web}/job/docker_plugin_test/configure"
     )
     config_page = str(res.content, "utf-8")
-    assert "Docker Build and Publish" in config_page, (
-        f"docker-build-publish configuration option not found. {config_page}"
-    )
+    assert (
+        "Docker Build and Publish" in config_page
+    ), f"docker-build-publish configuration option not found. {config_page}"
 
 
 async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
@@ -56,9 +58,9 @@ async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
     )
     config_page = str(res.content, "utf-8")
 
-    assert "HTTP Header by reverse proxy" in config_page, (
-        f"reverse-proxy-auth-plugin configuration option not found. {config_page}"
-    )
+    assert (
+        "HTTP Header by reverse proxy" in config_page
+    ), f"reverse-proxy-auth-plugin configuration option not found. {config_page}"
 
 
 async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
@@ -73,14 +75,16 @@ async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
         f"{unit_web_client.web}/job/deps_plugin_test/configure"
     )
     job_page = str(res.content, "utf-8")
-    assert "Invoke Dependency-Check" in job_page, (
-        f"Dependency check job configuration option not found. {job_page}"
+    assert (
+        "Invoke Dependency-Check" in job_page
+    ), f"Dependency check job configuration option not found. {job_page}"
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/manage/configureTools/"
     )
-    res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configureTools/")
     tools_page = str(res.content, "utf-8")
-    assert "Dependency-Check installations" in tools_page, (
-        f"Dependency check tool configuration option not found. {tools_page}"
-    )
+    assert (
+        "Dependency-Check installations" in tools_page
+    ), f"Dependency check tool configuration option not found. {tools_page}"
 
 
 async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
@@ -90,14 +94,16 @@ async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
     assert: pipeline-groovy-lib plugin option exists.
     """
     await install_plugins(unit_web_client, ("pipeline-groovy-lib",))
-    res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configure")
+    res = unit_web_client.client.requester.get_url(
+        f"{unit_web_client.web}/manage/configure"
+    )
 
     config_page = str(res.content, "utf-8")
     # The string is now "Global Trusted Pipeline Libraries" and
     # "Global Untrusted Pipeline Libraries" for v727.ve832a_9244dfa_
-    assert "Pipeline Libraries" in config_page, (
-        f"Groovy libs configuration option not found. {config_page}"
-    )
+    assert (
+        "Pipeline Libraries" in config_page
+    ), f"Groovy libs configuration option not found. {config_page}"
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
@@ -135,7 +141,9 @@ async def test_openid_plugin(unit_web_client: UnitWebClient):
         data={"endpoint": "https://login.ubuntu.com/+openid"},
     )
 
-    assert res.status_code == 200, "Failed to validate openid endpoint using the plugin."
+    assert (
+        res.status_code == 200
+    ), "Failed to validate openid endpoint using the plugin."
 
 
 async def test_openid_connect_plugin(
@@ -181,9 +189,13 @@ async def test_openid_connect_plugin(
             ),
         ],
     )
-    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
+    res = requests.get(
+        f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30
+    )
     assert res.history[0].status_code == 302, "Jenkins login not redirected."
-    assert keycloak_ip in res.history[0].headers["location"], "Login not redirected to keycloak."
+    assert (
+        keycloak_ip in res.history[0].headers["location"]
+    ), "Login not redirected to keycloak."
 
     # 2. when jenkins security realm is reset and login page is requested.
     payload = {
@@ -208,13 +220,19 @@ async def test_openid_connect_plugin(
             )
         ],
     )
-    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
+    res = requests.get(
+        f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30
+    )
     assert res.status_code == 404, "Security realm login not reset."
     res = requests.get(f"{unit_web_client.web}/login?from=%2F", timeout=30)
     assert res.status_code == 200, "Failed to load Jenkins native login UI."
 
 
-async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: str):
+async def test_kubernetes_plugin(
+    unit_web_client: UnitWebClient,
+    kube_config: str,
+    kube_core_client: kubernetes.client.CoreV1Api,
+):
     """
     arrange: given a Jenkins charm with kubernetes plugin installed and credentials from microk8s.
     act: Run a job using an agent provided by the kubernetes plugin.
@@ -222,6 +240,13 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
     """
     # Use plain credentials to be able to create secret-file/secret-text credentials
     await install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
+
+    plugins = unit_web_client.client.plugins
+    logger.info(
+        "Installed plugins: %s",
+        {name: plugin.version for name, plugin in plugins.iteritems()},
+    )
+
     credentials_id = await wait_for(
         functools.partial(create_secret_file_credentials, unit_web_client, kube_config)
     )
@@ -239,10 +264,78 @@ async def test_kubernetes_plugin(unit_web_client: UnitWebClient, kube_config: st
     queue_item.block_until_complete()
 
     build: jenkinsapi.build.Build = queue_item.get_build()
+    build_status = build.get_status()
     log_stream = build.stream_logs()
     logs = "".join(log_stream)
-    logger.debug("build logs: %s", logs)
-    assert build.get_status() == "SUCCESS"
+    logger.info("Build status: %s\nBuild logs:\n%s", build_status, logs)
+
+    try:
+        system_log_resp = unit_web_client.client.requester.get_url(
+            f"{unit_web_client.web}/log/all"
+        )
+        logger.info("Jenkins system log:\n%s", system_log_resp.text)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("Could not fetch Jenkins system log: %s", exc)
+
+    _log_k8s_agent_pods(kube_core_client)
+
+    assert build_status == "SUCCESS"
+
+
+def _log_k8s_agent_pods(kube_core_client: kubernetes.client.CoreV1Api) -> None:
+    """Log K8s pod status, container logs and events for all jenkins agent pods.
+
+    Args:
+        kube_core_client: The Kubernetes core API client.
+    """
+    try:
+        pods = kube_core_client.list_pod_for_all_namespaces()
+        agent_pods = [
+            p
+            for p in pods.items
+            if any("jenkins" in (c.name or "") for c in (p.spec.containers or []))
+            or "jenkins" in (p.metadata.name or "")
+        ]
+        logger.info(
+            "Jenkins-related pods found: %s", [p.metadata.name for p in agent_pods]
+        )
+        for pod in agent_pods:
+            ns = pod.metadata.namespace
+            name = pod.metadata.name
+            logger.info(
+                "Pod %s/%s phase=%s conditions=%s",
+                ns,
+                name,
+                pod.status.phase,
+                pod.status.conditions,
+            )
+            for container in pod.spec.containers or []:
+                try:
+                    pod_log = kube_core_client.read_namespaced_pod_log(
+                        name, ns, container=container.name, tail_lines=100
+                    )
+                    logger.info(
+                        "Pod %s container %s logs:\n%s", name, container.name, pod_log
+                    )
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning(
+                        "Could not get logs for pod %s container %s: %s",
+                        name,
+                        container.name,
+                        exc,
+                    )
+            try:
+                events = kube_core_client.list_namespaced_event(
+                    ns, field_selector=f"involvedObject.name={name}"
+                )
+                for ev in events.items:
+                    logger.info(
+                        "Pod event [%s] %s/%s: %s", ev.type, ns, name, ev.message
+                    )
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("Could not get events for pod %s: %s", name, exc)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("Could not list K8s pods: %s", exc)
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
