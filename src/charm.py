@@ -332,9 +332,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: the event fired when agent discovery ingress becomes ready.
         """
-        state = self._get_state()
-        if state is None:  # pragma: nocover
-            return
         self.agent_observer.reconfigure_agent_discovery(event)
 
     def _on_agent_discovery_ingress_revoked(self, event: ops.EventBase) -> None:
@@ -343,9 +340,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: the event fired when agent discovery ingress is revoked.
         """
-        state = self._get_state()
-        if state is None:  # pragma: nocover
-            return
         self.agent_observer.reconfigure_agent_discovery(event)
 
     def _on_server_ingress_ready(self, event: ops.EventBase) -> None:
