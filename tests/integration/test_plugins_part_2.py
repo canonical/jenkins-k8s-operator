@@ -10,7 +10,6 @@ import logging
 import jenkinsapi.job
 import jenkinsapi.plugin
 import kubernetes.client
-import kubernetes.config
 import pytest
 import requests
 import tenacity
@@ -252,16 +251,17 @@ async def test_kubernetes_plugin(
 
     build_status = _invoke_job_with_retry(job)
 
-    try:
-        # /log/all is a UI page; /log/all/api/json returns structured log records
-        system_log_resp = unit_web_client.client.requester.get_url(
-            f"{unit_web_client.web}/log/all/api/json?depth=1"
-        )
-        logger.info("Jenkins system log (JSON): %s", system_log_resp.text[:5000])
-    except Exception as exc:  # pylint: disable=broad-except
-        logger.warning("Could not fetch Jenkins system log: %s", exc)
+    if build_status != "SUCCESS":
+        try:
+            # /log/all is a UI page; /log/all/api/json returns structured log records
+            system_log_resp = unit_web_client.client.requester.get_url(
+                f"{unit_web_client.web}/log/all/api/json?depth=1"
+            )
+            logger.info("Jenkins system log (JSON): %s", system_log_resp.text[:5000])
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Could not fetch Jenkins system log: %s", exc)
 
-    _log_k8s_agent_pods(kube_core_client)
+        _log_k8s_agent_pods(kube_core_client)
 
     assert build_status == "SUCCESS"
 

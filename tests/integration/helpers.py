@@ -463,18 +463,18 @@ def kubernetes_test_pipeline_script() -> str:
             apiVersion: v1
             kind: Pod
             metadata:
-            labels:
+              labels:
                 some-label: some-label-value
             spec:
-            containers:
-            - name: busybox
-              image: busybox
-              imagePullPolicy: IfNotPresent
-              command:
-              - sleep
-              args:
-              - 99d
-              tty: true
+              containers:
+              - name: busybox
+                image: busybox
+                imagePullPolicy: IfNotPresent
+                command:
+                - sleep
+                args:
+                - 99d
+                tty: true
         ''') {
         node(POD_LABEL) {
             stage('Integration Test') {
