@@ -7,8 +7,8 @@ import functools
 import json
 import logging
 
-import jenkinsapi.plugin
 import jenkinsapi.job
+import jenkinsapi.plugin
 import kubernetes.client
 import kubernetes.config
 import pytest
