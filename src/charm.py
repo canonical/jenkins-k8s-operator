@@ -11,10 +11,12 @@ import logging
 import typing
 
 import ops
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 
 import agent
 import auth_proxy
-import cos
 import ingress
 import jenkins
 import pebble
@@ -66,7 +68,22 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             ),
             jenkins_instance=self.jenkins,
         )
-        self.cos_observer = cos.Observer(self)
+        self._loki = LogProxyConsumer(
+            self,
+            relation_name="logging",
+            log_files=str(jenkins.LOGGING_PATH),
+            container_name="jenkins",
+        )
+        self._prometheus = MetricsEndpointProvider(
+            self,
+            jobs=[
+                {
+                    "metrics_path": "/prometheus",
+                    "static_configs": [{"targets": [f"*:{jenkins.WEB_PORT}"]}],
+                }
+            ],
+        )
+        self._grafana = GrafanaDashboardProvider(self)
         self.auth_proxy_observer = auth_proxy.Observer(
             self, self.ingress_observer.ingress, self.jenkins
         )
