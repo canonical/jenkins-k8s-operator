@@ -10,8 +10,8 @@ import typing
 from dataclasses import dataclass
 
 import ops
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
-import ingress
 import jenkins
 import precondition
 from state import (
@@ -27,15 +27,15 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class IngressObservers:
-    """Wrapper for ingress observers.
+    """Ingress requirer instances for agent discovery.
 
     Attributes:
-        agent_discovery: Agent discovery ingress observer instance.
-        server: Jenkins server ingress observer instance.
+        agent_discovery: Agent discovery ingress requirer instance.
+        server: Jenkins server ingress requirer instance.
     """
 
-    agent_discovery: ingress.Observer
-    server: ingress.Observer
+    agent_discovery: IngressPerAppRequirer
+    server: IngressPerAppRequirer
 
 
 class Observer(ops.Object):
@@ -81,9 +81,9 @@ class Observer(ops.Object):
         # Check if an agent-discovery or Jenkins server ingress URL is available
         # 2025/09/05 If the public ingress is secured (e.g. Oathkeeper), the agents will fail to
         # register.
-        if ingress_url := self.agent_discovery_ingress_observer.ingress.url:
+        if ingress_url := self.agent_discovery_ingress_observer.url:
             return ingress_url
-        if ingress_url := self.ingress_observer.ingress.url:
+        if ingress_url := self.ingress_observer.url:
             logger.warning(
                 "Using public ingress with protected endpoints (e.g. oathkeeper)"
                 "will result in agent discovery failure. Use %s for agents discovery.",
@@ -109,10 +109,7 @@ class Observer(ops.Object):
     @property
     def _status_message(self) -> str:
         """Status message to set on agent relation joined."""
-        if (
-            self.ingress_observer.ingress.url
-            and not self.agent_discovery_ingress_observer.ingress.url
-        ):
+        if self.ingress_observer.url and not self.agent_discovery_ingress_observer.url:
             return (
                 f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
             )
