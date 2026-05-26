@@ -145,3 +145,7 @@ dmypy.json
 !.vale/styles/config/vocabularies/local
 # END VALE WORKFLOW IGNORE
 
+# OS artifacts
+.DS_Store
+
+.worktrees

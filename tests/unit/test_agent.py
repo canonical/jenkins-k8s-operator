@@ -3,6 +3,7 @@
 
 """Jenkins-k8s charm agent relation tests."""
 
+import inspect
 import secrets
 import socket
 from unittest.mock import MagicMock
@@ -11,10 +12,17 @@ import pytest
 from ops import testing
 
 import jenkins
+from agent import Observer
 from charm import JenkinsK8sOperatorCharm
-from state import JENKINS_SERVICE_NAME, AgentMeta
+from state import JENKINS_SERVICE_NAME, AgentMeta, State
 
 _MONKEYPATCHED_FQDN = "192.0.2.0"
+
+
+def test_reconcile_agents_accepts_state_parameter():
+    """reconcile_agents must accept state as an explicit keyword argument."""
+    sig = inspect.signature(Observer.reconcile_agents)
+    assert "state" in sig.parameters, "reconcile_agents must accept a 'state' parameter"
 
 
 class FakeJenkinsService:
@@ -209,7 +217,8 @@ def test_reconcile_agents(
         # testing.
         fake_jenkins_service = FakeJenkinsService(initial_agents=initial_agents)
         mgr.charm.agent_observer.jenkins = fake_jenkins_service  # type: ignore
-        mgr.charm.agent_observer.reconcile_agents(event=MagicMock())
+        charm_state = State.from_charm(mgr.charm)
+        mgr.charm.agent_observer.reconcile_agents(event=MagicMock(), state=charm_state)
 
     all_agent_names = [node.name for node in fake_jenkins_service.list_agent_nodes()]
     assert len(all_agent_names) == len(expected_agents)
@@ -285,7 +294,8 @@ def test_reconcile_agents_error(mock_jenkins_service: MagicMock):
         # testing.
         fake_jenkins_service = mock_jenkins_service
         mgr.charm.agent_observer.jenkins = fake_jenkins_service  # type: ignore
-        mgr.charm.agent_observer.reconcile_agents(event=MagicMock())
+        charm_state = State.from_charm(mgr.charm)
+        mgr.charm.agent_observer.reconcile_agents(event=MagicMock(), state=charm_state)
 
 
 def _generate_agent_discovery_url_test_params():
