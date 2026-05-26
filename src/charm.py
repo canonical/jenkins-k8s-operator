@@ -13,7 +13,6 @@ import typing
 import ops
 
 import agent
-import auth_proxy
 import ingress
 import jenkins
 import pebble
@@ -22,6 +21,7 @@ import storage
 import timerange
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
+from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from state import (
     AGENT_RELATION,
@@ -84,9 +84,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             ],
         )
         self._grafana = GrafanaDashboardProvider(self)
-        self.auth_proxy_observer = auth_proxy.Observer(
-            self, self.ingress_observer.ingress, self.jenkins
-        )
+        self._auth_proxy = AuthProxyRequirer(self)
 
         # Register all events to funnel through reconcile
         self.framework.observe(
@@ -251,7 +249,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             state: The current charm state.
         """
         if state.auth_proxy_integrated and self.ingress_observer.ingress.url:
-            self.auth_proxy_observer._update_auth_proxy_config()
+            auth_proxy_config = AuthProxyConfig(
+                protected_urls=[self.ingress_observer.ingress.url],
+                allowed_endpoints=[],
+                headers=["X-Auth-Request-User"],
+            )
+            self._auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
 
     def _reconcile_plugins(self, container: ops.Container, state: State) -> None:
         """Remove plugins that are installed but not allowed.
