@@ -9,11 +9,11 @@
 
 import logging
 import typing
+from urllib.parse import urlparse
 
 import ops
 
 import agent
-import ingress
 import jenkins
 import pebble
 import precondition
@@ -23,6 +23,7 @@ from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from state import (
     AGENT_RELATION,
     AUTH_PROXY_RELATION,
@@ -53,18 +54,22 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.storage = storage.Reconciler(charm=self)
         # Ingress dedicated to agent discovery
-        self.agent_discovery_ingress_observer = ingress.Observer(
+        self.agent_discovery_ingress = IngressPerAppRequirer(
             self,
-            "agent-discovery-ingress-observer",
-            agent.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+            relation_name=agent.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+            port=jenkins.WEB_PORT,
         )
-        self.ingress_observer = ingress.Observer(self, "ingress-observer", INGRESS_RELATION_NAME)
+        self.server_ingress = IngressPerAppRequirer(
+            self,
+            relation_name=INGRESS_RELATION_NAME,
+            port=jenkins.WEB_PORT,
+        )
         self.jenkins = jenkins.Jenkins(self.calculate_env())
         self.agent_observer = agent.Observer(
             charm=self,
             observers=agent.IngressObservers(
-                agent_discovery=self.agent_discovery_ingress_observer,
-                server=self.ingress_observer,
+                agent_discovery=self.agent_discovery_ingress,
+                server=self.server_ingress,
             ),
             jenkins_instance=self.jenkins,
         )
@@ -105,19 +110,19 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.on[AGENT_RELATION].relation_changed, self._on_agent_relation_changed
         )
         self.framework.observe(
-            self.agent_discovery_ingress_observer.ingress.on.ready,
+            self.agent_discovery_ingress.on.ready,
             self._on_agent_discovery_ingress_ready,
         )
         self.framework.observe(
-            self.agent_discovery_ingress_observer.ingress.on.revoked,
+            self.agent_discovery_ingress.on.revoked,
             self._on_agent_discovery_ingress_revoked,
         )
         self.framework.observe(
-            self.ingress_observer.ingress.on.ready,
+            self.server_ingress.on.ready,
             self._on_server_ingress_ready,
         )
         self.framework.observe(
-            self.ingress_observer.ingress.on.revoked,
+            self.server_ingress.on.revoked,
             self._on_server_ingress_revoked,
         )
         self.framework.observe(
@@ -147,6 +152,19 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
 
+    def _get_ingress_path(self) -> str:
+        """Return the path in which Jenkins is expected to be listening.
+
+        Returns:
+            the path for the ingress URL.
+        """
+        if not self.server_ingress.url:
+            return ""
+        path = urlparse(self.server_ingress.url).path
+        if path == "/":
+            return ""
+        return path
+
     def calculate_env(self) -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
 
@@ -155,7 +173,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """
         return jenkins.Environment(
             JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
-            JENKINS_PREFIX=self.ingress_observer.get_path(),
+            JENKINS_PREFIX=self._get_ingress_path(),
         )
 
     def _reconcile(self, event: ops.EventBase) -> None:
@@ -250,12 +268,19 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The triggering event.
             state: The current charm state.
         """
-        if state.auth_proxy_integrated and self.ingress_observer.ingress.url:
-            auth_proxy_config = AuthProxyConfig(
-                protected_urls=[self.ingress_observer.ingress.url],
-                allowed_endpoints=[],
-                headers=["X-Auth-Request-User"],
-            )
+        if state.auth_proxy_integrated:
+            if self.server_ingress.url:
+                auth_proxy_config = AuthProxyConfig(
+                    protected_urls=[self.server_ingress.url],
+                    allowed_endpoints=[],
+                    headers=["X-Auth-Request-User"],
+                )
+            else:
+                auth_proxy_config = AuthProxyConfig(
+                    protected_urls=[],
+                    allowed_endpoints=[],
+                    headers=["X-Auth-Request-User"],
+                )
             self._auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
 
     def _reconcile_plugins(self, container: ops.Container, state: State) -> None:
