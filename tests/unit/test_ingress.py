@@ -44,6 +44,7 @@ def test_traefik_integration_added_replans_jenkins(
     monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
     mock_ingress_url = "http://ingress.test/model-unit-0"
 
+    harness.add_storage("jenkins-home", attach=True)
     harness.begin()
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
 
@@ -71,6 +72,7 @@ def test_traefik_integration_added_with_auth_proxy_replans_jenkins(
     """
     monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
     mock_ingress_url = "http://ingress.test/model-unit-0"
+    harness.add_storage("jenkins-home", attach=True)
     harness.add_relation(
         "auth-proxy",
         "oathkeeper",
