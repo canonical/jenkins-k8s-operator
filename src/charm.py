@@ -12,7 +12,6 @@ import typing
 
 import ops
 
-import actions
 import agent
 import auth_proxy
 import cos
@@ -59,7 +58,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         )
         self.ingress_observer = ingress.Observer(self, "ingress-observer", INGRESS_RELATION_NAME)
         self.jenkins = jenkins.Jenkins(self.calculate_env())
-        self.actions_observer = actions.Observer(self, self.jenkins)
         self.agent_observer = agent.Observer(
             charm=self,
             observers=agent.IngressObservers(
@@ -114,8 +112,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.on[AUTH_PROXY_RELATION].relation_departed,
             self._on_auth_proxy_relation_departed,
         )
-
-    # ─── State derivation ───────────────────────────────────────────────
+        self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
+        self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
 
     def _get_state(self) -> typing.Optional[State]:
         """Derive the charm state fresh from current config and relation data.
@@ -144,8 +142,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
             JENKINS_PREFIX=self.ingress_observer.get_path(),
         )
-
-    # ─── Reconciliation ─────────────────────────────────────────────────
 
     def _reconcile(self, event: ops.EventBase) -> None:
         """Single top-level reconcile method invoked by all event handlers.
@@ -194,6 +190,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             container: The Jenkins workload container.
             charm_state: The current charm state.
         """
+        # Recalculate environment to pick up changes (e.g. ingress prefix)
+        self.jenkins.environment = self.calculate_env()
         desired_layer = pebble.get_pebble_layer(self.jenkins, charm_state)
         try:
             current_services = container.get_plan().services
@@ -259,8 +257,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except TimeoutError as exc:
             logger.error("Failed to remove plugins, %s", exc)
 
-    # ─── Bootstrap (first-run only) ─────────────────────────────────────
-
     def _bootstrap_jenkins(self, event: ops.EventBase) -> None:
         """Bootstrap Jenkins on first pebble-ready.
 
@@ -296,8 +292,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.unit.set_workload_version(version)
         self.unit.status = ops.ActiveStatus()
-
-    # ─── Event handlers (thin wrappers) ─────────────────────────────────
 
     def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
         """Configure and start Jenkins server on first pebble ready.
@@ -410,6 +404,39 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: the event fired when the auth proxy relation departs.
         """
         self._reconcile(event)
+
+    def _on_get_admin_password(self, event: ops.ActionEvent) -> None:
+        """Handle get-admin-password event.
+
+        Args:
+            event: The event fired from get-admin-password action.
+        """
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        if not jenkins.is_storage_ready(container):
+            event.fail("Jenkins storage not yet mounted.")
+            return
+        credentials = jenkins.get_admin_credentials(container)
+        event.set_results({"password": credentials.password_or_token})
+
+    def _on_rotate_credentials(self, event: ops.ActionEvent) -> None:
+        """Invalidate all sessions and reset admin account password.
+
+        Args:
+            event: The rotate credentials event.
+        """
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        if not jenkins.is_storage_ready(container):
+            event.fail("Jenkins storage not yet mounted.")
+            return
+        if not jenkins.is_jenkins_ready(container):
+            event.fail("Jenkins service is not yet ready.")
+            return
+        try:
+            password = self.jenkins.rotate_credentials(container)
+        except jenkins.JenkinsError:
+            event.fail("Error invalidating user sessions. See logs.")
+            return
+        event.set_results({"password": password})
 
 
 if __name__ == "__main__":  # pragma: nocover

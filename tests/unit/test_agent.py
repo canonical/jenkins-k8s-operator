@@ -6,10 +6,11 @@
 import inspect
 import secrets
 import socket
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from ops import testing
+from scenario.errors import UncaughtCharmError
 
 import jenkins
 from agent import Observer
@@ -268,8 +269,20 @@ def test_reconcile_agents_error(mock_jenkins_service: MagicMock):
         testing.Storage("jenkins-home"),
     }
     ctx = testing.Context(JenkinsK8sOperatorCharm)
+    # Patch the charm's _reconcile_agents to use our mock jenkins service.
+    # The reconciliation pattern means the event dispatch itself calls reconcile_agents,
+    # so we need the mock in place before ctx.run().
+    original_reconcile_agents = Observer.reconcile_agents
+
+    def patched_reconcile_agents(self, event, state):
+        self.jenkins = mock_jenkins_service
+        return original_reconcile_agents(self, event, state)
+
     with (
-        ctx(
+        patch.object(Observer, "reconcile_agents", patched_reconcile_agents),
+        pytest.raises(UncaughtCharmError, match="JenkinsError"),
+    ):
+        ctx.run(
             ctx.on.config_changed(),
             testing.State(
                 # there's incorrect container type inference in scenario.state.Container vs
@@ -287,15 +300,7 @@ def test_reconcile_agents_error(mock_jenkins_service: MagicMock):
                     )
                 ],
             ),
-        ) as mgr,
-        pytest.raises(jenkins.JenkinsError),
-    ):
-        # Ignore the mismatching type for FakeJenkinsService since this is a fake service for
-        # testing.
-        fake_jenkins_service = mock_jenkins_service
-        mgr.charm.agent_observer.jenkins = fake_jenkins_service  # type: ignore
-        charm_state = State.from_charm(mgr.charm)
-        mgr.charm.agent_observer.reconcile_agents(event=MagicMock(), state=charm_state)
+        )
 
 
 def _generate_agent_discovery_url_test_params():
