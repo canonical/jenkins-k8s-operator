@@ -7,28 +7,31 @@
 
 # pylint: disable=too-many-instance-attributes
 
+import ipaddress
 import logging
+import socket
 import typing
 from urllib.parse import urlparse
 
 import ops
-
-import agent
-import jenkins
-import pebble
-import precondition
-import storage
-import timerange
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
+
+import jenkins
+import pebble
+import precondition
+import storage
+import timerange
 from state import (
+    AGENT_DISCOVERY_INGRESS_RELATION_NAME,
     AGENT_RELATION,
     AUTH_PROXY_RELATION,
     INGRESS_RELATION_NAME,
     JENKINS_SERVICE_NAME,
+    AgentMeta,
     CharmConfigInvalidError,
     CharmIllegalNumUnitsError,
     CharmRelationDataInvalidError,
@@ -56,7 +59,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         # Ingress dedicated to agent discovery
         self.agent_discovery_ingress = IngressPerAppRequirer(
             self,
-            relation_name=agent.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+            relation_name=AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             port=jenkins.WEB_PORT,
         )
         self.server_ingress = IngressPerAppRequirer(
@@ -65,14 +68,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             port=jenkins.WEB_PORT,
         )
         self.jenkins = jenkins.Jenkins(self.calculate_env())
-        self.agent_observer = agent.Observer(
-            charm=self,
-            observers=agent.IngressObservers(
-                agent_discovery=self.agent_discovery_ingress,
-                server=self.server_ingress,
-            ),
-            jenkins_instance=self.jenkins,
-        )
         self._loki = LogProxyConsumer(
             self,
             relation_name="logging",
@@ -206,7 +201,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self._reconcile_auth_proxy(event, state)
         self._reconcile_plugins(container, state)
 
-        self.unit.status = ops.ActiveStatus()
+        self.unit.status = ops.ActiveStatus(self._agent_status_message)
 
     def _reconcile_storage(self, container: ops.Container) -> None:
         """Ensure storage permissions are correct.
@@ -246,18 +241,38 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """
         if not state.agent_relation_meta:
             return
-        self.agent_observer.reconcile_agents(event, state)
+
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        if not jenkins.is_jenkins_ready(container=container):
+            self.unit.status = ops.WaitingStatus("Jenkins service not yet ready.")
+            event.defer()
+            return
+
+        # Make sure Jenkins is fully up and running before interacting with it.
+        self.jenkins.wait_ready()
+
+        self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
+        agent_nodes = self.jenkins.list_agent_nodes(container=container)
+        agent_node_names = [node.name for node in agent_nodes]
+
+        self._add_agent_nodes_from_relation(
+            agent_relation=state.agent_relation_meta,
+            container=container,
+            agent_node_names=agent_node_names,
+        )
+        self._remove_agent_nodes_not_in_relation(
+            agent_relation=state.agent_relation_meta,
+            container=container,
+            agent_node_names=agent_node_names,
+        )
 
     def _reconcile_agent_discovery(self) -> None:
         """Update the agent discovery URL in all connected agent relations."""
         for relation in self.model.relations[AGENT_RELATION]:
             relation_discovery_url = relation.data[self.model.unit].get("url")
-            if (
-                relation_discovery_url
-                and relation_discovery_url == self.agent_observer.agent_discovery_url
-            ):
+            if relation_discovery_url and relation_discovery_url == self._agent_discovery_url:
                 continue
-            relation.data[self.model.unit].update({"url": self.agent_observer.agent_discovery_url})
+            relation.data[self.model.unit].update({"url": self._agent_discovery_url})
 
     def _reconcile_auth_proxy(self, event: ops.EventBase, state: State) -> None:
         """Reconcile auth proxy configuration.
@@ -301,6 +316,115 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             logger.error("Failed to remove unlisted plugin, %s", exc)
         except TimeoutError as exc:
             logger.error("Failed to remove plugins, %s", exc)
+
+    @property
+    def _agent_discovery_url(self) -> str:
+        """Return the external hostname to be passed to agents via the integration.
+
+        If there is no ingress, use the pod IP as hostname. The pod IP is preferred
+        over the pod name or a K8s service because those rely on the cluster's DNS
+        service, while the IP address is sometimes routable from the outside.
+
+        Returns:
+            The charm's agent discovery url.
+        """
+        if ingress_url := self.agent_discovery_ingress.url:
+            return ingress_url
+        if ingress_url := self.server_ingress.url:
+            logger.warning(
+                "Using public ingress with protected endpoints (e.g. oathkeeper)"
+                "will result in agent discovery failure. Use %s for agents discovery.",
+                AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+            )
+            return ingress_url
+
+        # Fallback to pod IP
+        if binding := self.model.get_binding("juju-info"):
+            try:
+                unit_ip = str(binding.network.bind_address)
+                ipaddress.ip_address(unit_ip)
+                env_dict = typing.cast(typing.Dict[str, str], self.jenkins.environment)
+                return f"http://{unit_ip}:{jenkins.WEB_PORT}{env_dict['JENKINS_PREFIX']}"
+            except ValueError as exc:
+                logger.error(
+                    "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
+                    exc,
+                )
+
+        # Fallback to using socket.fqdn
+        return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
+
+    @property
+    def _agent_status_message(self) -> str:
+        """Status message regarding agent discovery ingress configuration."""
+        if self.server_ingress.url and not self.agent_discovery_ingress.url:
+            return (
+                f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
+            )
+        return ""
+
+    def _add_agent_nodes_from_relation(
+        self,
+        agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
+        container: ops.Container,
+        agent_node_names: list[str],
+    ) -> None:
+        """Add agent nodes from relation data.
+
+        Args:
+            agent_relation: Mapping of agent relation to agent metadata.
+            container: The workload container.
+            agent_node_names: The node names of agents.
+
+        Raises:
+            JenkinsError: if there was an error while registering agent nodes to Jenkins.
+        """
+        for relation, agents in agent_relation.items():
+            unregistered_agents = [agent for agent in agents if agent.name not in agent_node_names]
+            for unregistered_agent in unregistered_agents:
+                try:
+                    self.jenkins.add_agent_node(agent_meta=unregistered_agent, container=container)
+                except jenkins.JenkinsError:
+                    logger.exception("Failed to register agent node: %s", unregistered_agent)
+                    raise
+
+            agent_relation_data: dict[str, str] = {"url": self._agent_discovery_url}
+            for meta in agents:
+                try:
+                    agent_relation_data[f"{meta.name}_secret"] = self.jenkins.get_node_secret(
+                        node_name=meta.name, container=container
+                    )
+                except jenkins.JenkinsError:
+                    logger.exception("Failed to get secret for registered node: %s", meta)
+                    raise
+            relation.data[self.model.unit].update(agent_relation_data)
+
+    def _remove_agent_nodes_not_in_relation(
+        self,
+        agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
+        container: ops.Container,
+        agent_node_names: list[str],
+    ) -> None:
+        """Remove agent nodes not found in relation data.
+
+        Args:
+            agent_relation: Mapping of agent relation to agent metadata.
+            container: The Jenkins workload container.
+            agent_node_names: The agents registered on Jenkins server.
+
+        Raises:
+            JenkinsError: if there was an error while removing agent nodes from Jenkins.
+        """
+        all_agent_names_from_relation = {
+            agent.name for agents in agent_relation.values() for agent in agents
+        }
+        agents_not_in_relation = set(agent_node_names) - all_agent_names_from_relation
+        for agent_name in agents_not_in_relation:
+            try:
+                self.jenkins.remove_agent_node(agent_name=agent_name, container=container)
+            except jenkins.JenkinsError:
+                logger.exception("Failed to remove registered node: %s", agent_name)
+                raise
 
     def _bootstrap_jenkins(self, event: ops.EventBase) -> None:
         """Bootstrap Jenkins on first pebble-ready.
