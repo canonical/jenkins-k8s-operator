@@ -5,7 +5,7 @@
 
 # pylint:disable=protected-access
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import ops
 from ops.testing import Harness
