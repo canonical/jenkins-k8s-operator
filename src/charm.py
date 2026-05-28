@@ -184,7 +184,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         check_result = precondition.check(container=container, storages=self.model.storages)
         if not check_result.success:
             self.unit.status = ops.WaitingStatus(check_result.reason or "")
-            event.defer()
             return
 
         state = self._get_state()
@@ -196,9 +195,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._reconcile_storage(container)
 
         self._reconcile_pebble(container, state)
-        self._reconcile_agents(event, state)
+        self._reconcile_agents(state)
         self._reconcile_agent_discovery()
-        self._reconcile_auth_proxy(event, state)
+        self._reconcile_auth_proxy(state)
+
         # Plugin removal only runs on update-status (matching original behaviour)
         if isinstance(event, ops.UpdateStatusEvent):
             self._reconcile_plugins(container, state)
@@ -234,23 +234,21 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
             container.replan()
 
-    def _reconcile_agents(self, event: ops.EventBase, state: State) -> None:
+    def _reconcile_agents(self, state: State) -> None:
         """Reconcile Jenkins agent nodes to match relation state.
 
         Args:
-            event: The triggering event (for deferral if Jenkins not ready).
             state: The current charm state.
+
+        Raises:
+            TimeoutError: if Jenkins does not become ready within the timeout.
         """
         if not state.agent_relation_meta:
             return
 
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_jenkins_ready(container=container):
-            self.unit.status = ops.WaitingStatus("Jenkins service not yet ready.")
-            event.defer()
-            return
 
-        # Make sure Jenkins is fully up and running before interacting with it.
+        # Block until Jenkins is ready; raises TimeoutError → unit errors if broken.
         self.jenkins.wait_ready()
 
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
@@ -276,11 +274,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 continue
             relation.data[self.model.unit].update({"url": self._agent_discovery_url})
 
-    def _reconcile_auth_proxy(self, event: ops.EventBase, state: State) -> None:
+    def _reconcile_auth_proxy(self, state: State) -> None:
         """Reconcile auth proxy configuration.
 
         Args:
-            event: The triggering event.
             state: The current charm state.
         """
         if state.auth_proxy_integrated:
@@ -444,7 +441,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         check_result = precondition.check(container=container, storages=self.model.storages)
         if not check_result.success:
             self.unit.status = ops.WaitingStatus(check_result.reason or "")
-            event.defer()
             return
 
         state = self._get_state()
@@ -469,6 +465,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The event fired when pebble is ready.
         """
         self._bootstrap_jenkins(event)
+        self._reconcile(event)
 
     def _on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
         """Handle configuration changes.
