@@ -7,7 +7,6 @@
 
 from unittest.mock import MagicMock
 
-import ops
 from ops.testing import Harness
 
 from charm import JenkinsK8sOperatorCharm
@@ -32,9 +31,8 @@ def test_reconcile_auth_proxy_updates_config_when_integrated():
     mock_state.auth_proxy_integrated = True
 
     harness.charm._auth_proxy = MagicMock()
-    mock_event = MagicMock(spec=ops.EventBase)
 
-    harness.charm._reconcile_auth_proxy(mock_event, mock_state)
+    harness.charm._reconcile_auth_proxy(mock_state)
 
     harness.charm._auth_proxy.update_auth_proxy_config.assert_called_once()
     call_kwargs = harness.charm._auth_proxy.update_auth_proxy_config.call_args
@@ -55,9 +53,8 @@ def test_reconcile_auth_proxy_skips_when_not_integrated():
     mock_state.auth_proxy_integrated = False
 
     harness.charm._auth_proxy = MagicMock()
-    mock_event = MagicMock(spec=ops.EventBase)
 
-    harness.charm._reconcile_auth_proxy(mock_event, mock_state)
+    harness.charm._reconcile_auth_proxy(mock_state)
 
     harness.charm._auth_proxy.update_auth_proxy_config.assert_not_called()
 
@@ -78,9 +75,8 @@ def test_reconcile_auth_proxy_clears_config_when_no_ingress_url():
     mock_state.auth_proxy_integrated = True
 
     harness.charm._auth_proxy = MagicMock()
-    mock_event = MagicMock(spec=ops.EventBase)
 
-    harness.charm._reconcile_auth_proxy(mock_event, mock_state)
+    harness.charm._reconcile_auth_proxy(mock_state)
 
     harness.charm._auth_proxy.update_auth_proxy_config.assert_called_once()
     config = harness.charm._auth_proxy.update_auth_proxy_config.call_args[1]["auth_proxy_config"]

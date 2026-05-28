@@ -8,7 +8,6 @@ import secrets
 import socket
 from unittest.mock import MagicMock, patch
 
-import ops
 import pytest
 from ops import testing
 from scenario.errors import UncaughtCharmError
@@ -220,7 +219,7 @@ def test_reconcile_agents(
         fake_jenkins_service = FakeJenkinsService(initial_agents=initial_agents)
         mgr.charm.jenkins = fake_jenkins_service  # type: ignore
         charm_state = State.from_charm(mgr.charm)
-        mgr.charm._reconcile_agents(event=MagicMock(), state=charm_state)
+        mgr.charm._reconcile_agents(state=charm_state)
 
     all_agent_names = [node.name for node in fake_jenkins_service.list_agent_nodes()]
     assert len(all_agent_names) == len(expected_agents)
@@ -275,9 +274,9 @@ def test_reconcile_agents_error(mock_jenkins_service: MagicMock):
     # so we need the mock in place before ctx.run().
     original_reconcile_agents = JenkinsK8sOperatorCharm._reconcile_agents
 
-    def patched_reconcile_agents(self, event, state):
+    def patched_reconcile_agents(self, state):
         self.jenkins = mock_jenkins_service
-        return original_reconcile_agents(self, event, state)
+        return original_reconcile_agents(self, state)
 
     with (
         patch.object(JenkinsK8sOperatorCharm, "_reconcile_agents", patched_reconcile_agents),
@@ -511,11 +510,11 @@ def test_status_message(state: testing.State, expected_status_message: str):
 
 
 @patch("jenkins.is_jenkins_ready", return_value=False)
-def test_reconcile_agents_jenkins_not_ready(_mock_ready):
+def test_reconcile_agents_jenkins_not_ready_raises(_mock_ready):
     """
-    arrange: given jenkins not ready.
+    arrange: given jenkins not ready (wait_ready times out).
     act: when _reconcile_agents is called.
-    assert: event is deferred and status is WaitingStatus.
+    assert: TimeoutError is raised.
     """
     state = testing.State(
         containers=[testing.Container("jenkins", can_connect=True)],  # type: ignore
@@ -533,11 +532,11 @@ def test_reconcile_agents_jenkins_not_ready(_mock_ready):
         patch.object(JenkinsK8sOperatorCharm, "_reconcile"),
         ctx(ctx.on.config_changed(), state) as mgr,
     ):
-        mock_event = MagicMock()
+        mgr.charm.jenkins = MagicMock()
+        mgr.charm.jenkins.wait_ready.side_effect = TimeoutError("Timed out")
         charm_state = State.from_charm(mgr.charm)
-        mgr.charm._reconcile_agents(event=mock_event, state=charm_state)
-        mock_event.defer.assert_called_once()
-        assert isinstance(mgr.charm.unit.status, ops.WaitingStatus)
+        with pytest.raises(TimeoutError):
+            mgr.charm._reconcile_agents(state=charm_state)
 
 
 def test_reconcile_agent_discovery_updates_relation():
