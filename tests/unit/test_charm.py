@@ -15,6 +15,7 @@ import ops
 import pytest
 import requests
 
+import ingress
 import jenkins
 import precondition
 import state
@@ -300,9 +301,11 @@ def test_calculate_env(harness: Harness):
     assert: expected environment variable mapping dictionary is returned.
     """
     harness.begin()
+    ingress_observer = MagicMock(spec=ingress.Observer)
+    ingress_observer.get_path.return_value = ""
+    harness.charm.ingress_observer = ingress_observer
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    with patch.object(jenkins_charm, "_get_ingress_path", return_value=""):
-        env = jenkins_charm.calculate_env()
+    env = jenkins_charm.calculate_env()
 
     assert env == {"JENKINS_HOME": str(jenkins.JENKINS_HOME_PATH), "JENKINS_PREFIX": ""}
 

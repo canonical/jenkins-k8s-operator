@@ -5,7 +5,7 @@
 
 # pylint:disable=protected-access
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import ops
 from ops.testing import Harness
@@ -24,8 +24,8 @@ def test_reconcile_auth_proxy_updates_config_when_integrated():
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
 
     # Mock ingress URL
-    harness.charm.server_ingress = MagicMock()
-    harness.charm.server_ingress.url = "https://example.com/jenkins"
+    harness.charm.ingress_observer.ingress = MagicMock()
+    harness.charm.ingress_observer.ingress.url = "https://example.com/jenkins"
 
     # Mock state with auth_proxy_integrated=True
     mock_state = MagicMock()
@@ -62,17 +62,17 @@ def test_reconcile_auth_proxy_skips_when_not_integrated():
     harness.charm._auth_proxy.update_auth_proxy_config.assert_not_called()
 
 
-def test_reconcile_auth_proxy_clears_config_when_no_ingress_url():
+def test_reconcile_auth_proxy_skips_when_no_ingress_url():
     """
     arrange: given a charm with auth_proxy relation but no ingress URL.
     act: when _reconcile_auth_proxy is called.
-    assert: auth proxy config is updated with empty protected_urls.
+    assert: auth proxy config is not updated.
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
 
-    harness.charm.server_ingress = MagicMock()
-    harness.charm.server_ingress.url = None
+    harness.charm.ingress_observer.ingress = MagicMock()
+    harness.charm.ingress_observer.ingress.url = None
 
     mock_state = MagicMock()
     mock_state.auth_proxy_integrated = True
@@ -82,6 +82,4 @@ def test_reconcile_auth_proxy_clears_config_when_no_ingress_url():
 
     harness.charm._reconcile_auth_proxy(mock_event, mock_state)
 
-    harness.charm._auth_proxy.update_auth_proxy_config.assert_called_once()
-    config = harness.charm._auth_proxy.update_auth_proxy_config.call_args[1]["auth_proxy_config"]
-    assert config.protected_urls == []
+    harness.charm._auth_proxy.update_auth_proxy_config.assert_not_called()
