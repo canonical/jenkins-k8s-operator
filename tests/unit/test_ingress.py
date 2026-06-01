@@ -14,23 +14,23 @@ import jenkins
 from charm import JenkinsK8sOperatorCharm
 
 
-def test_get_path():
+def test_get_ingress_path():
     """
     arrange: given a charm with an ingress URL set.
-    act: when get_path is called.
+    act: when _get_ingress_path is called.
     assert: it returns the URL path.
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
     ingress_per_app = MagicMock(spec=IngressPerAppRequirer)
-    harness.charm.ingress_observer.ingress = ingress_per_app
+    harness.charm.server_ingress = ingress_per_app
 
     ingress_per_app.url = "https://host:8080/path"
-    assert harness.charm.ingress_observer.get_path() == "/path"
+    assert harness.charm._get_ingress_path() == "/path"
     ingress_per_app.url = "https://host:8080/"
-    assert harness.charm.ingress_observer.get_path() == ""
+    assert harness.charm._get_ingress_path() == ""
     ingress_per_app.url = None
-    assert harness.charm.ingress_observer.get_path() == ""
+    assert harness.charm._get_ingress_path() == ""
 
 
 def test_traefik_integration_added_replans_jenkins(
