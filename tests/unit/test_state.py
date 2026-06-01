@@ -299,3 +299,30 @@ def test_system_properties_invalid_entries_raise(mock_charm: MagicMock, bad_valu
         state.State.from_charm(mock_charm)
 
     assert "expected key=value" in str(excinfo.value.msg)
+
+
+def test_agent_meta_from_relation_data_missing_fields():
+    """
+    arrange: given relation data missing required fields.
+    act: when from_agent_relation is called.
+    assert: None is returned.
+    """
+    result = state.AgentMeta.from_agent_relation(
+        typing.cast(ops.RelationDataContent, {"executors": "1", "labels": "linux"})
+    )
+    assert result is None
+
+
+def test_agent_meta_from_relation_data_complete():
+    """
+    arrange: given relation data with all required fields.
+    act: when from_agent_relation is called.
+    assert: AgentMeta is returned.
+    """
+    result = state.AgentMeta.from_agent_relation(
+        typing.cast(
+            ops.RelationDataContent, {"executors": "1", "labels": "linux", "name": "agent-0"}
+        )
+    )
+    assert result is not None
+    assert result.name == "agent-0"

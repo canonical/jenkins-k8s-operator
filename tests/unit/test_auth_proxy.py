@@ -105,3 +105,53 @@ def test_auth_proxy_relation_departed(replan_mock, _):
     harness.charm.auth_proxy_observer.on_auth_proxy_relation_departed(mock_event, state_obj)
 
     replan_mock.assert_called_once()
+
+
+@patch("jenkins.is_storage_ready", return_value=True)
+@patch("pebble.replan_jenkins")
+def test_on_ingress_ready_with_auth_proxy_integrated(replan_mock, _):
+    """
+    arrange: given a charm with auth_proxy integrated.
+    act: when ingress ready event is fired.
+    assert: auth proxy config is updated and pebble service is replanned.
+    """
+    harness = Harness(JenkinsK8sOperatorCharm)
+    harness.begin()
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
+    mock_event = MagicMock(spec=ops.EventBase)
+    mock_ingress = MagicMock(spec=IngressPerAppRequirer)
+    mock_ingress.url = "https://example.com/jenkins"
+    harness.charm.auth_proxy_observer.ingress = mock_ingress
+    harness.charm.auth_proxy_observer.auth_proxy = MagicMock(spec=AuthProxyRequirer)
+    # Create state with auth_proxy integrated
+    harness.add_relation("auth-proxy", "oauth2-proxy")
+    state_obj = State.from_charm(harness.charm)
+    harness.charm.auth_proxy_observer.on_ingress_ready(mock_event, state_obj)
+
+    harness.charm.auth_proxy_observer.auth_proxy.update_auth_proxy_config.assert_called_once()
+    replan_mock.assert_called_once()
+
+
+@patch("jenkins.is_storage_ready", return_value=True)
+@patch("pebble.replan_jenkins")
+def test_on_ingress_revoked_with_auth_proxy_integrated(replan_mock, _):
+    """
+    arrange: given a charm with auth_proxy integrated.
+    act: when ingress revoked event is fired.
+    assert: auth proxy config is updated and pebble service is replanned.
+    """
+    harness = Harness(JenkinsK8sOperatorCharm)
+    harness.begin()
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
+    mock_event = MagicMock(spec=ops.EventBase)
+    mock_ingress = MagicMock(spec=IngressPerAppRequirer)
+    mock_ingress.url = "https://example.com/jenkins"
+    harness.charm.auth_proxy_observer.ingress = mock_ingress
+    harness.charm.auth_proxy_observer.auth_proxy = MagicMock(spec=AuthProxyRequirer)
+    # Create state with auth_proxy integrated
+    harness.add_relation("auth-proxy", "oauth2-proxy")
+    state_obj = State.from_charm(harness.charm)
+    harness.charm.auth_proxy_observer.on_ingress_revoked(mock_event, state_obj)
+
+    harness.charm.auth_proxy_observer.auth_proxy.update_auth_proxy_config.assert_called_once()
+    replan_mock.assert_called_once()
