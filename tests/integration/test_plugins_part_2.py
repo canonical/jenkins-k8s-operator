@@ -7,12 +7,11 @@ import functools
 import json
 import logging
 
-import jenkinsapi.job
 import jenkinsapi.plugin
 import kubernetes.client
+import kubernetes.config
 import pytest
 import requests
-import tenacity
 
 from .helpers import (
     create_kubernetes_cloud,
@@ -218,9 +217,7 @@ async def test_openid_connect_plugin(
 
 
 async def test_kubernetes_plugin(
-    unit_web_client: UnitWebClient,
-    kube_config: str,
-    kube_core_client: kubernetes.client.CoreV1Api,
+    unit_web_client: UnitWebClient, kube_config: str, kube_core_client: kubernetes.client.CoreV1Api
 ):
     """
     arrange: given a Jenkins charm with kubernetes plugin installed and credentials from microk8s.
@@ -236,6 +233,8 @@ async def test_kubernetes_plugin(
         {name: plugin.version for name, plugin in plugins.iteritems()},
     )
 
+    logger.info("Jenkins version pre-build: %s", unit_web_client.client.version)
+
     credentials_id = await wait_for(
         functools.partial(create_secret_file_credentials, unit_web_client, kube_config)
     )
@@ -249,60 +248,44 @@ async def test_kubernetes_plugin(
         gen_test_pipeline_with_custom_script_xml(kubernetes_test_pipeline_script()),
     )
 
-    build_status = _invoke_job_with_retry(job)
-
-    if build_status != "SUCCESS":
-        try:
-            # /log/all is a UI page; /log/all/api/json returns structured log records
-            system_log_resp = unit_web_client.client.requester.get_url(
-                f"{unit_web_client.web}/log/all/api/json?depth=1"
-            )
-            logger.info("Jenkins system log (JSON): %s", system_log_resp.text[:5000])
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Could not fetch Jenkins system log: %s", exc)
-
-        _log_k8s_agent_pods(kube_core_client)
-
-    assert build_status == "SUCCESS"
-
-
-@tenacity.retry(
-    retry=tenacity.retry_if_result(lambda status: status == "ABORTED"),
-    stop=tenacity.stop_after_attempt(3),
-    reraise=True,
-)
-def _invoke_job_with_retry(job: jenkinsapi.job.Job) -> str:
-    """Invoke a Jenkins job and return the build status, retrying on ABORTED.
-
-    Args:
-        job: The Jenkins job to invoke.
-
-    Returns:
-        The build status string.
-    """
     queue_item = job.invoke()
     queue_item.block_until_complete()
 
     build: jenkinsapi.build.Build = queue_item.get_build()
     build_status = build.get_status()
-    logs = "".join(build.stream_logs())
+    log_stream = build.stream_logs()
+    logs = "".join(log_stream)
     logger.info("Build status: %s\nBuild logs:\n%s", build_status, logs)
-    return build_status
+
+    try:
+        system_log_resp = unit_web_client.client.requester.get_url(
+            f"{unit_web_client.web}/log/all"
+        )
+        logger.info("Jenkins system log:\n%s", system_log_resp.text)
+    except Exception as exc:
+        logger.warning("Could not fetch Jenkins system log: %s", exc)
+
+    _log_k8s_agent_pods(kube_core_client)
+
+    assert build_status == "SUCCESS"
 
 
 def _log_k8s_agent_pods(kube_core_client: kubernetes.client.CoreV1Api) -> None:
-    """Log K8s pod status, container logs and events for all pods in all namespaces.
-
-    Logs every pod so dynamically-created Kubernetes plugin pods (which use
-    arbitrary names/labels) are visible alongside the Juju-deployed agent pods.
+    """Log K8s pod status, container logs and events for all jenkins agent pods.
 
     Args:
         kube_core_client: The Kubernetes core API client.
     """
     try:
         pods = kube_core_client.list_pod_for_all_namespaces()
-        logger.info("All pods: %s", [(p.metadata.namespace, p.metadata.name) for p in pods.items])
-        for pod in pods.items:
+        agent_pods = [
+            p
+            for p in pods.items
+            if any("jenkins" in (c.name or "") for c in (p.spec.containers or []))
+            or "jenkins" in (p.metadata.name or "")
+        ]
+        logger.info("Jenkins-related pods found: %s", [p.metadata.name for p in agent_pods])
+        for pod in agent_pods:
             ns = pod.metadata.namespace
             name = pod.metadata.name
             logger.info(

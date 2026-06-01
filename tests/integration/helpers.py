@@ -110,7 +110,8 @@ def gen_test_job_xml(node_label: str):
     Returns:
         The job XML.
     """
-    return textwrap.dedent(f"""
+    return textwrap.dedent(
+        f"""
         <project>
             <actions/>
             <description/>
@@ -133,7 +134,8 @@ def gen_test_job_xml(node_label: str):
             <publishers/>
             <buildWrappers/>
         </project>
-        """)
+        """
+    )
 
 
 def assert_job_success(
@@ -165,7 +167,8 @@ def gen_git_test_job_xml(node_label: str):
     Returns:
         The git test job XML.
     """
-    return textwrap.dedent(f"""
+    return textwrap.dedent(
+        f"""
         <project>
             <actions />
             <description></description>
@@ -205,7 +208,8 @@ def gen_git_test_job_xml(node_label: str):
             <publishers />
             <buildWrappers />
         </project>
-        """)
+        """
+    )
 
 
 async def get_pod_ip(model: Model, kube_core_client: kubernetes.client.CoreV1Api, app_label: str):
@@ -434,7 +438,8 @@ def gen_test_pipeline_with_custom_script_xml(script: str) -> str:
     Returns:
         The job XML.
     """
-    return textwrap.dedent(f"""
+    return textwrap.dedent(
+        f"""
         <flow-definition plugin="workflow-job@1385.vb_58b_86ea_fff1">
             <actions/>
             <description></description>
@@ -449,7 +454,8 @@ def gen_test_pipeline_with_custom_script_xml(script: str) -> str:
             <triggers/>
             <disabled>false</disabled>
         </flow-definition>
-        """)
+        """
+    )
 
 
 def kubernetes_test_pipeline_script() -> str:
@@ -458,23 +464,24 @@ def kubernetes_test_pipeline_script() -> str:
     Return:
         The pipeline script
     """
-    return textwrap.dedent("""
+    return textwrap.dedent(
+        """
         podTemplate(yaml: '''
             apiVersion: v1
             kind: Pod
             metadata:
-              labels:
+            labels:
                 some-label: some-label-value
             spec:
-              containers:
-              - name: busybox
-                image: busybox
-                imagePullPolicy: IfNotPresent
-                command:
-                - sleep
-                args:
-                - 99d
-                tty: true
+            containers:
+            - name: busybox
+              image: busybox
+              imagePullPolicy: IfNotPresent
+              command:
+              - sleep
+              args:
+              - 99d
+              tty: true
         ''') {
         node(POD_LABEL) {
             stage('Integration Test') {
@@ -483,7 +490,8 @@ def kubernetes_test_pipeline_script() -> str:
             '''
             }
         }
-        }""")
+        }"""
+    )
 
 
 def declarative_pipeline_script() -> str:
@@ -492,7 +500,8 @@ def declarative_pipeline_script() -> str:
     Return:
         The pipeline script
     """
-    return textwrap.dedent("""
+    return textwrap.dedent(
+        """
         pipeline {
             agent any
 
@@ -505,7 +514,8 @@ def declarative_pipeline_script() -> str:
                     }
                 }
             }
-        }""")
+        }"""
+    )
 
 
 def create_secret_file_credentials(

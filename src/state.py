@@ -103,7 +103,7 @@ class AgentMeta(BaseModel):
 
     @classmethod
     def from_agent_relation(
-        cls, relation_data: ops.RelationDataContent
+        cls, relation_data: typing.Mapping[str, str]
     ) -> typing.Optional["AgentMeta"]:
         """Instantiate AgentMeta from charm relation databag.
 
