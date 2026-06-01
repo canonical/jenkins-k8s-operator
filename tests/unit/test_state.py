@@ -307,9 +307,7 @@ def test_agent_meta_from_relation_data_missing_fields():
     act: when from_agent_relation is called.
     assert: None is returned.
     """
-    result = state.AgentMeta.from_agent_relation(
-        typing.cast(ops.RelationDataContent, {"executors": "1", "labels": "linux"})
-    )
+    result = state.AgentMeta.from_agent_relation({"executors": "1", "labels": "linux"})
     assert result is None
 
 
@@ -320,9 +318,7 @@ def test_agent_meta_from_relation_data_complete():
     assert: AgentMeta is returned.
     """
     result = state.AgentMeta.from_agent_relation(
-        typing.cast(
-            ops.RelationDataContent, {"executors": "1", "labels": "linux", "name": "agent-0"}
-        )
+        {"executors": "1", "labels": "linux", "name": "agent-0"}
     )
     assert result is not None
     assert result.name == "agent-0"

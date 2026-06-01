@@ -8,12 +8,12 @@ import secrets
 import socket
 from unittest.mock import MagicMock, patch
 
+import ops
 import pytest
 from ops import testing
 from scenario.errors import UncaughtCharmError
 
 import jenkins
-from agent import Observer
 from charm import JenkinsK8sOperatorCharm
 from state import JENKINS_SERVICE_NAME, AgentMeta, State
 
@@ -22,8 +22,8 @@ _MONKEYPATCHED_FQDN = "192.0.2.0"
 
 def test_reconcile_agents_accepts_state_parameter():
     """reconcile_agents must accept state as an explicit keyword argument."""
-    sig = inspect.signature(Observer.reconcile_agents)
-    assert "state" in sig.parameters, "reconcile_agents must accept a 'state' parameter"
+    sig = inspect.signature(JenkinsK8sOperatorCharm._reconcile_agents)
+    assert "state" in sig.parameters, "_reconcile_agents must accept a 'state' parameter"
 
 
 class FakeJenkinsService:
@@ -213,13 +213,14 @@ def test_reconcile_agents(
     assert: expected agents are registered.
     """
     ctx = testing.Context(JenkinsK8sOperatorCharm)
-    with ctx(ctx.on.config_changed(), state) as mgr:
-        # Ignore the mismatching type for FakeJenkinsService since this is a fake service for
-        # testing.
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile"),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
         fake_jenkins_service = FakeJenkinsService(initial_agents=initial_agents)
-        mgr.charm.agent_observer.jenkins = fake_jenkins_service  # type: ignore
+        mgr.charm.jenkins = fake_jenkins_service  # type: ignore
         charm_state = State.from_charm(mgr.charm)
-        mgr.charm.agent_observer.reconcile_agents(event=MagicMock(), state=charm_state)
+        mgr.charm._reconcile_agents(event=MagicMock(), state=charm_state)
 
     all_agent_names = [node.name for node in fake_jenkins_service.list_agent_nodes()]
     assert len(all_agent_names) == len(expected_agents)
@@ -272,14 +273,14 @@ def test_reconcile_agents_error(mock_jenkins_service: MagicMock):
     # Patch the charm's _reconcile_agents to use our mock jenkins service.
     # The reconciliation pattern means the event dispatch itself calls reconcile_agents,
     # so we need the mock in place before ctx.run().
-    original_reconcile_agents = Observer.reconcile_agents
+    original_reconcile_agents = JenkinsK8sOperatorCharm._reconcile_agents
 
     def patched_reconcile_agents(self, event, state):
         self.jenkins = mock_jenkins_service
         return original_reconcile_agents(self, event, state)
 
     with (
-        patch.object(Observer, "reconcile_agents", patched_reconcile_agents),
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile_agents", patched_reconcile_agents),
         pytest.raises(UncaughtCharmError, match="JenkinsError"),
     ):
         ctx.run(
@@ -438,8 +439,8 @@ def test_reconfigure_agent_discovery(
     """
     ctx = testing.Context(JenkinsK8sOperatorCharm)
     with ctx(ctx.on.config_changed(), state) as mgr:
-        mgr.charm.agent_observer.reconfigure_agent_discovery(MagicMock())
-        assert mgr.charm.agent_observer.agent_discovery_url == expected_discovery_url
+        mgr.charm._reconcile_agent_discovery()
+        assert mgr.charm._agent_discovery_url == expected_discovery_url
 
 
 def _generate_status_message_test_params():
@@ -506,4 +507,62 @@ def test_status_message(state: testing.State, expected_status_message: str):
     with ctx(ctx.on.config_changed(), state) as mgr:
         # Need access to protected functions for testing
         # pylint:disable=protected-access
-        assert mgr.charm.agent_observer._status_message == expected_status_message
+        assert mgr.charm._agent_status_message == expected_status_message
+
+
+@patch("jenkins.is_jenkins_ready", return_value=False)
+def test_reconcile_agents_jenkins_not_ready(_mock_ready):
+    """
+    arrange: given jenkins not ready.
+    act: when _reconcile_agents is called.
+    assert: event is deferred and status is WaitingStatus.
+    """
+    state = testing.State(
+        containers=[testing.Container("jenkins", can_connect=True)],  # type: ignore
+        storages={testing.Storage("jenkins-home")},
+        relations=[
+            testing.Relation(
+                endpoint="agent",
+                interface="jenkins_agent_v0",
+                remote_units_data={0: {"executors": "1", "labels": "x", "name": "a1"}},
+            ),
+        ],
+    )
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile"),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        mock_event = MagicMock()
+        charm_state = State.from_charm(mgr.charm)
+        mgr.charm._reconcile_agents(event=mock_event, state=charm_state)
+        mock_event.defer.assert_called_once()
+        assert isinstance(mgr.charm.unit.status, ops.WaitingStatus)
+
+
+def test_reconcile_agent_discovery_updates_relation():
+    """
+    arrange: given an agent relation with no url set.
+    act: when _reconcile_agent_discovery is called.
+    assert: the url is set in the relation data.
+    """
+    state = testing.State(
+        containers=[testing.Container("jenkins", can_connect=True)],  # type: ignore
+        storages={testing.Storage("jenkins-home")},
+        relations=[
+            testing.Relation(
+                endpoint="agent",
+                interface="jenkins_agent_v0",
+                remote_units_data={0: {"executors": "1", "labels": "x", "name": "a1"}},
+            ),
+        ],
+    )
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile"),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        mgr.charm._reconcile_agent_discovery()
+        # Check that url was set in relation data
+        agent_rel = mgr.charm.model.relations["agent"][0]
+        assert "url" in agent_rel.data[mgr.charm.unit]
