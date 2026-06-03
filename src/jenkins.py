@@ -23,6 +23,7 @@ import jenkinsapi.jenkins
 import jenkinsapi.utils.requester
 import ops
 import requests
+import tenacity
 from jenkinsapi.node import Node
 from pydantic import HttpUrl
 
@@ -223,6 +224,37 @@ class Jenkins:
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             return False
 
+    def _is_api_ready(self, container: ops.Container) -> bool:
+        """Check if Jenkins API is fully functional (crumb issuance works).
+
+        This is a stronger readiness check than _is_ready. Jenkins may serve pages
+        (login_url returns 200) before its security subsystem is fully initialized.
+        This method verifies that the crumb issuer endpoint is functional, which is
+        required for API token generation during bootstrap.
+
+        Args:
+            container: The Jenkins workload container (for reading admin credentials).
+
+        Returns:
+            True if Jenkins API is fully functional. False otherwise.
+        """
+        try:
+            creds = get_admin_credentials(container)
+            resp = requests.get(
+                f"{self.web_url}/crumbIssuer/api/json",
+                auth=(creds.username, creds.password_or_token),
+                timeout=10,
+            )
+            return resp.ok and "crumb" in resp.json()
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.JSONDecodeError,
+            KeyError,
+            ops.pebble.PathError,
+        ):
+            return False
+
     def wait_ready(self, timeout: int = 300, check_interval: int = 10) -> None:
         """Wait until Jenkins service is up.
 
@@ -293,24 +325,60 @@ class Jenkins:
         Raises:
             JenkinsBootstrapError: if the token can not be setup.
         """
+        # Wait for Jenkins API to be fully ready (crumb issuer functional)
+        # before attempting token generation. Jenkins may serve pages before
+        # its security subsystem is initialized, causing crumb/session races.
+        try:
+            _wait_for(lambda: self._is_api_ready(container), timeout=120, check_interval=5)
+        except TimeoutError as exc:
+            raise JenkinsBootstrapError(
+                "Timed out waiting for Jenkins API to become ready."
+            ) from exc
+
+        try:
+            self._generate_user_token(container)
+        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+            raise JenkinsBootstrapError("Failed to setup user token") from exc
+        except JenkinsBootstrapError:
+            raise
+        except ops.pebble.PathError as exc:
+            raise JenkinsBootstrapError("Failed to setup user token.") from exc
+
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(5),
+        wait=tenacity.wait_exponential(multiplier=2, min=2, max=30),
+        retry=tenacity.retry_if_exception_type(
+            jenkinsapi.custom_exceptions.JenkinsAPIException
+        ),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def _generate_user_token(self, container: ops.Container) -> None:
+        """Generate and store the admin user API token with retry.
+
+        Creates a fresh client on each attempt to ensure a new session/crumb pair.
+
+        Args:
+            container: The Jenkins workload container.
+
+        Raises:
+            JenkinsBootstrapError: if the token can not be generated after retries.
+        """
         try:
             client = self._get_client(get_admin_credentials(container))
             token: str = client.generate_new_api_token(JUJU_API_TOKEN)
             container.push(API_TOKEN_PATH, token, user=USER, group=GROUP)
-        except ops.pebble.PathError as exc:
-            raise JenkinsBootstrapError("Failed to setup user token.") from exc
-        except jenkinsapi.utils.requester.JenkinsAPIException as e:
-            # Jenkins api exception when generating user token
-            # We check if security is disabled
-            logger.info("Generate token failed, checking if security is disabled")
-            response = client.requester.get_url(
-                f"{client.base_server_url()}/manage/api/json?tree=useSecurity"
-            )
+        except jenkinsapi.custom_exceptions.JenkinsAPIException as e:
+            # Check if security is disabled before retrying
             try:
-                if response.status_code == 200 and not response.json()["useSecurity"]:
-                    # !! Write a random string to the api token as a temporary workaround,
-                    # Prefix it to signify that it's a placeholder token
-                    # Follow-up changes will be needed to rework this.
+                check_response = requests.get(
+                    f"{self.web_url}/manage/api/json?tree=useSecurity",
+                    timeout=10,
+                )
+                if check_response.status_code == 200 and not check_response.json()[
+                    "useSecurity"
+                ]:
+                    # Security disabled — write placeholder token
                     container.push(
                         API_TOKEN_PATH,
                         f"placeholder-{secrets.token_hex(16)}",
@@ -318,16 +386,15 @@ class Jenkins:
                         group=GROUP,
                     )
                     return
-            # Not in the case where security is disabled, reraise the exception
             except (requests.exceptions.JSONDecodeError, KeyError):
                 logger.error(
-                    "Failed parsing jenkins's security config in response, will raise initial error"
+                    "Failed parsing jenkins's security config, will retry"
                 )
-            logger.error(
-                "Generate token failed but security is not disabled, API response: HTTP %s",
-                response.status_code,
+            logger.warning(
+                "Token generation failed (API response may indicate crumb/session race): %s",
+                e,
             )
-            raise JenkinsBootstrapError("Failed to setup user token") from e
+            raise
 
     def _configure_proxy(
         self, container: ops.Container, proxy_config: state.ProxyConfig | None = None
