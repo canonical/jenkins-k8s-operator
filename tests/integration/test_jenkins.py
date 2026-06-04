@@ -154,8 +154,7 @@ async def test_bootstrap_after_restart(application: Application, unit: Unit):
 
     # Restart the jenkins service — triggers pebble-ready → bootstrap
     action = await unit.run(
-        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
-        "/charm/bin/pebble restart jenkins"
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket /charm/bin/pebble restart jenkins"
     )
     await action.wait()
     assert action.status == "completed", f"Failed to restart jenkins: {action.data}"
