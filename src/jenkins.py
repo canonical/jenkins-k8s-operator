@@ -347,9 +347,7 @@ class Jenkins:
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(5),
         wait=tenacity.wait_exponential(multiplier=2, min=2, max=30),
-        retry=tenacity.retry_if_exception_type(
-            jenkinsapi.custom_exceptions.JenkinsAPIException
-        ),
+        retry=tenacity.retry_if_exception_type(jenkinsapi.custom_exceptions.JenkinsAPIException),
         before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
@@ -375,9 +373,7 @@ class Jenkins:
                     f"{self.web_url}/manage/api/json?tree=useSecurity",
                     timeout=10,
                 )
-                if check_response.status_code == 200 and not check_response.json()[
-                    "useSecurity"
-                ]:
+                if check_response.status_code == 200 and not check_response.json()["useSecurity"]:
                     # Security disabled — write placeholder token
                     container.push(
                         API_TOKEN_PATH,
@@ -387,9 +383,7 @@ class Jenkins:
                     )
                     return
             except (requests.exceptions.JSONDecodeError, KeyError):
-                logger.error(
-                    "Failed parsing jenkins's security config, will retry"
-                )
+                logger.error("Failed parsing jenkins's security config, will retry")
             logger.warning(
                 "Token generation failed (API response may indicate crumb/session race): %s",
                 e,
