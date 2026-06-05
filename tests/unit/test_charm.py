@@ -304,7 +304,12 @@ def test_calculate_env(harness: Harness):
     with patch.object(jenkins_charm, "_get_ingress_path", return_value=""):
         env = jenkins_charm.calculate_env()
 
-    assert env == {"JENKINS_HOME": str(jenkins.JENKINS_HOME_PATH), "JENKINS_PREFIX": ""}
+    assert env == {
+        "JENKINS_HOME": str(jenkins.JENKINS_HOME_PATH),
+        "JENKINS_PREFIX": "",
+        "CASC_JENKINS_CONFIG": str(jenkins.JCASC_CONFIG_PATH),
+        "JENKINS_ADMIN_PASSWORD": "",
+    }
 
 
 def test__on_config_changed_invalid_config_blocked(

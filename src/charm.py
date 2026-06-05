@@ -160,8 +160,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ""
         return path
 
-    def calculate_env(self) -> jenkins.Environment:
+    def calculate_env(
+        self, admin_password: str = ""
+    ) -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
+
+        Args:
+            admin_password: The admin password for JCasC secret interpolation.
+                Empty string if not yet available (e.g. during __init__).
 
         Returns:
             The dictionary mapping of environment variables for the Jenkins service.
@@ -169,6 +175,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         return jenkins.Environment(
             JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
             JENKINS_PREFIX=self._get_ingress_path(),
+            CASC_JENKINS_CONFIG=str(jenkins.JCASC_CONFIG_PATH),
+            JENKINS_ADMIN_PASSWORD=admin_password,
         )
 
     def _reconcile(self, event: ops.EventBase) -> None:
@@ -220,8 +228,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             container: The Jenkins workload container.
             charm_state: The current charm state.
         """
-        # Recalculate environment to pick up changes (e.g. ingress prefix)
-        self.jenkins.environment = self.calculate_env()
+        # Recalculate environment to pick up changes (e.g. ingress prefix, admin password)
+        admin_password = ""
+        try:
+            credentials = jenkins.get_admin_credentials(container)
+            admin_password = credentials.password_or_token
+        except (ops.pebble.PathError, FileNotFoundError):
+            pass  # Password not yet available (first boot)
+        self.jenkins.environment = self.calculate_env(admin_password=admin_password)
         desired_layer = pebble.get_pebble_layer(self.jenkins, charm_state)
         try:
             current_services = container.get_plan().services
