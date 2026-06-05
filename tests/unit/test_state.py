@@ -322,3 +322,28 @@ def test_agent_meta_from_relation_data_complete():
     )
     assert result is not None
     assert result.name == "agent-0"
+
+
+def test_jcasc_config_from_charm(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-config set.
+    act: when state is initialized from charm.
+    assert: jcasc_config contains the config value.
+    """
+    test_config = "jenkins:\n  systemMessage: test\n"
+    mock_charm.config = {"jcasc-config": test_config}
+
+    config = state.State.from_charm(mock_charm)
+    assert config.jcasc_config == test_config
+
+
+def test_jcasc_config_default(mock_charm: MagicMock):
+    """
+    arrange: given a charm with no explicit jcasc-config.
+    act: when state is initialized from charm.
+    assert: jcasc_config returns empty string (default from get).
+    """
+    mock_charm.config = {}
+
+    config = state.State.from_charm(mock_charm)
+    assert config.jcasc_config == ""

@@ -197,6 +197,7 @@ class State:
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
         auth_proxy_integrated: if an auth proxy integrated has been set.
+        jcasc_config: Raw JCasC YAML content from charm config.
         system_properties: Additional JVM system properties as -D flags.
 
     """
@@ -206,6 +207,7 @@ class State:
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
     auth_proxy_integrated: bool
+    jcasc_config: str
     system_properties: typing.List[str] = dataclasses.field(default_factory=list)
 
     @classmethod
@@ -284,5 +286,6 @@ class State:
             plugins=plugins,
             proxy_config=proxy_config,
             auth_proxy_integrated=is_auth_proxy_integrated,
+            jcasc_config=typing.cast(str, charm.config.get("jcasc-config") or ""),
             system_properties=system_properties,
         )

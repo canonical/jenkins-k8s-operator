@@ -118,6 +118,32 @@ config:
         Comma-separated JVM system properties to pass to the Jenkins process at startup.
         Specify entries as key=value without the -D prefix. These are appended as -Dkey=value.
         Example: jenkins.model.Jenkins.crumbIssuerProxyCompatibility=true
+    jcasc-config:
+      type: string
+      description: |
+        Jenkins Configuration as Code (JCasC) YAML content. This is the declarative
+        way to manage Jenkins configuration (security, clouds, credentials, views, etc.).
+        The charm auto-injects admin credentials if the user config omits securityRealm,
+        and injects auth proxy config when the relation is active.
+        See https://www.jenkins.io/projects/jcasc/ for schema reference.
+      default: |
+        jenkins:
+          systemMessage: "Managed by jenkins-k8s charm via JCasC\n"
+          numExecutors: 0
+          securityRealm:
+            local:
+              allowsSignup: false
+              users:
+                - id: "admin"
+                  password: "${JENKINS_ADMIN_PASSWORD}"
+          authorizationStrategy:
+            loggedInUsersCanDoAnything:
+              allowAnonymousRead: false
+          crumbIssuer:
+            standard:
+              excludeClientIPFromCrumb: true
+          remotingSecurity:
+            enabled: true
 
 actions:
   get-admin-password:
