@@ -102,10 +102,14 @@ class Environment(typing.TypedDict):
     Attributes:
         JENKINS_HOME: The Jenkins home directory.
         JENKINS_PREFIX: The prefix in which Jenkins will be accessible.
+        CASC_JENKINS_CONFIG: Path to the JCasC configuration file.
+        JENKINS_ADMIN_PASSWORD: The admin password for JCasC secret interpolation.
     """
 
     JENKINS_HOME: str
     JENKINS_PREFIX: str
+    CASC_JENKINS_CONFIG: str
+    JENKINS_ADMIN_PASSWORD: str
 
 
 @dataclasses.dataclass(frozen=True)
