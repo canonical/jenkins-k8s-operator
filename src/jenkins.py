@@ -47,6 +47,8 @@ LAST_EXEC_VERSION_PATH = JENKINS_HOME_PATH / Path("jenkins.install.InstallUtil.l
 WIZARD_VERSION_PATH = JENKINS_HOME_PATH / Path("jenkins.install.UpgradeWizard.state")
 # The Jenkins bootstrapping config path
 CONFIG_FILE_PATH = JENKINS_HOME_PATH / "config.xml"
+# The JCasC configuration file path
+JCASC_CONFIG_PATH = JENKINS_HOME_PATH / "jenkins.yaml"
 # The Jenkins plugins installation directory
 PLUGINS_PATH = JENKINS_HOME_PATH / "plugins"
 # The Jenkins logging configuration path
@@ -58,6 +60,7 @@ REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
     "prometheus",  # required for COS integration
     "monitoring",  # required for session invalidation
+    "configuration-as-code",  # required for JCasC declarative config management
 ]
 USER = "jenkins"
 GROUP = "jenkins"
