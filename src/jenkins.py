@@ -736,6 +736,123 @@ class Jenkins:
             client=client,
         )
 
+    def reload_jcasc(self, container: ops.Container) -> None:
+        """Reload JCasC configuration without restarting Jenkins.
+
+        Args:
+            container: The Jenkins workload container.
+
+        Raises:
+            JenkinsError: if the reload request fails.
+        """
+        try:
+            credentials = _get_api_credentials(container)
+            client = self._get_client(credentials)
+            client.requester.post_url(
+                f"{self.web_url}/configuration-as-code/reload"
+            )
+        except JenkinsError:
+            raise
+        except Exception as exc:
+            logger.error("JCasC reload failed: %s", exc)
+            raise JenkinsError("Failed to reload JCasC configuration.") from exc
+
+    def check_jcasc(self, container: ops.Container, config_content: str) -> bool:
+        """Validate JCasC config via the check endpoint.
+
+        Args:
+            container: The Jenkins workload container.
+            config_content: The YAML content to validate.
+
+        Returns:
+            True if config is valid, False otherwise.
+
+        Raises:
+            JenkinsError: if the check request fails or Jenkins is unreachable.
+        """
+        try:
+            credentials = _get_api_credentials(container)
+            client = self._get_client(credentials)
+            response = client.requester.post_url(
+                f"{self.web_url}/configuration-as-code/check",
+                data=config_content,
+            )
+            return response.status_code == 200
+        except JenkinsError:
+            raise
+        except Exception as exc:
+            logger.error("JCasC validation failed: %s", exc)
+            raise JenkinsError("Failed to validate JCasC configuration.") from exc
+
+    def sync_jcasc_config(self, container: ops.Container, desired_yaml: str) -> bool:
+        """Write JCasC config to disk, validate, and reload. Rollback on failure.
+
+        Handles the full JCasC file lifecycle:
+        1. Pull current config (if any)
+        2. Short-circuit if unchanged
+        3. Push desired config
+        4. Validate via Jenkins API
+        5. Reload if valid, rollback if invalid
+
+        Args:
+            container: The Jenkins workload container.
+            desired_yaml: The full YAML string to write.
+
+        Returns:
+            True if config was applied (or unchanged), False if validation failed
+            (config has been rolled back).
+
+        Raises:
+            JenkinsError: if Jenkins API calls fail (check/reload).
+        """
+        jcasc_path = str(JCASC_CONFIG_PATH)
+
+        # Pull current config
+        try:
+            current = container.pull(jcasc_path).read()
+        except (ops.pebble.PathError, FileNotFoundError):
+            current = ""
+
+        # No-op if unchanged
+        if current == desired_yaml:
+            return True
+
+        # Write new config
+        container.push(
+            jcasc_path,
+            desired_yaml,
+            encoding="utf-8",
+            user=USER,
+            group=GROUP,
+            make_dirs=True,
+        )
+
+        # Validate and reload — skip if Jenkins hasn't bootstrapped yet
+        # (config on disk will be loaded when Jenkins starts)
+        try:
+            if not self.check_jcasc(container, desired_yaml):
+                logger.warning("JCasC validation failed, rolling back")
+                if current:
+                    container.push(
+                        jcasc_path,
+                        current,
+                        encoding="utf-8",
+                        user=USER,
+                        group=GROUP,
+                        make_dirs=True,
+                    )
+                    self.reload_jcasc(container)
+                else:
+                    container.remove_path(jcasc_path)
+                return False
+
+            # Apply
+            self.reload_jcasc(container)
+        except JenkinsBootstrapError:
+            logger.debug("Jenkins not yet bootstrapped, skipping validation/reload")
+
+        return True
+
 
 def _wait_for(
     func: typing.Callable[[], typing.Any], timeout: int = 300, check_interval: int = 10

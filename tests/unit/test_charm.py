@@ -14,12 +14,13 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import ops
 import pytest
 import requests
+import yaml
 
 import jenkins
 import precondition
 import state
 import timerange
-from charm import JenkinsK8sOperatorCharm
+from charm import JenkinsK8sOperatorCharm, ReconcileBlockedError
 
 from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME, WAITING_STATUS_NAME
 from .types_ import Harness, HarnessWithContainer
@@ -416,6 +417,7 @@ def test__on_config_changed_success_replans_and_restarts(
         patch.object(harness_container.container, "add_layer") as add_layer_mock,
         patch.object(harness_container.container, "replan") as replan_mock,
         patch.object(harness_container.container, "get_plan") as get_plan_mock,
+        patch.object(jenkins_charm, "_reconcile_jcasc"),
     ):
         check_mock.return_value = precondition._CheckResult(success=True, reason=None)
         # Minimal viable layer for add_layer
@@ -547,3 +549,346 @@ def test__auth_proxy_relation_handlers_delegate(
         getattr(jenkins_charm, handler_name)(event)
 
     reconcile_mock.assert_called_once_with(event)
+
+VALID_JCASC_CONFIG = {
+    "jenkins": {
+        "systemMessage": "Managed by Juju",
+        "numExecutors": 0,
+    }
+}
+
+JCASC_WITH_SECURITY_REALM = {
+    "jenkins": {
+        "securityRealm": {
+            "local": {
+                "allowsSignup": False,
+                "users": [{"id": "custom", "password": "secret"}],
+            }
+        }
+    }
+}
+
+
+@pytest.fixture(name="harness_with_jcasc")
+def harness_with_jcasc_fixture(harness_container: HarnessWithContainer):
+    """Provide a harness with JCasC config set and Jenkins home dir ready."""
+    harness = harness_container.harness
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    # Set the jcasc-config option
+    harness.update_config(
+        {"jcasc-config": yaml.dump(VALID_JCASC_CONFIG, default_flow_style=False)}
+    )
+
+    return harness, jenkins_charm, harness_container.container
+
+
+def _make_jenkins_instance() -> jenkins.Jenkins:
+    """Create a Jenkins instance with a test environment."""
+    env: jenkins.Environment = {
+        "JENKINS_HOME": str(jenkins.JENKINS_HOME_PATH),
+        "JENKINS_PREFIX": "",
+        "CASC_JENKINS_CONFIG": str(jenkins.JCASC_CONFIG_PATH),
+        "JENKINS_ADMIN_PASSWORD": "",
+    }
+    return jenkins.Jenkins(env)
+
+
+
+def test_build_jcasc_config_blocks_security_realm_with_auth_proxy(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given auth_proxy is integrated and jcasc-config has securityRealm.
+    act: when _build_jcasc_config is called.
+    assert: ReconcileBlockedError is raised with conflict message.
+    """
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    mock_state = MagicMock(spec=state.State)
+    mock_state.jcasc_config = JCASC_WITH_SECURITY_REALM
+    mock_state.auth_proxy_integrated = True
+
+    with pytest.raises(ReconcileBlockedError, match="JCasC conflict"):
+        charm._build_jcasc_config(mock_state)
+
+
+def test_build_jcasc_config_allows_security_realm_without_auth_proxy(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given auth_proxy is NOT integrated and jcasc-config has securityRealm.
+    act: when _build_jcasc_config is called.
+    assert: config is returned with user's securityRealm preserved.
+    """
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    mock_state = MagicMock(spec=state.State)
+    mock_state.jcasc_config = JCASC_WITH_SECURITY_REALM
+    mock_state.auth_proxy_integrated = False
+
+    result = charm._build_jcasc_config(mock_state)
+    assert result["jenkins"]["securityRealm"]["local"]["users"][0]["id"] == "custom"
+
+
+def test_build_jcasc_config_injects_admin_credentials(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given jcasc-config without securityRealm.
+    act: when _build_jcasc_config is called.
+    assert: securityRealm with admin/${JENKINS_ADMIN_PASSWORD} is injected.
+    """
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    mock_state = MagicMock(spec=state.State)
+    mock_state.jcasc_config = VALID_JCASC_CONFIG
+    mock_state.auth_proxy_integrated = False
+
+    result = charm._build_jcasc_config(mock_state)
+    assert "securityRealm" in result["jenkins"]
+    realm = result["jenkins"]["securityRealm"]
+    assert realm["local"]["allowsSignup"] is False
+    assert realm["local"]["users"][0]["password"] == "${JENKINS_ADMIN_PASSWORD}"
+
+
+
+def test_reconcile_jcasc_skips_when_no_config(harness_container: HarnessWithContainer):
+    """
+    arrange: given jcasc_config is None.
+    act: when _reconcile_jcasc is called.
+    assert: returns without calling sync_jcasc_config.
+    """
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    mock_container = MagicMock(spec=ops.Container)
+    mock_state = MagicMock(spec=state.State)
+    mock_state.jcasc_config = None
+
+    with patch.object(charm.jenkins, "sync_jcasc_config") as sync_mock:
+        charm._reconcile_jcasc(mock_container, mock_state)
+
+    sync_mock.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "sync_return,expect_blocked",
+    [
+        pytest.param(True, False, id="sync_success"),
+        pytest.param(False, True, id="sync_failure"),
+    ],
+)
+def test_reconcile_jcasc_sync_result(
+    harness_container: HarnessWithContainer, sync_return: bool, expect_blocked: bool
+):
+    """
+    arrange: given valid config and sync_jcasc_config returns sync_return.
+    act: when _reconcile_jcasc is called.
+    assert: raises ReconcileBlockedError only when sync fails.
+    """
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    mock_container = MagicMock(spec=ops.Container)
+    mock_state = MagicMock(spec=state.State)
+    mock_state.jcasc_config = VALID_JCASC_CONFIG
+    mock_state.auth_proxy_integrated = False
+
+    with patch.object(charm.jenkins, "sync_jcasc_config", return_value=sync_return):
+        if expect_blocked:
+            with pytest.raises(ReconcileBlockedError, match="validation failed"):
+                charm._reconcile_jcasc(mock_container, mock_state)
+        else:
+            charm._reconcile_jcasc(mock_container, mock_state)
+
+
+def test_sync_jcasc_config_no_write_when_unchanged():
+    """
+    arrange: given container already has the desired config.
+    act: when sync_jcasc_config is called.
+    assert: push is NOT called, returns True.
+    """
+    j = _make_jenkins_instance()
+    desired = "jenkins:\n  systemMessage: test\n"
+    mock_container = MagicMock(spec=ops.Container)
+    mock_pull = MagicMock()
+    mock_pull.read.return_value = desired
+    mock_container.pull.return_value = mock_pull
+
+    result = j.sync_jcasc_config(mock_container, desired)
+
+    assert result is True
+    mock_container.push.assert_not_called()
+
+
+def test_sync_jcasc_config_successful_write():
+    """
+    arrange: given first-time write (file doesn't exist) and check_jcasc passes.
+    act: when sync_jcasc_config is called.
+    assert: push uses make_dirs=True, reload is called, returns True.
+    """
+    j = _make_jenkins_instance()
+    mock_container = MagicMock(spec=ops.Container)
+    mock_container.pull.side_effect = ops.pebble.PathError("not-found", "not found")
+    mock_container.push.return_value = None
+
+    with (
+        patch.object(j, "check_jcasc", return_value=True),
+        patch.object(j, "reload_jcasc") as reload_mock,
+    ):
+        result = j.sync_jcasc_config(mock_container, "jenkins:\n  test: true\n")
+
+    assert result is True
+    push_kwargs = mock_container.push.call_args[1]
+    assert push_kwargs.get("make_dirs") is True
+    reload_mock.assert_called_once_with(mock_container)
+
+
+@pytest.mark.parametrize(
+    "has_previous",
+    [
+        pytest.param(True, id="rollback_to_previous"),
+        pytest.param(False, id="remove_file"),
+    ],
+)
+def test_sync_jcasc_config_validation_failure(has_previous: bool):
+    """
+    arrange: given check_jcasc returns False.
+    act: when sync_jcasc_config writes config.
+    assert: rolls back to previous config or removes file, returns False.
+    """
+    j = _make_jenkins_instance()
+    previous = "jenkins:\n  systemMessage: old\n"
+    mock_container = MagicMock(spec=ops.Container)
+    mock_container.push.return_value = None
+
+    if has_previous:
+        mock_pull = MagicMock()
+        mock_pull.read.return_value = previous
+        mock_container.pull.return_value = mock_pull
+    else:
+        mock_container.pull.side_effect = ops.pebble.PathError("not-found", "not found")
+
+    with (
+        patch.object(j, "check_jcasc", return_value=False),
+        patch.object(j, "reload_jcasc") as reload_mock,
+    ):
+        result = j.sync_jcasc_config(mock_container, "jenkins:\n  test: new\n")
+
+    assert result is False
+    if has_previous:
+        assert mock_container.push.call_count == 2
+        rollback_call = mock_container.push.call_args_list[1]
+        assert rollback_call[0][1] == previous
+        reload_mock.assert_called_once_with(mock_container)
+    else:
+        mock_container.remove_path.assert_called_once()
+
+
+def test_sync_jcasc_config_skips_validation_when_not_bootstrapped():
+    """
+    arrange: given check_jcasc raises JenkinsBootstrapError.
+    act: when sync_jcasc_config writes config.
+    assert: config stays on disk, returns True (optimistic).
+    """
+    j = _make_jenkins_instance()
+    mock_container = MagicMock(spec=ops.Container)
+    mock_container.pull.side_effect = ops.pebble.PathError("not-found", "not found")
+    mock_container.push.return_value = None
+
+    with (
+        patch.object(
+            j, "check_jcasc",
+            side_effect=jenkins.JenkinsBootstrapError("not ready"),
+        ),
+        patch.object(j, "reload_jcasc") as reload_mock,
+    ):
+        result = j.sync_jcasc_config(mock_container, "jenkins:\n  test: true\n")
+
+    assert result is True
+    mock_container.push.assert_called_once()
+    reload_mock.assert_not_called()
+
+
+def test_reload_jcasc_success():
+    """
+    arrange: given a working Jenkins API.
+    act: when reload_jcasc is called.
+    assert: POST to /configuration-as-code/reload is made.
+    """
+    mock_container = MagicMock(spec=ops.Container)
+    mock_requester = MagicMock()
+    mock_client = MagicMock()
+    mock_client.requester = mock_requester
+
+    j = _make_jenkins_instance()
+    with (
+        patch.object(j, "_get_client", return_value=mock_client),
+        patch("jenkins._get_api_credentials") as creds_mock,
+    ):
+        creds_mock.return_value = jenkins.Credentials("admin", "token")
+        j.reload_jcasc(mock_container)
+
+    mock_requester.post_url.assert_called_once_with(
+        "http://localhost:8080/configuration-as-code/reload"
+    )
+
+
+def test_reload_jcasc_raises_jenkins_error():
+    """
+    arrange: given Jenkins API that returns an error.
+    act: when reload_jcasc is called.
+    assert: JenkinsError is raised.
+    """
+    mock_container = MagicMock(spec=ops.Container)
+
+    j = _make_jenkins_instance()
+    with (
+        patch("jenkins._get_api_credentials", side_effect=Exception("conn refused")),
+        pytest.raises(jenkins.JenkinsError),
+    ):
+        j.reload_jcasc(mock_container)
+
+
+def test_check_jcasc_valid_config():
+    """
+    arrange: given Jenkins API returns 200 for check endpoint.
+    act: when check_jcasc is called.
+    assert: returns True.
+    """
+    mock_container = MagicMock(spec=ops.Container)
+    mock_requester = MagicMock()
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_requester.post_url.return_value = mock_response
+    mock_client = MagicMock()
+    mock_client.requester = mock_requester
+
+    j = _make_jenkins_instance()
+    with (
+        patch.object(j, "_get_client", return_value=mock_client),
+        patch("jenkins._get_api_credentials") as creds_mock,
+    ):
+        creds_mock.return_value = jenkins.Credentials("admin", "token")
+        result = j.check_jcasc(mock_container, "jenkins: {}")
+
+    assert result is True
+
+
+def test_check_jcasc_raises_on_failure():
+    """
+    arrange: given Jenkins API is unreachable.
+    act: when check_jcasc is called.
+    assert: JenkinsError is raised.
+    """
+    mock_container = MagicMock(spec=ops.Container)
+
+    j = _make_jenkins_instance()
+    with (
+        patch(
+            "jenkins._get_api_credentials",
+            side_effect=jenkins.JenkinsBootstrapError("not ready"),
+        ),
+        pytest.raises(jenkins.JenkinsError),
+    ):
+        j.check_jcasc(mock_container, "jenkins: {}")

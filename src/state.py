@@ -9,6 +9,7 @@ import os
 import typing
 
 import ops
+import yaml
 from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
 
 from timerange import InvalidTimeRangeError, Range
@@ -207,7 +208,7 @@ class State:
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
     auth_proxy_integrated: bool
-    jcasc_config: str
+    jcasc_config: typing.Optional[typing.Dict[str, typing.Any]]
     system_properties: typing.List[str] = dataclasses.field(default_factory=list)
 
     @classmethod
@@ -280,12 +281,24 @@ class State:
                 f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME}"
             )
 
+        # Validate JCasC config: must be valid YAML mapping or empty
+        raw_jcasc = typing.cast(str, charm.config.get("jcasc-config") or "")
+        jcasc_config: typing.Optional[typing.Dict[str, typing.Any]] = None
+        if raw_jcasc.strip():
+            try:
+                parsed = yaml.safe_load(raw_jcasc)
+            except yaml.YAMLError as exc:
+                raise CharmConfigInvalidError(f"Invalid jcasc-config YAML: {exc}") from exc
+            if not isinstance(parsed, dict):
+                raise CharmConfigInvalidError("jcasc-config must be a YAML mapping (dict)")
+            jcasc_config = parsed
+
         return cls(
             restart_time_range=restart_time_range,
             agent_relation_meta=agent_relation_meta_map,
             plugins=plugins,
             proxy_config=proxy_config,
             auth_proxy_integrated=is_auth_proxy_integrated,
-            jcasc_config=typing.cast(str, charm.config.get("jcasc-config") or ""),
+            jcasc_config=jcasc_config,
             system_properties=system_properties,
         )

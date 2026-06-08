@@ -14,6 +14,7 @@ import typing
 from urllib.parse import urlparse
 
 import ops
+import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
@@ -39,6 +40,23 @@ from state import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ReconcileBlockedError(Exception):
+    """Raised by sub-reconcilers to signal the charm should enter BlockedStatus.
+
+    Attributes:
+        message: The blocked status message.
+    """
+
+    def __init__(self, message: str):
+        """Initialize ReconcileBlockedError.
+
+        Args:
+            message: The blocked status message to surface to the user.
+        """
+        self.message = message
+        super().__init__(message)
 
 
 class JenkinsK8sOperatorCharm(ops.CharmBase):
@@ -199,17 +217,22 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if state is None:
             return
 
-        # Storage ownership only needs correction on attach/upgrade events
-        if isinstance(event, (ops.StorageAttachedEvent, ops.UpgradeCharmEvent)):
-            self._reconcile_storage(container)
+        try:
+            # Storage ownership only needs correction on attach/upgrade events
+            if isinstance(event, (ops.StorageAttachedEvent, ops.UpgradeCharmEvent)):
+                self._reconcile_storage(container)
 
-        self._reconcile_pebble(container, state)
-        self._reconcile_agents(event, state)
-        self._reconcile_agent_discovery()
-        self._reconcile_auth_proxy(event, state)
-        # Plugin removal only runs on update-status (matching original behaviour)
-        if isinstance(event, ops.UpdateStatusEvent):
-            self._reconcile_plugins(container, state)
+            self._reconcile_pebble(container, state)
+            self._reconcile_jcasc(container, state)
+            self._reconcile_agents(event, state)
+            self._reconcile_agent_discovery()
+            self._reconcile_auth_proxy(event, state)
+            # Plugin removal only runs on update-status (matching original behaviour)
+            if isinstance(event, ops.UpdateStatusEvent):
+                self._reconcile_plugins(container, state)
+        except ReconcileBlockedError as exc:
+            self.unit.status = ops.BlockedStatus(exc.message)
+            return
 
         self.unit.status = ops.ActiveStatus(self._agent_status_message)
 
@@ -247,6 +270,63 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if current_services != desired_services:
             container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
             container.replan()
+
+    def _reconcile_jcasc(self, container: ops.Container, state: State) -> None:
+        """Reconcile JCasC configuration to desired state.
+
+        Builds the desired JCasC config by merging user-provided config with
+        charm-managed sections (admin credentials, auth proxy), then delegates
+        file I/O, validation, and reload to jenkins.sync_jcasc_config.
+
+        Args:
+            container: The Jenkins workload container.
+            state: The current charm state.
+        """
+        if state.jcasc_config is None:
+            return
+
+        desired_config = self._build_jcasc_config(state)
+        desired_yaml = yaml.dump(desired_config, default_flow_style=False, sort_keys=False)
+
+        if not self.jenkins.sync_jcasc_config(container, desired_yaml):
+            raise ReconcileBlockedError(
+                "JCasC validation failed — check juju debug-log"
+            )
+
+    def _build_jcasc_config(self, state: State) -> typing.Dict[str, typing.Any]:
+        """Build the desired JCasC config by merging user config with charm-managed sections.
+
+        Injects admin credentials (local securityRealm) when the user hasn't provided one.
+        Checks for conflicts with auth_proxy relation.
+
+        Args:
+            state: The current charm state.
+
+        Returns:
+            The merged JCasC configuration dict.
+        """
+        # state.jcasc_config is already validated as a dict by State.from_charm
+        config: typing.Dict[str, typing.Any] = dict(state.jcasc_config)  # type: ignore[arg-type]
+        jenkins_section: typing.Dict[str, typing.Any] = config.get("jenkins", {})
+
+        # Conflict check: user provides securityRealm while auth_proxy is active
+        if state.auth_proxy_integrated and "securityRealm" in jenkins_section:
+            raise ReconcileBlockedError(
+                "JCasC conflict: 'securityRealm' is managed by auth_proxy relation, "
+                "remove it from jcasc-config"
+            )
+
+        # Inject admin credentials if securityRealm not provided by user
+        if "securityRealm" not in jenkins_section:
+            jenkins_section["securityRealm"] = {
+                "local": {
+                    "allowsSignup": False,
+                    "users": [{"id": "admin", "password": "${JENKINS_ADMIN_PASSWORD}"}],
+                }
+            }
+            config.setdefault("jenkins", {}).update(jenkins_section)
+
+        return config
 
     def _reconcile_agents(self, event: ops.EventBase, state: State) -> None:
         """Reconcile Jenkins agent nodes to match relation state.
