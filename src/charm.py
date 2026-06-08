@@ -14,6 +14,7 @@ import typing
 from urllib.parse import urlparse
 
 import ops
+import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
@@ -204,6 +205,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._reconcile_storage(container)
 
         self._reconcile_pebble(container, state)
+        self._reconcile_jcasc(container, state)
         self._reconcile_agents(event, state)
         self._reconcile_agent_discovery()
         self._reconcile_auth_proxy(event, state)
@@ -247,6 +249,119 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if current_services != desired_services:
             container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
             container.replan()
+
+    def _reconcile_jcasc(self, container: ops.Container, state: State) -> None:
+        """Reconcile JCasC configuration to desired state.
+
+        Parses user-provided JCasC YAML, injects charm-managed sections (admin
+        credentials, auth proxy), checks for conflicts, writes the config file,
+        validates it, and reloads Jenkins.
+
+        Args:
+            container: The Jenkins workload container.
+            state: The current charm state.
+        """
+        # Skip if Jenkins home directory is not ready (first boot before bootstrap)
+        try:
+            container.list_files(str(jenkins.JENKINS_HOME_PATH))
+        except (ops.pebble.PathError, ops.pebble.APIError):
+            return
+
+        raw_config = state.jcasc_config
+
+        # Block if empty
+        if not raw_config.strip():
+            self.unit.status = ops.BlockedStatus("jcasc-config must not be empty")
+            return
+
+        # Parse YAML
+        try:
+            user_config = yaml.safe_load(raw_config)
+        except yaml.YAMLError as exc:
+            logger.error("Invalid JCasC YAML: %s", exc)
+            self.unit.status = ops.BlockedStatus(f"Invalid jcasc-config YAML: {exc}")
+            return
+
+        if not isinstance(user_config, dict):
+            self.unit.status = ops.BlockedStatus(
+                "jcasc-config must be a YAML mapping (dict)"
+            )
+            return
+
+        jenkins_section = user_config.get("jenkins", {})
+
+        # Conflict check: user provides securityRealm while auth_proxy is active
+        if state.auth_proxy_integrated and "securityRealm" in jenkins_section:
+            self.unit.status = ops.BlockedStatus(
+                "JCasC conflict: 'securityRealm' is managed by auth_proxy relation, "
+                "remove it from jcasc-config"
+            )
+            return
+
+        # Inject admin credentials if securityRealm not provided by user
+        if "securityRealm" not in jenkins_section:
+            jenkins_section["securityRealm"] = {
+                "local": {
+                    "allowsSignup": False,
+                    "users": [{"id": "admin", "password": "${JENKINS_ADMIN_PASSWORD}"}],
+                }
+            }
+            user_config.setdefault("jenkins", {}).update(jenkins_section)
+
+        # Write if changed
+        desired_yaml = yaml.dump(user_config, default_flow_style=False, sort_keys=False)
+        jcasc_path = str(jenkins.JCASC_CONFIG_PATH)
+        try:
+            current = container.pull(jcasc_path).read()
+        except (ops.pebble.PathError, FileNotFoundError):
+            current = ""
+
+        if current == desired_yaml:
+            return  # No change needed
+
+        try:
+            container.push(
+                jcasc_path,
+                desired_yaml,
+                encoding="utf-8",
+                user=jenkins.USER,
+                group=jenkins.GROUP,
+                make_dirs=True,
+            )
+        except ops.pebble.PathError:
+            # Directory not ready yet — will be written on next reconcile
+            return
+
+        # Validate via live check endpoint if Jenkins is ready
+        try:
+            if not self.jenkins.check_jcasc(container, desired_yaml):
+                logger.warning("JCasC validation failed, rolling back")
+                self.unit.status = ops.BlockedStatus(
+                    "JCasC validation failed — check juju debug-log"
+                )
+                # Rollback
+                if current:
+                    container.push(
+                        jcasc_path,
+                        current,
+                        encoding="utf-8",
+                        user=jenkins.USER,
+                        group=jenkins.GROUP,
+                        make_dirs=True,
+                    )
+                    self.jenkins.reload_jcasc(container)
+                return
+        except jenkins.JenkinsError:
+            # Jenkins not ready yet or API token not available — skip validation
+            # Config is on disk and will be picked up when Jenkins starts
+            logger.info("JCasC validation skipped (Jenkins not ready)")
+            return
+
+        # Apply the new configuration
+        try:
+            self.jenkins.reload_jcasc(container)
+        except jenkins.JenkinsError:
+            logger.warning("JCasC reload failed, Jenkins will pick up config on next restart")
 
     def _reconcile_agents(self, event: ops.EventBase, state: State) -> None:
         """Reconcile Jenkins agent nodes to match relation state.

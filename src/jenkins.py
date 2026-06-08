@@ -736,6 +736,54 @@ class Jenkins:
             client=client,
         )
 
+    def reload_jcasc(self, container: ops.Container) -> None:
+        """Reload JCasC configuration without restarting Jenkins.
+
+        Args:
+            container: The Jenkins workload container.
+
+        Raises:
+            JenkinsError: if the reload request fails.
+        """
+        try:
+            credentials = _get_api_credentials(container)
+            client = self._get_client(credentials)
+            client.requester.post_url(
+                f"{self.web_url}/configuration-as-code/reload"
+            )
+        except JenkinsError:
+            raise
+        except Exception as exc:
+            logger.error("JCasC reload failed: %s", exc)
+            raise JenkinsError("Failed to reload JCasC configuration.") from exc
+
+    def check_jcasc(self, container: ops.Container, config_content: str) -> bool:
+        """Validate JCasC config via the check endpoint.
+
+        Args:
+            container: The Jenkins workload container.
+            config_content: The YAML content to validate.
+
+        Returns:
+            True if config is valid, False otherwise.
+
+        Raises:
+            JenkinsError: if the check request fails or Jenkins is unreachable.
+        """
+        try:
+            credentials = _get_api_credentials(container)
+            client = self._get_client(credentials)
+            response = client.requester.post_url(
+                f"{self.web_url}/configuration-as-code/check",
+                data=config_content,
+            )
+            return response.status_code == 200
+        except JenkinsError:
+            raise
+        except Exception as exc:
+            logger.error("JCasC validation failed: %s", exc)
+            raise JenkinsError("Failed to validate JCasC configuration.") from exc
+
 
 def _wait_for(
     func: typing.Callable[[], typing.Any], timeout: int = 300, check_interval: int = 10
