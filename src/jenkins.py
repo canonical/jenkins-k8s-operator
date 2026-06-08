@@ -753,7 +753,10 @@ class Jenkins:
             )
         except JenkinsError:
             raise
-        except Exception as exc:
+        except (
+            requests.exceptions.RequestException,
+            jenkinsapi.custom_exceptions.JenkinsAPIException,
+        ) as exc:
             logger.error("JCasC reload failed: %s", exc)
             raise JenkinsError("Failed to reload JCasC configuration.") from exc
 
@@ -780,7 +783,10 @@ class Jenkins:
             return response.status_code == 200
         except JenkinsError:
             raise
-        except Exception as exc:
+        except (
+            requests.exceptions.RequestException,
+            jenkinsapi.custom_exceptions.JenkinsAPIException,
+        ) as exc:
             logger.error("JCasC validation failed: %s", exc)
             raise JenkinsError("Failed to validate JCasC configuration.") from exc
 
@@ -807,17 +813,14 @@ class Jenkins:
         """
         jcasc_path = str(JCASC_CONFIG_PATH)
 
-        # Pull current config
         try:
             current = container.pull(jcasc_path).read()
         except (ops.pebble.PathError, FileNotFoundError):
             current = ""
 
-        # No-op if unchanged
         if current == desired_yaml:
             return True
 
-        # Write new config
         container.push(
             jcasc_path,
             desired_yaml,
@@ -827,8 +830,6 @@ class Jenkins:
             make_dirs=True,
         )
 
-        # Validate and reload — skip if Jenkins hasn't bootstrapped yet
-        # (config on disk will be loaded when Jenkins starts)
         try:
             if not self.check_jcasc(container, desired_yaml):
                 logger.warning("JCasC validation failed, rolling back")
@@ -846,7 +847,6 @@ class Jenkins:
                     container.remove_path(jcasc_path)
                 return False
 
-            # Apply
             self.reload_jcasc(container)
         except JenkinsBootstrapError:
             logger.debug("Jenkins not yet bootstrapped, skipping validation/reload")

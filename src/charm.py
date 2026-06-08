@@ -227,9 +227,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._reconcile_agents(event, state)
             self._reconcile_agent_discovery()
             self._reconcile_auth_proxy(event, state)
-            # Plugin removal only runs on update-status (matching original behaviour)
-            if isinstance(event, ops.UpdateStatusEvent):
-                self._reconcile_plugins(container, state)
+            self._reconcile_plugins(container, state)
         except ReconcileBlockedError as exc:
             self.unit.status = ops.BlockedStatus(exc.message)
             return
@@ -305,7 +303,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The merged JCasC configuration dict.
         """
-        # state.jcasc_config is already validated as a dict by State.from_charm
         config: typing.Dict[str, typing.Any] = dict(state.jcasc_config)  # type: ignore[arg-type]
         jenkins_section: typing.Dict[str, typing.Any] = config.get("jenkins", {})
 

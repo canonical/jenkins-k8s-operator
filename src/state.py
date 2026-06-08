@@ -281,7 +281,6 @@ class State:
                 f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME}"
             )
 
-        # Validate JCasC config: must be valid YAML mapping or empty
         raw_jcasc = typing.cast(str, charm.config.get("jcasc-config") or "")
         jcasc_config: typing.Optional[typing.Dict[str, typing.Any]] = None
         if raw_jcasc.strip():

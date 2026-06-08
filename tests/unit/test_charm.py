@@ -418,6 +418,7 @@ def test__on_config_changed_success_replans_and_restarts(
         patch.object(harness_container.container, "replan") as replan_mock,
         patch.object(harness_container.container, "get_plan") as get_plan_mock,
         patch.object(jenkins_charm, "_reconcile_jcasc"),
+        patch.object(jenkins_charm, "_reconcile_plugins"),
     ):
         check_mock.return_value = precondition._CheckResult(success=True, reason=None)
         # Minimal viable layer for add_layer
@@ -844,7 +845,10 @@ def test_reload_jcasc_raises_jenkins_error():
 
     j = _make_jenkins_instance()
     with (
-        patch("jenkins._get_api_credentials", side_effect=Exception("conn refused")),
+        patch(
+            "jenkins._get_api_credentials",
+            side_effect=requests.exceptions.ConnectionError("conn refused"),
+        ),
         pytest.raises(jenkins.JenkinsError),
     ):
         j.reload_jcasc(mock_container)
