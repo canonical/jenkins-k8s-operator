@@ -60,6 +60,7 @@ def test_workload_not_ready(harness: Harness, event_spec: type):
     act: when an event hook is fired.
     assert: the charm falls into waiting status.
     """
+    harness.add_storage(state.JENKINS_HOME_STORAGE_NAME, count=1, attach=True)
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     mock_event = MagicMock(spec=event_spec)
@@ -88,6 +89,8 @@ def test_storage_not_ready(harness: Harness, event_spec: type):
     """
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    container = harness.model.unit.get_container("jenkins")
+    harness.set_can_connect(container, True)
     mock_event = MagicMock(spec=event_spec)
 
     if event_spec == ops.PebbleReadyEvent:
@@ -510,7 +513,7 @@ def test__upgrade_charm_reconciles_storage_and_agents(harness_container: Harness
     "event_type",
     [
         pytest.param(
-            ops.RelationCreatedEvent,
+            ops.RelationJoinedEvent,
             id="joined",
         ),
         pytest.param(
