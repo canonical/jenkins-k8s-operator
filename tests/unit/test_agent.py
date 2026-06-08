@@ -214,7 +214,7 @@ def test_reconcile_agents(
     """
     ctx = testing.Context(JenkinsK8sOperatorCharm)
     with (
-        patch.object(JenkinsK8sOperatorCharm, "_reconcile"),
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
         ctx(ctx.on.config_changed(), state) as mgr,
     ):
         fake_jenkins_service = FakeJenkinsService(initial_agents=initial_agents)
@@ -530,7 +530,7 @@ def test_reconcile_agents_jenkins_not_ready(_mock_ready):
     )
     ctx = testing.Context(JenkinsK8sOperatorCharm)
     with (
-        patch.object(JenkinsK8sOperatorCharm, "_reconcile"),
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
         ctx(ctx.on.config_changed(), state) as mgr,
     ):
         mock_event = MagicMock()
@@ -559,7 +559,7 @@ def test_reconcile_agent_discovery_updates_relation():
     )
     ctx = testing.Context(JenkinsK8sOperatorCharm)
     with (
-        patch.object(JenkinsK8sOperatorCharm, "_reconcile"),
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
         ctx(ctx.on.config_changed(), state) as mgr,
     ):
         mgr.charm._reconcile_agent_discovery()
