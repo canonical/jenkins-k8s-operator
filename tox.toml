@@ -2,12 +2,12 @@
 # See LICENSE file for licensing details.
 
 skipsdist = true
-envlist = [ "lint", "unit", "static", "coverage-report" ]
-requires = [ "tox>=4.21" ]
+envlist = ["fmt", "lint", "unit", "static", "coverage-report"]
+requires = ["tox>=4.21"]
 no_package = true
 
 [env_run_base]
-passenv = [ "PYTHONPATH" ]
+passenv = ["PYTHONPATH"]
 runner = "uv-venv-lock-runner"
 
 [env_run_base.setenv]
@@ -17,7 +17,7 @@ PY_COLORS = "1"
 
 [env.build]
 description = "Build the rock and pack the charm"
-allowlist_externals = [ "sh" ]
+allowlist_externals = ["sh"]
 commands = [
   [
     "sh",
@@ -54,7 +54,7 @@ commands = [
     ], extend = true },
   ],
 ]
-dependency_groups = [ "fmt" ]
+dependency_groups = ["fmt"]
 
 [env.lint]
 description = "Check code against coding style standards"
@@ -89,7 +89,7 @@ commands = [
     ], extend = true },
   ],
 ]
-dependency_groups = [ "lint" ]
+dependency_groups = ["lint"]
 
 [env.unit]
 description = "Run unit tests"
@@ -112,12 +112,12 @@ commands = [
     "report",
   ],
 ]
-dependency_groups = [ "unit" ]
+dependency_groups = ["unit"]
 
 [env.coverage-report]
 description = "Create test coverage report"
-commands = [ [ "coverage", "report" ] ]
-dependency_groups = [ "coverage-report" ]
+commands = [["coverage", "report"]]
+dependency_groups = ["coverage-report"]
 
 [env.integration]
 description = "Run integration tests"
@@ -138,12 +138,21 @@ commands = [
     { replace = "posargs", extend = "true" },
   ],
 ]
-dependency_groups = [ "integration" ]
+dependency_groups = ["integration"]
 
 [env.static]
 description = "Run static analysis tests"
-commands = [ [ "bandit", "-c", "{toxinidir}/pyproject.toml", "-r", "{[vars]src_path}", "{[vars]tst_path}" ] ]
-dependency_groups = [ "static" ]
+commands = [
+  [
+    "bandit",
+    "-c",
+    "{toxinidir}/pyproject.toml",
+    "-r",
+    "{[vars]src_path}",
+    "{[vars]tst_path}",
+  ],
+]
+dependency_groups = ["static"]
 
 [env.lint-fix]
 description = "Apply coding style standards to code"
@@ -159,9 +168,9 @@ commands = [
     ], extend = true },
   ],
 ]
-dependency_groups = [ "lint" ]
+dependency_groups = ["lint"]
 
 [vars]
 src_path = "{toxinidir}/src/"
 tst_path = "{toxinidir}/tests/"
-all_path = [ "{toxinidir}/src/", "{toxinidir}/tests/" ]
+all_path = ["{toxinidir}/src/", "{toxinidir}/tests/"]
