@@ -178,9 +178,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ""
         return path
 
-    def calculate_env(
-        self, admin_password: str = ""
-    ) -> jenkins.Environment:
+    def calculate_env(self, admin_password: str = "") -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
 
         Args:
@@ -268,6 +266,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if current_services != desired_services:
             container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
             container.replan()
+            self.jenkins.wait_ready()
 
     def _reconcile_jcasc(self, container: ops.Container, state: State) -> None:
         """Reconcile JCasC configuration to desired state.
@@ -287,9 +286,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         desired_yaml = yaml.dump(desired_config, default_flow_style=False, sort_keys=False)
 
         if not self.jenkins.sync_jcasc_config(container, desired_yaml):
-            raise ReconcileBlockedError(
-                "JCasC validation failed — check juju debug-log"
-            )
+            raise ReconcileBlockedError("JCasC validation failed — check juju debug-log")
 
     def _build_jcasc_config(self, state: State) -> typing.Dict[str, typing.Any]:
         """Build the desired JCasC config by merging user config with charm-managed sections.

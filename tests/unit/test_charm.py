@@ -551,6 +551,7 @@ def test__auth_proxy_relation_handlers_delegate(
 
     reconcile_mock.assert_called_once_with(event)
 
+
 VALID_JCASC_CONFIG = {
     "jenkins": {
         "systemMessage": "Managed by Juju",
@@ -594,7 +595,6 @@ def _make_jenkins_instance() -> jenkins.Jenkins:
         "JENKINS_ADMIN_PASSWORD": "",
     }
     return jenkins.Jenkins(env)
-
 
 
 def test_build_jcasc_config_blocks_security_realm_with_auth_proxy(
@@ -652,7 +652,6 @@ def test_build_jcasc_config_injects_admin_credentials(
     realm = result["jenkins"]["securityRealm"]
     assert realm["local"]["allowsSignup"] is False
     assert realm["local"]["users"][0]["password"] == "${JENKINS_ADMIN_PASSWORD}"
-
 
 
 def test_reconcile_jcasc_skips_when_no_config(harness_container: HarnessWithContainer):
@@ -799,7 +798,8 @@ def test_sync_jcasc_config_skips_validation_when_not_bootstrapped():
 
     with (
         patch.object(
-            j, "check_jcasc",
+            j,
+            "check_jcasc",
             side_effect=jenkins.JenkinsBootstrapError("not ready"),
         ),
         patch.object(j, "reload_jcasc") as reload_mock,

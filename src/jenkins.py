@@ -748,9 +748,7 @@ class Jenkins:
         try:
             credentials = _get_api_credentials(container)
             client = self._get_client(credentials)
-            client.requester.post_url(
-                f"{self.web_url}/configuration-as-code/reload"
-            )
+            client.requester.post_url(f"{self.web_url}/configuration-as-code/reload")
         except JenkinsError:
             raise
         except (
@@ -846,9 +844,8 @@ class Jenkins:
                 else:
                     container.remove_path(jcasc_path)
                 return False
-
             self.reload_jcasc(container)
-        except JenkinsBootstrapError:
+        except JenkinsError:
             logger.debug("Jenkins not yet bootstrapped, skipping validation/reload")
 
         return True

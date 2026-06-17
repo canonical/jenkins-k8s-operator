@@ -59,10 +59,12 @@ async def install_plugins(
 
     # block until the UI does not have "Pending" in download progress column.
     await wait_for(
-        lambda: "Pending"
-        not in str(
-            client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
-            encoding="utf-8",
+        lambda: (
+            "Pending"
+            not in str(
+                client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
+                encoding="utf-8",
+            )
         ),
         timeout=60 * 10,
     )

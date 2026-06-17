@@ -184,9 +184,7 @@ async def test_jcasc_default_config_applied(
     act: when the charm is active/idle.
     assert: the JCasC plugin endpoint is reachable and config is applied.
     """
-    response = jenkins_client.requester.post_url(
-        f"{web_address}/configuration-as-code/export"
-    )
+    response = jenkins_client.requester.post_url(f"{web_address}/configuration-as-code/export")
     assert response.status_code == 200, "JCasC export endpoint should be accessible"
     exported = response.text
     assert "jenkins" in exported, "Exported JCasC should contain jenkins section"
