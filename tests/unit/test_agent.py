@@ -17,6 +17,8 @@ import jenkins
 from charm import JenkinsK8sOperatorCharm
 from state import JENKINS_SERVICE_NAME, AgentMeta, State
 
+from .helpers import patch_reconcile_pipeline
+
 _MONKEYPATCHED_FQDN = "192.0.2.0"
 
 
@@ -280,10 +282,10 @@ def test_reconcile_agents_error(mock_jenkins_service: MagicMock):
         return original_reconcile_agents(self, state)
 
     with (
-        patch.object(JenkinsK8sOperatorCharm, "_reconcile_storage"),
-        patch.object(JenkinsK8sOperatorCharm, "_reconcile_bootstrap_prestart", return_value=True),
-        patch.object(JenkinsK8sOperatorCharm, "_reconcile_pebble"),
-        patch.object(JenkinsK8sOperatorCharm, "_reconcile_bootstrap_poststart", return_value=True),
+        patch_reconcile_pipeline(
+            JenkinsK8sOperatorCharm,
+            patch_agents=False,
+        ),
         patch.object(JenkinsK8sOperatorCharm, "_reconcile_agents", patched_reconcile_agents),
         pytest.raises(UncaughtCharmError, match="JenkinsError"),
     ):

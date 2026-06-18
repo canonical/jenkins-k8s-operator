@@ -3,7 +3,10 @@
 
 """Helper functions used to unit test Jenkins charm."""
 
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import requests
 
@@ -42,3 +45,34 @@ def combine_root_paths(root_path: Path, relative_path: Path) -> Path:
         The combined paths.
     """
     return root_path / str(relative_path).removeprefix("/")
+
+
+@contextmanager
+def patch_reconcile_pipeline(
+    charm: object, *, patch_agents: bool = True, agents_return: bool = True
+) -> Iterator[dict[str, MagicMock]]:
+    """Patch common reconcile pipeline methods and return their mocks.
+
+    Args:
+        charm: Charm instance or class to patch methods on.
+        patch_agents: Whether to patch ``_reconcile_agents``.
+        agents_return: Return value for ``_reconcile_agents`` when patched.
+
+    Yields:
+        Mapping of patched method labels to mocks.
+    """
+    with ExitStack() as stack:
+        mocks: dict[str, MagicMock] = {}
+        mocks["reconcile_storage"] = stack.enter_context(patch.object(charm, "_reconcile_storage"))
+        mocks["reconcile_bootstrap_prestart"] = stack.enter_context(
+            patch.object(charm, "_reconcile_bootstrap_prestart", return_value=True)
+        )
+        mocks["reconcile_pebble"] = stack.enter_context(patch.object(charm, "_reconcile_pebble"))
+        mocks["reconcile_bootstrap_poststart"] = stack.enter_context(
+            patch.object(charm, "_reconcile_bootstrap_poststart", return_value=True)
+        )
+        if patch_agents:
+            mocks["reconcile_agents"] = stack.enter_context(
+                patch.object(charm, "_reconcile_agents", return_value=agents_return)
+            )
+        yield mocks

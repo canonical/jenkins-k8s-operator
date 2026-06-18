@@ -21,7 +21,12 @@ import state
 import timerange
 from charm import JenkinsK8sOperatorCharm
 
-from .helpers import ACTIVE_STATUS_NAME, BLOCKED_STATUS_NAME, WAITING_STATUS_NAME
+from .helpers import (
+    ACTIVE_STATUS_NAME,
+    BLOCKED_STATUS_NAME,
+    WAITING_STATUS_NAME,
+    patch_reconcile_pipeline,
+)
 from .types_ import Harness, HarnessWithContainer
 
 
@@ -459,13 +464,8 @@ def test__agent_relation_handlers_reconcile_agents(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=event_type)
 
-    with (
-        patch.object(jenkins_charm, "_reconcile_storage"),
-        patch.object(jenkins_charm, "_reconcile_bootstrap_prestart", return_value=True),
-        patch.object(jenkins_charm, "_reconcile_pebble"),
-        patch.object(jenkins_charm, "_reconcile_bootstrap_poststart", return_value=True),
-        patch.object(jenkins_charm, "_reconcile_agents") as reconcile_agents_mock,
-    ):
+    with patch_reconcile_pipeline(jenkins_charm, agents_return=True) as patched:
+        reconcile_agents_mock = patched["reconcile_agents"]
         jenkins_charm._reconcile(event)
 
     reconcile_agents_mock.assert_called_once()
@@ -491,11 +491,7 @@ def test__agent_discovery_ingress_handlers_reconfigure_agents(
     event = MagicMock(spec=event_spec)
 
     with (
-        patch.object(jenkins_charm, "_reconcile_storage"),
-        patch.object(jenkins_charm, "_reconcile_bootstrap_prestart", return_value=True),
-        patch.object(jenkins_charm, "_reconcile_pebble"),
-        patch.object(jenkins_charm, "_reconcile_bootstrap_poststart", return_value=True),
-        patch.object(jenkins_charm, "_reconcile_agents", return_value=True),
+        patch_reconcile_pipeline(jenkins_charm, agents_return=True),
         patch.object(jenkins_charm, "_reconcile_agent_discovery") as reconcile_discovery_mock,
     ):
         jenkins_charm._reconcile(event)
@@ -513,13 +509,8 @@ def test__upgrade_charm_reconciles_storage_and_agents(harness_container: Harness
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=ops.UpgradeCharmEvent)
 
-    with (
-        patch.object(jenkins_charm, "_reconcile_storage") as reconcile_storage_mock,
-        patch.object(jenkins_charm, "_reconcile_bootstrap_prestart", return_value=True),
-        patch.object(jenkins_charm, "_reconcile_pebble"),
-        patch.object(jenkins_charm, "_reconcile_bootstrap_poststart", return_value=True),
-        patch.object(jenkins_charm, "_reconcile_agents", return_value=True),
-    ):
+    with patch_reconcile_pipeline(jenkins_charm, agents_return=True) as patched:
+        reconcile_storage_mock = patched["reconcile_storage"]
         jenkins_charm._reconcile(event)
 
     reconcile_storage_mock.assert_called_once()
@@ -741,11 +732,7 @@ def test__auth_proxy_relation_handlers_delegate(
     event = MagicMock(spec=event_type)
 
     with (
-        patch.object(jenkins_charm, "_reconcile_storage"),
-        patch.object(jenkins_charm, "_reconcile_bootstrap_prestart", return_value=True),
-        patch.object(jenkins_charm, "_reconcile_pebble"),
-        patch.object(jenkins_charm, "_reconcile_bootstrap_poststart", return_value=True),
-        patch.object(jenkins_charm, "_reconcile_agents", return_value=True),
+        patch_reconcile_pipeline(jenkins_charm, agents_return=True),
         patch.object(jenkins_charm, "_reconcile_auth_proxy") as reconcile_auth_mock,
     ):
         jenkins_charm._reconcile(event)
