@@ -647,26 +647,27 @@ def test_bootstrap_poststart_does_not_mark_complete_on_runtime_error(
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
 
 
-def test_jenkins_bootstrapped_returns_true_when_sentinel_exists(
+@pytest.mark.parametrize(
+    (
+        "sentinel_exists",
+        "legacy_exists",
+        "expected_bootstrapped",
+        "expect_mark_backfill",
+    ),
+    [
+        pytest.param(True, False, True, False, id="sentinel-exists"),
+        pytest.param(False, True, True, True, id="legacy-artifacts-backfill"),
+        pytest.param(False, False, False, False, id="no-sentinel-or-legacy"),
+    ],
+)
+def test_jenkins_bootstrapped(
     harness_container: HarnessWithContainer,
+    sentinel_exists: bool,
+    legacy_exists: bool,
+    expected_bootstrapped: bool,
+    expect_mark_backfill: bool,
 ):
-    """Sentinel file indicates bootstrap is complete."""
-    harness_container.harness.begin()
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    sentinel_path = str(jenkins.JENKINS_HOME_PATH / ".charm/bootstrap-complete")
-
-    with patch.object(
-        harness_container.container,
-        "exists",
-        side_effect=lambda path: path == sentinel_path,
-    ):
-        assert jenkins_charm._jenkins_bootstrapped(harness_container.container) is True
-
-
-def test_jenkins_bootstrapped_backfills_sentinel_when_legacy_artifacts_exist(
-    harness_container: HarnessWithContainer,
-):
-    """Legacy bootstrap artifacts trigger sentinel backfill."""
+    """Validate bootstrap marker + legacy backfill matrix."""
     harness_container.harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     sentinel_path = str(jenkins.JENKINS_HOME_PATH / ".charm/bootstrap-complete")
@@ -676,33 +677,26 @@ def test_jenkins_bootstrapped_backfills_sentinel_when_legacy_artifacts_exist(
         str(jenkins.WIZARD_VERSION_PATH),
     }
 
-    with (
-        patch.object(
-            harness_container.container,
-            "exists",
-            side_effect=lambda path: path in legacy_paths and path != sentinel_path,
-        ),
-        patch.object(jenkins_charm, "_mark_jenkins_bootstrapped") as mark_bootstrapped_mock,
-    ):
-        assert jenkins_charm._jenkins_bootstrapped(harness_container.container) is True
-
-    mark_bootstrapped_mock.assert_called_once_with(harness_container.container)
-
-
-def test_jenkins_bootstrapped_returns_false_without_sentinel_or_legacy_artifacts(
-    harness_container: HarnessWithContainer,
-):
-    """Without marker or legacy artifacts, bootstrap is incomplete."""
-    harness_container.harness.begin()
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    def exists_side_effect(path: str) -> bool:
+        if path == sentinel_path:
+            return sentinel_exists
+        if path in legacy_paths:
+            return legacy_exists
+        return False
 
     with (
-        patch.object(harness_container.container, "exists", return_value=False),
+        patch.object(harness_container.container, "exists", side_effect=exists_side_effect),
         patch.object(jenkins_charm, "_mark_jenkins_bootstrapped") as mark_bootstrapped_mock,
     ):
-        assert jenkins_charm._jenkins_bootstrapped(harness_container.container) is False
+        assert (
+            jenkins_charm._jenkins_bootstrapped(harness_container.container)
+            is expected_bootstrapped
+        )
 
-    mark_bootstrapped_mock.assert_not_called()
+    if expect_mark_backfill:
+        mark_bootstrapped_mock.assert_called_once_with(harness_container.container)
+    else:
+        mark_bootstrapped_mock.assert_not_called()
 
 
 @pytest.mark.parametrize(
