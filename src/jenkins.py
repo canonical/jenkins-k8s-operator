@@ -53,6 +53,9 @@ PLUGINS_PATH = JENKINS_HOME_PATH / "plugins"
 LOGGING_CONFIG_PATH = JENKINS_HOME_PATH / "logging.properties"
 # The Jenkins logging path as defined in templates/logging.properties file
 LOGGING_PATH = JENKINS_HOME_PATH / "logs/jenkins.log"
+REQUIRED_PLUGINS_PREINSTALL_MARKER_PATH = (
+    JENKINS_HOME_PATH / ".charm/required-plugins-preinstall.json"
+)
 # The plugins that are required for Jenkins to work
 REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
@@ -414,6 +417,95 @@ class Jenkins:
             logger.error("Failed to configure proxy, %s", exc)
             raise JenkinsBootstrapError("Proxy configuration failed.") from exc
 
+    def _required_plugins_preinstall_fingerprint(self) -> dict[str, typing.Any]:
+        """Build idempotency fingerprint for required plugins preinstall marker."""
+        return {
+            "plugin_manager_version": JENKINS_PLUGIN_MANAGER_VERSION,
+            "required_plugins": sorted(REQUIRED_PLUGINS),
+        }
+
+    def _read_required_plugins_preinstall_marker(
+        self, container: ops.Container
+    ) -> dict[str, typing.Any] | None:
+        """Read required plugins preinstall marker, if present and valid."""
+        try:
+            marker_content = container.pull(
+                REQUIRED_PLUGINS_PREINSTALL_MARKER_PATH, encoding="utf-8"
+            ).read()
+        except ops.pebble.PathError:
+            return None
+
+        try:
+            marker = json.loads(marker_content)
+        except json.JSONDecodeError:
+            logger.warning("Invalid required plugins preinstall marker JSON")
+            return None
+
+        if not isinstance(marker, dict):
+            logger.warning("Invalid required plugins preinstall marker format")
+            return None
+
+        return marker
+
+    def _write_required_plugins_preinstall_marker(self, container: ops.Container) -> None:
+        """Write required plugins preinstall marker."""
+        marker = self._required_plugins_preinstall_fingerprint()
+        container.push(
+            REQUIRED_PLUGINS_PREINSTALL_MARKER_PATH,
+            json.dumps(marker, sort_keys=True),
+            make_dirs=True,
+            encoding="utf-8",
+            user=USER,
+            group=GROUP,
+        )
+
+    def _required_plugin_archives_present(self, container: ops.Container) -> bool:
+        """Return whether all REQUIRED_PLUGINS archives are present in Jenkins home."""
+        for plugin in REQUIRED_PLUGINS:
+            jpi_path = PLUGINS_PATH / f"{plugin}.jpi"
+            hpi_path = PLUGINS_PATH / f"{plugin}.hpi"
+            if not container.exists(str(jpi_path)) and not container.exists(str(hpi_path)):
+                return False
+        return True
+
+    def _ensure_required_plugins_preinstalled(
+        self, container: ops.Container, proxy_config: state.ProxyConfig | None = None
+    ) -> None:
+        """Install REQUIRED_PLUGINS only when marker/fingerprint requires it."""
+        expected = self._required_plugins_preinstall_fingerprint()
+        current = self._read_required_plugins_preinstall_marker(container)
+
+        if current == expected and self._required_plugin_archives_present(container):
+            return
+
+        _install_plugins(container, proxy_config)
+        self._write_required_plugins_preinstall_marker(container)
+
+    def prepare_bootstrap_static(
+        self,
+        container: ops.Container,
+        jenkins_config_file: str,
+        proxy_config: state.ProxyConfig | None = None,
+    ) -> None:
+        """Prepare static Jenkins artifacts before runtime API bootstrap calls."""
+        try:
+            install_logging_config(container)
+            _install_configs(container, jenkins_config_file)
+            self._ensure_required_plugins_preinstalled(container, proxy_config)
+        except JenkinsBootstrapError as exc:
+            raise JenkinsBootstrapError("Failed to prepare Jenkins bootstrap static phase.") from exc
+
+    def complete_bootstrap_runtime(
+        self, container: ops.Container, proxy_config: state.ProxyConfig | None = None
+    ) -> None:
+        """Complete runtime Jenkins bootstrap steps against a running service."""
+        try:
+            self._unlock_wizard(container)
+            self._setup_user_token(container)
+            self._configure_proxy(container, proxy_config)
+        except JenkinsBootstrapError as exc:
+            raise JenkinsBootstrapError("Failed to complete Jenkins bootstrap runtime phase.") from exc
+
     def bootstrap(
         self,
         container: ops.Container,
@@ -431,11 +523,8 @@ class Jenkins:
             JenkinsBootstrapError: if there was an error installing the plugins plugins.
         """
         try:
-            self._unlock_wizard(container)
-            _install_configs(container, jenkins_config_file)
-            self._setup_user_token(container)
-            self._configure_proxy(container, proxy_config)
-            _install_plugins(container, proxy_config)
+            self.prepare_bootstrap_static(container, jenkins_config_file, proxy_config)
+            self.complete_bootstrap_runtime(container, proxy_config)
         except JenkinsBootstrapError as exc:
             raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
 

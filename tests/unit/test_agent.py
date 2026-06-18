@@ -220,7 +220,7 @@ def test_reconcile_agents(
         fake_jenkins_service = FakeJenkinsService(initial_agents=initial_agents)
         mgr.charm.jenkins = fake_jenkins_service  # type: ignore
         charm_state = State.from_charm(mgr.charm)
-        mgr.charm._reconcile_agents(event=MagicMock(), state=charm_state)
+        mgr.charm._reconcile_agents(state=charm_state)
 
     all_agent_names = [node.name for node in fake_jenkins_service.list_agent_nodes()]
     assert len(all_agent_names) == len(expected_agents)
@@ -275,11 +275,15 @@ def test_reconcile_agents_error(mock_jenkins_service: MagicMock):
     # so we need the mock in place before ctx.run().
     original_reconcile_agents = JenkinsK8sOperatorCharm._reconcile_agents
 
-    def patched_reconcile_agents(self, event, state):
+    def patched_reconcile_agents(self, state):
         self.jenkins = mock_jenkins_service
-        return original_reconcile_agents(self, event, state)
+        return original_reconcile_agents(self, state)
 
     with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile_storage"),
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile_bootstrap_prestart", return_value=True),
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile_pebble"),
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile_bootstrap_poststart", return_value=True),
         patch.object(JenkinsK8sOperatorCharm, "_reconcile_agents", patched_reconcile_agents),
         pytest.raises(UncaughtCharmError, match="JenkinsError"),
     ):
@@ -515,7 +519,7 @@ def test_reconcile_agents_jenkins_not_ready(_mock_ready):
     """
     arrange: given jenkins not ready.
     act: when _reconcile_agents is called.
-    assert: event is deferred and status is WaitingStatus.
+    assert: waiting status is set and the method returns False.
     """
     state = testing.State(
         containers=[testing.Container("jenkins", can_connect=True)],  # type: ignore
@@ -533,10 +537,9 @@ def test_reconcile_agents_jenkins_not_ready(_mock_ready):
         patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
         ctx(ctx.on.config_changed(), state) as mgr,
     ):
-        mock_event = MagicMock()
         charm_state = State.from_charm(mgr.charm)
-        mgr.charm._reconcile_agents(event=mock_event, state=charm_state)
-        mock_event.defer.assert_called_once()
+        reconciled = mgr.charm._reconcile_agents(state=charm_state)
+        assert reconciled is False
         assert isinstance(mgr.charm.unit.status, ops.WaitingStatus)
 
 

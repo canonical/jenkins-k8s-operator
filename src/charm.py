@@ -40,6 +40,13 @@ from state import (
 
 logger = logging.getLogger(__name__)
 
+BOOTSTRAP_MARKER_PATH = jenkins.JENKINS_HOME_PATH / ".charm/bootstrap-complete"
+LEGACY_BOOTSTRAP_ARTIFACTS = (
+    jenkins.API_TOKEN_PATH,
+    jenkins.LAST_EXEC_VERSION_PATH,
+    jenkins.WIZARD_VERSION_PATH,
+)
+
 
 class JenkinsK8sOperatorCharm(ops.CharmBase):
     """Charmed Jenkins."""
@@ -107,6 +114,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
 
+    def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
+        """Bootstrap and reconcile when the workload container becomes ready."""
+        self._reconcile(event)
+
     def _get_state(self) -> typing.Optional[State]:
         """Derive the charm state fresh from current config and relation data.
 
@@ -162,21 +173,25 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         check_result = precondition.check(container=container, storages=self.model.storages)
         if not check_result.success:
             self.unit.status = ops.WaitingStatus(check_result.reason or "")
-            event.defer()
+            if not isinstance(event, ops.UpdateStatusEvent):
+                event.defer()
             return
 
         state = self._get_state()
         if state is None:
             return
 
-        # Storage ownership only needs correction on attach/upgrade events
-        if isinstance(event, (ops.StorageAttachedEvent, ops.UpgradeCharmEvent)):
-            self._reconcile_storage(container)
-
+        self._reconcile_storage(container)
+        if not self._reconcile_bootstrap_prestart(container, state):
+            return
         self._reconcile_pebble(container, state)
-        self._reconcile_agents(event, state)
+        if not self._reconcile_bootstrap_poststart(container, state):
+            return
+
+        if not self._reconcile_agents(state):
+            return
         self._reconcile_agent_discovery()
-        self._reconcile_auth_proxy(event, state)
+        self._reconcile_auth_proxy(state)
         # Plugin removal only runs on update-status (matching original behaviour)
         if isinstance(event, ops.UpdateStatusEvent):
             self._reconcile_plugins(container, state)
@@ -212,21 +227,124 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
             container.replan()
 
-    def _reconcile_agents(self, event: ops.EventBase, state: State) -> None:
+    def _reconcile_bootstrap_prestart(self, container: ops.Container, state: State) -> bool:
+        """Reconcile Jenkins bootstrap prestart phase.
+
+        Args:
+            container: The Jenkins workload container.
+            state: The current charm state.
+
+        Returns:
+            True when reconcile can continue.
+        """
+        del container, state
+        return True
+
+    def _reconcile_bootstrap_poststart(self, container: ops.Container, state: State) -> bool:
+        """Reconcile Jenkins bootstrap poststart phase.
+
+        Args:
+            container: The Jenkins workload container.
+            state: The current charm state.
+
+        Returns:
+            False when Jenkins is not ready yet and the reconcile should stop early.
+        """
+        try:
+            return self._reconcile_bootstrap(container, state)
+        except jenkins.JenkinsBootstrapError as exc:
+            logger.error("Failed to bootstrap Jenkins runtime phase, %s", exc)
+            self.unit.status = ops.BlockedStatus("Failed to bootstrap Jenkins runtime phase.")
+            return False
+
+    def _reconcile_bootstrap(self, container: ops.Container, state: State) -> bool:
+        """Bootstrap Jenkins after the Pebble layer converges.
+
+        Returns:
+            False when Jenkins is not ready yet and the reconcile should stop early.
+        """
+        if not jenkins.is_jenkins_ready(container=container):
+            self.unit.status = ops.WaitingStatus("Jenkins service not yet ready.")
+            return False
+
+        self.jenkins.wait_ready()
+        if self._jenkins_bootstrapped(container):
+            try:
+                version = self.jenkins.version
+            except jenkins.JenkinsError:
+                logger.exception("Failed to get Jenkins version")
+                raise
+            self.unit.set_workload_version(version)
+            return True
+
+        self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
+        config_file = (
+            jenkins.AUTH_PROXY_JENKINS_CONFIG
+            if state.auth_proxy_integrated
+            else jenkins.DEFAULT_JENKINS_CONFIG
+        )
+        self.jenkins.bootstrap(container, config_file, state.proxy_config)
+        container.restart(JENKINS_SERVICE_NAME)
+        self.jenkins.wait_ready()
+        self._mark_jenkins_bootstrapped(container)
+        self.unit.set_workload_version(self.jenkins.version)
+        return True
+
+    def _jenkins_bootstrapped(self, container: ops.Container) -> bool:
+        """Return whether Jenkins bootstrap is already complete.
+
+        If the new marker is missing but legacy bootstrap artifacts exist, backfill marker.
+
+        Args:
+            container: The Jenkins workload container.
+
+        Returns:
+            True when Jenkins is considered already bootstrapped.
+        """
+        if container.exists(str(BOOTSTRAP_MARKER_PATH)):
+            return True
+
+        if all(container.exists(str(path)) for path in LEGACY_BOOTSTRAP_ARTIFACTS):
+            self._mark_jenkins_bootstrapped(container)
+            return True
+
+        return False
+
+    def _mark_jenkins_bootstrapped(self, container: ops.Container) -> None:
+        """Write charm-owned bootstrap completion marker.
+
+        Args:
+            container: The Jenkins workload container.
+        """
+        container.make_dir(
+            str(BOOTSTRAP_MARKER_PATH.parent),
+            make_parents=True,
+            user=jenkins.USER,
+            group=jenkins.GROUP,
+        )
+        container.push(
+            str(BOOTSTRAP_MARKER_PATH),
+            "complete\n",
+            user=jenkins.USER,
+            group=jenkins.GROUP,
+        )
+
+    def _reconcile_agents(self, state: State) -> bool:
         """Reconcile Jenkins agent nodes to match relation state.
 
         Args:
-            event: The triggering event (for deferral if Jenkins not ready).
             state: The current charm state.
+
+        Returns:
+            False when Jenkins is not ready and agent reconciliation should stop early.
         """
         if not state.agent_relation_meta:
-            return
+            return True
 
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         if not jenkins.is_jenkins_ready(container=container):
             self.unit.status = ops.WaitingStatus("Jenkins service not yet ready.")
-            event.defer()
-            return
+            return False
 
         # Make sure Jenkins is fully up and running before interacting with it.
         self.jenkins.wait_ready()
@@ -245,6 +363,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             container=container,
             agent_node_names=agent_node_names,
         )
+        return True
 
     def _reconcile_agent_discovery(self) -> None:
         """Update the agent discovery URL in all connected agent relations."""
@@ -254,11 +373,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 continue
             relation.data[self.model.unit].update({"url": self._agent_discovery_url})
 
-    def _reconcile_auth_proxy(self, event: ops.EventBase, state: State) -> None:
+    def _reconcile_auth_proxy(self, state: State) -> None:
         """Reconcile auth proxy configuration.
 
         Args:
-            event: The triggering event.
             state: The current charm state.
         """
         if state.auth_proxy_integrated:
@@ -403,50 +521,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             except jenkins.JenkinsError:
                 logger.exception("Failed to remove registered node: %s", agent_name)
                 raise
-
-    def _bootstrap_jenkins(self, event: ops.EventBase) -> None:
-        """Bootstrap Jenkins on first pebble-ready.
-
-        This performs the full install and version detection that only needs
-        to happen once (or on upgrade).
-
-        Args:
-            event: The event that triggered the bootstrap.
-
-        Raises:
-            TimeoutError: if there was an error waiting for Jenkins service to come up.
-            JenkinsBootstrapError: if there was an error installing Jenkins.
-            JenkinsError: if there was an error fetching Jenkins version.
-        """
-        container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        check_result = precondition.check(container=container, storages=self.model.storages)
-        if not check_result.success:
-            self.unit.status = ops.WaitingStatus(check_result.reason or "")
-            event.defer()
-            return
-
-        state = self._get_state()
-        if state is None:  # pragma: nocover
-            return
-
-        self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
-        pebble.replan_jenkins(container, self.jenkins, state)
-        try:
-            version = self.jenkins.version
-        except jenkins.JenkinsError as exc:
-            logger.error("Failed to get Jenkins version, %s", exc)
-            raise
-
-        self.unit.set_workload_version(version)
-        self.unit.status = ops.ActiveStatus()
-
-    def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
-        """Configure and start Jenkins server on first pebble ready.
-
-        Args:
-            event: The event fired when pebble is ready.
-        """
-        self._bootstrap_jenkins(event)
 
     def _on_get_admin_password(self, event: ops.ActionEvent) -> None:
         """Handle get-admin-password event.

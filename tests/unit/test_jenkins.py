@@ -831,6 +831,220 @@ def test_bootstrap(
         assert "<useSecurity>true</useSecurity>" in config_xml
 
 
+def test_prepare_bootstrap_static_calls_logging_config_config_and_required_plugins(
+    harness_container: HarnessWithContainer,
+    proxy_config: state.ProxyConfig,
+    mock_env: jenkins.Environment,
+):
+    """prepare_bootstrap_static should install logging/config and ensure required plugins."""
+    call_order: list[str] = []
+
+    with (
+        patch(
+            "jenkins.install_logging_config",
+            side_effect=lambda container: call_order.append("install_logging_config"),
+        ),
+        patch(
+            "jenkins._install_configs",
+            side_effect=lambda container, config_file: call_order.append("install_configs"),
+        ),
+        patch.object(
+            jenkins.Jenkins,
+            "_ensure_required_plugins_preinstalled",
+            side_effect=lambda self, container, proxy: call_order.append("ensure_required_plugins"),
+            autospec=True,
+        ),
+    ):
+        jenkins.Jenkins(mock_env).prepare_bootstrap_static(
+            harness_container.container,
+            jenkins.DEFAULT_JENKINS_CONFIG,
+            proxy_config,
+        )
+
+    assert call_order == ["install_logging_config", "install_configs", "ensure_required_plugins"]
+
+
+def test_complete_bootstrap_runtime_calls_unlock_token_proxy(
+    harness_container: HarnessWithContainer,
+    proxy_config: state.ProxyConfig,
+    mock_env: jenkins.Environment,
+):
+    """complete_bootstrap_runtime should run runtime/bootstrap API steps in order."""
+    call_order: list[str] = []
+
+    with (
+        patch.object(
+            jenkins.Jenkins,
+            "_unlock_wizard",
+            side_effect=lambda self, container: call_order.append("unlock_wizard"),
+            autospec=True,
+        ),
+        patch.object(
+            jenkins.Jenkins,
+            "_setup_user_token",
+            side_effect=lambda self, container: call_order.append("setup_user_token"),
+            autospec=True,
+        ),
+        patch.object(
+            jenkins.Jenkins,
+            "_configure_proxy",
+            side_effect=lambda self, container, proxy: call_order.append("configure_proxy"),
+            autospec=True,
+        ),
+    ):
+        jenkins.Jenkins(mock_env).complete_bootstrap_runtime(harness_container.container, proxy_config)
+
+    assert call_order == ["unlock_wizard", "setup_user_token", "configure_proxy"]
+
+
+def test_bootstrap_wrapper_calls_static_then_runtime(
+    harness_container: HarnessWithContainer,
+    proxy_config: state.ProxyConfig,
+    mock_env: jenkins.Environment,
+):
+    """bootstrap wrapper should call static phase then runtime phase."""
+    call_order: list[str] = []
+
+    with (
+        patch.object(
+            jenkins.Jenkins,
+            "prepare_bootstrap_static",
+            side_effect=(
+                lambda self, container, config_file, proxy: call_order.append("prepare_bootstrap_static")
+            ),
+            autospec=True,
+        ),
+        patch.object(
+            jenkins.Jenkins,
+            "complete_bootstrap_runtime",
+            side_effect=lambda self, container, proxy: call_order.append("complete_bootstrap_runtime"),
+            autospec=True,
+        ),
+    ):
+        jenkins.Jenkins(mock_env).bootstrap(
+            harness_container.container,
+            jenkins.DEFAULT_JENKINS_CONFIG,
+            proxy_config,
+        )
+
+    assert call_order == ["prepare_bootstrap_static", "complete_bootstrap_runtime"]
+
+
+def test_required_plugins_preinstall_skips_when_marker_matches_and_plugins_present(
+    harness_container: HarnessWithContainer,
+    proxy_config: state.ProxyConfig,
+    mock_env: jenkins.Environment,
+):
+    """Matching marker + plugin archives should skip plugin-manager execution."""
+    marker = {
+        "plugin_manager_version": jenkins.JENKINS_PLUGIN_MANAGER_VERSION,
+        "required_plugins": sorted(jenkins.REQUIRED_PLUGINS),
+    }
+
+    with (
+        patch.object(
+            jenkins.Jenkins,
+            "_read_required_plugins_preinstall_marker",
+            return_value=marker,
+        ),
+        patch.object(jenkins.Jenkins, "_required_plugin_archives_present", return_value=True),
+        patch("jenkins._install_plugins") as install_plugins_mock,
+        patch.object(jenkins.Jenkins, "_write_required_plugins_preinstall_marker") as write_marker_mock,
+    ):
+        jenkins.Jenkins(mock_env)._ensure_required_plugins_preinstalled(
+            harness_container.container,
+            proxy_config,
+        )
+
+    install_plugins_mock.assert_not_called()
+    write_marker_mock.assert_not_called()
+
+
+def test_required_plugins_preinstall_runs_when_marker_missing(
+    harness_container: HarnessWithContainer,
+    proxy_config: state.ProxyConfig,
+    mock_env: jenkins.Environment,
+):
+    """Missing marker should trigger plugin-manager execution and marker write."""
+    with (
+        patch.object(
+            jenkins.Jenkins,
+            "_read_required_plugins_preinstall_marker",
+            return_value=None,
+        ),
+        patch.object(jenkins.Jenkins, "_required_plugin_archives_present", return_value=True),
+        patch("jenkins._install_plugins") as install_plugins_mock,
+        patch.object(jenkins.Jenkins, "_write_required_plugins_preinstall_marker") as write_marker_mock,
+    ):
+        jenkins.Jenkins(mock_env)._ensure_required_plugins_preinstalled(
+            harness_container.container,
+            proxy_config,
+        )
+
+    install_plugins_mock.assert_called_once_with(harness_container.container, proxy_config)
+    write_marker_mock.assert_called_once_with(harness_container.container)
+
+
+def test_required_plugins_preinstall_runs_when_marker_mismatch(
+    harness_container: HarnessWithContainer,
+    proxy_config: state.ProxyConfig,
+    mock_env: jenkins.Environment,
+):
+    """Mismatched marker should trigger plugin-manager execution and marker rewrite."""
+    marker = {
+        "plugin_manager_version": "old-version",
+        "required_plugins": sorted(jenkins.REQUIRED_PLUGINS),
+    }
+
+    with (
+        patch.object(
+            jenkins.Jenkins,
+            "_read_required_plugins_preinstall_marker",
+            return_value=marker,
+        ),
+        patch.object(jenkins.Jenkins, "_required_plugin_archives_present", return_value=True),
+        patch("jenkins._install_plugins") as install_plugins_mock,
+        patch.object(jenkins.Jenkins, "_write_required_plugins_preinstall_marker") as write_marker_mock,
+    ):
+        jenkins.Jenkins(mock_env)._ensure_required_plugins_preinstalled(
+            harness_container.container,
+            proxy_config,
+        )
+
+    install_plugins_mock.assert_called_once_with(harness_container.container, proxy_config)
+    write_marker_mock.assert_called_once_with(harness_container.container)
+
+
+def test_required_plugins_preinstall_runs_when_plugin_archive_missing(
+    harness_container: HarnessWithContainer,
+    proxy_config: state.ProxyConfig,
+    mock_env: jenkins.Environment,
+):
+    """Matching marker but missing plugin archives should trigger plugin-manager execution."""
+    marker = {
+        "plugin_manager_version": jenkins.JENKINS_PLUGIN_MANAGER_VERSION,
+        "required_plugins": sorted(jenkins.REQUIRED_PLUGINS),
+    }
+
+    with (
+        patch.object(
+            jenkins.Jenkins,
+            "_read_required_plugins_preinstall_marker",
+            return_value=marker,
+        ),
+        patch.object(jenkins.Jenkins, "_required_plugin_archives_present", return_value=False),
+        patch("jenkins._install_plugins") as install_plugins_mock,
+        patch.object(jenkins.Jenkins, "_write_required_plugins_preinstall_marker") as write_marker_mock,
+    ):
+        jenkins.Jenkins(mock_env)._ensure_required_plugins_preinstalled(
+            harness_container.container,
+            proxy_config,
+        )
+
+    install_plugins_mock.assert_called_once_with(harness_container.container, proxy_config)
+    write_marker_mock.assert_called_once_with(harness_container.container)
+
+
 def test_get_client(admin_credentials: jenkins.Credentials, mock_env: jenkins.Environment):
     """
     arrange: .

@@ -47,6 +47,10 @@ def test_traefik_integration_added_replans_jenkins(
     harness.add_storage("jenkins-home", attach=True)
     harness.begin()
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
+    monkeypatch.setattr(harness.charm, "_reconcile_storage", MagicMock())
+    monkeypatch.setattr(harness.charm, "_reconcile_bootstrap_prestart", MagicMock(return_value=True))
+    monkeypatch.setattr(harness.charm, "_reconcile_bootstrap_poststart", MagicMock(return_value=True))
+    monkeypatch.setattr(harness.charm, "_reconcile_agents", MagicMock(return_value=True))
 
     container = harness.model.unit.containers["jenkins"]
     replan_mock = MagicMock()
@@ -81,6 +85,10 @@ def test_traefik_integration_added_with_auth_proxy_replans_jenkins(
     harness.begin()
 
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
+    monkeypatch.setattr(harness.charm, "_reconcile_storage", MagicMock())
+    monkeypatch.setattr(harness.charm, "_reconcile_bootstrap_prestart", MagicMock(return_value=True))
+    monkeypatch.setattr(harness.charm, "_reconcile_bootstrap_poststart", MagicMock(return_value=True))
+    monkeypatch.setattr(harness.charm, "_reconcile_agents", MagicMock(return_value=True))
 
     container = harness.model.unit.containers["jenkins"]
     replan_mock = MagicMock()

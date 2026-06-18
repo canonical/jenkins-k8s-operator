@@ -65,10 +65,7 @@ def test_workload_not_ready(harness: Harness, event_spec: type):
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     mock_event = MagicMock(spec=event_spec)
 
-    if event_spec == ops.PebbleReadyEvent:
-        jenkins_charm._on_jenkins_pebble_ready(mock_event)
-    else:
-        jenkins_charm._reconcile(mock_event)
+    jenkins_charm._reconcile(mock_event)
 
     assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
 
@@ -93,10 +90,7 @@ def test_storage_not_ready(harness: Harness, event_spec: type):
     harness.set_can_connect(container, True)
     mock_event = MagicMock(spec=event_spec)
 
-    if event_spec == ops.PebbleReadyEvent:
-        jenkins_charm._on_jenkins_pebble_ready(mock_event)
-    else:
-        jenkins_charm._reconcile(mock_event)
+    jenkins_charm._reconcile(mock_event)
 
     assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
 
@@ -120,7 +114,7 @@ def test__get_state_returns_none_on_invalid_config(harness: Harness):
     assert jenkins_charm.unit.status.message == "bad config"
 
 
-def test__on_jenkins_pebble_ready_get_version_error(
+def test__reconcile_pebble_ready_get_version_error(
     harness_container: HarnessWithContainer,
     mocked_get_request: typing.Callable[..., requests.Response],
     monkeypatch: pytest.MonkeyPatch,
@@ -137,17 +131,18 @@ def test__on_jenkins_pebble_ready_get_version_error(
     with (
         patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
         patch.object(jenkins.Jenkins, "bootstrap"),
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile_storage"),
     ):
         version_mock.side_effect = jenkins.JenkinsError
 
         jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
 
         with pytest.raises(jenkins.JenkinsError):
-            jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
+            jenkins_charm._reconcile(MagicMock(spec=ops.PebbleReadyEvent))
 
 
 @pytest.mark.usefixtures("patch_os_environ")
-def test__on_jenkins_pebble_ready(harness_container: HarnessWithContainer):
+def test__reconcile_pebble_ready(harness_container: HarnessWithContainer):
     """
     arrange: given a mocked jenkins client and a patched requests instance.
     act: when the Jenkins pebble ready event is fired.
@@ -158,12 +153,13 @@ def test__on_jenkins_pebble_ready(harness_container: HarnessWithContainer):
         patch.object(jenkins.Jenkins, "wait_ready"),
         patch.object(jenkins.Jenkins, "bootstrap"),
         patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile_storage"),
     ):
         version_mock.return_value = "1"
         harness.begin()
 
         jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-        jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
+        jenkins_charm._reconcile(MagicMock(spec=ops.PebbleReadyEvent))
 
         assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME, (
             f"unit should be in {ACTIVE_STATUS_NAME}"
@@ -411,6 +407,7 @@ def test__on_config_changed_success_replans_and_restarts(
         patch("state.State.from_charm", wraps=state.State.from_charm),
         patch("precondition.check") as check_mock,
         patch("pebble.get_pebble_layer") as layer_mock,
+        patch.object(jenkins_charm, "_reconcile_storage"),
         patch.object(harness_container.container, "add_layer") as add_layer_mock,
         patch.object(harness_container.container, "replan") as replan_mock,
         patch.object(harness_container.container, "get_plan") as get_plan_mock,
@@ -462,7 +459,13 @@ def test__agent_relation_handlers_reconcile_agents(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=event_type)
 
-    with patch.object(jenkins_charm, "_reconcile_agents") as reconcile_agents_mock:
+    with (
+        patch.object(jenkins_charm, "_reconcile_storage"),
+        patch.object(jenkins_charm, "_reconcile_bootstrap_prestart", return_value=True),
+        patch.object(jenkins_charm, "_reconcile_pebble"),
+        patch.object(jenkins_charm, "_reconcile_bootstrap_poststart", return_value=True),
+        patch.object(jenkins_charm, "_reconcile_agents") as reconcile_agents_mock,
+    ):
         jenkins_charm._reconcile(event)
 
     reconcile_agents_mock.assert_called_once()
@@ -487,7 +490,14 @@ def test__agent_discovery_ingress_handlers_reconfigure_agents(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=event_spec)
 
-    with patch.object(jenkins_charm, "_reconcile_agent_discovery") as reconcile_discovery_mock:
+    with (
+        patch.object(jenkins_charm, "_reconcile_storage"),
+        patch.object(jenkins_charm, "_reconcile_bootstrap_prestart", return_value=True),
+        patch.object(jenkins_charm, "_reconcile_pebble"),
+        patch.object(jenkins_charm, "_reconcile_bootstrap_poststart", return_value=True),
+        patch.object(jenkins_charm, "_reconcile_agents", return_value=True),
+        patch.object(jenkins_charm, "_reconcile_agent_discovery") as reconcile_discovery_mock,
+    ):
         jenkins_charm._reconcile(event)
 
     reconcile_discovery_mock.assert_called_once()
@@ -503,10 +513,205 @@ def test__upgrade_charm_reconciles_storage_and_agents(harness_container: Harness
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=ops.UpgradeCharmEvent)
 
-    with patch.object(jenkins_charm, "_reconcile_storage") as reconcile_storage_mock:
+    with (
+        patch.object(jenkins_charm, "_reconcile_storage") as reconcile_storage_mock,
+        patch.object(jenkins_charm, "_reconcile_bootstrap_prestart", return_value=True),
+        patch.object(jenkins_charm, "_reconcile_pebble"),
+        patch.object(jenkins_charm, "_reconcile_bootstrap_poststart", return_value=True),
+        patch.object(jenkins_charm, "_reconcile_agents", return_value=True),
+    ):
         jenkins_charm._reconcile(event)
 
     reconcile_storage_mock.assert_called_once()
+
+
+def test_reconcile_orders_bootstrap_prestart_before_pebble_and_poststart_after(
+    harness_container: HarnessWithContainer,
+):
+    """Ensure reconcile executes bootstrap prestart and poststart around pebble reconciliation."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    call_order: list[str] = []
+
+    with (
+        patch.object(
+            jenkins_charm,
+            "_reconcile_storage",
+            side_effect=lambda container: call_order.append("storage"),
+        ),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_bootstrap_prestart",
+            create=True,
+            side_effect=lambda container, state: call_order.append("bootstrap_prestart") or True,
+        ),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_pebble",
+            side_effect=lambda container, state: call_order.append("pebble"),
+        ),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_bootstrap_poststart",
+            create=True,
+            side_effect=lambda container, state: call_order.append("bootstrap_poststart") or True,
+        ),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_bootstrap",
+            create=True,
+            side_effect=lambda container, state: call_order.append("bootstrap") or True,
+        ),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_agents",
+            side_effect=lambda state: call_order.append("agents") or True,
+        ),
+        patch.object(jenkins_charm, "_reconcile_agent_discovery"),
+        patch.object(jenkins_charm, "_reconcile_auth_proxy"),
+    ):
+        jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
+
+    assert call_order == ["storage", "bootstrap_prestart", "pebble", "bootstrap_poststart", "agents"]
+
+
+def test_bootstrap_poststart_marks_complete_only_after_restart_and_wait_ready(
+    harness_container: HarnessWithContainer,
+):
+    """Ensure bootstrap marker is written after runtime steps complete."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    charm_state = state.State.from_charm(jenkins_charm)
+    call_order: list[str] = []
+
+    with (
+        patch.object(jenkins, "is_jenkins_ready", return_value=True),
+        patch.object(jenkins_charm, "_jenkins_bootstrapped", return_value=False),
+        patch.object(
+            jenkins_charm.jenkins,
+            "wait_ready",
+            side_effect=lambda: call_order.append("wait_ready"),
+        ),
+        patch.object(
+            jenkins_charm.jenkins,
+            "bootstrap",
+            side_effect=lambda container, config_file, proxy_config: call_order.append("bootstrap"),
+        ),
+        patch.object(
+            harness_container.container,
+            "restart",
+            side_effect=lambda service_name: call_order.append("restart"),
+        ),
+        patch.object(
+            jenkins_charm,
+            "_mark_jenkins_bootstrapped",
+            side_effect=lambda container: call_order.append("mark_bootstrapped"),
+        ),
+        patch.object(
+            jenkins_charm.unit,
+            "set_workload_version",
+            side_effect=lambda version: call_order.append("set_workload_version"),
+        ),
+        patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
+    ):
+        version_mock.return_value = "1"
+
+        result = jenkins_charm._reconcile_bootstrap_poststart(harness_container.container, charm_state)
+
+    assert result is True
+    assert call_order == [
+        "wait_ready",
+        "bootstrap",
+        "restart",
+        "wait_ready",
+        "mark_bootstrapped",
+        "set_workload_version",
+    ]
+
+
+def test_bootstrap_poststart_does_not_mark_complete_on_runtime_error(
+    harness_container: HarnessWithContainer,
+):
+    """Ensure bootstrap marker is not written when runtime bootstrap fails."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    charm_state = state.State.from_charm(jenkins_charm)
+
+    with (
+        patch.object(jenkins, "is_jenkins_ready", return_value=True),
+        patch.object(jenkins_charm, "_jenkins_bootstrapped", return_value=False),
+        patch.object(jenkins_charm.jenkins, "wait_ready"),
+        patch.object(
+            jenkins_charm.jenkins,
+            "bootstrap",
+            side_effect=jenkins.JenkinsBootstrapError("runtime bootstrap failed"),
+        ),
+        patch.object(jenkins_charm, "_mark_jenkins_bootstrapped") as mark_bootstrapped_mock,
+    ):
+        result = jenkins_charm._reconcile_bootstrap_poststart(harness_container.container, charm_state)
+
+    assert result is False
+    mark_bootstrapped_mock.assert_not_called()
+    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
+
+
+def test_jenkins_bootstrapped_returns_true_when_sentinel_exists(
+    harness_container: HarnessWithContainer,
+):
+    """Sentinel file indicates bootstrap is complete."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    sentinel_path = str(jenkins.JENKINS_HOME_PATH / ".charm/bootstrap-complete")
+
+    with patch.object(
+        harness_container.container,
+        "exists",
+        side_effect=lambda path: path == sentinel_path,
+    ):
+        assert jenkins_charm._jenkins_bootstrapped(harness_container.container) is True
+
+
+def test_jenkins_bootstrapped_backfills_sentinel_when_legacy_artifacts_exist(
+    harness_container: HarnessWithContainer,
+):
+    """Legacy bootstrap artifacts trigger sentinel backfill."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    sentinel_path = str(jenkins.JENKINS_HOME_PATH / ".charm/bootstrap-complete")
+    legacy_paths = {
+        str(jenkins.API_TOKEN_PATH),
+        str(jenkins.LAST_EXEC_VERSION_PATH),
+        str(jenkins.WIZARD_VERSION_PATH),
+    }
+
+    with (
+        patch.object(
+            harness_container.container,
+            "exists",
+            side_effect=lambda path: path in legacy_paths and path != sentinel_path,
+        ),
+        patch.object(jenkins_charm, "_mark_jenkins_bootstrapped") as mark_bootstrapped_mock,
+    ):
+        assert jenkins_charm._jenkins_bootstrapped(harness_container.container) is True
+
+    mark_bootstrapped_mock.assert_called_once_with(harness_container.container)
+
+
+def test_jenkins_bootstrapped_returns_false_without_sentinel_or_legacy_artifacts(
+    harness_container: HarnessWithContainer,
+):
+    """Without marker or legacy artifacts, bootstrap is incomplete."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    with (
+        patch.object(harness_container.container, "exists", return_value=False),
+        patch.object(jenkins_charm, "_mark_jenkins_bootstrapped") as mark_bootstrapped_mock,
+    ):
+        assert jenkins_charm._jenkins_bootstrapped(harness_container.container) is False
+
+    mark_bootstrapped_mock.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -535,7 +740,14 @@ def test__auth_proxy_relation_handlers_delegate(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=event_type)
 
-    with patch.object(jenkins_charm, "_reconcile_auth_proxy") as reconcile_auth_mock:
+    with (
+        patch.object(jenkins_charm, "_reconcile_storage"),
+        patch.object(jenkins_charm, "_reconcile_bootstrap_prestart", return_value=True),
+        patch.object(jenkins_charm, "_reconcile_pebble"),
+        patch.object(jenkins_charm, "_reconcile_bootstrap_poststart", return_value=True),
+        patch.object(jenkins_charm, "_reconcile_agents", return_value=True),
+        patch.object(jenkins_charm, "_reconcile_auth_proxy") as reconcile_auth_mock,
+    ):
         jenkins_charm._reconcile(event)
 
     reconcile_auth_mock.assert_called_once()
