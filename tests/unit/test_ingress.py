@@ -33,55 +33,26 @@ def test_get_ingress_path():
     assert harness.charm._get_ingress_path() == ""
 
 
+@pytest.mark.parametrize("with_auth_proxy", [False, True], ids=["without-auth-proxy", "with-auth-proxy"])
 def test_traefik_integration_added_replans_jenkins(
-    harness: Harness, monkeypatch: pytest.MonkeyPatch
+    harness: Harness, monkeypatch: pytest.MonkeyPatch, with_auth_proxy: bool
 ):
     """
-    arrange: given a base jenkins charm.
-    act: add an integration with traefik on :ingress endpoint and remove it.
-    assert: pebble replan should run twice, one for ingress ready, one for ingress revoked.
-    """
-    monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
-    mock_ingress_url = "http://ingress.test/model-unit-0"
-
-    harness.add_storage("jenkins-home", attach=True)
-    harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    monkeypatch.setattr(harness.charm, "_reconcile_storage", MagicMock())
-    monkeypatch.setattr(harness.charm, "_reconcile_bootstrap_prestart", MagicMock(return_value=True))
-    monkeypatch.setattr(harness.charm, "_reconcile_bootstrap_poststart", MagicMock(return_value=True))
-    monkeypatch.setattr(harness.charm, "_reconcile_agents", MagicMock(return_value=True))
-
-    container = harness.model.unit.containers["jenkins"]
-    replan_mock = MagicMock()
-    monkeypatch.setattr(container, "replan", replan_mock)
-
-    ingress_relation_id = harness.add_relation(
-        "ingress",
-        "traefik-k8s",
-        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
-    )
-    harness.remove_relation(ingress_relation_id)
-
-    assert replan_mock.call_count == 2
-
-
-def test_traefik_integration_added_with_auth_proxy_replans_jenkins(
-    harness: Harness, monkeypatch: pytest.MonkeyPatch
-):
-    """
-    arrange: given a base jenkins charm with auth-proxy relation.
+    arrange: given a base jenkins charm (optionally with auth-proxy relation).
     act: add an integration with traefik on :ingress endpoint and remove it.
     assert: pebble replan should run twice, one for ingress ready, one for ingress revoked.
     """
     monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
     mock_ingress_url = "http://ingress.test/model-unit-0"
     harness.add_storage("jenkins-home", attach=True)
-    harness.add_relation(
-        "auth-proxy",
-        "oathkeeper",
-        app_data={},
-    )
+
+    if with_auth_proxy:
+        harness.add_relation(
+            "auth-proxy",
+            "oathkeeper",
+            app_data={},
+        )
+
     harness.begin()
 
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
