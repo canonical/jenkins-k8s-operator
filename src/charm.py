@@ -87,46 +87,23 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self._auth_proxy = AuthProxyRequirer(self)
 
         # Register all events to funnel through reconcile
-        self.framework.observe(
+        for event in [
             self.on.jenkins_home_storage_attached,
-            self._on_jenkins_home_storage_attached,
-        )
-        self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
-        self.framework.observe(self.on.update_status, self._on_update_status)
-        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(
-            self.on[AGENT_RELATION].relation_joined, self._on_agent_relation_joined
-        )
-        self.framework.observe(
-            self.on[AGENT_RELATION].relation_departed, self._on_agent_relation_departed
-        )
-        self.framework.observe(
-            self.on[AGENT_RELATION].relation_changed, self._on_agent_relation_changed
-        )
-        self.framework.observe(
+            self.on.upgrade_charm,
+            self.on.config_changed,
+            self.on[AGENT_RELATION].relation_joined,
+            self.on[AGENT_RELATION].relation_departed,
+            self.on[AGENT_RELATION].relation_changed,
             self.agent_discovery_ingress.on.ready,
-            self._on_agent_discovery_ingress_ready,
-        )
-        self.framework.observe(
             self.agent_discovery_ingress.on.revoked,
-            self._on_agent_discovery_ingress_revoked,
-        )
-        self.framework.observe(
             self.server_ingress.on.ready,
-            self._on_server_ingress_ready,
-        )
-        self.framework.observe(
             self.server_ingress.on.revoked,
-            self._on_server_ingress_revoked,
-        )
-        self.framework.observe(
-            self.on[AUTH_PROXY_RELATION].relation_joined, self._on_auth_proxy_relation_joined
-        )
-        self.framework.observe(
+            self.on[AUTH_PROXY_RELATION].relation_joined,
             self.on[AUTH_PROXY_RELATION].relation_departed,
-            self._on_auth_proxy_relation_departed,
-        )
+            self.on.update_status,
+        ]:
+            self.framework.observe(event, self._reconcile)
+        self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
 
@@ -134,7 +111,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """Derive the charm state fresh from current config and relation data.
 
         Returns:
-            The current charm state, or None if config/units are invalid (unit set to BlockedStatus).
+            The current charm state, or None if config/units are invalid (unit set to
+            BlockedStatus).
 
         Raises:
             RuntimeError: if invalid relation data was received.
@@ -483,110 +461,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The event fired when pebble is ready.
         """
         self._bootstrap_jenkins(event)
-
-    def _on_config_changed(self, event: ops.ConfigChangedEvent) -> None:
-        """Handle configuration changes.
-
-        Args:
-            event: The config-changed event.
-        """
-        self._reconcile(event)
-
-    def _on_update_status(self, event: ops.UpdateStatusEvent) -> None:
-        """Handle update status event.
-
-        Args:
-            event: The update status hook event.
-        """
-        self._reconcile(event)
-
-    def _on_jenkins_home_storage_attached(self, event: ops.StorageAttachedEvent) -> None:
-        """Handle storage attached.
-
-        Args:
-            event: The event fired when the storage is attached.
-        """
-        self._reconcile(event)
-
-    def _on_upgrade_charm(self, event: ops.UpgradeCharmEvent) -> None:
-        """Handle charm upgrade.
-
-        Args:
-            event: The event fired when the charm is upgraded.
-        """
-        self._reconcile(event)
-
-    def _on_agent_relation_joined(self, event: ops.RelationJoinedEvent) -> None:
-        """Handle agent relation joined.
-
-        Args:
-            event: the event fired when an agent joins the relation.
-        """
-        self._reconcile(event)
-
-    def _on_agent_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
-        """Handle agent relation departed.
-
-        Args:
-            event: the event fired when an agent departs the relation.
-        """
-        self._reconcile(event)
-
-    def _on_agent_relation_changed(self, event: ops.RelationChangedEvent) -> None:
-        """Handle agent relation changed.
-
-        Args:
-            event: the event fired when agent relation data changes.
-        """
-        self._reconcile(event)
-
-    def _on_agent_discovery_ingress_ready(self, event: ops.EventBase) -> None:
-        """Handle agent discovery ingress ready event.
-
-        Args:
-            event: the event fired when agent discovery ingress becomes ready.
-        """
-        self._reconcile(event)
-
-    def _on_agent_discovery_ingress_revoked(self, event: ops.EventBase) -> None:
-        """Handle agent discovery ingress revoked event.
-
-        Args:
-            event: the event fired when agent discovery ingress is revoked.
-        """
-        self._reconcile(event)
-
-    def _on_server_ingress_ready(self, event: ops.EventBase) -> None:
-        """Handle server ingress ready event.
-
-        Args:
-            event: the event fired when server ingress becomes ready.
-        """
-        self._reconcile(event)
-
-    def _on_server_ingress_revoked(self, event: ops.EventBase) -> None:
-        """Handle server ingress revoked event.
-
-        Args:
-            event: the event fired when server ingress is revoked.
-        """
-        self._reconcile(event)
-
-    def _on_auth_proxy_relation_joined(self, event: ops.RelationCreatedEvent) -> None:
-        """Handle auth proxy relation joined.
-
-        Args:
-            event: the event fired when the auth proxy relation is joined.
-        """
-        self._reconcile(event)
-
-    def _on_auth_proxy_relation_departed(self, event: ops.RelationDepartedEvent) -> None:
-        """Handle auth proxy relation departed.
-
-        Args:
-            event: the event fired when the auth proxy relation departs.
-        """
-        self._reconcile(event)
 
     def _on_get_admin_password(self, event: ops.ActionEvent) -> None:
         """Handle get-admin-password event.

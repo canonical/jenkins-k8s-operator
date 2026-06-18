@@ -41,46 +41,47 @@ def test__on_config_changed_invalid_config_sets_blocked(
     harness_container.harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    jenkins_charm._on_config_changed(MagicMock(spec=ops.ConfigChangedEvent))
+    jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
 
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
 @pytest.mark.parametrize(
-    "event_handler",
+    "event_spec",
     [
-        pytest.param("_on_jenkins_home_storage_attached"),
-        pytest.param("_on_jenkins_pebble_ready"),
-        pytest.param("_on_update_status"),
+        pytest.param(ops.StorageAttachedEvent, id="_on_jenkins_home_storage_attached"),
+        pytest.param(ops.PebbleReadyEvent, id="_on_jenkins_pebble_ready"),
+        pytest.param(ops.UpdateStatusEvent, id="_on_update_status"),
     ],
 )
-def test_workload_not_ready(harness: Harness, event_handler: str):
+def test_workload_not_ready(harness: Harness, event_spec: type):
     """
     arrange: given a charm with no container ready.
     act: when an event hook is fired.
     assert: the charm falls into waiting status.
     """
+    harness.add_storage(state.JENKINS_HOME_STORAGE_NAME, count=1, attach=True)
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    handler_func = getattr(jenkins_charm, event_handler)
-    mock_event = MagicMock(spec=ops.WorkloadEvent)
-    mock_event.workload = MagicMock(spec=ops.model.Container)
-    mock_event.workload.can_connect.return_value = False
+    mock_event = MagicMock(spec=event_spec)
 
-    handler_func(mock_event)
+    if event_spec == ops.PebbleReadyEvent:
+        jenkins_charm._on_jenkins_pebble_ready(mock_event)
+    else:
+        jenkins_charm._reconcile(mock_event)
 
     assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
 
 
 @pytest.mark.parametrize(
-    "event_handler",
+    "event_spec",
     [
-        pytest.param("_on_jenkins_home_storage_attached"),
-        pytest.param("_on_jenkins_pebble_ready"),
-        pytest.param("_on_update_status"),
+        pytest.param(ops.StorageAttachedEvent, id="_on_jenkins_home_storage_attached"),
+        pytest.param(ops.PebbleReadyEvent, id="_on_jenkins_pebble_ready"),
+        pytest.param(ops.UpdateStatusEvent, id="_on_update_status"),
     ],
 )
-def test_storage_not_ready(harness: Harness, event_handler: str):
+def test_storage_not_ready(harness: Harness, event_spec: type):
     """
     arrange: given a charm with no storage ready.
     act: when an event hook is fired.
@@ -88,12 +89,14 @@ def test_storage_not_ready(harness: Harness, event_handler: str):
     """
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    handler_func = getattr(jenkins_charm, event_handler)
-    mock_event = MagicMock(spec=ops.WorkloadEvent)
-    mock_event.workload = MagicMock(spec=ops.model.Container)
-    mock_event.workload.can_connect.return_value = True
+    container = harness.model.unit.get_container("jenkins")
+    harness.set_can_connect(container, True)
+    mock_event = MagicMock(spec=event_spec)
 
-    handler_func(mock_event)
+    if event_spec == ops.PebbleReadyEvent:
+        jenkins_charm._on_jenkins_pebble_ready(mock_event)
+    else:
+        jenkins_charm._reconcile(mock_event)
 
     assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
 
@@ -334,7 +337,7 @@ def test__on_config_changed_invalid_config_blocked(
     ):
         from_charm_mock.side_effect = state.CharmConfigInvalidError("bad sysprops")
 
-        jenkins_charm._on_config_changed(MagicMock(spec=ops.ConfigChangedEvent))
+        jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
 
         assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
         assert jenkins_charm.unit.status.message == "bad sysprops"
@@ -360,7 +363,7 @@ def test__on_config_changed_relation_data_invalid_raises(
         from_charm_mock.side_effect = state.CharmRelationDataInvalidError("bad relation")
 
         with pytest.raises(RuntimeError):
-            jenkins_charm._on_config_changed(MagicMock(spec=ops.ConfigChangedEvent))
+            jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
 
 
 def test__on_config_changed_precondition_waits_and_defers(
@@ -386,7 +389,7 @@ def test__on_config_changed_precondition_waits_and_defers(
     ):
         check_mock.return_value = precondition._CheckResult(success=False, reason="not ready")
 
-        jenkins_charm._on_config_changed(event)
+        jenkins_charm._reconcile(event)
 
         assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
         assert jenkins_charm.unit.status.message == "not ready"
@@ -423,7 +426,7 @@ def test__on_config_changed_success_replans_and_restarts(
         # Return empty plan so services differ and replan is triggered
         get_plan_mock.return_value = ops.pebble.Plan("")
 
-        jenkins_charm._on_config_changed(MagicMock(spec=ops.ConfigChangedEvent))
+        jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
 
         add_layer_mock.assert_called_once()
         replan_mock.assert_called_once()
@@ -445,84 +448,80 @@ def test__remove_unlisted_plugins_requires_state(harness_container: HarnessWithC
 
 
 @pytest.mark.parametrize(
-    "handler_name, event_type",
+    "event_type",
     [
-        pytest.param("_on_agent_relation_joined", ops.RelationJoinedEvent, id="joined"),
-        pytest.param("_on_agent_relation_departed", ops.RelationDepartedEvent, id="departed"),
-        pytest.param("_on_agent_relation_changed", ops.RelationChangedEvent, id="changed"),
+        pytest.param(ops.RelationJoinedEvent, id="joined"),
+        pytest.param(ops.RelationDepartedEvent, id="departed"),
+        pytest.param(ops.RelationChangedEvent, id="changed"),
     ],
 )
 def test__agent_relation_handlers_reconcile_agents(
-    harness_container: HarnessWithContainer, handler_name: str, event_type: type[ops.EventBase]
+    harness_container: HarnessWithContainer, event_type: type[ops.EventBase]
 ):
     """
     arrange: given a started charm and a valid derived state.
-    act: when an agent relation handler is called.
-    assert: the handler delegates to _reconcile.
+    act: when an agent relation event triggers _reconcile.
+    assert: reconcile executes without error (delegates internally to _reconcile_agents).
     """
     harness_container.harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=event_type)
 
-    with patch.object(jenkins_charm, "_reconcile") as reconcile_mock:
-        getattr(jenkins_charm, handler_name)(event)
+    with patch.object(jenkins_charm, "_reconcile_agents") as reconcile_agents_mock:
+        jenkins_charm._reconcile(event)
 
-    reconcile_mock.assert_called_once_with(event)
+    reconcile_agents_mock.assert_called_once()
 
 
 @pytest.mark.parametrize(
-    "handler_name",
+    "event_spec",
     [
-        pytest.param("_on_agent_discovery_ingress_ready", id="ready"),
-        pytest.param("_on_agent_discovery_ingress_revoked", id="revoked"),
+        pytest.param(ops.EventBase, id="ready"),
+        pytest.param(ops.EventBase, id="revoked"),
     ],
 )
 def test__agent_discovery_ingress_handlers_reconfigure_agents(
-    harness_container: HarnessWithContainer, handler_name: str
+    harness_container: HarnessWithContainer, event_spec: type
 ):
     """
     arrange: given a started charm and a valid derived state.
-    act: when an agent discovery ingress handler is called.
-    assert: the handler delegates to _reconcile.
+    act: when an agent discovery ingress event triggers _reconcile.
+    assert: reconcile executes without error (delegates internally to _reconcile_agent_discovery).
     """
     harness_container.harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-    event = MagicMock(spec=ops.EventBase)
+    event = MagicMock(spec=event_spec)
 
-    with patch.object(jenkins_charm, "_reconcile") as reconcile_mock:
-        getattr(jenkins_charm, handler_name)(event)
+    with patch.object(jenkins_charm, "_reconcile_agent_discovery") as reconcile_discovery_mock:
+        jenkins_charm._reconcile(event)
 
-    reconcile_mock.assert_called_once_with(event)
+    reconcile_discovery_mock.assert_called_once()
 
 
 def test__upgrade_charm_reconciles_storage_and_agents(harness_container: HarnessWithContainer):
     """
     arrange: given a started charm and a valid derived state.
-    act: when the upgrade-charm handler is called.
-    assert: _reconcile is called with the event.
+    act: when the upgrade-charm event triggers _reconcile.
+    assert: _reconcile_storage is called (UpgradeCharmEvent triggers storage reconciliation).
     """
     harness_container.harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=ops.UpgradeCharmEvent)
 
-    with patch.object(jenkins_charm, "_reconcile") as reconcile_mock:
-        jenkins_charm._on_upgrade_charm(event)
+    with patch.object(jenkins_charm, "_reconcile_storage") as reconcile_storage_mock:
+        jenkins_charm._reconcile(event)
 
-    reconcile_mock.assert_called_once_with(event)
+    reconcile_storage_mock.assert_called_once()
 
 
 @pytest.mark.parametrize(
-    "handler_name, observer_name, event_type",
+    "event_type",
     [
         pytest.param(
-            "_on_auth_proxy_relation_joined",
-            "on_auth_proxy_relation_joined",
-            ops.RelationCreatedEvent,
+            ops.RelationJoinedEvent,
             id="joined",
         ),
         pytest.param(
-            "_on_auth_proxy_relation_departed",
-            "on_auth_proxy_relation_departed",
             ops.RelationDepartedEvent,
             id="departed",
         ),
@@ -530,20 +529,18 @@ def test__upgrade_charm_reconciles_storage_and_agents(harness_container: Harness
 )
 def test__auth_proxy_relation_handlers_delegate(
     harness_container: HarnessWithContainer,
-    handler_name: str,
-    observer_name: str,
     event_type: type[ops.EventBase],
 ):
     """
     arrange: given a started charm and a valid derived state.
-    act: when an auth-proxy relation handler is called.
-    assert: the handler delegates to _reconcile.
+    act: when an auth-proxy relation event triggers _reconcile.
+    assert: reconcile executes without error (delegates internally to _reconcile_auth_proxy).
     """
     harness_container.harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=event_type)
 
-    with patch.object(jenkins_charm, "_reconcile") as reconcile_mock:
-        getattr(jenkins_charm, handler_name)(event)
+    with patch.object(jenkins_charm, "_reconcile_auth_proxy") as reconcile_auth_mock:
+        jenkins_charm._reconcile(event)
 
-    reconcile_mock.assert_called_once_with(event)
+    reconcile_auth_mock.assert_called_once()
