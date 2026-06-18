@@ -930,24 +930,70 @@ def test_bootstrap_wrapper_calls_static_then_runtime(
     assert call_order == ["prepare_bootstrap_static", "complete_bootstrap_runtime"]
 
 
-def test_required_plugins_preinstall_skips_when_marker_matches_and_plugins_present(
+@pytest.mark.parametrize(
+    (
+        "marker",
+        "archives_present",
+        "expect_install_plugins",
+        "expect_write_marker",
+    ),
+    [
+        pytest.param(
+            {
+                "plugin_manager_version": jenkins.JENKINS_PLUGIN_MANAGER_VERSION,
+                "required_plugins": sorted(jenkins.REQUIRED_PLUGINS),
+            },
+            True,
+            False,
+            False,
+            id="marker-matches-and-plugins-present",
+        ),
+        pytest.param(
+            None,
+            True,
+            True,
+            True,
+            id="marker-missing",
+        ),
+        pytest.param(
+            {
+                "plugin_manager_version": "old-version",
+                "required_plugins": sorted(jenkins.REQUIRED_PLUGINS),
+            },
+            True,
+            True,
+            True,
+            id="marker-mismatch",
+        ),
+        pytest.param(
+            {
+                "plugin_manager_version": jenkins.JENKINS_PLUGIN_MANAGER_VERSION,
+                "required_plugins": sorted(jenkins.REQUIRED_PLUGINS),
+            },
+            False,
+            True,
+            True,
+            id="plugin-archive-missing",
+        ),
+    ],
+)
+def test_required_plugins_preinstall(
     harness_container: HarnessWithContainer,
     proxy_config: state.ProxyConfig,
     mock_env: jenkins.Environment,
+    marker: dict[str, typing.Any] | None,
+    archives_present: bool,
+    expect_install_plugins: bool,
+    expect_write_marker: bool,
 ):
-    """Matching marker + plugin archives should skip plugin-manager execution."""
-    marker = {
-        "plugin_manager_version": jenkins.JENKINS_PLUGIN_MANAGER_VERSION,
-        "required_plugins": sorted(jenkins.REQUIRED_PLUGINS),
-    }
-
+    """Ensure required plugin preinstall idempotency matrix behaves as expected."""
     with (
         patch.object(
             jenkins.Jenkins,
             "_read_required_plugins_preinstall_marker",
             return_value=marker,
         ),
-        patch.object(jenkins.Jenkins, "_required_plugin_archives_present", return_value=True),
+        patch.object(jenkins.Jenkins, "_required_plugin_archives_present", return_value=archives_present),
         patch("jenkins._install_plugins") as install_plugins_mock,
         patch.object(jenkins.Jenkins, "_write_required_plugins_preinstall_marker") as write_marker_mock,
     ):
@@ -956,93 +1002,15 @@ def test_required_plugins_preinstall_skips_when_marker_matches_and_plugins_prese
             proxy_config,
         )
 
-    install_plugins_mock.assert_not_called()
-    write_marker_mock.assert_not_called()
+    if expect_install_plugins:
+        install_plugins_mock.assert_called_once_with(harness_container.container, proxy_config)
+    else:
+        install_plugins_mock.assert_not_called()
 
-
-def test_required_plugins_preinstall_runs_when_marker_missing(
-    harness_container: HarnessWithContainer,
-    proxy_config: state.ProxyConfig,
-    mock_env: jenkins.Environment,
-):
-    """Missing marker should trigger plugin-manager execution and marker write."""
-    with (
-        patch.object(
-            jenkins.Jenkins,
-            "_read_required_plugins_preinstall_marker",
-            return_value=None,
-        ),
-        patch.object(jenkins.Jenkins, "_required_plugin_archives_present", return_value=True),
-        patch("jenkins._install_plugins") as install_plugins_mock,
-        patch.object(jenkins.Jenkins, "_write_required_plugins_preinstall_marker") as write_marker_mock,
-    ):
-        jenkins.Jenkins(mock_env)._ensure_required_plugins_preinstalled(
-            harness_container.container,
-            proxy_config,
-        )
-
-    install_plugins_mock.assert_called_once_with(harness_container.container, proxy_config)
-    write_marker_mock.assert_called_once_with(harness_container.container)
-
-
-def test_required_plugins_preinstall_runs_when_marker_mismatch(
-    harness_container: HarnessWithContainer,
-    proxy_config: state.ProxyConfig,
-    mock_env: jenkins.Environment,
-):
-    """Mismatched marker should trigger plugin-manager execution and marker rewrite."""
-    marker = {
-        "plugin_manager_version": "old-version",
-        "required_plugins": sorted(jenkins.REQUIRED_PLUGINS),
-    }
-
-    with (
-        patch.object(
-            jenkins.Jenkins,
-            "_read_required_plugins_preinstall_marker",
-            return_value=marker,
-        ),
-        patch.object(jenkins.Jenkins, "_required_plugin_archives_present", return_value=True),
-        patch("jenkins._install_plugins") as install_plugins_mock,
-        patch.object(jenkins.Jenkins, "_write_required_plugins_preinstall_marker") as write_marker_mock,
-    ):
-        jenkins.Jenkins(mock_env)._ensure_required_plugins_preinstalled(
-            harness_container.container,
-            proxy_config,
-        )
-
-    install_plugins_mock.assert_called_once_with(harness_container.container, proxy_config)
-    write_marker_mock.assert_called_once_with(harness_container.container)
-
-
-def test_required_plugins_preinstall_runs_when_plugin_archive_missing(
-    harness_container: HarnessWithContainer,
-    proxy_config: state.ProxyConfig,
-    mock_env: jenkins.Environment,
-):
-    """Matching marker but missing plugin archives should trigger plugin-manager execution."""
-    marker = {
-        "plugin_manager_version": jenkins.JENKINS_PLUGIN_MANAGER_VERSION,
-        "required_plugins": sorted(jenkins.REQUIRED_PLUGINS),
-    }
-
-    with (
-        patch.object(
-            jenkins.Jenkins,
-            "_read_required_plugins_preinstall_marker",
-            return_value=marker,
-        ),
-        patch.object(jenkins.Jenkins, "_required_plugin_archives_present", return_value=False),
-        patch("jenkins._install_plugins") as install_plugins_mock,
-        patch.object(jenkins.Jenkins, "_write_required_plugins_preinstall_marker") as write_marker_mock,
-    ):
-        jenkins.Jenkins(mock_env)._ensure_required_plugins_preinstalled(
-            harness_container.container,
-            proxy_config,
-        )
-
-    install_plugins_mock.assert_called_once_with(harness_container.container, proxy_config)
-    write_marker_mock.assert_called_once_with(harness_container.container)
+    if expect_write_marker:
+        write_marker_mock.assert_called_once_with(harness_container.container)
+    else:
+        write_marker_mock.assert_not_called()
 
 
 def test_get_client(admin_credentials: jenkins.Credentials, mock_env: jenkins.Environment):
