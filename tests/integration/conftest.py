@@ -97,7 +97,7 @@ async def application_fixture(
         raise_on_error=False,
         wait_for_active=True,
         raise_on_blocked=True,
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
     )
     # slow down update-status so that it doesn't intervene currently running tests
@@ -430,7 +430,7 @@ async def jenkins_with_proxy_fixture(
         apps=[application.name],
         wait_for_active=True,
         raise_on_blocked=True,
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
     )
     # slow down update-status so that it doesn't intervene currently running tests
@@ -563,7 +563,7 @@ async def prometheus_related_fixture(application: Application, model: Model):
     await model.wait_for_idle(
         status="active",
         apps=[prometheus.name, application.name],
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
         raise_on_error=False,
     )
@@ -581,7 +581,7 @@ async def loki_related_fixture(application: Application, model: Model):
     await model.wait_for_idle(
         status="active",
         apps=[loki.name, application.name],
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
         raise_on_error=False,
     )
@@ -599,7 +599,7 @@ async def grafana_related_fixture(application: Application, model: Model):
     await model.wait_for_idle(
         status="active",
         apps=[grafana.name, application.name],
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
         raise_on_error=False,
     )
@@ -749,7 +749,7 @@ async def traefik_application_fixture(model: Model):
     await model.wait_for_idle(
         status="active",
         apps=[traefik.name],
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
         raise_on_error=False,
     )

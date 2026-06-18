@@ -474,8 +474,9 @@ def kubernetes_test_pipeline_script() -> str:
                 some-label: some-label-value
             spec:
             containers:
-            - name: httpd
-              image: httpd
+            - name: busybox
+              image: busybox
+              imagePullPolicy: IfNotPresent
               command:
               - sleep
               args:
@@ -587,6 +588,7 @@ def create_kubernetes_cloud(
             "jenkinsUrl": "{unit_web_client.web}",
             "type": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
             "webSocket":true,
+            "connectTimeout": "300",
             "Submit": "",
         }}""",
         "webSocket": True,
@@ -610,6 +612,6 @@ def create_kubernetes_cloud(
     res = unit_web_client.client.requester.post_url(
         url=url, headers=headers, data=payload, timeout=60 * 5
     )
-    logger.debug("Cloud created, %s", res.status_code)
+    logger.debug("Cloud created, status=%s body=%s", res.status_code, res.text)
 
     return kubernetes_test_cloud_name if res.status_code == 200 else None

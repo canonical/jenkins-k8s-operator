@@ -5,97 +5,83 @@
 
 # pylint:disable=protected-access
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import ops
-from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyRequirer
-from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.testing import Harness
 
 from charm import JenkinsK8sOperatorCharm
 
 
-@patch("jenkins.is_storage_ready", return_value=False)
-def test_on_auth_proxy_relation_joined_when_jenkins_storage_not_ready(_):
+def test_reconcile_auth_proxy_updates_config_when_integrated():
     """
-    arrange: given a charm with no connectable container.
-    act: when auth_proxy relation joined event is fired.
-    assert: the event is deferred.
-    """
-    harness = Harness(JenkinsK8sOperatorCharm)
-    harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
-
-    assert mock_event.defer.to_be_called_once()
-
-
-@patch("jenkins.is_storage_ready", return_value=False)
-def test_on_auth_proxy_relation_joined_when_ingress_not_ready(_):
-    """
-    arrange: given a charm with ready storage but no ingress related.
-    act: when auth_proxy relation joined event is fired.
-    assert: the event is deferred.
+    arrange: given a charm with auth_proxy relation and ingress URL available.
+    act: when _reconcile_auth_proxy is called.
+    assert: auth proxy config is updated with the ingress URL.
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
 
-    assert mock_event.defer.to_be_called_once()
+    # Mock ingress URL
+    harness.charm.server_ingress = MagicMock()
+    harness.charm.server_ingress.url = "https://example.com/jenkins"
+
+    # Mock state with auth_proxy_integrated=True
+    mock_state = MagicMock()
+    mock_state.auth_proxy_integrated = True
+
+    harness.charm._auth_proxy = MagicMock()
+    mock_event = MagicMock(spec=ops.EventBase)
+
+    harness.charm._reconcile_auth_proxy(mock_event, mock_state)
+
+    harness.charm._auth_proxy.update_auth_proxy_config.assert_called_once()
+    call_kwargs = harness.charm._auth_proxy.update_auth_proxy_config.call_args
+    config = call_kwargs.kwargs["auth_proxy_config"]
+    assert config.protected_urls == ["https://example.com/jenkins"]
 
 
-@patch("jenkins.is_storage_ready", return_value=True)
-@patch("pebble.replan_jenkins")
-def test_on_auth_proxy_relation_joined(replan_mock, _):
+def test_reconcile_auth_proxy_skips_when_not_integrated():
     """
-    arrange: given a charm with ready storage and ingress related.
-    act: when auth_proxy relation joined event is fired.
-    assert: the pebble service is replaned.
-    """
-    harness = Harness(JenkinsK8sOperatorCharm)
-    harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    mock_ingress = MagicMock(spec=IngressPerAppRequirer)
-    mock_ingress.url.return_value = "https://example.com"
-    harness.charm.auth_proxy_observer.ingress = mock_ingress
-    harness.charm.auth_proxy_observer.auth_proxy = MagicMock(spec=AuthProxyRequirer)
-    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
-
-    replan_mock.assert_called_once()
-
-
-@patch("jenkins.is_storage_ready", return_value=False)
-def test_auth_proxy_relation_departed_when_jenkins_storage_not_ready(_):
-    """
-    arrange: given a charm with no connectable container.
-    act: when auth_proxy departed joined event is fired.
-    assert: the event is deferred.
+    arrange: given a charm without auth_proxy relation.
+    act: when _reconcile_auth_proxy is called.
+    assert: auth proxy config is not updated.
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    harness.charm.auth_proxy_observer._auth_proxy_relation_departed(mock_event)
 
-    assert mock_event.defer.to_be_called_once()
+    mock_state = MagicMock()
+    mock_state.auth_proxy_integrated = False
+
+    harness.charm._auth_proxy = MagicMock()
+    mock_event = MagicMock(spec=ops.EventBase)
+
+    harness.charm._reconcile_auth_proxy(mock_event, mock_state)
+
+    harness.charm._auth_proxy.update_auth_proxy_config.assert_not_called()
 
 
-@patch("jenkins.is_storage_ready", return_value=True)
-@patch("pebble.replan_jenkins")
-def test_auth_proxy_relation_departed(replan_mock, _):
+def test_reconcile_auth_proxy_clears_config_when_no_ingress_url():
     """
-    arrange: given a charm with ready storage and ingress related.
-    act: when auth_proxy relation departed event is fired.
-    assert: the pebble service is replaned.
+    arrange: given a charm with auth_proxy relation but no ingress URL.
+    act: when _reconcile_auth_proxy is called.
+    assert: auth proxy config is updated with empty protected_urls.
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    mock_event = MagicMock(spec=ops.RelationDepartedEvent)
-    harness.charm.auth_proxy_observer._auth_proxy_relation_departed(mock_event)
 
-    replan_mock.assert_called_once()
+    harness.charm.server_ingress = MagicMock()
+    harness.charm.server_ingress.url = None
+
+    mock_state = MagicMock()
+    mock_state.auth_proxy_integrated = True
+
+    harness.charm._auth_proxy = MagicMock()
+    mock_event = MagicMock(spec=ops.EventBase)
+
+    harness.charm._reconcile_auth_proxy(mock_event, mock_state)
+
+    harness.charm._auth_proxy.update_auth_proxy_config.assert_called_once()
+    config = harness.charm._auth_proxy.update_auth_proxy_config.call_args[1]["auth_proxy_config"]
+    assert config.protected_urls == []
