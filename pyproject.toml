@@ -21,7 +21,7 @@ dependencies = [
   "jsonschema==4.26.0",
   "ops==3.7.0",
   "pydantic==1.10.26",
-  "requests==2.33.1",
+  "requests==2.34.2",
 ]
 
 [dependency-groups]
@@ -33,7 +33,7 @@ lint = [
   "httpx==0.28.1",
   "jinja2==3.1.6",
   "jubilant",
-  "lightkube==0.19.1",
+  "lightkube==0.21.0",
   "mypy",
   "ops[testing]",
   "pep8-naming",
@@ -65,7 +65,7 @@ integration = [
   "jinja2==3.1.6",
   "jubilant",
   "juju>=3,<4",
-  "lightkube==0.19.1",
+  "lightkube==0.21.0",
   "macaroonbakery",
   "pyotp==2.9",
   "pytest",
@@ -139,7 +139,7 @@ skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage,html
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-log_cli_level = "INFO"
+log_cli_level = "DEBUG"
 
 [tool.coverage.run]
 branch = true

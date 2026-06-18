@@ -133,3 +133,42 @@ async def test_storage_mount_owner(application: Application):
 
     assert action.results.get("return-code") == 0
     assert f"{JENKINS_UID} {JENKINS_GID}" in str(action.results.get("stdout"))
+
+
+async def test_bootstrap_after_restart(application: Application, unit: Unit):
+    """
+    arrange: a running Jenkins deployment.
+    act: delete the API token file and restart the workload to re-trigger bootstrap.
+    assert: the charm re-bootstraps successfully and returns to active status.
+
+    This exercises the bootstrap code path (crumb fetch + token generation) on an
+    already-initialized Jenkins instance, which is more likely to hit the crumb/session
+    race because Jenkins's security subsystem restarts with existing state.
+    """
+    # Delete the API token to force re-bootstrap on next pebble-ready
+    action: Action = await unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble exec -- rm -f /var/lib/jenkins/juju_api_token"
+    )
+    await action.wait()
+
+    # Restart the jenkins service — triggers pebble-ready → bootstrap
+    action = await unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket /charm/bin/pebble restart jenkins"
+    )
+    await action.wait()
+    assert action.status == "completed", f"Failed to restart jenkins: {action.data}"
+
+    # Wait for the charm to re-settle — if crumb race hits, this will error/block
+    model = unit.model
+    await model.wait_for_idle(
+        apps=[application.name],
+        raise_on_error=False,
+        status="active",
+        raise_on_blocked=True,
+        timeout=10 * 60,
+        idle_period=30,
+    )
+    assert application.status == "active", (
+        f"Jenkins failed to re-bootstrap after restart: {application.status}"
+    )

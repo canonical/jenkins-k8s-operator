@@ -260,7 +260,10 @@ def test__setup_user_token(harness_container: HarnessWithContainer, mock_env: je
     mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
     mock_client.generate_new_api_token.return_value = test_api_token
 
-    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+    with (
+        patch.object(jenkins.Jenkins, "_get_client") as get_client_mock,
+        patch.object(jenkins.Jenkins, "_is_api_ready", return_value=True),
+    ):
         get_client_mock.return_value = mock_client
         jenkins.Jenkins(mock_env)._setup_user_token(harness_container.container)
 
@@ -283,7 +286,10 @@ def test__setup_user_token_raises_exception(mock_env: jenkins.Environment):
     mock_container.pull = MagicMock(
         side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
     )
-    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+    with (
+        patch.object(jenkins.Jenkins, "_get_client") as get_client_mock,
+        patch.object(jenkins.Jenkins, "_is_api_ready", return_value=True),
+    ):
         get_client_mock.return_value = mock_client
 
         with pytest.raises(jenkins.JenkinsBootstrapError):
@@ -317,7 +323,11 @@ def test__setup_user_token_security_disabled_response_parse_error(
     requester_mock.get_url = MagicMock(return_value=jenkins_security_response_mock)
     mock_client.requester = requester_mock
     mock_container = MagicMock(ops.Container)
-    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+    with (
+        patch.object(jenkins.Jenkins, "_get_client") as get_client_mock,
+        patch.object(jenkins.Jenkins, "_is_api_ready", return_value=True),
+        patch("jenkins.requests.get", return_value=jenkins_security_response_mock),
+    ):
         get_client_mock.return_value = mock_client
 
         with pytest.raises(jenkins.JenkinsBootstrapError):
@@ -341,7 +351,11 @@ def test__setup_user_token_security_disabled_push_placeholder_token(mock_env: je
     mock_container = MagicMock(ops.Container)
     push_mock = MagicMock()
     mock_container.push = push_mock
-    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+    with (
+        patch.object(jenkins.Jenkins, "_get_client") as get_client_mock,
+        patch.object(jenkins.Jenkins, "_is_api_ready", return_value=True),
+        patch("jenkins.requests.get", return_value=jenkins_security_response_mock),
+    ):
         get_client_mock.return_value = mock_client
         jenkins.Jenkins(mock_env)._setup_user_token(mock_container)
         push_mock.assert_called_once()
@@ -364,7 +378,11 @@ def test__setup_user_token_security_disabled_raise_original_error(mock_env: jenk
     mock_container = MagicMock(ops.Container)
     pull_mock = MagicMock()
     mock_container.pull = pull_mock
-    with patch.object(jenkins.Jenkins, "_get_client") as get_client_mock:
+    with (
+        patch.object(jenkins.Jenkins, "_get_client") as get_client_mock,
+        patch.object(jenkins.Jenkins, "_is_api_ready", return_value=True),
+        patch("jenkins.requests.get", return_value=jenkins_security_response_mock),
+    ):
         get_client_mock.return_value = mock_client
 
         with pytest.raises(jenkins.JenkinsBootstrapError):
