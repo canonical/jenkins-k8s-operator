@@ -6,6 +6,7 @@
 # Need access to protected functions for testing
 # pylint:disable=protected-access
 
+import dataclasses
 import datetime
 import functools
 import typing
@@ -550,19 +551,13 @@ def test_reconcile_orders_bootstrap_prestart_before_pebble_and_poststart_after(
         ),
         patch.object(
             jenkins_charm,
-            "_reconcile_bootstrap",
-            create=True,
-            side_effect=lambda container, state: call_order.append("bootstrap") or True,
-        ),
-        patch.object(
-            jenkins_charm,
             "_reconcile_agents",
             side_effect=lambda state: call_order.append("agents") or True,
         ),
         patch.object(jenkins_charm, "_reconcile_agent_discovery"),
         patch.object(jenkins_charm, "_reconcile_auth_proxy"),
     ):
-        jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
+        jenkins_charm._reconcile(MagicMock(spec=ops.UpgradeCharmEvent))
 
     assert call_order == ["storage", "bootstrap_prestart", "pebble", "bootstrap_poststart", "agents"]
 
@@ -586,9 +581,12 @@ def test_bootstrap_poststart_marks_complete_only_after_restart_and_wait_ready(
         ),
         patch.object(
             jenkins_charm.jenkins,
-            "bootstrap",
-            side_effect=lambda container, config_file, proxy_config: call_order.append("bootstrap"),
+            "complete_bootstrap_runtime",
+            side_effect=lambda container, proxy_config: call_order.append(
+                "complete_bootstrap_runtime"
+            ),
         ),
+        patch.object(jenkins_charm.jenkins, "bootstrap") as legacy_bootstrap_mock,
         patch.object(
             harness_container.container,
             "restart",
@@ -613,12 +611,13 @@ def test_bootstrap_poststart_marks_complete_only_after_restart_and_wait_ready(
     assert result is True
     assert call_order == [
         "wait_ready",
-        "bootstrap",
+        "complete_bootstrap_runtime",
         "restart",
         "wait_ready",
         "mark_bootstrapped",
         "set_workload_version",
     ]
+    legacy_bootstrap_mock.assert_not_called()
 
 
 def test_bootstrap_poststart_does_not_mark_complete_on_runtime_error(
@@ -635,16 +634,68 @@ def test_bootstrap_poststart_does_not_mark_complete_on_runtime_error(
         patch.object(jenkins_charm.jenkins, "wait_ready"),
         patch.object(
             jenkins_charm.jenkins,
-            "bootstrap",
+            "complete_bootstrap_runtime",
             side_effect=jenkins.JenkinsBootstrapError("runtime bootstrap failed"),
         ),
+        patch.object(jenkins_charm.jenkins, "bootstrap") as legacy_bootstrap_mock,
         patch.object(jenkins_charm, "_mark_jenkins_bootstrapped") as mark_bootstrapped_mock,
     ):
         result = jenkins_charm._reconcile_bootstrap_poststart(harness_container.container, charm_state)
 
     assert result is False
+    legacy_bootstrap_mock.assert_not_called()
     mark_bootstrapped_mock.assert_not_called()
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
+
+
+@pytest.mark.parametrize(
+    "auth_proxy_integrated, expected_config",
+    [
+        pytest.param(False, jenkins.DEFAULT_JENKINS_CONFIG, id="default-config"),
+        pytest.param(True, jenkins.AUTH_PROXY_JENKINS_CONFIG, id="auth-proxy-config"),
+    ],
+)
+def test_bootstrap_prestart_prepares_static_phase(
+    harness_container: HarnessWithContainer,
+    auth_proxy_integrated: bool,
+    expected_config: str,
+):
+    """Ensure prestart phase prepares static artifacts with selected config."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    charm_state = dataclasses.replace(
+        state.State.from_charm(jenkins_charm), auth_proxy_integrated=auth_proxy_integrated
+    )
+
+    with patch.object(jenkins_charm.jenkins, "prepare_bootstrap_static") as prepare_static_mock:
+        result = jenkins_charm._reconcile_bootstrap_prestart(harness_container.container, charm_state)
+
+    assert result is True
+    prepare_static_mock.assert_called_once_with(
+        harness_container.container,
+        expected_config,
+        charm_state.proxy_config,
+    )
+
+
+def test_bootstrap_prestart_blocks_on_static_phase_error(
+    harness_container: HarnessWithContainer,
+):
+    """Ensure prestart phase failures set BlockedStatus and stop reconcile."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    charm_state = state.State.from_charm(jenkins_charm)
+
+    with patch.object(
+        jenkins_charm.jenkins,
+        "prepare_bootstrap_static",
+        side_effect=jenkins.JenkinsBootstrapError("static bootstrap failed"),
+    ):
+        result = jenkins_charm._reconcile_bootstrap_prestart(harness_container.container, charm_state)
+
+    assert result is False
+    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
+    assert jenkins_charm.unit.status.message == "Failed to bootstrap Jenkins static phase."
 
 
 @pytest.mark.parametrize(

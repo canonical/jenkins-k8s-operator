@@ -95,6 +95,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         # Register all events to funnel through reconcile
         for event in [
+            self.on.jenkins_pebble_ready,
             self.on.jenkins_home_storage_attached,
             self.on.upgrade_charm,
             self.on.config_changed,
@@ -110,9 +111,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.on.update_status,
         ]:
             self.framework.observe(event, self._reconcile)
-        self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
-        self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
-        self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
+        self.framework.observe(
+            self.on.get_admin_password_action, self._on_get_admin_password
+        )
+        self.framework.observe(
+            self.on.rotate_credentials_action, self._on_rotate_credentials
+        )
 
     def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
         """Bootstrap and reconcile when the workload container becomes ready."""
@@ -170,18 +174,20 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The event that triggered reconciliation.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        check_result = precondition.check(container=container, storages=self.model.storages)
+        check_result = precondition.check(
+            container=container, storages=self.model.storages
+        )
         if not check_result.success:
             self.unit.status = ops.WaitingStatus(check_result.reason or "")
-            if not isinstance(event, ops.UpdateStatusEvent):
-                event.defer()
             return
 
         state = self._get_state()
         if state is None:
             return
 
-        self._reconcile_storage(container)
+        # Storage ownership only needs correction on attach/upgrade events
+        if isinstance(event, (ops.StorageAttachedEvent, ops.UpgradeCharmEvent)):
+            self._reconcile_storage(container)
         if not self._reconcile_bootstrap_prestart(container, state):
             return
         self._reconcile_pebble(container, state)
@@ -192,7 +198,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
         self._reconcile_agent_discovery()
         self._reconcile_auth_proxy(state)
-        # Plugin removal only runs on update-status (matching original behaviour)
+        # Plugin removal only runs on update-status
         if isinstance(event, ops.UpdateStatusEvent):
             self._reconcile_plugins(container, state)
 
@@ -227,7 +233,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
             container.replan()
 
-    def _reconcile_bootstrap_prestart(self, container: ops.Container, state: State) -> bool:
+    def _reconcile_bootstrap_prestart(
+        self, container: ops.Container, state: State
+    ) -> bool:
         """Reconcile Jenkins bootstrap prestart phase.
 
         Args:
@@ -237,10 +245,26 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             True when reconcile can continue.
         """
-        del container, state
+        config_file = (
+            jenkins.AUTH_PROXY_JENKINS_CONFIG
+            if state.auth_proxy_integrated
+            else jenkins.DEFAULT_JENKINS_CONFIG
+        )
+        try:
+            self.jenkins.prepare_bootstrap_static(
+                container, config_file, state.proxy_config
+            )
+        except jenkins.JenkinsBootstrapError as exc:
+            logger.error("Failed to bootstrap Jenkins static phase, %s", exc)
+            self.unit.status = ops.BlockedStatus(
+                "Failed to bootstrap Jenkins static phase."
+            )
+            return False
         return True
 
-    def _reconcile_bootstrap_poststart(self, container: ops.Container, state: State) -> bool:
+    def _reconcile_bootstrap_poststart(
+        self, container: ops.Container, state: State
+    ) -> bool:
         """Reconcile Jenkins bootstrap poststart phase.
 
         Args:
@@ -254,7 +278,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return self._reconcile_bootstrap(container, state)
         except jenkins.JenkinsBootstrapError as exc:
             logger.error("Failed to bootstrap Jenkins runtime phase, %s", exc)
-            self.unit.status = ops.BlockedStatus("Failed to bootstrap Jenkins runtime phase.")
+            self.unit.status = ops.BlockedStatus(
+                "Failed to bootstrap Jenkins runtime phase."
+            )
             return False
 
     def _reconcile_bootstrap(self, container: ops.Container, state: State) -> bool:
@@ -278,12 +304,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return True
 
         self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
-        config_file = (
-            jenkins.AUTH_PROXY_JENKINS_CONFIG
-            if state.auth_proxy_integrated
-            else jenkins.DEFAULT_JENKINS_CONFIG
-        )
-        self.jenkins.bootstrap(container, config_file, state.proxy_config)
+        self.jenkins.complete_bootstrap_runtime(container, state.proxy_config)
         container.restart(JENKINS_SERVICE_NAME)
         self.jenkins.wait_ready()
         self._mark_jenkins_bootstrapped(container)
@@ -369,7 +390,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """Update the agent discovery URL in all connected agent relations."""
         for relation in self.model.relations[AGENT_RELATION]:
             relation_discovery_url = relation.data[self.model.unit].get("url")
-            if relation_discovery_url and relation_discovery_url == self._agent_discovery_url:
+            if (
+                relation_discovery_url
+                and relation_discovery_url == self._agent_discovery_url
+            ):
                 continue
             relation.data[self.model.unit].update({"url": self._agent_discovery_url})
 
@@ -392,7 +416,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     allowed_endpoints=[],
                     headers=["X-Auth-Request-User"],
                 )
-            self._auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
+            self._auth_proxy.update_auth_proxy_config(
+                auth_proxy_config=auth_proxy_config
+            )
 
     def _reconcile_plugins(self, container: ops.Container, state: State) -> None:
         """Remove plugins that are installed but not allowed.
@@ -407,7 +433,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         try:
-            self.jenkins.remove_unlisted_plugins(plugins=state.plugins, container=container)
+            self.jenkins.remove_unlisted_plugins(
+                plugins=state.plugins, container=container
+            )
         except (jenkins.JenkinsPluginError, jenkins.JenkinsError) as exc:
             logger.error("Failed to remove unlisted plugin, %s", exc)
         except TimeoutError as exc:
@@ -440,7 +468,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 unit_ip = str(binding.network.bind_address)
                 ipaddress.ip_address(unit_ip)
                 env_dict = typing.cast(typing.Dict[str, str], self.jenkins.environment)
-                return f"http://{unit_ip}:{jenkins.WEB_PORT}{env_dict['JENKINS_PREFIX']}"
+                return (
+                    f"http://{unit_ip}:{jenkins.WEB_PORT}{env_dict['JENKINS_PREFIX']}"
+                )
             except ValueError as exc:
                 logger.error(
                     "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
@@ -454,9 +484,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
     def _agent_status_message(self) -> str:
         """Status message regarding agent discovery ingress configuration."""
         if self.server_ingress.url and not self.agent_discovery_ingress.url:
-            return (
-                f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
-            )
+            return f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
         return ""
 
     def _add_agent_nodes_from_relation(
@@ -476,22 +504,32 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             JenkinsError: if there was an error while registering agent nodes to Jenkins.
         """
         for relation, agents in agent_relation.items():
-            unregistered_agents = [agent for agent in agents if agent.name not in agent_node_names]
+            unregistered_agents = [
+                agent for agent in agents if agent.name not in agent_node_names
+            ]
             for unregistered_agent in unregistered_agents:
                 try:
-                    self.jenkins.add_agent_node(agent_meta=unregistered_agent, container=container)
+                    self.jenkins.add_agent_node(
+                        agent_meta=unregistered_agent, container=container
+                    )
                 except jenkins.JenkinsError:
-                    logger.exception("Failed to register agent node: %s", unregistered_agent)
+                    logger.exception(
+                        "Failed to register agent node: %s", unregistered_agent
+                    )
                     raise
 
             agent_relation_data: dict[str, str] = {"url": self._agent_discovery_url}
             for meta in agents:
                 try:
-                    agent_relation_data[f"{meta.name}_secret"] = self.jenkins.get_node_secret(
-                        node_name=meta.name, container=container
+                    agent_relation_data[f"{meta.name}_secret"] = (
+                        self.jenkins.get_node_secret(
+                            node_name=meta.name, container=container
+                        )
                     )
                 except jenkins.JenkinsError:
-                    logger.exception("Failed to get secret for registered node: %s", meta)
+                    logger.exception(
+                        "Failed to get secret for registered node: %s", meta
+                    )
                     raise
             relation.data[self.model.unit].update(agent_relation_data)
 
@@ -517,7 +555,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         agents_not_in_relation = set(agent_node_names) - all_agent_names_from_relation
         for agent_name in agents_not_in_relation:
             try:
-                self.jenkins.remove_agent_node(agent_name=agent_name, container=container)
+                self.jenkins.remove_agent_node(
+                    agent_name=agent_name, container=container
+                )
             except jenkins.JenkinsError:
                 logger.exception("Failed to remove registered node: %s", agent_name)
                 raise
