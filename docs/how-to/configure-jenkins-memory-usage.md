@@ -1,5 +1,5 @@
 # How to control heap memory
-The [jenkins-k8s-operator](https://github.com/canonical/jenkins-k8s-operator) charm uses [Juju constraints](https://juju.is/docs/juju/constraint) to limit the amount of memory a charm can use. To deploy the charm with constraints, use the `--constraints "<key>=<value>"` option when running `juju deploy`:
+The [jenkins-k8s-operator](https://github.com/canonical/jenkins-k8s-operator) charm uses [Juju constraints](https://documentation.ubuntu.com/juju/3.6/reference/constraint/) to limit the amount of memory a charm can use. To deploy the charm with constraints, use the `--constraints "<key>=<value>"` option when running `juju deploy`:
 ```bash
 juju deploy jenkins-k8s --channel=latest/edge --constraints "mem=2048M"
 ```
