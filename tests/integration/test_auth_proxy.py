@@ -497,6 +497,31 @@ async def test_auth_proxy_integration(
     )
 
 
+@pytest.mark.abort_on_fail
+@pytest.mark.asyncio
+async def test_auth_proxy_bootstrap_uses_unsecured_config_xml(
+    model: Model,
+    jenkins_k8s_charms: _JenkinsCharms,
+) -> None:
+    """
+    arrange: Jenkins with auth-proxy integration active.
+    act: read Jenkins config.xml from workload container.
+    assert: auth-proxy bootstrap config markers are present.
+    """
+    jenkins_app = model.applications[jenkins_k8s_charms.jenkins]
+    unit = jenkins_app.units[0]
+    action = await unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble exec -- cat /var/lib/jenkins/config.xml"
+    )
+    await action.wait()
+    assert action.results.get("return-code") == 0
+
+    config_xml = str(action.results.get("stdout", ""))
+    assert "AuthorizationStrategy$Unsecured" in config_xml
+    assert "SecurityRealm$None" in config_xml
+
+
 @dataclass
 class _TestCredentials:
     """Testing credentials.

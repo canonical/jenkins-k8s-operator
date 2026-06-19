@@ -517,6 +517,37 @@ def test__upgrade_charm_reconciles_storage_and_agents(harness_container: Harness
     reconcile_storage_mock.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    "event_spec",
+    [
+        pytest.param(ops.ConfigChangedEvent, id="config-changed"),
+        pytest.param(ops.UpdateStatusEvent, id="update-status"),
+        pytest.param(ops.PebbleReadyEvent, id="pebble-ready"),
+    ],
+)
+def test_storage_reconcile_not_called_on_non_storage_or_upgrade_events(
+    harness_container: HarnessWithContainer,
+    event_spec: type[ops.EventBase],
+):
+    """Storage ownership reconcile is event-gated and should not run on unrelated events."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    event = MagicMock(spec=event_spec)
+
+    with (
+        patch_reconcile_pipeline(jenkins_charm, agents_return=True) as patched,
+        patch.object(jenkins_charm, "_reconcile_plugins") as reconcile_plugins_mock,
+    ):
+        reconcile_storage_mock = patched["reconcile_storage"]
+        jenkins_charm._reconcile(event)
+
+    reconcile_storage_mock.assert_not_called()
+    if event_spec is ops.UpdateStatusEvent:
+        reconcile_plugins_mock.assert_called_once()
+    else:
+        reconcile_plugins_mock.assert_not_called()
+
+
 def test_reconcile_orders_bootstrap_prestart_before_pebble_and_poststart_after(
     harness_container: HarnessWithContainer,
 ):
@@ -646,6 +677,59 @@ def test_bootstrap_poststart_does_not_mark_complete_on_runtime_error(
     legacy_bootstrap_mock.assert_not_called()
     mark_bootstrapped_mock.assert_not_called()
     assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
+
+
+def test_bootstrap_poststart_waits_when_jenkins_not_ready(
+    harness_container: HarnessWithContainer,
+):
+    """Ensure poststart returns waiting and performs no runtime bootstrap when service is not ready."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    charm_state = state.State.from_charm(jenkins_charm)
+
+    with (
+        patch.object(jenkins, "is_jenkins_ready", return_value=False),
+        patch.object(jenkins_charm.jenkins, "complete_bootstrap_runtime") as runtime_bootstrap_mock,
+        patch.object(harness_container.container, "restart") as restart_mock,
+        patch.object(jenkins_charm, "_mark_jenkins_bootstrapped") as mark_bootstrapped_mock,
+    ):
+        result = jenkins_charm._reconcile_bootstrap_poststart(harness_container.container, charm_state)
+
+    assert result is False
+    assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
+    assert jenkins_charm.unit.status.message == "Jenkins service not yet ready."
+    runtime_bootstrap_mock.assert_not_called()
+    restart_mock.assert_not_called()
+    mark_bootstrapped_mock.assert_not_called()
+
+
+def test_bootstrap_poststart_skips_runtime_when_already_bootstrapped(
+    harness_container: HarnessWithContainer,
+):
+    """Ensure bootstrapped path skips runtime bootstrap work and only refreshes workload version."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    charm_state = state.State.from_charm(jenkins_charm)
+
+    with (
+        patch.object(jenkins, "is_jenkins_ready", return_value=True),
+        patch.object(jenkins_charm, "_jenkins_bootstrapped", return_value=True),
+        patch.object(jenkins_charm.jenkins, "wait_ready") as wait_ready_mock,
+        patch.object(jenkins_charm.jenkins, "complete_bootstrap_runtime") as runtime_bootstrap_mock,
+        patch.object(harness_container.container, "restart") as restart_mock,
+        patch.object(jenkins_charm, "_mark_jenkins_bootstrapped") as mark_bootstrapped_mock,
+        patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
+        patch.object(jenkins_charm.unit, "set_workload_version") as set_workload_version_mock,
+    ):
+        version_mock.return_value = "2.479.1"
+        result = jenkins_charm._reconcile_bootstrap_poststart(harness_container.container, charm_state)
+
+    assert result is True
+    wait_ready_mock.assert_called_once_with()
+    set_workload_version_mock.assert_called_once_with("2.479.1")
+    runtime_bootstrap_mock.assert_not_called()
+    restart_mock.assert_not_called()
+    mark_bootstrapped_mock.assert_not_called()
 
 
 @pytest.mark.parametrize(

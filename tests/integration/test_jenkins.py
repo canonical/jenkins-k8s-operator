@@ -135,6 +135,97 @@ async def test_storage_mount_owner(application: Application):
     assert f"{JENKINS_UID} {JENKINS_GID}" in str(action.results.get("stdout"))
 
 
+async def test_bootstrap_completion_marker_exists(unit: Unit):
+    """
+    arrange: a running Jenkins deployment.
+    act: check for the charm bootstrap completion marker.
+    assert: the marker exists under Jenkins home.
+    """
+    action: Action = await unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble exec -- test -f /var/lib/jenkins/.charm/bootstrap-complete"
+    )
+    await action.wait()
+    assert action.results.get("return-code") == 0, (
+        "Bootstrap completion marker missing at /var/lib/jenkins/.charm/bootstrap-complete"
+    )
+
+
+async def test_bootstrap_legacy_backfill_skips_runtime_rebootstrap(
+    application: Application,
+    unit: Unit,
+):
+    """
+    arrange: a running Jenkins deployment with legacy bootstrap artifacts present.
+    act: remove only the new bootstrap marker and restart Jenkins to trigger pebble-ready reconcile.
+    assert: marker is backfilled and API token remains unchanged (runtime re-bootstrap skipped).
+    """
+    check_legacy_action: Action = await unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble exec -- sh -c "
+        "'test -f /var/lib/jenkins/secrets/apiToken && "
+        "test -f /var/lib/jenkins/jenkins.install.InstallUtil.lastExecVersion && "
+        "test -f /var/lib/jenkins/jenkins.install.UpgradeWizard.state'"
+    )
+    await check_legacy_action.wait()
+    assert check_legacy_action.results.get("return-code") == 0, (
+        "Legacy bootstrap artifacts must exist before marker backfill test."
+    )
+
+    token_before_action: Action = await unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble exec -- cat /var/lib/jenkins/secrets/apiToken"
+    )
+    await token_before_action.wait()
+    assert token_before_action.results.get("return-code") == 0
+    token_before = str(token_before_action.results.get("stdout", "")).strip()
+    assert token_before, "Expected existing Jenkins API token before marker backfill test."
+
+    remove_marker_action: Action = await unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble exec -- rm -f /var/lib/jenkins/.charm/bootstrap-complete"
+    )
+    await remove_marker_action.wait()
+    assert remove_marker_action.results.get("return-code") == 0
+
+    restart_action: Action = await unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket /charm/bin/pebble restart jenkins"
+    )
+    await restart_action.wait()
+    assert restart_action.status == "completed", f"Failed to restart jenkins: {restart_action.data}"
+
+    model = unit.model
+    await model.wait_for_idle(
+        apps=[application.name],
+        raise_on_error=False,
+        status="active",
+        raise_on_blocked=True,
+        timeout=10 * 60,
+        idle_period=30,
+    )
+    assert application.status == "active", (
+        f"Jenkins failed to settle after legacy marker backfill trigger: {application.status}"
+    )
+
+    marker_backfilled_action: Action = await unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble exec -- test -f /var/lib/jenkins/.charm/bootstrap-complete"
+    )
+    await marker_backfilled_action.wait()
+    assert marker_backfilled_action.results.get("return-code") == 0, (
+        "Bootstrap marker was not backfilled after legacy artifact detection."
+    )
+
+    token_after_action: Action = await unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble exec -- cat /var/lib/jenkins/secrets/apiToken"
+    )
+    await token_after_action.wait()
+    assert token_after_action.results.get("return-code") == 0
+    token_after = str(token_after_action.results.get("stdout", "")).strip()
+    assert token_after == token_before, "API token changed unexpectedly; runtime re-bootstrap likely ran."
+
+
 async def test_bootstrap_after_restart(application: Application, unit: Unit):
     """
     arrange: a running Jenkins deployment.
