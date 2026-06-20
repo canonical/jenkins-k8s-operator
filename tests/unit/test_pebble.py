@@ -3,12 +3,7 @@
 
 """Unit tests for the pebble module."""
 
-import functools
-import typing
-from unittest.mock import patch
-
-import pytest
-import requests
+from unittest.mock import MagicMock
 
 import jenkins
 import pebble
@@ -17,59 +12,51 @@ import state
 from .types_ import HarnessWithContainer
 
 
-def test_replan_jenkins_pebble_error(
-    harness_container: HarnessWithContainer,
-    mocked_get_request: typing.Callable[..., requests.Response],
-    monkeypatch: pytest.MonkeyPatch,
-):
+def test_replan_jenkins_applies_layer(harness_container: HarnessWithContainer):
     """
-    arrange: given a patched jenkins bootstrap method that raises an exception.
+    arrange: given a container, Jenkins instance, and charm state.
     act: when the a replan is executed.
-    assert: an error is raised.
-    """
-    # speed up waiting by changing default argument values
-    monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
-    with (
-        patch.object(jenkins.Jenkins, "wait_ready"),
-        patch.object(jenkins.Jenkins, "bootstrap") as bootstrap_mock,
-    ):
-        bootstrap_mock.side_effect = jenkins.JenkinsBootstrapError
-        harness = harness_container.harness
-        harness.begin()
-
-        env = jenkins.Environment(
-            JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
-            JENKINS_PREFIX="/",
-        )
-
-        with pytest.raises(jenkins.JenkinsBootstrapError):
-            pebble.replan_jenkins(
-                harness_container.container,
-                jenkins.Jenkins(env),
-                state.State.from_charm(harness.charm),
-            )
-
-
-@pytest.mark.usefixtures("patch_os_environ")
-def test_replan_jenkins_when_not_ready(harness_container: HarnessWithContainer):
-    """
-    arrange: given a mocked jenkins version raises TimeoutError on the second call.
-    act: when the a replan is executed.
-    assert: an error is raised.
+    assert: the layer is applied and replanned.
     """
     harness = harness_container.harness
     harness.begin()
-    with patch.object(jenkins.Jenkins, "wait_ready") as wait_ready_mock:
-        wait_ready_mock.side_effect = TimeoutError
 
-        env = jenkins.Environment(
-            JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
-            JENKINS_PREFIX="/",
-        )
+    env = jenkins.Environment(
+        JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
+        JENKINS_PREFIX="/",
+    )
 
-        with pytest.raises(jenkins.JenkinsBootstrapError):
-            pebble.replan_jenkins(
-                harness_container.container,
-                jenkins.Jenkins(env),
-                state.State.from_charm(harness.charm),
-            )
+    pebble.replan_jenkins(
+        harness_container.container,
+        jenkins.Jenkins(env),
+        state.State.from_charm(harness.charm),
+    )
+
+    assert harness_container.container.get_plan().services
+
+
+def test_replan_jenkins_does_not_bootstrap(harness_container: HarnessWithContainer, monkeypatch):
+    """
+    arrange: given patched bootstrap methods.
+    act: when the a replan is executed.
+    assert: bootstrap methods are not invoked by Pebble replan.
+    """
+    harness = harness_container.harness
+    harness.begin()
+    wait_ready_mock = MagicMock()
+    bootstrap_mock = MagicMock()
+    monkeypatch.setattr(jenkins.Jenkins, "wait_ready", wait_ready_mock)
+    monkeypatch.setattr(jenkins.Jenkins, "bootstrap", bootstrap_mock)
+    env = jenkins.Environment(
+        JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
+        JENKINS_PREFIX="/",
+    )
+
+    pebble.replan_jenkins(
+        harness_container.container,
+        jenkins.Jenkins(env),
+        state.State.from_charm(harness.charm),
+    )
+
+    wait_ready_mock.assert_not_called()
+    bootstrap_mock.assert_not_called()

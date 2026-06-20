@@ -225,6 +225,19 @@ def test_get_admin_credentials(
     assert jenkins.get_admin_credentials(harness_container.container) == admin_credentials
 
 
+def test_get_admin_credentials_falls_back_to_initial_admin_password(
+    harness_container: HarnessWithContainer, admin_credentials: jenkins.Credentials
+):
+    """
+    arrange: given only the legacy initialAdminPassword file in the container.
+    act: admin credentials are fetched over pebble.
+    assert: the legacy password file is still accepted.
+    """
+    harness_container.container.remove_path(jenkins.API_TOKEN_PATH)
+
+    assert jenkins.get_admin_credentials(harness_container.container) == admin_credentials
+
+
 def test__get_api_credentials_error():
     """
     arrange: set up a container raising an exception.

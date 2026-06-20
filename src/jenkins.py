@@ -35,6 +35,10 @@ WEB_PORT = 8080
 JENKINS_PLUGIN_MANAGER_VERSION = "2.13.2"
 LOGIN_PATH = "/login?from=%2F"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
+JENKINS_HOME = Path("/var/jenkins_home")
+INIT_GROOVY_PATH = JENKINS_HOME / "init.groovy.d"
+WIZARD_STATE_FILE = JENKINS_HOME / "jenkins.install.UpgradeWizard.state"
+ADMIN_USERNAME = "admin"
 JENKINS_HOME_PATH = Path("/var/lib/jenkins")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
@@ -75,6 +79,132 @@ DEFAULT_JENKINS_CONFIG = "templates/jenkins-config.xml"
 JENKINS_LOGGING_CONFIG = "templates/logging.properties"
 
 ONLINE_CHECK_NAME = "online"
+
+
+def unlock_wizard(container: ops.Container, jenkins_version: str) -> None:
+    """Unlock the Jenkins setup wizard for the supplied Jenkins version.
+
+    Args:
+        container: The Jenkins workload container.
+        jenkins_version: The version to write to the wizard state file.
+    """
+    try:
+        current_version = container.pull(WIZARD_STATE_FILE, encoding="utf-8").read().strip()
+        if current_version == jenkins_version:
+            return
+    except ops.pebble.PathError:
+        pass
+    container.push(
+        WIZARD_STATE_FILE,
+        jenkins_version,
+        encoding="utf-8",
+        make_dirs=True,
+        user=USER,
+        group=GROUP,
+    )
+
+
+def prepare_admin_user(container: ops.Container, charm: ops.CharmBase) -> str:
+    """Prepare the Jenkins admin user via init Groovy script.
+
+    Args:
+        container: The Jenkins workload container.
+        charm: The charm instance.
+
+    Returns:
+        The admin user's password.
+    """
+    password = state.get_stored_admin_password(charm, container)
+    if password is None:
+        password = state.generate_admin_password()
+        state.store_admin_password(charm, password)
+
+    groovy_path = INIT_GROOVY_PATH / "01-create-admin.groovy"
+    try:
+        if password in container.pull(groovy_path, encoding="utf-8").read():
+            return password
+    except ops.pebble.PathError:
+        pass
+
+    script = textwrap.dedent(
+        f"""
+        import jenkins.model.Jenkins
+        import hudson.security.HudsonPrivateSecurityRealm
+        import hudson.security.FullControlOnceLoggedInAuthorizationStrategy
+
+        def instance = Jenkins.getInstance()
+        def securityRealm = new HudsonPrivateSecurityRealm(false)
+        if (securityRealm.getUser("admin") == null) {{
+            securityRealm.createAccount("admin", "{password}")
+        }}
+        instance.setSecurityRealm(securityRealm)
+        def authStrategy = new FullControlOnceLoggedInAuthorizationStrategy()
+        authStrategy.setAllowAnonymousRead(false)
+        instance.setAuthorizationStrategy(authStrategy)
+        instance.save()
+        """
+    ).strip()
+    container.push(
+        groovy_path,
+        script,
+        encoding="utf-8",
+        make_dirs=True,
+        user=USER,
+        group=GROUP,
+    )
+    return password
+
+
+def install_plugins_if_missing(container: ops.Container, state_: state.State) -> None:
+    """Install required Jenkins plugins if they are missing.
+
+    Args:
+        container: The Jenkins workload container.
+        state_: The charm state.
+    """
+    for plugin in REQUIRED_PLUGINS:
+        if not container.list_files(
+            path=str(PLUGINS_PATH), pattern=f"{plugin}.jpi"
+        ) and not container.list_files(path=str(PLUGINS_PATH), pattern=f"{plugin}.hpi"):
+            _install_plugins(container, state_.proxy_config)
+            return
+
+
+def setup_user_token_if_missing(
+    charm: ops.CharmBase, jenkins_url: str, password: str
+) -> None:
+    """Generate and store an admin API token if one has not already been stored.
+
+    Args:
+        charm: The charm instance.
+        jenkins_url: The local Jenkins URL.
+        password: The admin user's password.
+    """
+    if state.get_stored_admin_token(charm) is not None:
+        return
+    client = jenkinsapi.jenkins.Jenkins(
+        baseurl=jenkins_url,
+        username=ADMIN_USERNAME,
+        password=password,
+        timeout=60,
+    )
+    token: str = client.generate_new_api_token(JUJU_API_TOKEN)
+    state.store_admin_token(charm, token)
+
+
+def cleanup_init_groovy(container: ops.Container, charm: ops.CharmBase) -> None:
+    """Remove admin init Groovy after bootstrap has completed.
+
+    Args:
+        container: The Jenkins workload container.
+        charm: The charm instance.
+    """
+    if state.get_stored_admin_token(charm) is None:
+        return
+    try:
+        container.remove_path(INIT_GROOVY_PATH / "01-create-admin.groovy")
+    except ops.pebble.PathError:
+        pass
 
 
 class JenkinsError(Exception):

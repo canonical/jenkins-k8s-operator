@@ -5,6 +5,7 @@
 
 import logging
 import typing
+from pathlib import Path
 
 import ops
 
@@ -16,12 +17,13 @@ if typing.TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+JENKINS_WAR_PATH = Path("/usr/share/jenkins/jenkins.war")
+
 
 def replan_jenkins(
     container: ops.Container,
     jenkins_instance: jenkins.Jenkins,
     state: State,
-    disable_security: bool = False,
 ) -> None:
     """Replan the jenkins services.
 
@@ -29,41 +31,25 @@ def replan_jenkins(
         container: the container for with to replan the services.
         jenkins_instance: the Jenkins instance.
         state: the charm state.
-        disable_security: whether to replan with security disabled.
-
-    Raises:
-        JenkinsBootstrapError: if an error occurs while bootstrapping Jenkins.
     """
     logger.info("Installing Jenkins logging configuration")
     jenkins.install_logging_config(container=container)
     container.add_layer("jenkins", get_pebble_layer(jenkins_instance, state), combine=True)
     container.replan()
-    logger.info("Starting Jenkins service")
-    try:
-        logger.info("Waiting for Jenkins service to be initialized")
-        jenkins_instance.wait_ready()
-        logger.info("Bootstrapping Jenkins")
-        # Tested in integration
-        if disable_security:  # pragma: no cover
-            jenkins_instance.bootstrap(
-                container, jenkins.AUTH_PROXY_JENKINS_CONFIG, state.proxy_config
-            )
-        else:  # pragma: no cover
-            jenkins_instance.bootstrap(
-                container, jenkins.DEFAULT_JENKINS_CONFIG, state.proxy_config
-            )
-        logger.info("Restarting Jenkins for configuration to take effect")
-        # Second Jenkins server start restarts Jenkins to bypass Wizard setup.
-        container.restart(JENKINS_SERVICE_NAME)
-        logger.info("Waiting for Jenkins service to be restarted")
-        jenkins_instance.wait_ready()
-    except TimeoutError as exc:
-        logger.error("Timed out waiting for Jenkins, %s", exc)
-        raise jenkins.JenkinsBootstrapError from exc
-    except jenkins.JenkinsBootstrapError as exc:
-        logger.error("Error installing Jenkins, %s", exc)
-        raise
-    logger.info("Jenkins ready")
+
+
+def get_jenkins_version(container: ops.Container) -> str:
+    """Extracts the Jenkins version from the WAR file.
+
+    Args:
+        container: The Jenkins workload container.
+
+    Returns:
+        The Jenkins version string.
+    """
+    process = container.exec(["java", "-jar", str(JENKINS_WAR_PATH), "--version"], timeout=30)
+    stdout, _ = process.wait_output()
+    return stdout.strip()
 
 
 def get_pebble_layer(jenkins_instance: jenkins.Jenkins, state: State) -> ops.pebble.Layer:

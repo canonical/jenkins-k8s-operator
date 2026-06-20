@@ -134,16 +134,15 @@ def test__on_jenkins_pebble_ready_get_version_error(
     harness = harness_container.harness
     harness.begin()
 
-    with (
-        patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
-        patch.object(jenkins.Jenkins, "bootstrap"),
+    with patch(
+        "pebble.get_jenkins_version",
+        side_effect=ops.pebble.ExecError(["java"], 1, "", ""),
     ):
-        version_mock.side_effect = jenkins.JenkinsError
-
         jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+        jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
 
-        with pytest.raises(jenkins.JenkinsError):
-            jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
+    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
+    assert jenkins_charm.unit.status.message.startswith("Pebble error:")
 
 
 @pytest.mark.usefixtures("patch_os_environ")
@@ -357,8 +356,10 @@ def test__on_config_changed_relation_data_invalid_raises(
     with patch("state.State.from_charm") as from_charm_mock:
         from_charm_mock.side_effect = state.CharmRelationDataInvalidError("bad relation")
 
-        with pytest.raises(RuntimeError):
-            jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
+        jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
+
+    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
+    assert jenkins_charm.unit.status.message == "Config error: bad relation"
 
 
 def test__on_config_changed_precondition_waits_and_defers(
@@ -388,7 +389,7 @@ def test__on_config_changed_precondition_waits_and_defers(
 
         assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
         assert jenkins_charm.unit.status.message == "not ready"
-        event.defer.assert_called_once_with()
+        event.defer.assert_not_called()
         add_layer_mock.assert_not_called()
         replan_mock.assert_not_called()
         restart_mock.assert_not_called()

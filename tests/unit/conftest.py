@@ -20,6 +20,7 @@ from ops.pebble import ExecError
 from ops.testing import Harness
 
 import jenkins
+import pebble
 import state
 from charm import JenkinsK8sOperatorCharm
 
@@ -173,6 +174,42 @@ def inject_register_command_handler(monkeypatch: pytest.MonkeyPatch, harness: Ha
 def patch_is_jenkins_ready_fixture(monkeypatch: pytest.MonkeyPatch):
     """Patch Jenkins module to report Jenkins service as ready in is_jenkins_ready function."""
     monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
+
+
+@pytest.fixture(autouse=True)
+def patch_stateless_bootstrap_for_legacy_tests(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    admin_credentials: jenkins.Credentials,
+):
+    """Patch bootstrap helpers in legacy tests that exercise later reconcile phases.
+
+    The focused bootstrap-refactor tests exercise these helpers directly. Older tests in this
+    suite assert agent, ingress, and auth-proxy reconciliation behaviour and should not perform
+    the new pre-start bootstrap sequence or the synchronous health wait.
+    """
+    if request.path.name == "test_bootstrap_refactor.py":
+        return
+    monkeypatch.setattr(pebble, "get_jenkins_version", MagicMock(return_value="2.401.1"))
+    monkeypatch.setattr(jenkins, "unlock_wizard", MagicMock())
+    monkeypatch.setattr(
+        jenkins,
+        "prepare_admin_user",
+        MagicMock(return_value=admin_credentials.password_or_token),
+    )
+    monkeypatch.setattr(jenkins, "install_plugins_if_missing", MagicMock())
+    monkeypatch.setattr(jenkins, "setup_user_token_if_missing", MagicMock())
+    monkeypatch.setattr(jenkins, "cleanup_init_groovy", MagicMock())
+    monkeypatch.setattr(
+        state,
+        "get_stored_admin_password",
+        MagicMock(return_value=admin_credentials.password_or_token),
+    )
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm,
+        "_wait_for_jenkins_healthy",
+        MagicMock(return_value=True),
+    )
 
 
 @pytest.fixture(scope="function", name="container")

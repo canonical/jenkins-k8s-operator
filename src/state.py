@@ -6,6 +6,7 @@
 import dataclasses
 import logging
 import os
+import secrets
 import typing
 
 import ops
@@ -21,6 +22,131 @@ JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
 INGRESS_RELATION_NAME = "ingress"
 AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
+PEER_RELATION_NAME = "jenkins-peers"
+SECRET_LABEL = "jenkins-admin-credentials"
+LEGACY_ADMIN_PASSWORD_PATH = "/var/lib/jenkins/secrets/initialAdminPassword"
+
+
+def generate_admin_password() -> str:
+    """Generate a secure random password.
+
+    Returns:
+        A randomly generated admin password.
+    """
+    return secrets.token_urlsafe(24)
+
+
+def _get_peer_relation_databag(charm: ops.CharmBase) -> typing.MutableMapping[str, str] | None:
+    """Return the peer relation application databag if available.
+
+    Args:
+        charm: The charm instance.
+
+    Returns:
+        The peer application relation databag, or None if no peer relation is present.
+    """
+    relation = charm.model.get_relation(PEER_RELATION_NAME)
+    if not relation:
+        return None
+    return relation.data[charm.app]
+
+
+def get_stored_admin_password(
+    charm: ops.CharmBase, container: ops.Container | None = None
+) -> str | None:
+    """Retrieve the stored admin password.
+
+    Falls back to the peer relation databag if secret access is unavailable and to the legacy
+    password file if the password was generated before the charm started using Juju secrets.
+
+    Args:
+        charm: The charm instance.
+
+    Returns:
+        The stored admin password, or None if not found.
+    """
+    try:
+        secret = charm.model.get_secret(label=SECRET_LABEL)
+        password = secret.get_content().get("admin-password")
+        if password:
+            return password
+    except ops.model.SecretNotFoundError:
+        pass
+    except (ops.ModelError, RuntimeError):
+        if databag := _get_peer_relation_databag(charm):
+            password = databag.get("admin-password")
+            if password:
+                return password
+
+    if not container:
+        return None
+
+    try:
+        return container.pull(LEGACY_ADMIN_PASSWORD_PATH, encoding="utf-8").read().strip()
+    except ops.pebble.PathError:
+        return None
+
+
+def store_admin_password(charm: ops.CharmBase, password: str) -> None:
+    """Store admin password in Juju Secret.
+
+    Falls back to the peer relation databag if secret access is unavailable.
+
+    Args:
+        charm: The charm instance.
+        password: The admin password to store.
+    """
+    try:
+        secret = charm.model.get_secret(label=SECRET_LABEL)
+        content = secret.get_content()
+        content["admin-password"] = password
+        secret.set_content(content)
+    except ops.model.SecretNotFoundError:
+        charm.app.add_secret({"admin-password": password}, label=SECRET_LABEL)
+    except (ops.ModelError, RuntimeError):
+        if databag := _get_peer_relation_databag(charm):
+            databag["admin-password"] = password
+
+
+def get_stored_admin_token(charm: ops.CharmBase) -> str | None:
+    """Retrieve admin API token from Juju Secret. Returns None if not found.
+
+    Falls back to the peer relation databag if secret access is unavailable.
+
+    Args:
+        charm: The charm instance.
+
+    Returns:
+        The stored admin API token, or None if not found.
+    """
+    try:
+        secret = charm.model.get_secret(label=SECRET_LABEL)
+        return secret.get_content().get("admin-token")
+    except ops.model.SecretNotFoundError:
+        return None
+    except (ops.ModelError, RuntimeError):
+        if databag := _get_peer_relation_databag(charm):
+            return databag.get("admin-token")
+        return None
+
+
+def store_admin_token(charm: ops.CharmBase, token: str) -> None:
+    """Store admin API token in the existing Juju Secret.
+
+    Falls back to the peer relation databag if secret access is unavailable.
+
+    Args:
+        charm: The charm instance.
+        token: The admin API token to store.
+    """
+    try:
+        secret = charm.model.get_secret(label=SECRET_LABEL)
+        content = secret.get_content()
+        content["admin-token"] = token
+        secret.set_content(content)
+    except (ops.ModelError, RuntimeError):
+        if databag := _get_peer_relation_databag(charm):
+            databag["admin-token"] = token
 
 
 class CharmStateBaseError(Exception):
