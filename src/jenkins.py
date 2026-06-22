@@ -5,8 +5,10 @@
 
 # pylint: disable=too-many-lines
 
+import copy
 import dataclasses
 import functools
+import hashlib
 import itertools
 import json
 import logging
@@ -17,7 +19,9 @@ import typing
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
+from urllib.parse import urlparse
 
+from charm import ReconcileBlockedError
 import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
 import jenkinsapi.utils.requester
@@ -55,13 +59,6 @@ PLUGINS_PATH = JENKINS_HOME_PATH / "plugins"
 LOGGING_CONFIG_PATH = JENKINS_HOME_PATH / "logging.properties"
 # The Jenkins logging path as defined in templates/logging.properties file
 LOGGING_PATH = JENKINS_HOME_PATH / "logs/jenkins.log"
-# The plugins that are required for Jenkins to work
-REQUIRED_PLUGINS = [
-    "instance-identity",  # required to connect agent nodes to server
-    "prometheus",  # required for COS integration
-    "monitoring",  # required for session invalidation
-    "configuration-as-code",  # required for JCasC declarative config management
-]
 USER = "jenkins"
 GROUP = "jenkins"
 BUILT_IN_NODE_NAME = "Built-In Node"
@@ -104,12 +101,14 @@ class Environment(typing.TypedDict):
         JENKINS_PREFIX: The prefix in which Jenkins will be accessible.
         CASC_JENKINS_CONFIG: Path to the JCasC configuration file.
         JENKINS_ADMIN_PASSWORD: The admin password for JCasC secret interpolation.
+        CONFIGURATION_HASH: The hash of the JCasC configurations applied.
     """
 
     JENKINS_HOME: str
     JENKINS_PREFIX: str
     CASC_JENKINS_CONFIG: str
     JENKINS_ADMIN_PASSWORD: str
+    CONFIGURATION_HASH: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -135,8 +134,12 @@ def get_admin_credentials(container: ops.Container) -> Credentials:
         The Jenkins admin account credentials.
     """
     user = "admin"
-    password_file_contents = str(container.pull(PASSWORD_FILE_PATH, encoding="utf-8").read())
-    return Credentials(username=user, password_or_token=password_file_contents.strip())
+    try:
+        password_file_contents = str(container.pull(PASSWORD_FILE_PATH, encoding="utf-8").read())
+        return Credentials(username=user, password_or_token=password_file_contents.strip())
+    except ops.pebble.PathError as exc:
+        logger.debug("Admin password not yet setup.")
+        raise JenkinsBootstrapError("Admin password not yet setup.") from exc
 
 
 def _get_api_credentials(container: ops.Container) -> Credentials:
@@ -276,36 +279,6 @@ class Jenkins:
             _wait_for(self._is_ready, timeout=timeout, check_interval=check_interval)
         except TimeoutError as exc:
             raise TimeoutError("Timed out waiting for Jenkins to become ready.") from exc
-
-    def _unlock_wizard(self, container: ops.Container) -> None:
-        """Write to executed version and updated version file to bypass Jenkins setup wizard.
-
-        Args:
-            container: The Jenkins workload container.
-
-        Raises:
-            JenkinsBootstrapError: if the wizard can not be unlocked.
-        """
-        try:
-            version = self.version
-            container.push(
-                LAST_EXEC_VERSION_PATH,
-                version,
-                encoding="utf-8",
-                make_dirs=True,
-                user=USER,
-                group=GROUP,
-            )
-            container.push(
-                WIZARD_VERSION_PATH,
-                version,
-                encoding="utf-8",
-                make_dirs=True,
-                user=USER,
-                group=GROUP,
-            )
-        except (ops.pebble.PathError, JenkinsError) as exc:
-            raise JenkinsBootstrapError("Failed to unlock wizard.") from exc
 
     def _get_client(self, client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
         """Get the Jenkins client.
@@ -788,68 +761,6 @@ class Jenkins:
             logger.error("JCasC validation failed: %s", exc)
             raise JenkinsError("Failed to validate JCasC configuration.") from exc
 
-    def sync_jcasc_config(self, container: ops.Container, desired_yaml: str) -> bool:
-        """Write JCasC config to disk, validate, and reload. Rollback on failure.
-
-        Handles the full JCasC file lifecycle:
-        1. Pull current config (if any)
-        2. Short-circuit if unchanged
-        3. Push desired config
-        4. Validate via Jenkins API
-        5. Reload if valid, rollback if invalid
-
-        Args:
-            container: The Jenkins workload container.
-            desired_yaml: The full YAML string to write.
-
-        Returns:
-            True if config was applied (or unchanged), False if validation failed
-            (config has been rolled back).
-
-        Raises:
-            JenkinsError: if Jenkins API calls fail (check/reload).
-        """
-        jcasc_path = str(JCASC_CONFIG_PATH)
-
-        try:
-            current = container.pull(jcasc_path).read()
-        except (ops.pebble.PathError, FileNotFoundError):
-            current = ""
-
-        if current == desired_yaml:
-            return True
-
-        container.push(
-            jcasc_path,
-            desired_yaml,
-            encoding="utf-8",
-            user=USER,
-            group=GROUP,
-            make_dirs=True,
-        )
-
-        try:
-            if not self.check_jcasc(container, desired_yaml):
-                logger.warning("JCasC validation failed, rolling back")
-                if current:
-                    container.push(
-                        jcasc_path,
-                        current,
-                        encoding="utf-8",
-                        user=USER,
-                        group=GROUP,
-                        make_dirs=True,
-                    )
-                    self.reload_jcasc(container)
-                else:
-                    container.remove_path(jcasc_path)
-                return False
-            self.reload_jcasc(container)
-        except JenkinsError:
-            logger.debug("Jenkins not yet bootstrapped, skipping validation/reload")
-
-        return True
-
 
 def _wait_for(
     func: typing.Callable[[], typing.Any], timeout: int = 300, check_interval: int = 10
@@ -1023,74 +934,6 @@ def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[s
         yield f"'{proxy_config.no_proxy}'"
 
 
-def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
-    """Get JVM system property arguments for proxy.
-
-    Args:
-        proxy_config: The proxy settings to apply.
-
-    Yields:
-        JVM System property proxy arguments.
-    """
-    if proxy_config.http_proxy:
-        yield f"-Dhttp.proxyHost={proxy_config.http_proxy.host}"
-        yield f"-Dhttp.proxyPort={proxy_config.http_proxy.port}"
-        if proxy_config.http_proxy.user and proxy_config.http_proxy.password:
-            yield f"-Dhttp.proxyUser={proxy_config.http_proxy.user}"
-            yield f"-Dhttp.proxyPassword={proxy_config.http_proxy.password}"
-    if proxy_config.https_proxy:
-        yield f"-Dhttps.proxyHost={proxy_config.https_proxy.host}"
-        yield f"-Dhttps.proxyPort={proxy_config.https_proxy.port}"
-        if proxy_config.https_proxy.user and proxy_config.https_proxy.password:
-            yield f"-Dhttps.proxyUser={proxy_config.https_proxy.user}"
-            yield f"-Dhttps.proxyPassword={proxy_config.https_proxy.password}"
-    if proxy_config.no_proxy:
-        formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
-        yield f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"'
-
-
-def _install_plugins(
-    container: ops.Container, proxy_config: state.ProxyConfig | None = None
-) -> None:
-    """Install Jenkins plugins.
-
-    Download Jenkins plugins. A restart is required for the changes to take effect.
-
-    Args:
-        container: The Jenkins workload container.
-        proxy_config: The proxy settings to apply.
-
-    Raises:
-        JenkinsBootstrapError: if an error occurred installing the plugin.
-    """
-    proxy_args = [] if not proxy_config else _get_java_proxy_args(proxy_config)
-    command = [
-        "java",
-        *proxy_args,
-        "-jar",
-        f"jenkins-plugin-manager-{JENKINS_PLUGIN_MANAGER_VERSION}.jar",
-        "-w",
-        "jenkins.war",
-        "-d",
-        str(PLUGINS_PATH),
-        "-p",
-        " ".join(set(REQUIRED_PLUGINS)),
-        "--latest",
-    ]
-    proc: ops.pebble.ExecProcess = container.exec(
-        command,
-        working_dir=str(EXECUTABLES_PATH),
-        timeout=600,
-        user=USER,
-        group=GROUP,
-    )
-    try:
-        proc.wait_output()
-    except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
-        logger.error("Failed to install plugins, %s", exc)
-        raise JenkinsBootstrapError("Failed to install plugins.") from exc
-
-
 PLUGIN_NAME_GROUP = r"^([a-zA-Z0-9-_]+)"
 WHITESPACE = r"\s*"
 VERSION_GROUP = r"\((.*?)\)"
@@ -1254,3 +1097,193 @@ def _set_jenkins_system_message(message: str, client: jenkinsapi.jenkins.Jenkins
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to set system message, %s", exc)
         raise JenkinsError("Failed to set system message.") from exc
+
+
+def unlock_wizard(container: ops.Container, version: str) -> None:
+    """Write to executed version and updated version file to bypass Jenkins setup wizard.
+
+    Args:
+        container: The Jenkins workload container.
+        version: The Jenkins version to set.
+
+    Raises:
+        JenkinsBootstrapError: if the wizard can not be unlocked.
+    """
+    try:
+        container.push(
+            LAST_EXEC_VERSION_PATH,
+            version,
+            encoding="utf-8",
+            make_dirs=True,
+            user=USER,
+            group=GROUP,
+        )
+        container.push(
+            WIZARD_VERSION_PATH,
+            version,
+            encoding="utf-8",
+            make_dirs=True,
+            user=USER,
+            group=GROUP,
+        )
+    except (ops.pebble.PathError) as exc:
+        raise JenkinsError("Failed to unlock wizard.") from exc
+
+
+def install_plugins(
+    container: ops.Container, plugins: list[str], proxy_config: state.ProxyConfig | None = None
+) -> None:
+    """Install Jenkins plugins.
+
+    Download Jenkins plugins. A restart is required for the changes to take effect.
+
+    Args:
+        container: The Jenkins workload container.
+        proxy_config: The proxy settings to apply.
+
+    Raises:
+        JenkinsBootstrapError: if an error occurred installing the plugin.
+    """
+    proxy_args = [] if not proxy_config else _get_java_proxy_args(proxy_config)
+    command = [
+        "java",
+        *proxy_args,
+        "-jar",
+        f"jenkins-plugin-manager-{JENKINS_PLUGIN_MANAGER_VERSION}.jar",
+        "-w",
+        "jenkins.war",
+        "-d",
+        str(PLUGINS_PATH),
+        "-p",
+        " ".join(set(plugins)),
+        "--latest",
+    ]
+    proc: ops.pebble.ExecProcess = container.exec(
+        command,
+        working_dir=str(EXECUTABLES_PATH),
+        timeout=600,
+        user=USER,
+        group=GROUP,
+    )
+    try:
+        proc.wait_output()
+    except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
+        logger.error("Failed to install plugins, %s", exc)
+        raise JenkinsBootstrapError("Failed to install plugins.") from exc
+
+
+def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
+    """Get JVM system property arguments for proxy.
+
+    Args:
+        proxy_config: The proxy settings to apply.
+
+    Yields:
+        JVM System property proxy arguments.
+    """
+    if proxy_config.http_proxy:
+        yield f"-Dhttp.proxyHost={proxy_config.http_proxy.host}"
+        yield f"-Dhttp.proxyPort={proxy_config.http_proxy.port}"
+        if proxy_config.http_proxy.user and proxy_config.http_proxy.password:
+            yield f"-Dhttp.proxyUser={proxy_config.http_proxy.user}"
+            yield f"-Dhttp.proxyPassword={proxy_config.http_proxy.password}"
+    if proxy_config.https_proxy:
+        yield f"-Dhttps.proxyHost={proxy_config.https_proxy.host}"
+        yield f"-Dhttps.proxyPort={proxy_config.https_proxy.port}"
+        if proxy_config.https_proxy.user and proxy_config.https_proxy.password:
+            yield f"-Dhttps.proxyUser={proxy_config.https_proxy.user}"
+            yield f"-Dhttps.proxyPassword={proxy_config.https_proxy.password}"
+    if proxy_config.no_proxy:
+        formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
+        yield f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"'
+
+
+def build_jcasc_config(jcasc_config: dict[str, typing.Any], proxy_config: typing.Optional[state.ProxyConfig] = None) -> typing.Dict[str, typing.Any]:
+    """Build the desired JCasC config by merging user config with charm-managed sections.
+
+    Injects admin credentials (local securityRealm) when the user hasn't provided one.
+    Checks for conflicts with auth_proxy relation.
+
+    Args:
+        state: The current charm state.
+
+    Returns:
+        The merged JCasC configuration dict.
+    """
+    config = copy.deepcopy(jcasc_config)
+    jenkins_section: typing.Dict[str, typing.Any] = config.get("jenkins", {})
+
+    # Conflict check: user provides securityRealm while auth_proxy is active
+    if state.auth_proxy_integrated:
+        if "securityRealm" in jenkins_section:
+            logger.warning("Security realm is managed user provided jcasc-config settings.")
+        else:
+            logger.warning("Bypassing Jenkins security, security via auth proxy assumed.")
+            jenkins_section["securityRealm"] = {
+                "authorizationStrategy": "unsecured"
+            }
+
+    # Inject admin credentials if securityRealm not provided by user
+    if "securityRealm" not in jenkins_section:
+        jenkins_section["securityRealm"] = {
+            "local": {
+                "allowsSignup": True,
+                "users": [{"id": "admin", "password": "${JENKINS_ADMIN_PASSWORD}"}],
+            }
+        }
+
+    # Updates managed by the charm, user not expected to update Jenkins manually
+    jenkins_section["disabledAdministrativeMonitors:"] = ["hudson.model.UpdateCenter$CoreUpdateMonitor"]
+
+    if proxy_config and (proxy_config.https_proxy or proxy_config.http_proxy):
+        proxy = urlparse(proxy_config.https_proxy or proxy_config.http_proxy)
+        host, port = proxy.hostname, proxy.port
+        jenkins_section["proxy"] = {
+            "name": host,
+            "port": int(port),
+        }
+
+    config.setdefault("jenkins", {}).update(jenkins_section)
+    return config
+
+def sync_jcasc_config(container: ops.Container, configuration_yaml: str) -> str:
+    """Write JCasC config to disk, validate, and reload. Rollback on failure.
+
+    Handles the full JCasC file lifecycle:
+    1. Pull current config (if any)
+    2. Short-circuit if unchanged
+    3. Push desired config
+    4. Validate via Jenkins API
+    5. Reload if valid, rollback if invalid
+
+    Args:
+        container: The Jenkins workload container.
+        desired_yaml: The full YAML string to write.
+
+    Returns:
+        The hash of the configuration applied.
+
+    Raises:
+        JenkinsError: if Jenkins API calls fail (check/reload).
+    """
+    jcasc_path = str(JCASC_CONFIG_PATH)
+
+    try:
+        current = container.pull(jcasc_path).read()
+    except (ops.pebble.PathError, FileNotFoundError):
+        current = ""
+
+    config_hash = hashlib.sha256(configuration_yaml.encode("utf-8")).hexdigest()
+    old_config_hash = hashlib.sha256(current.encode("utf-8")).hexdigest()
+    if old_config_hash == config_hash:
+        return config_hash
+
+    container.push(
+        jcasc_path,
+        configuration_yaml,
+        encoding="utf-8",
+        user=USER,
+        group=GROUP,
+        make_dirs=True,
+    )
+    return config_hash

@@ -5,6 +5,7 @@
 
 import logging
 import typing
+from pathlib import Path
 
 import ops
 
@@ -13,6 +14,8 @@ from state import JENKINS_SERVICE_NAME, State
 
 if typing.TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
+
+JENKINS_WAR_PATH = Path("/usr/share/jenkins/jenkins.war")
 
 logger = logging.getLogger(__name__)
 
@@ -110,3 +113,16 @@ def get_pebble_layer(jenkins_instance: jenkins.Jenkins, state: State) -> ops.peb
         },
     }
     return ops.pebble.Layer(layer)
+
+def get_jenkins_version(container: ops.Container) -> str:
+    """Extracts the Jenkins version from the WAR file.
+
+    Args:
+        container: The Jenkins workload container.
+
+    Returns:
+        The Jenkins version string.
+    """
+    process = container.exec(["java", "-jar", str(JENKINS_WAR_PATH), "--version"], timeout=30)
+    stdout, _ = process.wait_output()
+    return stdout.strip()

@@ -8,6 +8,7 @@ import logging
 import os
 import typing
 
+import charm
 import ops
 import yaml
 from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
@@ -210,6 +211,7 @@ class State:
     auth_proxy_integrated: bool
     jcasc_config: typing.Optional[typing.Dict[str, typing.Any]]
     system_properties: typing.List[str] = dataclasses.field(default_factory=list)
+    admin_password: typing.Optional[str] = None
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -292,6 +294,12 @@ class State:
                 raise CharmConfigInvalidError("jcasc-config must be a YAML mapping (dict)")
             jcasc_config = parsed
 
+        # fetch admin password from juju secrets
+        try:
+            admin_password = typing.cast(str, charm.model.get_secret(label=charm.app.name).get_content().get("password"))
+        except ops.SecretNotFoundError:
+            admin_password = None
+
         return cls(
             restart_time_range=restart_time_range,
             agent_relation_meta=agent_relation_meta_map,
@@ -300,4 +308,5 @@ class State:
             auth_proxy_integrated=is_auth_proxy_integrated,
             jcasc_config=jcasc_config,
             system_properties=system_properties,
+            admin_password=admin_password,
         )
