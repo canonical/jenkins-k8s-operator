@@ -127,15 +127,16 @@ def test_get_admin_api_client_raises_when_api_credentials_missing(
 def test_get_admin_user_client_returns_configured_client(container: ops.Container):
     """get_admin_user_client builds jenkinsapi client using admin password credentials."""
     mock_api_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    jenkins_instance = _jenkins_instance(container)
 
     with patch("jenkins.jenkinsapi.jenkins.Jenkins", return_value=mock_api_client) as ctor:
-        result = _jenkins_instance(container).get_admin_user_client()
+        result = jenkins_instance.get_admin_user_client()
 
     assert result == mock_api_client
     ctor.assert_called_once_with(
-        baseurl=_jenkins_instance(container).web_url,
+        baseurl=jenkins_instance.web_url,
         username=jenkins.ADMIN_USER,
-        password="admin-password",
+        password=jenkins_instance._admin_password,
         timeout=60,
     )
 

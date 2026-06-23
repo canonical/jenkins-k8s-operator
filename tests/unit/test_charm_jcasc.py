@@ -82,6 +82,25 @@ def test_build_jcasc_config_preserves_existing_security_realm_without_mutation()
     assert result["jenkins"]["securityRealm"]["local"]["users"][0]["id"] == "custom"
 
 
+def test_build_jcasc_config_auth_proxy_preserves_user_security_realm_and_warns():
+    """
+    arrange: given user config already defines securityRealm and auth-proxy is integrated.
+    act: when build_jcasc_config is called.
+    assert: user securityRealm is preserved and warning branch is logged.
+    """
+    with patch.object(jenkins.logger, "warning") as warning_mock:
+        result = jenkins.build_jcasc_config(
+            JCASC_WITH_SECURITY_REALM,
+            proxy_config=None,
+            auth_proxy=True,
+        )
+
+    assert result["jenkins"]["securityRealm"]["local"]["users"][0]["id"] == "custom"
+    warning_mock.assert_called_once_with(
+        "Security realm is managed user provided jcasc-config settings."
+    )
+
+
 def test_build_jcasc_config_injects_proxy_settings():
     """
     arrange: given proxy settings in state.ProxyConfig.
@@ -104,6 +123,30 @@ def test_build_jcasc_config_injects_proxy_settings():
     )
 
     assert result["jenkins"]["proxy"] == {"name": "proxy.example.com", "port": "3128"}
+
+
+def test_build_jcasc_config_injects_proxy_name_without_port():
+    """
+    arrange: given proxy settings without explicit port.
+    act: when build_jcasc_config is called.
+    assert: only proxy host name is injected.
+    """
+    proxy = typing.cast(
+        state.ProxyConfig,
+        SimpleNamespace(
+            http_proxy="http://proxy-no-port.example.com",
+            https_proxy=None,
+            no_proxy=None,
+        ),
+    )
+
+    result = jenkins.build_jcasc_config(
+        VALID_JCASC_CONFIG,
+        proxy_config=proxy,
+        auth_proxy=False,
+    )
+
+    assert result["jenkins"]["proxy"] == {"name": "proxy-no-port.example.com"}
 
 
 def test_reconcile_jcasc_config_skips_when_no_config(harness_container: HarnessWithContainer):

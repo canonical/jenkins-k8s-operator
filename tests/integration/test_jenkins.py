@@ -212,7 +212,9 @@ async def test_jcasc_custom_config_updates(
     )
 
     await application.set_config({"jcasc-config": custom_config})
-    await ops_test.model.wait_for_idle(
+    model = ops_test.model
+    assert model is not None
+    await model.wait_for_idle(
         apps=[application.name],
         status="active",
         timeout=300,
@@ -233,8 +235,11 @@ async def test_jcasc_invalid_yaml_blocks(
     act: when jcasc-config is set to invalid YAML.
     assert: the charm enters blocked status.
     """
+    model = ops_test.model
+    assert model is not None
+
     await application.set_config({"jcasc-config": "{{invalid yaml [["})
-    await ops_test.model.wait_for_idle(
+    await model.wait_for_idle(
         apps=[application.name],
         status="blocked",
         timeout=120,
@@ -251,7 +256,7 @@ async def test_jcasc_invalid_yaml_blocks(
         }
     )
     await application.set_config({"jcasc-config": default_config})
-    await ops_test.model.wait_for_idle(
+    await model.wait_for_idle(
         apps=[application.name],
         status="active",
         timeout=300,
@@ -282,7 +287,9 @@ async def test_jcasc_reload_without_restart(
         }
     )
     await application.set_config({"jcasc-config": new_config})
-    await ops_test.model.wait_for_idle(
+    model = ops_test.model
+    assert model is not None
+    await model.wait_for_idle(
         apps=[application.name],
         status="active",
         timeout=300,

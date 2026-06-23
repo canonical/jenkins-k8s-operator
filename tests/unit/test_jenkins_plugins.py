@@ -109,6 +109,21 @@ def test__build_dependencies_lookup(
     assert jenkins._build_dependencies_lookup(dependency_strs) == expected_lookup
 
 
+def test__build_dependencies_lookup_logs_invalid_dependency_and_continues():
+    """_build_dependencies_lookup logs invalid dependency entries and still parses valid lines."""
+    dependency_strs = (
+        "plugin-a (v0.0.1) => [plugin-b (v0.0.1)]",
+        "invalid-deps (v0.0.01) => [invalid-dep]",
+    )
+
+    with patch.object(jenkins.logger, "error") as error_mock:
+        lookup = jenkins._build_dependencies_lookup(dependency_strs)
+
+    assert lookup == {"plugin-a": ("plugin-b",)}
+    error_mock.assert_called_once()
+    assert error_mock.call_args.args[0] == "Invalid plugin dependency, %s"
+
+
 @pytest.mark.parametrize(
     "top_level_plugins, plugins_lookup, expected_allowed_plugins",
     [
