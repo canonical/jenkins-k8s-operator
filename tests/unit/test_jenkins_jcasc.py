@@ -201,6 +201,29 @@ def test_get_java_proxy_args_without_credentials_omits_auth_flags(partial_proxy_
     assert not any(flag.startswith("-Dhttps.proxyPassword=") for flag in args)
 
 
+def test_get_groovy_proxy_args_uses_https_proxy_first(proxy_config):
+    """_get_groovy_proxy_args prefers https proxy values when both proxies are present."""
+    args = tuple(jenkins._get_groovy_proxy_args(proxy_config))
+
+    assert args[0] == f"'{proxy_config.https_proxy.host}'"
+    assert args[1] == f"{proxy_config.https_proxy.port}"
+    assert args[2] == f"'{proxy_config.https_proxy.user}'"
+    assert args[3] == f"'{proxy_config.https_proxy.password}'"
+    assert args[4] == f"'{proxy_config.no_proxy}'"
+
+
+def test_get_groovy_proxy_args_http_fallback_without_https(http_partial_proxy_config):
+    """_get_groovy_proxy_args falls back to http proxy when https proxy is absent."""
+    args = tuple(jenkins._get_groovy_proxy_args(http_partial_proxy_config))
+
+    assert args == (
+        f"'{http_partial_proxy_config.http_proxy.host}'",
+        f"{http_partial_proxy_config.http_proxy.port}",
+        "''",
+        "''",
+    )
+
+
 @pytest.mark.parametrize(
     "status_code, expected",
     [

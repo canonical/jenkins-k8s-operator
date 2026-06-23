@@ -74,6 +74,17 @@ def test_get_admin_credentials(
     assert jenkins.get_admin_credentials(harness_container.container) == admin_credentials
 
 
+def test_get_admin_credentials_error():
+    """get_admin_credentials raises JenkinsBootstrapError when password file is missing."""
+    mock_container = MagicMock(ops.Container)
+    mock_container.pull = MagicMock(
+        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
+    )
+
+    with pytest.raises(jenkins.JenkinsBootstrapError, match="Admin password not yet setup"):
+        jenkins.get_admin_credentials(mock_container)
+
+
 def test_get_api_credentials_error():
     """
     arrange: set up a container raising an exception.
@@ -111,6 +122,64 @@ def test_get_admin_api_client_raises_when_api_credentials_missing(
         ),
     ):
         _jenkins_instance(harness_container.container).get_admin_api_client()
+
+
+def test_get_admin_user_client_returns_configured_client(container: ops.Container):
+    """get_admin_user_client builds jenkinsapi client using admin password credentials."""
+    mock_api_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+
+    with patch("jenkins.jenkinsapi.jenkins.Jenkins", return_value=mock_api_client) as ctor:
+        result = _jenkins_instance(container).get_admin_user_client()
+
+    assert result == mock_api_client
+    ctor.assert_called_once_with(
+        baseurl=_jenkins_instance(container).web_url,
+        username=jenkins.ADMIN_USER,
+        password="admin-password",
+        timeout=60,
+    )
+
+
+def test_get_admin_api_client_returns_configured_client(
+    container: ops.Container, admin_credentials: jenkins.Credentials
+):
+    """get_admin_api_client builds jenkinsapi client from API credentials."""
+    mock_api_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+
+    with (
+        patch.object(jenkins, "get_api_credentials", return_value=admin_credentials),
+        patch("jenkins.jenkinsapi.jenkins.Jenkins", return_value=mock_api_client) as ctor,
+    ):
+        result = _jenkins_instance(container).get_admin_api_client()
+
+    assert result == mock_api_client
+    ctor.assert_called_once_with(
+        baseurl=_jenkins_instance(container).web_url,
+        username=admin_credentials.username,
+        password=admin_credentials.password_or_token,
+        timeout=60,
+    )
+
+
+def test_get_api_client_returns_configured_client(
+    container: ops.Container, admin_credentials: jenkins.Credentials
+):
+    """_get_api_client builds jenkinsapi client from stored API credentials."""
+    mock_api_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+
+    with (
+        patch.object(jenkins, "get_api_credentials", return_value=admin_credentials),
+        patch("jenkins.jenkinsapi.jenkins.Jenkins", return_value=mock_api_client) as ctor,
+    ):
+        result = _jenkins_instance(container)._get_api_client()
+
+    assert result == mock_api_client
+    ctor.assert_called_once_with(
+        baseurl=_jenkins_instance(container).web_url,
+        username=admin_credentials.username,
+        password=admin_credentials.password_or_token,
+        timeout=60,
+    )
 
 
 def test_generate_admin_user_token(

@@ -176,7 +176,7 @@ def test__on_config_changed_success_replans_and_restarts(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
 
     with (
-        patch.object(jenkins_charm, "_reconcile_storage"),
+        patch.object(jenkins_charm, "_reconcile_storage") as reconcile_storage_mock,
         patch.object(
             jenkins_charm, "_reconcile_pre_startup_configurations", return_value="hash123"
         ),
@@ -194,6 +194,94 @@ def test__on_config_changed_success_replans_and_restarts(
 
         add_layer_mock.assert_called_once()
         replan_mock.assert_called_once()
+        reconcile_storage_mock.assert_called_once_with(harness_container.container)
+
+
+def test_reconcile_sets_blocked_status_on_reconcile_blocked_error(
+    harness_container: HarnessWithContainer,
+):
+    """_reconcile maps ReconcileBlockedError to unit BlockedStatus message."""
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    with (
+        patch.object(jenkins_charm, "_get_state", return_value=MagicMock(spec=state.State)),
+        patch.object(jenkins_charm, "_reconcile_storage"),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_pre_startup_configurations",
+            side_effect=charm.ReconcileBlockedError("blocked by test"),
+        ),
+    ):
+        jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
+
+    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
+    assert jenkins_charm.unit.status.message == "blocked by test"
+
+
+def test_reconcile_admin_generates_password_when_container_credentials_missing(
+    harness_container: HarnessWithContainer,
+):
+    """_reconcile_admin generates a new password when container has no bootstrap credentials."""
+    harness = harness_container.harness
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    charm_state = MagicMock(spec=state.State)
+    charm_state.admin_password = None
+
+    with (
+        patch.object(
+            jenkins,
+            "get_admin_credentials",
+            side_effect=jenkins.JenkinsBootstrapError("missing"),
+        ),
+        patch.object(charm.secrets, "token_hex", return_value="generated-password"),
+        patch.object(jenkins_charm.app, "add_secret") as add_secret_mock,
+    ):
+        result = jenkins_charm._reconcile_admin(harness_container.container, charm_state)
+
+    assert result == "generated-password"
+    add_secret_mock.assert_called_once_with(
+        content={"password": "generated-password"}, label=jenkins_charm.app.name
+    )
+
+
+def test_reconcile_api_token_returns_when_api_client_exists(
+    harness_container: HarnessWithContainer,
+):
+    """_reconcile_api_token is a no-op when admin API client is already available."""
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    admin_client = MagicMock(spec=jenkins.Jenkins)
+    admin_client.get_admin_api_client.return_value = MagicMock()
+
+    jenkins_charm._reconcile_api_token(admin_client)
+
+    admin_client.generate_admin_user_token.assert_not_called()
+
+
+def test_reconcile_plugins_skips_when_not_in_restart_window(
+    harness_container: HarnessWithContainer,
+):
+    """_reconcile_plugins skips plugin cleanup when outside configured restart window."""
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    admin_client = MagicMock(spec=jenkins.Jenkins)
+    charm_state = MagicMock(spec=state.State)
+    charm_state.plugins = ["kubernetes"]
+    charm_state.restart_time_range = MagicMock()
+
+    with patch.object(charm.timerange, "check_now_within_bound_hours", return_value=False):
+        jenkins_charm._reconcile_plugins(charm_state, admin_client, harness_container.container)
+
+    admin_client.remove_unlisted_plugins.assert_not_called()
 
 
 def test_reconcile_admin_uses_state_admin_password_when_present(
