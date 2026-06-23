@@ -14,6 +14,35 @@ import jenkins
 from charm import JenkinsK8sOperatorCharm
 
 
+def _patch_reconcile_dependencies(monkeypatch: pytest.MonkeyPatch):
+    """Patch non-ingress reconcile paths for focused ingress event tests."""
+    monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm, "_reconcile_storage", MagicMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm,
+        "_reconcile_pre_startup_configurations",
+        MagicMock(return_value="config-hash"),
+    )
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm, "_reconcile_admin", MagicMock(return_value="admin-password")
+    )
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm, "_reconcile_api_token", MagicMock(return_value=None)
+    )
+    monkeypatch.setattr(JenkinsK8sOperatorCharm, "_reconcile_agents", MagicMock(return_value=None))
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm, "_reconcile_agent_discovery", MagicMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm, "_reconcile_auth_proxy", MagicMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm, "_reconcile_plugins", MagicMock(return_value=None)
+    )
+
+
 def test_get_ingress_path():
     """
     arrange: given a charm with an ingress URL set.
@@ -41,11 +70,7 @@ def test_traefik_integration_added_replans_jenkins(
     act: add an integration with traefik on :ingress endpoint and remove it.
     assert: pebble replan should run twice, one for ingress ready, one for ingress revoked.
     """
-    monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
-    monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_storage", MagicMock(return_value=None)
-    )
-    monkeypatch.setattr(jenkins.Jenkins, "remove_unlisted_plugins", MagicMock(return_value=None))
+    _patch_reconcile_dependencies(monkeypatch)
     mock_ingress_url = "http://ingress.test/model-unit-0"
 
     harness.add_storage("jenkins-home", attach=True)
@@ -74,10 +99,7 @@ def test_traefik_integration_added_with_auth_proxy_replans_jenkins(
     act: add an integration with traefik on :ingress endpoint and remove it.
     assert: pebble replan should run twice, one for ingress ready, one for ingress revoked.
     """
-    monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
-    monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_storage", MagicMock(return_value=None)
-    )
+    _patch_reconcile_dependencies(monkeypatch)
     mock_ingress_url = "http://ingress.test/model-unit-0"
     harness.add_storage("jenkins-home", attach=True)
     harness.add_relation(
