@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 import jenkinsapi
 import ops
 import pytest
+import requests
 
 import jenkins
 
@@ -439,3 +440,62 @@ def test_remove_unlisted_plugins(
             )
         else:
             mock_client.delete_plugins.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "shutdown_exc, expected_shutdown",
+    [
+        pytest.param(requests.ConnectionError(), True, id="connection-error-is-shutdown"),
+        pytest.param(None, False, id="200-not-shutdown"),
+    ],
+)
+def test_is_shutdown(
+    container: ops.Container,
+    shutdown_exc: Exception | None,
+    expected_shutdown: bool,
+):
+    """_is_shutdown treats connection errors as shutdown, otherwise checks for HTTP 503."""
+    jenkins_instance = _jenkins_instance(container)
+    client = MagicMock()
+    client.requester = MagicMock()
+
+    if shutdown_exc is not None:
+        client.requester.get_url.side_effect = shutdown_exc
+    else:
+        response = MagicMock()
+        response.status_code = 200
+        client.requester.get_url.return_value = response
+
+    assert jenkins_instance._is_shutdown(client) == expected_shutdown
+
+
+def test_wait_jenkins_job_shutdown_timeout(container: ops.Container, mock_client: MagicMock):
+    """_wait_jenkins_job_shutdown maps wait timeout to a clear TimeoutError."""
+    jenkins_instance = _jenkins_instance(container)
+
+    with (
+        patch.object(jenkins, "_wait_for", side_effect=TimeoutError("boom")),
+        pytest.raises(TimeoutError, match="Timed out waiting for Jenkins to be shutdown"),
+    ):
+        jenkins_instance._wait_jenkins_job_shutdown(mock_client)
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param(requests.exceptions.HTTPError("http"), id="http-error"),
+        pytest.param(requests.exceptions.ConnectionError("conn"), id="connection-error"),
+        pytest.param(jenkinsapi.custom_exceptions.JenkinsAPIException("api"), id="api-error"),
+    ],
+)
+def test_safe_restart_raises_jenkins_error(container: ops.Container, failure: Exception):
+    """safe_restart wraps restart failures in JenkinsError."""
+    jenkins_instance = _jenkins_instance(container)
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+
+    with (
+        patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
+        patch.object(jenkins_instance, "_wait_jenkins_job_shutdown", side_effect=failure),
+        pytest.raises(jenkins.JenkinsError, match="Failed to restart Jenkins safely"),
+    ):
+        jenkins_instance.safe_restart()

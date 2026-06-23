@@ -6,6 +6,7 @@
 # Need access to protected functions for testing
 # pylint:disable=protected-access
 
+import json
 from contextlib import nullcontext
 from secrets import token_hex
 from typing import Any
@@ -132,6 +133,37 @@ def test_add_agent_node_websocket(
         _jenkins_instance(container).add_agent_node(agent_meta)
 
     get_node_config_mock.assert_called_once_with(agent_meta=agent_meta)
+
+
+def test_get_node_config_builds_websocket_enabled_node_config(
+    container: ops.Container, mock_client: MagicMock, agent_meta: state.AgentMeta
+):
+    """_get_node_config builds node config and forces launcher.webSocket=true."""
+    base_payload = {"launcher": {"stapler-class": "hudson.slaves.JNLPLauncher"}}
+    fake_node = MagicMock()
+    fake_node.get_node_attributes.return_value = {"json": json.dumps(base_payload)}
+
+    with (
+        patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
+        patch.object(jenkins, "Node", return_value=fake_node) as node_ctor,
+    ):
+        config = _jenkins_instance(container)._get_node_config(agent_meta)
+
+    rendered = json.loads(config["json"])
+    assert rendered["launcher"]["webSocket"] is True
+    node_ctor.assert_called_once()
+    node_kwargs = node_ctor.call_args.kwargs
+    assert node_kwargs["jenkins_obj"] == mock_client
+    assert node_kwargs["baseurl"] == _jenkins_instance(container).web_url
+    assert node_kwargs["nodename"] == agent_meta.name
+    assert node_kwargs["node_dict"] == {
+        "num_executors": int(agent_meta.executors),
+        "node_description": agent_meta.name,
+        "remote_fs": "/var/lib/jenkins/",
+        "labels": agent_meta.labels,
+        "exclusive": False,
+    }
+    assert node_kwargs["poll"] is False
 
 
 @pytest.mark.parametrize("raise_api_error", [True, False], ids=["api-error", "success"])

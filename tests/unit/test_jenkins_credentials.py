@@ -100,6 +100,19 @@ def test_get_api_credentials(
     assert jenkins.get_api_credentials(harness_container.container) == admin_credentials
 
 
+def test_get_admin_api_client_raises_when_api_credentials_missing(
+    harness_container: HarnessWithContainer,
+):
+    """get_admin_api_client raises JenkinsBootstrapError when API token is unavailable."""
+    with (
+        patch.object(jenkins, "get_api_credentials", side_effect=jenkins.JenkinsBootstrapError),
+        pytest.raises(
+            jenkins.JenkinsBootstrapError, match="Admin API credentials not yet available"
+        ),
+    ):
+        _jenkins_instance(harness_container.container).get_admin_api_client()
+
+
 def test_generate_admin_user_token(
     harness_container: HarnessWithContainer,
 ):

@@ -71,6 +71,41 @@ def test__is_ready(
 
 
 @pytest.mark.parametrize(
+    "exception_type",
+    [
+        pytest.param(requests.exceptions.ConnectionError, id="connection-error"),
+        pytest.param(requests.exceptions.Timeout, id="timeout"),
+        pytest.param(requests.exceptions.JSONDecodeError, id="json-decode-error"),
+        pytest.param(KeyError, id="key-error"),
+        pytest.param(ops.pebble.PathError, id="path-error"),
+    ],
+)
+def test_is_api_ready_handles_exceptions(
+    monkeypatch: pytest.MonkeyPatch, exception_type: type[Exception]
+):
+    """_is_api_ready returns False when crumb endpoint checks error out."""
+    if exception_type is requests.exceptions.JSONDecodeError:
+        side_effect = exception_type("bad", "{}", 0)
+    elif exception_type is ops.pebble.PathError:
+        side_effect = ops.pebble.PathError(kind="not-found", message="missing")
+    else:
+        side_effect = exception_type("err")
+
+    monkeypatch.setattr(requests, "get", MagicMock(side_effect=side_effect))
+    assert _jenkins_instance()._is_api_ready() is False
+
+
+def test_is_api_ready_success(monkeypatch: pytest.MonkeyPatch):
+    """_is_api_ready returns True only when response is ok and includes crumb key."""
+    response = MagicMock()
+    response.ok = True
+    response.json.return_value = {"crumb": "abc", "crumbRequestField": ".crumb"}
+    monkeypatch.setattr(requests, "get", MagicMock(return_value=response))
+
+    assert _jenkins_instance()._is_api_ready() is True
+
+
+@pytest.mark.parametrize(
     "status_code, expect_timeout",
     [
         pytest.param(503, True, id="timeout"),
