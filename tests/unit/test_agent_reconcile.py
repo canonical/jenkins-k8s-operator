@@ -161,3 +161,21 @@ def test_reconcile_agents_sets_maintenance_status():
             state=charm_state, client=FakeJenkinsService(initial_agents=[])
         )  # type: ignore[arg-type]
         assert isinstance(mgr.charm.unit.status, ops.MaintenanceStatus)
+
+
+def test_reconcile_agents_returns_early_when_no_relation_meta():
+    """_reconcile_agents exits early when there is no agent relation metadata."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), testing.State()) as mgr,
+    ):
+        charm_state = MagicMock(spec=State)
+        charm_state.agent_relation_meta = None
+        mock_client = MagicMock(spec=jenkins.Jenkins)
+
+        mgr.charm._reconcile_agents(state=charm_state, client=mock_client)
+
+        mock_client.list_agent_nodes.assert_not_called()
+        assert not isinstance(mgr.charm.unit.status, ops.MaintenanceStatus)

@@ -325,11 +325,15 @@ def test_reconcile_pre_startup_configurations_runs_required_steps(
     charm_state.proxy_config = MagicMock()
 
     with (
-        patch.object(charm.pebble, "get_jenkins_version", return_value="2.401.1") as get_version_mock,
+        patch.object(
+            charm.pebble, "get_jenkins_version", return_value="2.401.1"
+        ) as get_version_mock,
         patch.object(jenkins, "unlock_wizard") as unlock_mock,
         patch.object(jenkins, "install_plugins") as install_plugins_mock,
         patch.object(jenkins, "install_logging_config") as install_logging_mock,
-        patch.object(jenkins_charm, "_reconcile_jcasc_config", return_value="hash123") as reconcile_jcasc_mock,
+        patch.object(
+            jenkins_charm, "_reconcile_jcasc_config", return_value="hash123"
+        ) as reconcile_jcasc_mock,
     ):
         result = jenkins_charm._reconcile_pre_startup_configurations(
             harness_container.container, charm_state
