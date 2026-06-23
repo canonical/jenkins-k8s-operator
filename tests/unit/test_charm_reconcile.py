@@ -261,3 +261,23 @@ def test_reconcile_api_token_generates_token_when_api_client_missing(
     jenkins_charm._reconcile_api_token(admin_client)
 
     admin_client.generate_admin_user_token.assert_called_once_with()
+
+
+def test_reconcile_api_token_raises_when_token_generation_fails(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given admin API client is missing and token generation fails.
+    act: when _reconcile_api_token is called.
+    assert: JenkinsBootstrapError is raised.
+    """
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    admin_client = MagicMock(spec=jenkins.Jenkins)
+    admin_client.get_admin_api_client.side_effect = jenkins.JenkinsBootstrapError("missing")
+    admin_client.generate_admin_user_token.side_effect = jenkins.JenkinsBootstrapError("failed")
+
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins_charm._reconcile_api_token(admin_client)

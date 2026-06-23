@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from ops import testing
 
+import charm
 from charm import JenkinsK8sOperatorCharm
 from state import AGENT_DISCOVERY_INGRESS_RELATION_NAME, JENKINS_SERVICE_NAME
 
@@ -126,3 +127,52 @@ def test_reconcile_agent_discovery_updates_relation(_mock_fqdn):
         mgr.charm._reconcile_agent_discovery()
         agent_rel = mgr.charm.model.relations["agent"][0]
         assert "url" in agent_rel.data[mgr.charm.unit]
+
+
+@patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)
+def test_agent_discovery_url_public_ingress_logs_warning(_mock_fqdn):
+    """_agent_discovery_url warns when falling back to public ingress URL."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = _state_with_ingress(public_url="https://public-ingress.com", discovery_url=None)
+
+    with (
+        patch.object(charm.logger, "warning") as warning_mock,
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        assert mgr.charm._agent_discovery_url == "https://public-ingress.com"
+
+    warning_mock.assert_called_once()
+
+
+@patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)
+def test_reconcile_agent_discovery_skips_when_url_already_matches(_mock_fqdn):
+    """_reconcile_agent_discovery leaves existing matching relation URL unchanged."""
+    discovery_url = "https://agent-discovery-ingress.com"
+    state = testing.State(
+        containers=[testing.Container(name=JENKINS_SERVICE_NAME, can_connect=True)],  # type: ignore[arg-type]
+        relations=[
+            testing.Relation(
+                endpoint=AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                interface="ingress",
+                remote_app_data={"ingress": f'{{"url":"{discovery_url}"}}'},
+            ),
+            testing.Relation(
+                endpoint="agent",
+                interface="jenkins_agent_v0",
+                remote_units_data={0: {"executors": "1", "labels": "x", "name": "a1"}},
+                local_unit_data={"url": discovery_url},
+            ),
+        ],
+    )
+
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        agent_rel = mgr.charm.model.relations["agent"][0]
+        before = dict(agent_rel.data[mgr.charm.unit])
+        mgr.charm._reconcile_agent_discovery()
+        after = dict(agent_rel.data[mgr.charm.unit])
+
+    assert before == after
