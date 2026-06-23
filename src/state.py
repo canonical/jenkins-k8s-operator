@@ -8,7 +8,6 @@ import logging
 import os
 import typing
 
-import charm
 import ops
 import yaml
 from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
@@ -92,7 +91,9 @@ class AgentMeta(BaseModel):
 
     @validator("executors")
     # The decorated method does not need a self argument.
-    def numeric_executors(cls, value: str) -> int:  # noqa: N805 pylint: disable=no-self-argument
+    def numeric_executors(
+        cls, value: str
+    ) -> int:  # noqa: N805 pylint: disable=no-self-argument
         """Validate executors field can be converted to int.
 
         Args:
@@ -138,7 +139,10 @@ def _get_agent_meta_map_from_relation(
         return None
     relation_agents_map = {}
     for relation in relations:
-        agents = [AgentMeta.from_agent_relation(relation.data[unit]) for unit in relation.units]
+        agents = [
+            AgentMeta.from_agent_relation(relation.data[unit])
+            for unit in relation.units
+        ]
         relation_agents_map.update({relation: [agent for agent in agents if agent]})
     return relation_agents_map
 
@@ -230,10 +234,14 @@ class State:
         """
         try:
             time_range_str = typing.cast(str, charm.config.get("restart-time-range"))
-            restart_time_range = Range.from_str(time_range_str) if time_range_str else None
+            restart_time_range = (
+                Range.from_str(time_range_str) if time_range_str else None
+            )
         except InvalidTimeRangeError as exc:
             logger.error("Invalid config value for restart-time-range, %s", exc)
-            raise CharmConfigInvalidError("Invalid config value for restart-time range.") from exc
+            raise CharmConfigInvalidError(
+                "Invalid config value for restart-time range."
+            ) from exc
 
         try:
             agent_relation_meta_map = _get_agent_meta_map_from_relation(
@@ -255,7 +263,11 @@ class State:
             raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
 
         plugins_str = typing.cast(str, charm.config.get("allowed-plugins"))
-        plugins = (plugin.strip() for plugin in plugins_str.split(",")) if plugins_str else None
+        plugins = (
+            (plugin.strip() for plugin in plugins_str.split(","))
+            if plugins_str
+            else None
+        )
 
         # Parse custom JVM system properties to pass as -D flags
         system_properties_cfg = typing.cast(str, charm.config.get("system-properties"))
@@ -275,7 +287,9 @@ class State:
             raise CharmIllegalNumUnitsError(
                 "The Jenkins charm supports only 1 unit of deployment."
             )
-        agent_discovery_ingress = charm.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME)
+        agent_discovery_ingress = charm.model.get_relation(
+            AGENT_DISCOVERY_INGRESS_RELATION_NAME
+        )
         server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
         if agent_discovery_ingress and not server_ingress:
             raise CharmConfigInvalidError(
@@ -289,14 +303,22 @@ class State:
             try:
                 parsed = yaml.safe_load(raw_jcasc)
             except yaml.YAMLError as exc:
-                raise CharmConfigInvalidError(f"Invalid jcasc-config YAML: {exc}") from exc
+                raise CharmConfigInvalidError(
+                    f"Invalid jcasc-config YAML: {exc}"
+                ) from exc
             if not isinstance(parsed, dict):
-                raise CharmConfigInvalidError("jcasc-config must be a YAML mapping (dict)")
+                raise CharmConfigInvalidError(
+                    "jcasc-config must be a YAML mapping (dict)"
+                )
             jcasc_config = parsed
 
         # fetch admin password from juju secrets
         try:
-            admin_password = typing.cast(str, charm.model.get_secret(label=charm.app.name).get_content().get("password"))
+            admin_password = (
+                charm.model.get_secret(label=charm.app.name)
+                .get_content()
+                .get("password")
+            )
         except ops.SecretNotFoundError:
             admin_password = None
 

@@ -41,14 +41,10 @@ def test__on_config_changed_invalid_config_sets_blocked(
     harness_container.harness.update_config(charm_config)
     harness_container.harness.begin()
 
-    jenkins_charm = typing.cast(
-        JenkinsK8sOperatorCharm, harness_container.harness.charm
-    )
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
 
-    assert (
-        jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME
-    ), "unit should be in BlockedStatus"
+    assert jenkins_charm.unit.status.name == BLOCKED_STATUS_NAME, "unit should be in BlockedStatus"
 
 
 @pytest.mark.parametrize(
@@ -135,16 +131,12 @@ def test__on_jenkins_pebble_ready_get_version_error(
     act: when the jenkins_pebble_ready event is fired.
     assert: the charm raises an error.
     """
-    monkeypatch.setattr(
-        requests, "get", functools.partial(mocked_get_request, status_code=200)
-    )
+    monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
     harness = harness_container.harness
     harness.begin()
 
     with (
-        patch.object(
-            jenkins.Jenkins, "version", new_callable=PropertyMock
-        ) as version_mock,
+        patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
         patch.object(jenkins.Jenkins, "bootstrap"),
     ):
         version_mock.side_effect = jenkins.JenkinsError
@@ -166,9 +158,7 @@ def test__on_jenkins_pebble_ready(harness_container: HarnessWithContainer):
     with (
         patch.object(jenkins.Jenkins, "wait_ready"),
         patch.object(jenkins.Jenkins, "bootstrap"),
-        patch.object(
-            jenkins.Jenkins, "version", new_callable=PropertyMock
-        ) as version_mock,
+        patch.object(jenkins.Jenkins, "version", new_callable=PropertyMock) as version_mock,
     ):
         version_mock.return_value = "1"
         harness.begin()
@@ -176,9 +166,9 @@ def test__on_jenkins_pebble_ready(harness_container: HarnessWithContainer):
         jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
         jenkins_charm._on_jenkins_pebble_ready(MagicMock(spec=ops.PebbleReadyEvent))
 
-        assert (
-            jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME
-        ), f"unit should be in {ACTIVE_STATUS_NAME}"
+        assert jenkins_charm.unit.status.name == ACTIVE_STATUS_NAME, (
+            f"unit should be in {ACTIVE_STATUS_NAME}"
+        )
 
 
 @pytest.mark.parametrize(
@@ -198,15 +188,11 @@ def test__remove_unlisted_plugins_error(
     act: when _reconcile_plugins is called.
     assert: no unhandled exception is raised (errors are logged internally).
     """
-    with patch.object(
-        jenkins.Jenkins, "remove_unlisted_plugins"
-    ) as remove_unlisted_plugins_mock:
+    with patch.object(jenkins.Jenkins, "remove_unlisted_plugins") as remove_unlisted_plugins_mock:
         remove_unlisted_plugins_mock.side_effect = exception
         harness_container.harness.begin()
 
-        jenkins_charm = typing.cast(
-            JenkinsK8sOperatorCharm, harness_container.harness.charm
-        )
+        jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
         dummy_state = state.State.from_charm(jenkins_charm)
         # _reconcile_plugins catches exceptions internally and logs them
         jenkins_charm._reconcile_plugins(harness_container.container, dummy_state)
@@ -227,9 +213,7 @@ def test__remove_unlisted_plugins(
     with patch.object(jenkins.Jenkins, "remove_unlisted_plugins") as remove_mock:
         harness_container.harness.begin()
 
-        jenkins_charm = typing.cast(
-            JenkinsK8sOperatorCharm, harness_container.harness.charm
-        )
+        jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
         dummy_state = state.State.from_charm(jenkins_charm)
         jenkins_charm._reconcile_plugins(harness_container.container, dummy_state)
 
@@ -250,13 +234,9 @@ def test__on_update_status_not_in_time_range(
     harness_container.harness.update_config({"restart-time-range": "00-23"})
     harness_container.harness.begin()
 
-    jenkins_charm = typing.cast(
-        JenkinsK8sOperatorCharm, harness_container.harness.charm
-    )
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     dummy_state = state.State.from_charm(jenkins_charm)
-    with patch.object(
-        jenkins.Jenkins, "remove_unlisted_plugins"
-    ) as remove_unlisted_plugins_mock:
+    with patch.object(jenkins.Jenkins, "remove_unlisted_plugins") as remove_unlisted_plugins_mock:
         jenkins_charm._reconcile_plugins(harness_container.container, dummy_state)
 
         remove_unlisted_plugins_mock.assert_not_called()
@@ -308,9 +288,7 @@ def test__on_update_status(
     """
     harness_container.harness.begin()
 
-    jenkins_charm = typing.cast(
-        JenkinsK8sOperatorCharm, harness_container.harness.charm
-    )
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     dummy_state = state.State.from_charm(jenkins_charm)
 
     with patch.object(jenkins.Jenkins, "remove_unlisted_plugins") as mock_remove:
@@ -383,9 +361,7 @@ def test__on_config_changed_relation_data_invalid_raises(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
 
     with patch("state.State.from_charm") as from_charm_mock:
-        from_charm_mock.side_effect = state.CharmRelationDataInvalidError(
-            "bad relation"
-        )
+        from_charm_mock.side_effect = state.CharmRelationDataInvalidError("bad relation")
 
         with pytest.raises(RuntimeError):
             jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
@@ -412,9 +388,7 @@ def test__on_config_changed_precondition_waits_and_defers(
         patch.object(harness_container.container, "replan") as replan_mock,
         patch.object(harness_container.container, "restart") as restart_mock,
     ):
-        check_mock.return_value = precondition._CheckResult(
-            success=False, reason="not ready"
-        )
+        check_mock.return_value = precondition._CheckResult(success=False, reason="not ready")
 
         jenkins_charm._reconcile(event)
 
@@ -470,9 +444,7 @@ def test__remove_unlisted_plugins_requires_state(
     assert: python rejects the call because state is required.
     """
     harness_container.harness.begin()
-    jenkins_charm = typing.cast(
-        JenkinsK8sOperatorCharm, harness_container.harness.charm
-    )
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
 
     reconcile_plugins = typing.cast(typing.Any, jenkins_charm._reconcile_plugins)
 
@@ -497,9 +469,7 @@ def test__agent_relation_handlers_reconcile_agents(
     assert: reconcile executes without error (delegates internally to _reconcile_agents).
     """
     harness_container.harness.begin()
-    jenkins_charm = typing.cast(
-        JenkinsK8sOperatorCharm, harness_container.harness.charm
-    )
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=event_type)
 
     with patch.object(jenkins_charm, "_reconcile_agents") as reconcile_agents_mock:
@@ -524,14 +494,10 @@ def test__agent_discovery_ingress_handlers_reconfigure_agents(
     assert: reconcile executes without error (delegates internally to _reconcile_agent_discovery).
     """
     harness_container.harness.begin()
-    jenkins_charm = typing.cast(
-        JenkinsK8sOperatorCharm, harness_container.harness.charm
-    )
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=event_spec)
 
-    with patch.object(
-        jenkins_charm, "_reconcile_agent_discovery"
-    ) as reconcile_discovery_mock:
+    with patch.object(jenkins_charm, "_reconcile_agent_discovery") as reconcile_discovery_mock:
         jenkins_charm._reconcile(event)
 
     reconcile_discovery_mock.assert_called_once()
@@ -546,9 +512,7 @@ def test__upgrade_charm_reconciles_storage_and_agents(
     assert: _reconcile_storage is called (UpgradeCharmEvent triggers storage reconciliation).
     """
     harness_container.harness.begin()
-    jenkins_charm = typing.cast(
-        JenkinsK8sOperatorCharm, harness_container.harness.charm
-    )
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=ops.UpgradeCharmEvent)
 
     with patch.object(jenkins_charm, "_reconcile_storage") as reconcile_storage_mock:
@@ -580,9 +544,7 @@ def test__auth_proxy_relation_handlers_delegate(
     assert: reconcile executes without error (delegates internally to _reconcile_auth_proxy).
     """
     harness_container.harness.begin()
-    jenkins_charm = typing.cast(
-        JenkinsK8sOperatorCharm, harness_container.harness.charm
-    )
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=event_type)
 
     with patch.object(jenkins_charm, "_reconcile_auth_proxy") as reconcile_auth_mock:

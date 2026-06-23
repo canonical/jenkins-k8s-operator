@@ -139,9 +139,6 @@ config:
           authorizationStrategy:
             loggedInUsersCanDoAnything:
               allowAnonymousRead: false
-          crumbIssuer:
-            standard:
-              excludeClientIPFromCrumb: true
           remotingSecurity:
             enabled: true
 
