@@ -8,6 +8,7 @@
 
 import textwrap
 import typing
+from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 import jenkinsapi
@@ -20,6 +21,14 @@ import jenkins
 def _jenkins_instance(container: ops.Container) -> jenkins.Jenkins:
     """Create Jenkins client wrapper for tests."""
     return jenkins.Jenkins("/", "admin-password", container)
+
+
+def _set_plugin_listing(mock_client: MagicMock, groovy_script_output: str) -> None:
+    """Configure mock Jenkins client to return plugin listing output."""
+    mock_client.run_groovy_script = (
+        mock_groovy_script := MagicMock(spec=jenkinsapi.jenkins.Jenkins.run_groovy_script)
+    )
+    mock_groovy_script.return_value = groovy_script_output
 
 
 @pytest.mark.parametrize(
@@ -292,66 +301,70 @@ def test__plugin_temporary_files_exist():
     assert jenkins._plugin_temporary_files_exist(container=mock_container)
 
 
-def test_remove_unlisted_plugins_wait_plugins_install_timeout(
-    monkeypatch: pytest.MonkeyPatch,
-    container: ops.Container,
-):
-    """remove_unlisted_plugins raises JenkinsPluginError when plugin install wait times out."""
-    monkeypatch.setattr(jenkins, "_wait_plugins_install", MagicMock(side_effect=TimeoutError))
-
-    with pytest.raises(jenkins.JenkinsPluginError):
-        _jenkins_instance(container).remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
-
-
-def test_remove_unlisted_plugins_delete_error(
-    mock_client: MagicMock,
-    container: ops.Container,
-    plugin_groovy_script_result: str,
-):
-    """remove_unlisted_plugins raises JenkinsPluginError when delete_plugins fails."""
-    mock_client.run_groovy_script = (
-        mock_groovy_script := MagicMock(spec=jenkinsapi.jenkins.Jenkins.run_groovy_script)
-    )
-    mock_groovy_script.return_value = plugin_groovy_script_result
-    mock_client.delete_plugins.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
-
-    with (
-        patch.object(jenkins.Jenkins, "safe_restart"),
-        patch.object(jenkins.Jenkins, "wait_ready"),
-        patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
-        pytest.raises(jenkins.JenkinsPluginError),
-    ):
-        _jenkins_instance(container).remove_unlisted_plugins(("plugin-a", "plugin-b"), container)
-
-
 @pytest.mark.parametrize(
-    "expected_exception",
+    "failure_stage,stage_exception,expected_exception",
     [
-        pytest.param(jenkins.JenkinsError, id="JenkinsError"),
-        pytest.param(TimeoutError, id="TimeoutError"),
+        pytest.param(
+            "wait_plugins_install",
+            TimeoutError,
+            jenkins.JenkinsPluginError,
+            id="wait-plugins-install-timeout",
+        ),
+        pytest.param(
+            "delete_plugins",
+            jenkinsapi.custom_exceptions.JenkinsAPIException(),
+            jenkins.JenkinsPluginError,
+            id="delete-plugins-api-error",
+        ),
+        pytest.param(
+            "safe_restart",
+            jenkins.JenkinsError,
+            jenkins.JenkinsError,
+            id="safe-restart-jenkins-error",
+        ),
+        pytest.param(
+            "safe_restart",
+            TimeoutError,
+            TimeoutError,
+            id="safe-restart-timeout",
+        ),
     ],
 )
-def test_remove_unlisted_plugins_restart_error(
+def test_remove_unlisted_plugins_exception_paths(
+    monkeypatch: pytest.MonkeyPatch,
     mock_client: MagicMock,
     container: ops.Container,
     plugin_groovy_script_result: str,
+    failure_stage: str,
+    stage_exception: type[Exception] | Exception,
     expected_exception: type[Exception],
 ):
-    """remove_unlisted_plugins re-raises restart-related errors."""
-    mock_client.run_groovy_script = (
-        mock_groovy_script := MagicMock(spec=jenkinsapi.jenkins.Jenkins.run_groovy_script)
-    )
-    mock_groovy_script.return_value = plugin_groovy_script_result
+    """remove_unlisted_plugins handles wait/delete/restart failures as expected."""
+    desired_plugins = ("plugin-a", "plugin-b")
 
-    with (
-        patch.object(jenkins.Jenkins, "safe_restart") as safe_restart_mock,
-        patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
-    ):
-        safe_restart_mock.side_effect = expected_exception
-        with pytest.raises(expected_exception):
-            _jenkins_instance(container).remove_unlisted_plugins(
-                ("plugin-a", "plugin-b"), container
+    if failure_stage == "wait_plugins_install":
+        monkeypatch.setattr(
+            jenkins, "_wait_plugins_install", MagicMock(side_effect=stage_exception)
+        )
+    else:
+        _set_plugin_listing(mock_client, plugin_groovy_script_result)
+
+    with ExitStack() as stack:
+        if failure_stage != "wait_plugins_install":
+            stack.enter_context(
+                patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client)
             )
+
+        if failure_stage == "delete_plugins":
+            mock_client.delete_plugins.side_effect = stage_exception
+            stack.enter_context(patch.object(jenkins.Jenkins, "safe_restart"))
+            stack.enter_context(patch.object(jenkins.Jenkins, "wait_ready"))
+        elif failure_stage == "safe_restart":
+            safe_restart_mock = stack.enter_context(patch.object(jenkins.Jenkins, "safe_restart"))
+            safe_restart_mock.side_effect = stage_exception
+
+        with pytest.raises(expected_exception):
+            _jenkins_instance(container).remove_unlisted_plugins(desired_plugins, container)
 
 
 @pytest.mark.parametrize(
@@ -411,10 +424,7 @@ def test_remove_unlisted_plugins(
     expected_delete_plugins: set[str],
 ):
     """remove_unlisted_plugins deletes only plugins outside desired set+deps."""
-    mock_client.run_groovy_script = (
-        mock_groovy_script := MagicMock(spec=jenkinsapi.jenkins.Jenkins.run_groovy_script)
-    )
-    mock_groovy_script.return_value = groovy_script_output
+    _set_plugin_listing(mock_client, groovy_script_output)
 
     with (
         patch.object(jenkins.Jenkins, "safe_restart"),

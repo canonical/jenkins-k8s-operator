@@ -8,6 +8,7 @@
 
 import re
 from functools import partial
+from typing import Callable
 from unittest.mock import MagicMock
 
 import jenkinsapi
@@ -20,9 +21,13 @@ import jenkins
 from .types_ import HarnessWithContainer
 
 
-def _jenkins_instance(container: ops.Container) -> jenkins.Jenkins:
-    """Create Jenkins client wrapper for tests."""
-    return jenkins.Jenkins("/", "admin-password", container)
+def _failing_container() -> ops.Container:
+    """Return container mock failing on push()."""
+    mock_container = MagicMock(ops.Container)
+    mock_container.push = MagicMock(
+        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
+    )
+    return mock_container
 
 
 def test__unlock_wizard(
@@ -52,13 +57,9 @@ def test__unlock_wizard_raises_exception(
 ):
     """unlock_wizard raises JenkinsError on container push failure."""
     monkeypatch.setattr(requests, "get", partial(mocked_get_request, status_code=403))
-    mock_container = MagicMock(ops.Container)
-    mock_container.push = MagicMock(
-        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
-    )
 
     with pytest.raises(jenkins.JenkinsError):
-        jenkins.unlock_wizard(mock_container, "2.401.1")
+        jenkins.unlock_wizard(_failing_container(), "2.401.1")
 
 
 def test_install_config(harness_container: HarnessWithContainer):
@@ -74,59 +75,54 @@ def test_install_config(harness_container: HarnessWithContainer):
     assert jnlp_match.group(1) == "50000", "jnlp not set as default port."
 
 
-def test_install_config_raises_exception():
-    """_install_configs raises JenkinsBootstrapError on write failure."""
-    mock_container = MagicMock(ops.Container)
-    mock_container.push = MagicMock(
-        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
-    )
-
-    with pytest.raises(jenkins.JenkinsBootstrapError):
-        jenkins._install_configs(mock_container, jenkins.DEFAULT_JENKINS_CONFIG)
-
-
-def test_install_auth_proxy_config(harness_container: HarnessWithContainer):
-    """install_auth_proxy_config writes unsecured Jenkins config."""
-    jenkins.install_auth_proxy_config(harness_container.container)
-
-    config_xml = str(
-        harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
-    )
-
-    assert "<useSecurity>false</useSecurity>" in config_xml
-
-
-def test_install_auth_proxy_config_raises_exception():
-    """install_auth_proxy_config raises JenkinsBootstrapError on write failure."""
-    mock_container = MagicMock(ops.Container)
-    mock_container.push = MagicMock(
-        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
-    )
-
-    with pytest.raises(jenkins.JenkinsBootstrapError):
-        jenkins.install_auth_proxy_config(mock_container)
-
-
-def test_install_defalt_config(harness_container: HarnessWithContainer):
-    """install_default_config writes secured Jenkins config."""
-    jenkins.install_default_config(harness_container.container)
+@pytest.mark.parametrize(
+    "installer, expected_security_snippet",
+    [
+        pytest.param(
+            jenkins.install_auth_proxy_config,
+            "<useSecurity>false</useSecurity>",
+            id="auth-proxy-config",
+        ),
+        pytest.param(
+            jenkins.install_default_config,
+            "<useSecurity>true</useSecurity>",
+            id="default-config",
+        ),
+    ],
+)
+def test_install_security_configs(
+    harness_container: HarnessWithContainer,
+    installer: Callable[[ops.Container], None],
+    expected_security_snippet: str,
+):
+    """Security config installers write expected <useSecurity> value."""
+    installer(harness_container.container)
 
     config_xml = str(
         harness_container.container.pull(jenkins.CONFIG_FILE_PATH, encoding="utf-8").read()
     )
+    assert expected_security_snippet in config_xml
 
-    assert "<useSecurity>true</useSecurity>" in config_xml
 
-
-def test_install_default_config_raises_exception():
-    """install_default_config raises JenkinsBootstrapError on write failure."""
-    mock_container = MagicMock(ops.Container)
-    mock_container.push = MagicMock(
-        side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
-    )
-
+@pytest.mark.parametrize(
+    "installer, install_args",
+    [
+        pytest.param(
+            jenkins._install_configs,
+            (jenkins.DEFAULT_JENKINS_CONFIG,),
+            id="install-config",
+        ),
+        pytest.param(jenkins.install_auth_proxy_config, (), id="install-auth-proxy-config"),
+        pytest.param(jenkins.install_default_config, (), id="install-default-config"),
+    ],
+)
+def test_installers_raise_bootstrap_error_on_write_failure(
+    installer: Callable[..., None],
+    install_args: tuple,
+):
+    """Config installers raise JenkinsBootstrapError when container push fails."""
     with pytest.raises(jenkins.JenkinsBootstrapError):
-        jenkins.install_default_config(mock_container)
+        installer(_failing_container(), *install_args)
 
 
 def test__set_jenkins_system_message_error(mock_client: MagicMock):
