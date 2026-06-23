@@ -77,7 +77,11 @@ def test_on_rotate_credentials_action_api_error(
     harness.begin()
     monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    harness.charm.jenkins.rotate_credentials = MagicMock(side_effect=jenkins.JenkinsError)
+    monkeypatch.setattr(
+        jenkins.Jenkins,
+        "rotate_credentials",
+        MagicMock(side_effect=jenkins.JenkinsError),
+    )
 
     jenkins_charm._on_rotate_credentials(mock_event)
 
@@ -98,7 +102,7 @@ def test_on_rotate_credentials_action(
     mock_event = MagicMock(spec=ops.ActionEvent)
     harness.begin()
     monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
-    harness.charm.jenkins.rotate_credentials = MagicMock(return_value=password)
+    monkeypatch.setattr(jenkins.Jenkins, "rotate_credentials", MagicMock(return_value=password))
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     jenkins_charm._on_rotate_credentials(mock_event)

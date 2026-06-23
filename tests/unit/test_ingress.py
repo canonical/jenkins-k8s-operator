@@ -42,6 +42,9 @@ def test_traefik_integration_added_replans_jenkins(
     assert: pebble replan should run twice, one for ingress ready, one for ingress revoked.
     """
     monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm, "_reconcile_storage", MagicMock(return_value=None)
+    )
     monkeypatch.setattr(jenkins.Jenkins, "remove_unlisted_plugins", MagicMock(return_value=None))
     mock_ingress_url = "http://ingress.test/model-unit-0"
 
@@ -72,6 +75,9 @@ def test_traefik_integration_added_with_auth_proxy_replans_jenkins(
     assert: pebble replan should run twice, one for ingress ready, one for ingress revoked.
     """
     monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm, "_reconcile_storage", MagicMock(return_value=None)
+    )
     mock_ingress_url = "http://ingress.test/model-unit-0"
     harness.add_storage("jenkins-home", attach=True)
     harness.add_relation(
