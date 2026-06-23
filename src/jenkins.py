@@ -43,9 +43,7 @@ PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
 API_TOKEN_PATH = JENKINS_HOME_PATH / "secrets/apiToken"
 JUJU_API_TOKEN = "juju_api_token"  # nosec
 # Path to last executed Jenkins version file, required to override wizard installation
-LAST_EXEC_VERSION_PATH = JENKINS_HOME_PATH / Path(
-    "jenkins.install.InstallUtil.lastExecVersion"
-)
+LAST_EXEC_VERSION_PATH = JENKINS_HOME_PATH / Path("jenkins.install.InstallUtil.lastExecVersion")
 # Path to Jenkins version file, required to override wizard installation
 WIZARD_VERSION_PATH = JENKINS_HOME_PATH / Path("jenkins.install.UpgradeWizard.state")
 # The Jenkins bootstrapping config path
@@ -135,12 +133,8 @@ def get_admin_credentials(container: ops.Container) -> Credentials:
         The Jenkins admin account credentials.
     """
     try:
-        password_file_contents = str(
-            container.pull(PASSWORD_FILE_PATH, encoding="utf-8").read()
-        )
-        return Credentials(
-            username=ADMIN_USER, password_or_token=password_file_contents.strip()
-        )
+        password_file_contents = str(container.pull(PASSWORD_FILE_PATH, encoding="utf-8").read())
+        return Credentials(username=ADMIN_USER, password_or_token=password_file_contents.strip())
     except ops.pebble.PathError as exc:
         logger.debug("Admin password not yet setup.")
         raise JenkinsBootstrapError("Admin password not yet setup.") from exc
@@ -175,9 +169,7 @@ class Jenkins:
         version: the Jenkins version.
     """
 
-    def __init__(
-        self, jenkins_prefix: str, admin_password: str, container: ops.Container
-    ):
+    def __init__(self, jenkins_prefix: str, admin_password: str, container: ops.Container):
         """Construct a Jenkins class.
 
         Args:
@@ -279,9 +271,7 @@ class Jenkins:
                 )
             _wait_for(self._is_ready, timeout=timeout, check_interval=check_interval)
         except TimeoutError as exc:
-            raise TimeoutError(
-                "Timed out waiting for Jenkins to become ready."
-            ) from exc
+            raise TimeoutError("Timed out waiting for Jenkins to become ready.") from exc
 
     def get_admin_user_client(self) -> jenkinsapi.jenkins.Jenkins:
         """Get the Jenkins client.
@@ -318,9 +308,7 @@ class Jenkins:
             )
         except JenkinsBootstrapError as exc:
             logger.debug("Admin API credentials not yet available.")
-            raise JenkinsBootstrapError(
-                "Admin API credentials not yet available."
-            ) from exc
+            raise JenkinsBootstrapError("Admin API credentials not yet available.") from exc
 
     def _get_api_client(self) -> jenkinsapi.jenkins.Jenkins:
         """Get the Jenkins client.
@@ -339,9 +327,7 @@ class Jenkins:
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(5),
         wait=tenacity.wait_exponential(multiplier=2, min=2, max=30),
-        retry=tenacity.retry_if_exception_type(
-            jenkinsapi.custom_exceptions.JenkinsAPIException
-        ),
+        retry=tenacity.retry_if_exception_type(jenkinsapi.custom_exceptions.JenkinsAPIException),
         before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
@@ -364,10 +350,7 @@ class Jenkins:
                     f"{self.web_url}/manage/api/json?tree=useSecurity",
                     timeout=10,
                 )
-                if (
-                    check_response.status_code == 200
-                    and not check_response.json()["useSecurity"]
-                ):
+                if check_response.status_code == 200 and not check_response.json()["useSecurity"]:
                     # Security disabled — write placeholder token
                     self._container.push(
                         API_TOKEN_PATH,
@@ -405,9 +388,7 @@ class Jenkins:
             return client.run_groovy_script(script).strip()
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             logger.error("Failed to run get_node_secret groovy script, %s", exc)
-            raise JenkinsError(
-                "Failed to run groovy script getting node secret."
-            ) from exc
+            raise JenkinsError("Failed to run groovy script getting node secret.") from exc
 
     def _get_node_config(self, agent_meta: state.AgentMeta) -> dict[str, typing.Any]:
         """Get agent node configuration dictionary values.
@@ -634,15 +615,11 @@ class Jenkins:
         try:
             client.delete_plugins(plugin_list=plugins_to_remove, restart=False)
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
-            logger.error(
-                "Failed to remove the following plugins: %s, %s", plugins_to_remove, exc
-            )
+            logger.error("Failed to remove the following plugins: %s, %s", plugins_to_remove, exc)
             raise JenkinsPluginError("Failed to remove plugins.") from exc
 
         logger.debug("Removed %s", plugins_to_remove)
-        top_level_plugins = _filter_dependent_plugins(
-            plugins_to_remove, dependency_lookup
-        )
+        top_level_plugins = _filter_dependent_plugins(plugins_to_remove, dependency_lookup)
         try:
             self.safe_restart()
             self.wait_ready()
@@ -763,9 +740,7 @@ def is_storage_ready(container: typing.Optional[ops.Container]) -> bool:
     mount_info: str = container.pull("/proc/mounts").read()
     if str(JENKINS_HOME_PATH) not in mount_info:
         return False
-    proc: ops.pebble.ExecProcess = container.exec(
-        ["stat", "-c", "%U", str(JENKINS_HOME_PATH)]
-    )
+    proc: ops.pebble.ExecProcess = container.exec(["stat", "-c", "%U", str(JENKINS_HOME_PATH)])
     try:
         stdout, _ = proc.wait_output()
     except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
@@ -792,9 +767,7 @@ def is_jenkins_ready(container: typing.Optional[ops.Container]) -> bool:
     return online_check.status == ops.pebble.CheckStatus.UP
 
 
-def _install_config(
-    container: ops.Container, filename: str, destination_path: Path
-) -> None:
+def _install_config(container: ops.Container, filename: str, destination_path: Path) -> None:
     """Install jenkins-config.xml.
 
     Args:
@@ -1025,9 +998,7 @@ def _filter_dependent_plugins(
     return set(plugins) - dependent_plugins
 
 
-def _set_jenkins_system_message(
-    message: str, client: jenkinsapi.jenkins.Jenkins
-) -> None:
+def _set_jenkins_system_message(message: str, client: jenkinsapi.jenkins.Jenkins) -> None:
     """Set a system message on Jenkins.
 
     Args:
@@ -1173,13 +1144,9 @@ def build_jcasc_config(
     # Conflict check: user provides securityRealm while auth_proxy is active
     if auth_proxy:
         if "securityRealm" in jenkins_section:
-            logger.warning(
-                "Security realm is managed user provided jcasc-config settings."
-            )
+            logger.warning("Security realm is managed user provided jcasc-config settings.")
         else:
-            logger.warning(
-                "Bypassing Jenkins security, security via auth proxy assumed."
-            )
+            logger.warning("Bypassing Jenkins security, security via auth proxy assumed.")
             jenkins_section["securityRealm"] = {"authorizationStrategy": "unsecured"}
 
     # Inject admin credentials if securityRealm not provided by user
