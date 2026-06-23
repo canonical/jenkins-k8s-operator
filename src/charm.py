@@ -165,12 +165,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ""
         return path
 
-    def calculate_env(self, config_hash: str, admin_password: str = "") -> jenkins.Environment:
+    def calculate_env(self, config_hash: str, admin_password: str) -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
 
         Args:
+            config_hash: The hash of the JCasC configurations applied.
             admin_password: The admin password for JCasC secret interpolation.
-                Empty string if not yet available (e.g. during __init__).
 
         Returns:
             The dictionary mapping of environment variables for the Jenkins service.

@@ -173,7 +173,9 @@ class Jenkins:
         """Construct a Jenkins class.
 
         Args:
-            environment: the Jenkins environment.
+            jenkins_prefix: The URL path prefix where Jenkins is exposed.
+            admin_password: The Jenkins admin password.
+            container: The Jenkins workload container.
         """
         self._jenkins_prefix = jenkins_prefix
         self._admin_password = admin_password
@@ -260,6 +262,8 @@ class Jenkins:
         Args:
             timeout: Time in seconds to wait for jenkins to become ready in 10 second intervals.
             check_interval: Time in seconds to wait between ready checks.
+            api_ready: Whether to require API readiness (crumb issuer available) instead of
+                only web readiness.
 
         Raises:
             TimeoutError: if Jenkins status check did not pass within the timeout duration.
@@ -1063,6 +1067,7 @@ def install_plugins(
 
     Args:
         container: The Jenkins workload container.
+        plugins: The list of plugins to install.
         proxy_config: The proxy settings to apply.
 
     Raises:
@@ -1133,7 +1138,9 @@ def build_jcasc_config(
     Checks for conflicts with auth_proxy relation.
 
     Args:
-        state: The current charm state.
+        jcasc_config: User-provided JCasC mapping from charm config.
+        proxy_config: Optional model proxy configuration to inject into Jenkins config.
+        auth_proxy: Whether auth proxy integration is active.
 
     Returns:
         The merged JCasC configuration dict.
@@ -1188,7 +1195,7 @@ def sync_jcasc_config(container: ops.Container, configuration_yaml: str) -> str:
 
     Args:
         container: The Jenkins workload container.
-        desired_yaml: The full YAML string to write.
+        configuration_yaml: The full YAML string to write.
 
     Returns:
         The hash of the configuration applied.

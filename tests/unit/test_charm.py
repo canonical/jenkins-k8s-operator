@@ -547,7 +547,7 @@ def test__auth_proxy_relation_handlers_delegate(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=event_type)
 
-    with patch.object(jenkins_charm, "_reconcile_auth_proxy") as reconcile_auth_mock:
+    with patch.object(jenkins_charm, "_reconcile_auth_proxy"):
         jenkins_charm._reconcile(event)
 
 
