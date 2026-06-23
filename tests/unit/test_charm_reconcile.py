@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import ops
 import pytest
 
+import charm
 import jenkins
 import precondition
 import state
@@ -281,3 +282,28 @@ def test_reconcile_api_token_raises_when_token_generation_fails(
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
         jenkins_charm._reconcile_api_token(admin_client)
+
+
+def test_reconcile_plugins_logs_timeout_error(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given remove_unlisted_plugins times out.
+    act: when _reconcile_plugins is called.
+    assert: timeout is swallowed and timeout-specific log path is used.
+    """
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    admin_client = MagicMock(spec=jenkins.Jenkins)
+    admin_client.remove_unlisted_plugins.side_effect = TimeoutError("timed out")
+    charm_state = MagicMock(spec=state.State)
+    charm_state.plugins = ["kubernetes"]
+    charm_state.restart_time_range = None
+
+    with patch.object(charm.logger, "error") as error_mock:
+        jenkins_charm._reconcile_plugins(charm_state, admin_client, harness_container.container)
+
+    error_mock.assert_called_once()
+    assert error_mock.call_args.args[0] == "Failed to remove plugins, %s"

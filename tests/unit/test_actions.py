@@ -44,6 +44,54 @@ def test_workload_not_ready(harness: Harness, handler_name: str):
     mock_event.fail.assert_called_once()
 
 
+def test_on_get_admin_password_fails_when_storage_not_mounted(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """
+    arrange: given Jenkins storage is not yet mounted.
+    act: when get-admin-password action is run.
+    assert: action fails with storage-not-mounted message and state is not fetched.
+    """
+    harness_container.harness.begin()
+    mock_event = MagicMock(spec=ops.ActionEvent)
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=False))
+    get_state_mock = MagicMock()
+    monkeypatch.setattr(jenkins_charm, "_get_state", get_state_mock)
+
+    jenkins_charm._on_get_admin_password(mock_event)
+
+    mock_event.fail.assert_called_once_with("Jenkins storage not yet mounted.")
+    mock_event.set_results.assert_not_called()
+    get_state_mock.assert_not_called()
+
+
+def test_on_rotate_credentials_fails_when_storage_not_mounted(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """
+    arrange: given Jenkins storage is not yet mounted.
+    act: when rotate-credentials action is run.
+    assert: action fails with storage-not-mounted message and readiness checks are skipped.
+    """
+    harness_container.harness.begin()
+    mock_event = MagicMock(spec=ops.ActionEvent)
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=False))
+    is_jenkins_ready_mock = MagicMock()
+    monkeypatch.setattr(jenkins, "is_jenkins_ready", is_jenkins_ready_mock)
+
+    jenkins_charm._on_rotate_credentials(mock_event)
+
+    mock_event.fail.assert_called_once_with("Jenkins storage not yet mounted.")
+    mock_event.set_results.assert_not_called()
+    is_jenkins_ready_mock.assert_not_called()
+
+
 def test_on_get_admin_password_action(
     harness_container: HarnessWithContainer, admin_credentials: jenkins.Credentials
 ):
