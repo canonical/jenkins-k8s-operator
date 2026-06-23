@@ -63,6 +63,55 @@ def test_on_get_admin_password_action(
     )
 
 
+def test_on_get_admin_password_action_fails_when_charm_state_not_ready(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """
+    arrange: given storage is ready but charm state is unavailable.
+    act: when get-admin-password action is run.
+    assert: action fails with not-ready message.
+    """
+    mock_event = MagicMock(spec=ops.ActionEvent)
+    harness_container.harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    monkeypatch.setattr(jenkins_charm, "_get_state", MagicMock(return_value=None))
+
+    jenkins_charm._on_get_admin_password(mock_event)
+
+    mock_event.fail.assert_called_once_with("Jenkins charm is not yet ready.")
+    mock_event.set_results.assert_not_called()
+
+
+def test_on_get_admin_password_action_prefers_secret_from_charm_state(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """
+    arrange: given charm state already contains admin password secret.
+    act: when get-admin-password action is run.
+    assert: secret from state is returned without reading credentials from container.
+    """
+    secret_password = secrets.token_hex(16)
+    mock_event = MagicMock(spec=ops.ActionEvent)
+    harness_container.harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    monkeypatch.setattr(
+        jenkins_charm,
+        "_get_state",
+        MagicMock(return_value=MagicMock(admin_password=secret_password)),
+    )
+    get_admin_credentials_mock = MagicMock()
+    monkeypatch.setattr(jenkins, "get_admin_credentials", get_admin_credentials_mock)
+
+    jenkins_charm._on_get_admin_password(mock_event)
+
+    mock_event.set_results.assert_called_once_with({"password": secret_password})
+    get_admin_credentials_mock.assert_not_called()
+
+
 def test_on_rotate_credentials_action_api_error(
     harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
 ):
@@ -128,3 +177,28 @@ def test_on_rotate_credentials_action_jenkins_not_ready(
     jenkins_charm._on_rotate_credentials(mock_event)
 
     mock_event.fail.assert_called_once_with("Jenkins service is not yet ready.")
+
+
+def test_on_rotate_credentials_action_fails_when_jenkins_not_bootstrapped(
+    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given Jenkins service is up but admin credentials are unavailable.
+    act: when rotate_credentials action is run.
+    assert: action fails with bootstrap message.
+    """
+    harness = harness_container.harness
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
+    mock_event = MagicMock(spec=ops.ActionEvent)
+    harness.begin()
+    monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        jenkins,
+        "get_admin_credentials",
+        MagicMock(side_effect=jenkins.JenkinsBootstrapError("not bootstrapped")),
+    )
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    jenkins_charm._on_rotate_credentials(mock_event)
+
+    mock_event.fail.assert_called_once_with("Jenkins has not yet bootstrapped.")
