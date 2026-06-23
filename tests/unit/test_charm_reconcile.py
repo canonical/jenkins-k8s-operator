@@ -7,6 +7,7 @@
 # pylint:disable=protected-access
 
 import typing
+from secrets import token_hex
 from unittest.mock import MagicMock, patch
 
 import ops
@@ -69,14 +70,15 @@ def test_calculate_env(harness: Harness):
     """
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    admin_password = token_hex(8)
     with patch.object(jenkins_charm, "_get_ingress_path", return_value=""):
-        env = jenkins_charm.calculate_env(config_hash="hash123", admin_password="secret")
+        env = jenkins_charm.calculate_env(config_hash="hash123", admin_password=admin_password)
 
     assert env == {
         "JENKINS_HOME": str(jenkins.JENKINS_HOME_PATH),
         "JENKINS_PREFIX": "",
         "CASC_JENKINS_CONFIG": str(jenkins.JCASC_CONFIG_PATH),
-        "JENKINS_ADMIN_PASSWORD": "secret",
+        "JENKINS_ADMIN_PASSWORD": admin_password,
         "CONFIGURATION_HASH": "hash123",
     }
 

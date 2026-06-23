@@ -8,6 +8,7 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from secrets import token_hex
 from unittest.mock import MagicMock, patch
 
 import jenkinsapi
@@ -107,7 +108,7 @@ def test_generate_admin_user_token(
     act: when generate_admin_user_token is called.
     assert: generate_new_api_token is called and token written to API token path.
     """
-    test_api_token = "api-token-value"
+    test_api_token = token_hex(8)
     mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
     mock_client.generate_new_api_token.return_value = test_api_token
 

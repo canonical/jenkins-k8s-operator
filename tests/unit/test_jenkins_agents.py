@@ -7,6 +7,7 @@
 # pylint:disable=protected-access
 
 from contextlib import nullcontext
+from secrets import token_hex
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -54,13 +55,14 @@ def test_list_agent_nodes(container: ops.Container, mock_client: MagicMock, rais
 def test_get_node_secret(container: ops.Container, mock_client: MagicMock, raise_api_error: bool):
     """get_node_secret handles API errors and success path."""
     expected_ctx = pytest.raises(jenkins.JenkinsError) if raise_api_error else nullcontext()
+    expected_secret = token_hex(8)
 
     if raise_api_error:
         mock_client.run_groovy_script.side_effect = (
             jenkinsapi.custom_exceptions.JenkinsAPIException()
         )
     else:
-        mock_client.run_groovy_script.return_value = "abc123\n"
+        mock_client.run_groovy_script.return_value = f"{expected_secret}\n"
 
     with (
         patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
@@ -69,7 +71,7 @@ def test_get_node_secret(container: ops.Container, mock_client: MagicMock, raise
         node_secret = _jenkins_instance(container).get_node_secret("jenkins-agent")
 
     if not raise_api_error:
-        assert node_secret == "abc123"
+        assert node_secret == expected_secret
 
 
 @pytest.mark.parametrize(
