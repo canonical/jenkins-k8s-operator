@@ -193,3 +193,71 @@ def test__on_config_changed_success_replans_and_restarts(
 
         add_layer_mock.assert_called_once()
         replan_mock.assert_called_once()
+
+
+def test_reconcile_admin_uses_state_admin_password_when_present(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given charm state already contains admin password.
+    act: when _reconcile_admin is called.
+    assert: password from state is returned and no new secret is written.
+    """
+    harness = harness_container.harness
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    existing_password = token_hex(8)
+    charm_state = MagicMock(spec=state.State)
+    charm_state.admin_password = existing_password
+
+    with patch.object(jenkins_charm.app, "add_secret") as add_secret_mock:
+        result = jenkins_charm._reconcile_admin(harness_container.container, charm_state)
+
+    assert result == existing_password
+    add_secret_mock.assert_not_called()
+
+
+def test_reconcile_admin_migrates_password_from_container_to_secret(
+    harness_container: HarnessWithContainer, admin_credentials: jenkins.Credentials
+):
+    """
+    arrange: given no secret in state and credentials available in container.
+    act: when _reconcile_admin is called.
+    assert: container credential is returned and persisted as secret.
+    """
+    harness = harness_container.harness
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    charm_state = MagicMock(spec=state.State)
+    charm_state.admin_password = None
+
+    with patch.object(jenkins_charm.app, "add_secret") as add_secret_mock:
+        result = jenkins_charm._reconcile_admin(harness_container.container, charm_state)
+
+    assert result == admin_credentials.password_or_token
+    add_secret_mock.assert_called_once_with(
+        content={"password": admin_credentials.password_or_token},
+        label=jenkins_charm.app.name,
+    )
+
+
+def test_reconcile_api_token_generates_token_when_api_client_missing(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given admin API client is not yet bootstrapped.
+    act: when _reconcile_api_token is called.
+    assert: token generation is attempted.
+    """
+    harness = harness_container.harness
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    admin_client = MagicMock(spec=jenkins.Jenkins)
+    admin_client.get_admin_api_client.side_effect = jenkins.JenkinsBootstrapError("missing")
+
+    jenkins_charm._reconcile_api_token(admin_client)
+
+    admin_client.generate_admin_user_token.assert_called_once_with()

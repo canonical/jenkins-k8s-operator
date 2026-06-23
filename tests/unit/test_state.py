@@ -324,6 +324,30 @@ def test_agent_meta_from_relation_data_complete():
     assert result.name == "agent-0"
 
 
+def test_get_relation_state_invalid_agent_data_raises_relation_error():
+    """
+    arrange: given relation data containing invalid agent metadata.
+    act: when _get_relation_state is called.
+    assert: CharmRelationDataInvalidError is raised.
+    """
+    mock_charm = MagicMock(spec=ops.CharmBase)
+    mock_unit = MagicMock(spec=ops.Unit)
+    mock_relation = MagicMock(spec=ops.Relation)
+    mock_relation.units = [mock_unit]
+    mock_relation.data = {
+        mock_unit: {
+            "executors": "not-an-int",
+            "labels": "linux",
+            "name": "agent-0",
+        }
+    }
+    mock_charm.model.relations = {state.AGENT_RELATION: [mock_relation]}
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(state.CharmRelationDataInvalidError, match="Invalid agent relation data"):
+        state._get_relation_state(mock_charm)
+
+
 def test_jcasc_config_from_charm(mock_charm: MagicMock):
     """
     arrange: given a charm with valid jcasc-config set.
