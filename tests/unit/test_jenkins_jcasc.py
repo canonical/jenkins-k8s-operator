@@ -9,7 +9,7 @@
 import re
 from functools import partial
 from typing import Callable
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import jenkinsapi
 import ops
@@ -142,3 +142,132 @@ def test__set_jenkins_system_message(mock_client: MagicMock):
     jenkins._set_jenkins_system_message(message, mock_client)
 
     mock_groovy_script.assert_called()
+
+
+def test_install_plugins_executes_plugin_manager_command():
+    """install_plugins invokes jenkins plugin manager with expected command layout."""
+    mock_container = MagicMock(spec=ops.Container)
+    mock_process = MagicMock(spec=ops.pebble.ExecProcess)
+    mock_process.wait_output.return_value = ("Done", "")
+    mock_container.exec.return_value = mock_process
+
+    jenkins.install_plugins(mock_container, ["plugin-a", "plugin-b"])
+
+    executed_command = mock_container.exec.call_args.args[0]
+    assert executed_command[0] == "java"
+    assert "-jar" in executed_command
+    assert (
+        f"jenkins-plugin-manager-{jenkins.JENKINS_PLUGIN_MANAGER_VERSION}.jar" in executed_command
+    )
+    assert "--latest" in executed_command
+    plugins_arg = executed_command[executed_command.index("-p") + 1]
+    assert set(plugins_arg.split(" ")) == {"plugin-a", "plugin-b"}
+
+
+def test_install_plugins_raises_bootstrap_error_on_exec_failure():
+    """install_plugins raises JenkinsBootstrapError when command execution fails."""
+    mock_container = MagicMock(spec=ops.Container)
+    mock_process = MagicMock(spec=ops.pebble.ExecProcess)
+    mock_process.wait_output.side_effect = ops.pebble.ExecError(
+        command=["java"],
+        exit_code=1,
+        stdout="",
+        stderr="failed",
+    )
+    mock_container.exec.return_value = mock_process
+
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins.install_plugins(mock_container, ["plugin-a"])
+
+
+def test_get_java_proxy_args_with_auth_and_no_proxy(proxy_config):
+    """_get_java_proxy_args renders JVM flags for authenticated proxy with no_proxy list."""
+    args = tuple(jenkins._get_java_proxy_args(proxy_config))
+
+    assert any(flag.startswith("-Dhttp.proxyUser=") for flag in args)
+    assert any(flag.startswith("-Dhttp.proxyPassword=") for flag in args)
+    assert any(flag.startswith("-Dhttps.proxyUser=") for flag in args)
+    assert any(flag.startswith("-Dhttps.proxyPassword=") for flag in args)
+    assert any(flag.startswith("-Dhttp.nonProxyHosts=") for flag in args)
+
+
+def test_get_java_proxy_args_without_credentials_omits_auth_flags(partial_proxy_config):
+    """_get_java_proxy_args omits user/password flags when proxy credentials are absent."""
+    args = tuple(jenkins._get_java_proxy_args(partial_proxy_config))
+
+    assert not any(flag.startswith("-Dhttp.proxyUser=") for flag in args)
+    assert not any(flag.startswith("-Dhttp.proxyPassword=") for flag in args)
+    assert not any(flag.startswith("-Dhttps.proxyUser=") for flag in args)
+    assert not any(flag.startswith("-Dhttps.proxyPassword=") for flag in args)
+
+
+@pytest.mark.parametrize(
+    "status_code, expected",
+    [
+        pytest.param(200, True, id="valid-config"),
+        pytest.param(400, False, id="invalid-config"),
+    ],
+)
+def test_check_jcasc_returns_status_from_endpoint(
+    status_code: int,
+    expected: bool,
+    harness_container: HarnessWithContainer,
+):
+    """check_jcasc returns True only when check endpoint responds with HTTP 200."""
+    manager = jenkins.Jenkins("/", "admin-password", harness_container.container)
+    mock_requester = MagicMock()
+    mock_requester.post_url.return_value = MagicMock(status_code=status_code)
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.requester = mock_requester
+
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
+        assert manager.check_jcasc("jenkins:\n  systemMessage: test\n") is expected
+
+
+def test_check_jcasc_raises_jenkins_error_on_request_exception(
+    harness_container: HarnessWithContainer,
+):
+    """check_jcasc converts request failures into JenkinsError."""
+    manager = jenkins.Jenkins("/", "admin-password", harness_container.container)
+    mock_requester = MagicMock()
+    mock_requester.post_url.side_effect = requests.exceptions.RequestException("boom")
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.requester = mock_requester
+
+    with (
+        patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
+        pytest.raises(jenkins.JenkinsError, match="Failed to validate JCasC configuration"),
+    ):
+        manager.check_jcasc("jenkins:\n  systemMessage: test\n")
+
+
+def test_reload_jcasc_posts_reload_endpoint(harness_container: HarnessWithContainer):
+    """reload_jcasc posts to the JCasC reload endpoint."""
+    manager = jenkins.Jenkins("/", "admin-password", harness_container.container)
+    mock_requester = MagicMock()
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.requester = mock_requester
+
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
+        manager.reload_jcasc()
+
+    mock_requester.post_url.assert_called_once_with(
+        f"{manager.web_url}/configuration-as-code/reload"
+    )
+
+
+def test_reload_jcasc_raises_jenkins_error_on_request_exception(
+    harness_container: HarnessWithContainer,
+):
+    """reload_jcasc converts request failures into JenkinsError."""
+    manager = jenkins.Jenkins("/", "admin-password", harness_container.container)
+    mock_requester = MagicMock()
+    mock_requester.post_url.side_effect = requests.exceptions.RequestException("boom")
+    mock_client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    mock_client.requester = mock_requester
+
+    with (
+        patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
+        pytest.raises(jenkins.JenkinsError, match="Failed to reload JCasC configuration"),
+    ):
+        manager.reload_jcasc()
