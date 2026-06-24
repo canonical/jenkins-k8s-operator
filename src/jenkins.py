@@ -249,8 +249,6 @@ class Jenkins:
             requests.exceptions.ConnectionError,
             requests.exceptions.Timeout,
             requests.exceptions.JSONDecodeError,
-            KeyError,
-            ops.pebble.PathError,
         ):
             return False
 
@@ -1210,6 +1208,8 @@ def sync_jcasc_config(container: ops.Container, configuration_yaml: str) -> str:
     except (ops.pebble.PathError, FileNotFoundError):
         current = ""
 
+    # TODO: Do pebble exec that calculates the hash of the file on disk instead of pulling it to
+    # the operator side. This could improve performance.
     config_hash = hashlib.sha256(configuration_yaml.encode("utf-8")).hexdigest()
     old_config_hash = hashlib.sha256(current.encode("utf-8")).hexdigest()
     if old_config_hash == config_hash:

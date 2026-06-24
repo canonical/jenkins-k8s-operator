@@ -20,7 +20,9 @@ JENKINS_WAR_PATH = Path("/srv/jenkins/jenkins.war")
 logger = logging.getLogger(__name__)
 
 
-def get_pebble_layer(jenkins_environment: dict[str, str], state: State) -> ops.pebble.Layer:
+def compute_pebble_layer(
+    jenkins_environment: dict[str, str], state: State
+) -> ops.pebble.Layer:
     """Return a dictionary representing a Pebble layer.
 
     Args:
@@ -31,7 +33,6 @@ def get_pebble_layer(jenkins_environment: dict[str, str], state: State) -> ops.p
         The pebble layer defining Jenkins service layer.
     """
     system_props = " ".join(state.system_properties) if state.system_properties else ""
-    system_props = f"{system_props} " if system_props else ""
     layer: LayerDict = {
         "summary": "jenkins layer",
         "description": "pebble config layer for jenkins",

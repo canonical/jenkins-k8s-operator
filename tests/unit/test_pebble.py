@@ -65,7 +65,7 @@ def test_get_pebble_layer_command(
     }
     fake_state = SimpleNamespace(system_properties=system_properties)
 
-    layer = pebble.get_pebble_layer(env, fake_state)  # type: ignore[arg-type]
+    layer = pebble.compute_pebble_layer(env, fake_state)  # type: ignore[arg-type]
     layer_dict = cast(dict[str, Any], layer.to_dict())
     command = layer_dict["services"]["jenkins"]["command"]
 
@@ -78,7 +78,9 @@ def test_get_pebble_layer_command(
 @pytest.mark.parametrize(
     "prefix, expected_url",
     [
-        pytest.param("/prefix", f"http://localhost:{jenkins.WEB_PORT}/prefix", id="with-prefix"),
+        pytest.param(
+            "/prefix", f"http://localhost:{jenkins.WEB_PORT}/prefix", id="with-prefix"
+        ),
         pytest.param("", f"http://localhost:{jenkins.WEB_PORT}", id="without-prefix"),
     ],
 )
@@ -97,7 +99,7 @@ def test_get_pebble_layer_sets_check_url_with_prefix(prefix: str, expected_url: 
     }
     fake_state = SimpleNamespace(system_properties=[])
 
-    layer = pebble.get_pebble_layer(env, fake_state)  # type: ignore[arg-type]
+    layer = pebble.compute_pebble_layer(env, fake_state)  # type: ignore[arg-type]
     layer_dict = cast(dict[str, Any], layer.to_dict())
     check_url = layer_dict["checks"][jenkins.ONLINE_CHECK_NAME]["http"]["url"]
 

@@ -157,7 +157,7 @@ def test__on_config_changed_precondition_waits_and_defers(
 
         assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
         assert jenkins_charm.unit.status.message == "not ready"
-        event.defer.assert_called_once_with()
+        event.defer.assert_not_called()
         add_layer_mock.assert_not_called()
         replan_mock.assert_not_called()
 
