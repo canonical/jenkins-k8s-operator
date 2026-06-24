@@ -59,6 +59,7 @@ async def test_agent_discovery_ingress_integration(
     application: Application,
     ingress_traefik: _IngressTraefiks,
     jenkins_machine_agents: Application,
+    controller_name: str,
 ):
     """
     arrange: deploy the Jenkins charm, ingress, and a machine agent.
@@ -76,7 +77,7 @@ async def test_agent_discovery_ingress_integration(
 
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
+        f"{controller_name}:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
     await machine_model.wait_for_idle(
         apps=[jenkins_machine_agents.name], wait_for_active=True, raise_on_error=False

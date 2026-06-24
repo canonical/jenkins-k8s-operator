@@ -140,6 +140,9 @@ skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage,html
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "DEBUG"
+markers = [
+  "infra_flaky: integration test is sensitive to transient infra/controller timing churn",
+]
 
 [tool.coverage.run]
 branch = true

@@ -15,6 +15,7 @@ async def test_jenkins_machine_agent_relation(
     application: Application,
     jenkins_machine_agents: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
+    controller_name: str,
 ):
     """
     arrange: given a cross controller cross model jenkins machine agent with an offer.
@@ -33,7 +34,7 @@ async def test_jenkins_machine_agent_relation(
     # pylint: disable=duplicate-code
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
+        f"{controller_name}:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)
