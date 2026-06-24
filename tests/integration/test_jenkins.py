@@ -73,7 +73,9 @@ async def test_rotate_password_action(jenkins_user_client: jenkinsapi.jenkins.Je
     assert result.status_code == 200, "Unable to access Jenkins with initial credentials."
     action: Action = await unit.run_action("rotate-credentials")
     await action.wait()
-    new_password: str = action.results["password"]
+    assert action.status == "completed", f"rotate-credentials failed: {action.results}"
+    new_password = action.results.get("password")
+    assert new_password, f"rotate-credentials did not return password: {action.results}"
 
     assert jenkins_user_client.password != new_password, "Password not rotated"
     result = session.get(f"{jenkins_user_client.baseurl}/manage")

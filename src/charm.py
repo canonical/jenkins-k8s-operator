@@ -609,10 +609,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if not jenkins.is_storage_ready(container):
             event.fail("Jenkins storage not yet mounted.")
             return
-        if not jenkins.is_jenkins_ready(container):
-            event.fail("Jenkins service is not yet ready.")
-            return
-
         charm_state = self._get_state()
         if not charm_state:
             event.fail("Jenkins charm is not yet ready.")
@@ -628,7 +624,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         admin_client = jenkins.Jenkins(self._jenkins_prefix, current_password, container)
-        admin_client.wait_ready(api_ready=True)
+        try:
+            admin_client.wait_ready(api_ready=True)
+        except TimeoutError:
+            event.fail("Jenkins service is not yet ready.")
+            return
+
         try:
             password = admin_client.rotate_credentials(container)
         except jenkins.JenkinsError:

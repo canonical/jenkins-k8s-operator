@@ -172,7 +172,6 @@ def test_on_rotate_credentials_action_api_error(
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.ActionEvent)
     harness.begin()
-    monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     monkeypatch.setattr(
         jenkins.Jenkins,
@@ -198,8 +197,8 @@ def test_on_rotate_credentials_action(
     harness.set_can_connect(harness_container.harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.ActionEvent)
     harness.begin()
-    monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
     monkeypatch.setattr(jenkins.Jenkins, "rotate_credentials", MagicMock(return_value=password))
+    monkeypatch.setattr(jenkins.Jenkins, "wait_ready", MagicMock(return_value=None))
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     jenkins_charm._on_rotate_credentials(mock_event)
@@ -211,15 +210,15 @@ def test_on_rotate_credentials_action_jenkins_not_ready(
     harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
 ):
     """
-    arrange: given Jenkins service is not ready.
+    arrange: given Jenkins service does not become ready before timeout.
     act: when rotate_credentials action is run.
-    assert: the event is failed with appropriate message.
+    assert: the event fails with readiness timeout message.
     """
     harness = harness_container.harness
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.ActionEvent)
     harness.begin()
-    monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=False))
+    monkeypatch.setattr(jenkins.Jenkins, "wait_ready", MagicMock(side_effect=TimeoutError))
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     jenkins_charm._on_rotate_credentials(mock_event)
@@ -239,7 +238,6 @@ def test_on_rotate_credentials_action_fails_when_jenkins_not_bootstrapped(
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
     mock_event = MagicMock(spec=ops.ActionEvent)
     harness.begin()
-    monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
     monkeypatch.setattr(
         jenkins,
         "get_admin_credentials",
@@ -269,7 +267,6 @@ def test_on_rotate_credentials_action_prefers_secret_from_charm_state_and_update
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
     monkeypatch.setattr(
         jenkins_charm,
         "_get_state",
@@ -306,7 +303,6 @@ def test_on_rotate_credentials_action_creates_secret_when_missing(
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
     monkeypatch.setattr(
         jenkins_charm,
         "_get_state",
