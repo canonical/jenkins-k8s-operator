@@ -7,7 +7,7 @@ import secrets
 
 # Need access to protected functions for testing
 import typing
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import ops
 import pytest
@@ -250,3 +250,80 @@ def test_on_rotate_credentials_action_fails_when_jenkins_not_bootstrapped(
     jenkins_charm._on_rotate_credentials(mock_event)
 
     mock_event.fail.assert_called_once_with("Jenkins has not yet bootstrapped.")
+
+
+def test_on_rotate_credentials_action_prefers_secret_from_charm_state_and_updates_secret(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """
+    arrange: given charm state contains admin password and app secret exists.
+    act: when rotate_credentials action is run.
+    assert: state password is used for auth and rotated password is persisted to existing secret.
+    """
+    old_password = secrets.token_hex(16)
+    new_password = secrets.token_hex(16)
+    harness = harness_container.harness
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
+    mock_event = MagicMock(spec=ops.ActionEvent)
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        jenkins_charm,
+        "_get_state",
+        MagicMock(return_value=MagicMock(admin_password=old_password)),
+    )
+    get_admin_credentials_mock = MagicMock()
+    monkeypatch.setattr(jenkins, "get_admin_credentials", get_admin_credentials_mock)
+    monkeypatch.setattr(jenkins.Jenkins, "rotate_credentials", MagicMock(return_value=new_password))
+
+    mock_secret = MagicMock()
+    monkeypatch.setattr(jenkins_charm.model, "get_secret", MagicMock(return_value=mock_secret))
+
+    jenkins_charm._on_rotate_credentials(mock_event)
+
+    mock_event.set_results.assert_called_once_with({"password": new_password})
+    get_admin_credentials_mock.assert_not_called()
+    mock_secret.set_content.assert_called_once_with({"password": new_password})
+
+
+def test_on_rotate_credentials_action_creates_secret_when_missing(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """
+    arrange: given charm state contains admin password but app secret does not yet exist.
+    act: when rotate_credentials action is run.
+    assert: rotated password is written by creating app secret.
+    """
+    old_password = secrets.token_hex(16)
+    new_password = secrets.token_hex(16)
+    harness = harness_container.harness
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
+    mock_event = MagicMock(spec=ops.ActionEvent)
+    harness.begin()
+
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        jenkins_charm,
+        "_get_state",
+        MagicMock(return_value=MagicMock(admin_password=old_password)),
+    )
+    monkeypatch.setattr(jenkins.Jenkins, "rotate_credentials", MagicMock(return_value=new_password))
+    monkeypatch.setattr(
+        jenkins_charm.model,
+        "get_secret",
+        MagicMock(side_effect=ops.SecretNotFoundError()),
+    )
+
+    with patch.object(jenkins_charm.app, "add_secret") as add_secret_mock:
+        jenkins_charm._on_rotate_credentials(mock_event)
+
+    mock_event.set_results.assert_called_once_with({"password": new_password})
+    add_secret_mock.assert_called_once_with(
+        content={"password": new_password},
+        label=jenkins_charm.app.name,
+    )

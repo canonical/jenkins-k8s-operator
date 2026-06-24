@@ -612,22 +612,35 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if not jenkins.is_jenkins_ready(container):
             event.fail("Jenkins service is not yet ready.")
             return
+
+        charm_state = self._get_state()
+        if not charm_state:
+            event.fail("Jenkins charm is not yet ready.")
+            return
+
+        current_password = charm_state.admin_password
         try:
-            credentials = jenkins.get_admin_credentials(container)
+            if not current_password:
+                current_password = jenkins.get_admin_credentials(container).password_or_token
         except jenkins.JenkinsBootstrapError as exc:
             logger.error("Failed to get admin credentials, %s", exc)
             event.fail("Jenkins has not yet bootstrapped.")
             return
 
-        admin_client = jenkins.Jenkins(
-            self._jenkins_prefix, credentials.password_or_token, container
-        )
+        admin_client = jenkins.Jenkins(self._jenkins_prefix, current_password, container)
         admin_client.wait_ready(api_ready=True)
         try:
             password = admin_client.rotate_credentials(container)
         except jenkins.JenkinsError:
             event.fail("Error invalidating user sessions. See logs.")
             return
+
+        try:
+            secret = self.model.get_secret(label=self.app.name)
+            secret.set_content({"password": password})
+        except ops.SecretNotFoundError:
+            self.app.add_secret(content={"password": password}, label=self.app.name)
+
         event.set_results({"password": password})
 
 
