@@ -626,7 +626,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         admin_client = jenkins.Jenkins(self._jenkins_prefix, current_password, container)
         try:
             admin_client.wait_ready(api_ready=True)
-        except TimeoutError:
+        except TimeoutError as exc:
+            logger.warning(
+                "phase=rotate_credentials wait_ready_timeout unit=%s app=%s jenkins_prefix=%s error=%s",
+                self.unit.name,
+                self.app.name,
+                self._jenkins_prefix,
+                exc,
+            )
             event.fail("Jenkins service is not yet ready.")
             return
 

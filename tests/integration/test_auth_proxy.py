@@ -236,11 +236,25 @@ def identity_platform_traefik_ip_fixture(
     identity_platform_juju: jubilant.Juju,
 ):
     """Identity platform traefik ip."""
-    idp_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
-        name=f"{identity_platform_public_traefik}-lb",
-        namespace=identity_platform_juju.model,
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type((AssertionError, TypeError, KeyError, IndexError)),
+        stop=tenacity.stop_after_attempt(12),
+        wait=tenacity.wait_fixed(10),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
     )
-    return idp_traefik_loadbalancer_service.status.load_balancer.ingress[0].ip
+    def _get_lb_ip() -> str:
+        idp_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
+            name=f"{identity_platform_public_traefik}-lb",
+            namespace=identity_platform_juju.model,
+        )
+        ingress = idp_traefik_loadbalancer_service.status.load_balancer.ingress
+        assert ingress, "Identity platform traefik load balancer ingress not ready"
+        ip = ingress[0].ip
+        assert ip, "Identity platform traefik load balancer IP not ready"
+        return str(ip)
+
+    return _get_lb_ip()
 
 
 @pytest.fixture(scope="module", name="jenkins_traefik_ip")
@@ -250,10 +264,24 @@ def jenkins_traefik_ip_fixture(
     model: Model,
 ):
     """Jenkins traefik ip."""
-    jenkins_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
-        name=f"{jenkins_k8s_charms.traefik}-lb", namespace=model.name
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type((AssertionError, TypeError, KeyError, IndexError)),
+        stop=tenacity.stop_after_attempt(12),
+        wait=tenacity.wait_fixed(10),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
     )
-    return jenkins_traefik_loadbalancer_service.status.load_balancer.ingress[0].ip
+    def _get_lb_ip() -> str:
+        jenkins_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
+            name=f"{jenkins_k8s_charms.traefik}-lb", namespace=model.name
+        )
+        ingress = jenkins_traefik_loadbalancer_service.status.load_balancer.ingress
+        assert ingress, "Jenkins traefik load balancer ingress not ready"
+        ip = ingress[0].ip
+        assert ip, "Jenkins traefik load balancer IP not ready"
+        return str(ip)
+
+    return _get_lb_ip()
 
 
 @pytest.fixture(scope="module", name="patch_dns_resolver")
@@ -482,13 +510,22 @@ def jenkins_endpoint_fixture(model: Model, jenkins_k8s_charms: _JenkinsCharms):
     """The Jenkins endpoint URL from public traefik."""
     juju = jubilant.Juju(model=model.name)
 
-    endpoints = _get_traefik_proxied_endpoints(
-        juju=juju, traefik_app_name=jenkins_k8s_charms.traefik
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(AssertionError),
+        stop=tenacity.stop_after_attempt(18),
+        wait=tenacity.wait_fixed(10),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
     )
-    jenkins_endpoint = endpoints.get("jenkins-k8s", {}).get("url")
-    assert jenkins_endpoint, "Jenkins endpoint not found in proxied endpoints"
+    def _get_jenkins_endpoint() -> str:
+        endpoints = _get_traefik_proxied_endpoints(
+            juju=juju, traefik_app_name=jenkins_k8s_charms.traefik
+        )
+        jenkins_endpoint = endpoints.get("jenkins-k8s", {}).get("url")
+        assert jenkins_endpoint, "Jenkins endpoint not found in proxied endpoints"
+        return str(jenkins_endpoint)
 
-    return jenkins_endpoint
+    return _get_jenkins_endpoint()
 
 
 @pytest.mark.abort_on_fail

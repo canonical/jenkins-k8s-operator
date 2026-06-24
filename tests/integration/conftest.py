@@ -120,18 +120,26 @@ def model_app_unit_fixture(model: Model, application: Application, unit: Unit):
     return ModelAppUnit(model=model, app=application, unit=unit)
 
 
-@pytest_asyncio.fixture(scope="module", name="unit_ip")
+@pytest_asyncio.fixture(scope="function", name="unit_ip")
 async def unit_ip_fixture(model: Model, application: Application):
     """Get Jenkins charm unit IP."""
     unit_ips = await get_model_unit_addresses(model=model, app_name=application.name)
     assert unit_ips, f"Unit IP address not found for {application.name}"
+    logger.info(
+        "phase=unit_ip_fixture model=%s app=%s resolved_ips=%s",
+        model.name,
+        application.name,
+        unit_ips,
+    )
     return unit_ips[0]
 
 
-@pytest.fixture(scope="module", name="web_address")
+@pytest.fixture(scope="function", name="web_address")
 def web_address_fixture(unit_ip: str):
     """Get Jenkins charm web address."""
-    return f"http://{unit_ip}:8080"
+    address = f"http://{unit_ip}:8080"
+    logger.info("phase=web_address_fixture address=%s", address)
+    return address
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_client")
@@ -141,7 +149,52 @@ async def jenkins_client_fixture(
     web_address: str,
 ) -> jenkinsapi.jenkins.Jenkins:
     """The Jenkins API client."""
-    jenkins_client = await generate_jenkins_client(ops_test, application, web_address)
+    logger.info(
+        "phase=jenkins_client_fixture start model=%s app=%s web_address=%s",
+        ops_test.model_name,
+        application.name,
+        web_address,
+    )
+    try:
+        jenkins_client = await generate_jenkins_client(ops_test, application, web_address)
+    except Exception as exc:
+        logger.error(
+            "phase=jenkins_client_fixture failed model=%s app=%s web_address=%s exc_type=%s exc=%s",
+            ops_test.model_name,
+            application.name,
+            web_address,
+            type(exc).__name__,
+            exc,
+        )
+        model = ops_test.model
+        if model is not None:
+            try:
+                status = await model.get_status()
+                app_status = status.applications.get(application.name)
+                unit_keys = []
+                if app_status is not None and app_status.units:
+                    unit_keys = sorted(app_status.units.keys())
+                logger.error(
+                    "phase=jenkins_client_fixture model_snapshot app=%s app_status=%s app_message=%s units=%s",
+                    application.name,
+                    getattr(app_status, "status", None),
+                    getattr(app_status, "status_info", None),
+                    unit_keys,
+                )
+            except Exception as status_exc:
+                logger.error(
+                    "phase=jenkins_client_fixture model_snapshot_failed exc_type=%s exc=%s",
+                    type(status_exc).__name__,
+                    status_exc,
+                )
+        raise
+    logger.info(
+        "phase=jenkins_client_fixture success model=%s app=%s web_address=%s client_baseurl=%s",
+        ops_test.model_name,
+        application.name,
+        web_address,
+        jenkins_client.baseurl,
+    )
     return jenkins_client
 
 

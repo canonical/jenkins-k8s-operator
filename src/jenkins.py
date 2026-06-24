@@ -18,6 +18,7 @@ import typing
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
+import time
 from urllib.parse import urlparse
 
 import jenkinsapi.custom_exceptions
@@ -266,13 +267,35 @@ class Jenkins:
         Raises:
             TimeoutError: if Jenkins status check did not pass within the timeout duration.
         """
+        start = time.monotonic()
+        logger.info(
+            "phase=wait_ready start web_url=%s api_ready=%s timeout=%s check_interval=%s",
+            self.web_url,
+            api_ready,
+            timeout,
+            check_interval,
+        )
         try:
             if api_ready:
-                return _wait_for(
+                result = _wait_for(
                     self._is_api_ready, timeout=timeout, check_interval=check_interval
                 )
-            _wait_for(self._is_ready, timeout=timeout, check_interval=check_interval)
+            else:
+                result = _wait_for(self._is_ready, timeout=timeout, check_interval=check_interval)
+            logger.info(
+                "phase=wait_ready success web_url=%s api_ready=%s elapsed_s=%.2f",
+                self.web_url,
+                api_ready,
+                time.monotonic() - start,
+            )
+            return result
         except TimeoutError as exc:
+            logger.warning(
+                "phase=wait_ready timeout web_url=%s api_ready=%s elapsed_s=%.2f",
+                self.web_url,
+                api_ready,
+                time.monotonic() - start,
+            )
             raise TimeoutError("Timed out waiting for Jenkins to become ready.") from exc
 
     def get_admin_user_client(self) -> jenkinsapi.jenkins.Jenkins:

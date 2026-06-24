@@ -10,6 +10,7 @@ import textwrap
 import time
 import typing
 from enum import Enum
+from urllib.parse import urlparse
 
 import jenkinsapi.jenkins
 import kubernetes.client
@@ -369,6 +370,29 @@ async def generate_jenkins_client(
         A Jenkins web client.
     """
     jenkins_unit = jenkins_app.units[0]
+    start = time.monotonic()
+    model = ops_test.model
+    assert model is not None
+    current_unit_ips = await get_model_unit_addresses(model=model, app_name=jenkins_app.name)
+    requested_host = urlparse(address).hostname
+    logger.info(
+        "phase=generate_client app=%s unit=%s address=%s requested_host=%s resolved_ips=%s method=%s",
+        jenkins_app.name,
+        jenkins_unit.name,
+        address,
+        requested_host,
+        current_unit_ips,
+        method.value,
+    )
+    if requested_host and requested_host not in current_unit_ips:
+        logger.warning(
+            "phase=generate_client app=%s unit=%s stale_address_detected address_host=%s resolved_ips=%s",
+            jenkins_app.name,
+            jenkins_unit.name,
+            requested_host,
+            current_unit_ips,
+        )
+
     if method == AuthMethod.TOKEN:
         ret, api_token, stderr = await ops_test.juju(
             "ssh",
@@ -383,11 +407,55 @@ async def generate_jenkins_client(
     elif method == AuthMethod.PASSWORD:
         action = await jenkins_unit.run_action("get-admin-password")
         await action.wait()
+        logger.info(
+            "phase=generate_client app=%s unit=%s auth_action=%s action_status=%s action_result_keys=%s",
+            jenkins_app.name,
+            jenkins_unit.name,
+            "get-admin-password",
+            action.status,
+            sorted(action.results.keys()),
+        )
         secret = action.results["password"]
     else:
         raise ValueError(f"Unsupported auth method: {method}")
 
-    return jenkinsapi.jenkins.Jenkins(address, "admin", secret, timeout=60)
+    try:
+        response = requests.get(f"{address}/login", timeout=10)
+        logger.info(
+            "phase=generate_client app=%s unit=%s login_probe_status=%s elapsed_s=%.2f",
+            jenkins_app.name,
+            jenkins_unit.name,
+            response.status_code,
+            time.monotonic() - start,
+        )
+    except requests.RequestException as exc:
+        logger.warning(
+            "phase=generate_client app=%s unit=%s login_probe_error=%s elapsed_s=%.2f",
+            jenkins_app.name,
+            jenkins_unit.name,
+            repr(exc),
+            time.monotonic() - start,
+        )
+
+    try:
+        client = jenkinsapi.jenkins.Jenkins(address, "admin", secret, timeout=60)
+        logger.info(
+            "phase=generate_client app=%s unit=%s client_created=true elapsed_s=%.2f",
+            jenkins_app.name,
+            jenkins_unit.name,
+            time.monotonic() - start,
+        )
+        return client
+    except Exception as exc:
+        logger.warning(
+            "phase=generate_client app=%s unit=%s client_created=false exc_type=%s exc=%s elapsed_s=%.2f",
+            jenkins_app.name,
+            jenkins_unit.name,
+            type(exc).__name__,
+            exc,
+            time.monotonic() - start,
+        )
+        raise
 
 
 async def generate_unit_web_client_from_application(
