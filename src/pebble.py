@@ -20,9 +20,7 @@ JENKINS_WAR_PATH = Path("/srv/jenkins/jenkins.war")
 logger = logging.getLogger(__name__)
 
 
-def compute_pebble_layer(
-    jenkins_environment: dict[str, str], state: State
-) -> ops.pebble.Layer:
+def compute_pebble_layer(jenkins_environment: dict[str, str], state: State) -> ops.pebble.Layer:
     """Return a dictionary representing a Pebble layer.
 
     Args:

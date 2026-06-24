@@ -131,12 +131,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.on.update_status,
         ]:
             self.framework.observe(event, self._reconcile)
-        self.framework.observe(
-            self.on.get_admin_password_action, self._on_get_admin_password
-        )
-        self.framework.observe(
-            self.on.rotate_credentials_action, self._on_rotate_credentials
-        )
+        self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
+        self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
 
     def _get_state(self) -> typing.Optional[State]:
         """Derive the charm state fresh from current config and relation data.
@@ -169,9 +165,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ""
         return path
 
-    def calculate_env(
-        self, config_hash: str, admin_password: str
-    ) -> jenkins.Environment:
+    def calculate_env(self, config_hash: str, admin_password: str) -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
 
         Args:
@@ -189,20 +183,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             CONFIGURATION_HASH=config_hash,
         )
 
-    def _reconcile(self, _: ops.EventBase) -> None:
+    def _reconcile(self, event: ops.EventBase) -> None:
         """Single top-level reconcile method invoked by all event handlers.
 
         This ensures all subsystems are reconciled to the desired state on every event,
         making the charm converge regardless of event ordering.
 
         Args:
-            _: The triggering Juju event (unused, present for observe callback compatibility).
+            event: The triggering Juju event (unused, present for observe callback compatibility).
 
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        check_result = precondition.check(
-            container=container, storages=self.model.storages
-        )
+        check_result = precondition.check(container=container, storages=self.model.storages)
         if not check_result.success:
             self.unit.status = ops.WaitingStatus(check_result.reason or "")
             return
@@ -217,9 +209,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._reconcile_storage(container)
 
             # Reconcile jenkins configuration filesystem
-            configuration_hash = self._reconcile_pre_startup_configurations(
-                container, charm_state
-            )
+            configuration_hash = self._reconcile_pre_startup_configurations(container, charm_state)
             # pass in configuration hash to trigger pebble layer update
             logger.info("Reconciling admin user")
             admin_password = self._reconcile_admin(container, charm_state)
@@ -228,9 +218,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._reconcile_pebble(container, charm_state, jenkins_environment)
 
             logger.info("Waiting for Jenkins to come up")
-            admin_client = jenkins.Jenkins(
-                self._jenkins_prefix, admin_password, container
-            )
+            admin_client = jenkins.Jenkins(self._jenkins_prefix, admin_password, container)
             admin_client.wait_ready(api_ready=True)
 
             # Post Jenkins server startup reconciliations
@@ -275,9 +263,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         # Backwards compatibility: fetch admin password from container and migrate to juju secrets.
         admin_setup = False
         try:
-            password_or_token = jenkins.get_admin_credentials(
-                container
-            ).password_or_token
+            password_or_token = jenkins.get_admin_credentials(container).password_or_token
             admin_setup = True
         except jenkins.JenkinsBootstrapError as exc:
             logger.debug("Admin password not yet setup, setting up admin user: %s", exc)
@@ -286,9 +272,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if not admin_setup:
             # Generate admin user secret using secrets.token_hex() and set it in the container
             password_or_token = secrets.token_hex(16)
-        self.app.add_secret(
-            content={"password": password_or_token}, label=self.app.name
-        )
+        self.app.add_secret(content={"password": password_or_token}, label=self.app.name)
         return password_or_token
 
     def _reconcile_api_token(self, admin_client: jenkins.Jenkins) -> None:
@@ -304,9 +288,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             admin_client.get_admin_api_client()
             return
         except jenkins.JenkinsBootstrapError:
-            logger.info(
-                "Jenkins admin API client not yet available, generating API token."
-            )
+            logger.info("Jenkins admin API client not yet available, generating API token.")
 
         try:
             admin_client.generate_admin_user_token()
@@ -362,10 +344,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """Update the agent discovery URL in all connected agent relations."""
         for relation in self.model.relations[AGENT_RELATION]:
             relation_discovery_url = relation.data[self.model.unit].get("url")
-            if (
-                relation_discovery_url
-                and relation_discovery_url == self._agent_discovery_url
-            ):
+            if relation_discovery_url and relation_discovery_url == self._agent_discovery_url:
                 continue
             relation.data[self.model.unit].update({"url": self._agent_discovery_url})
 
@@ -388,9 +367,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     allowed_endpoints=[],
                     headers=["X-Auth-Request-User"],
                 )
-            self._auth_proxy.update_auth_proxy_config(
-                auth_proxy_config=auth_proxy_config
-            )
+            self._auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
 
     def _reconcile_plugins(
         self, state: State, admin_client: jenkins.Jenkins, container: ops.Container
@@ -466,7 +443,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
     def _agent_status_message(self) -> str:
         """Status message regarding agent discovery ingress configuration."""
         if self.server_ingress.url and not self.agent_discovery_ingress.url:
-            return f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
+            return (
+                f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
+            )
         return ""
 
     def _add_agent_nodes_from_relation(
@@ -486,28 +465,22 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             JenkinsError: if there was an error while registering agent nodes to Jenkins.
         """
         for relation, agents in agent_relation.items():
-            unregistered_agents = [
-                agent for agent in agents if agent.name not in agent_node_names
-            ]
+            unregistered_agents = [agent for agent in agents if agent.name not in agent_node_names]
             for unregistered_agent in unregistered_agents:
                 try:
                     api_client.add_agent_node(agent_meta=unregistered_agent)
                 except jenkins.JenkinsError:
-                    logger.exception(
-                        "Failed to register agent node: %s", unregistered_agent
-                    )
+                    logger.exception("Failed to register agent node: %s", unregistered_agent)
                     raise
 
             agent_relation_data: dict[str, str] = {"url": self._agent_discovery_url}
             for meta in agents:
                 try:
-                    agent_relation_data[f"{meta.name}_secret"] = (
-                        api_client.get_node_secret(node_name=meta.name)
+                    agent_relation_data[f"{meta.name}_secret"] = api_client.get_node_secret(
+                        node_name=meta.name
                     )
                 except jenkins.JenkinsError:
-                    logger.exception(
-                        "Failed to get secret for registered node: %s", meta
-                    )
+                    logger.exception("Failed to get secret for registered node: %s", meta)
                     raise
             relation.data[self.model.unit].update(agent_relation_data)
 
@@ -596,9 +569,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             charm_state.auth_proxy_integrated,
         )
         try:
-            desired_yaml = yaml.dump(
-                desired_config, default_flow_style=False, sort_keys=False
-            )
+            desired_yaml = yaml.dump(desired_config, default_flow_style=False, sort_keys=False)
         except yaml.YAMLError as exc:
             logger.error("Failed to serialize JCasC config, %s", exc)
             raise ReconcileBlockedError("Failed to serialize JCasC config.") from exc

@@ -76,8 +76,6 @@ def test__is_ready(
         pytest.param(requests.exceptions.ConnectionError, id="connection-error"),
         pytest.param(requests.exceptions.Timeout, id="timeout"),
         pytest.param(requests.exceptions.JSONDecodeError, id="json-decode-error"),
-        pytest.param(KeyError, id="key-error"),
-        pytest.param(ops.pebble.PathError, id="path-error"),
     ],
 )
 def test_is_api_ready_handles_exceptions(

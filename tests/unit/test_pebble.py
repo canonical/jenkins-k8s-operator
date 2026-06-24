@@ -78,9 +78,7 @@ def test_get_pebble_layer_command(
 @pytest.mark.parametrize(
     "prefix, expected_url",
     [
-        pytest.param(
-            "/prefix", f"http://localhost:{jenkins.WEB_PORT}/prefix", id="with-prefix"
-        ),
+        pytest.param("/prefix", f"http://localhost:{jenkins.WEB_PORT}/prefix", id="with-prefix"),
         pytest.param("", f"http://localhost:{jenkins.WEB_PORT}", id="without-prefix"),
     ],
 )
