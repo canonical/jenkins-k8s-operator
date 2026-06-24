@@ -18,6 +18,7 @@ import pyotp
 import pytest
 import pytest_asyncio
 import requests
+import tenacity
 import yaml
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
@@ -194,8 +195,36 @@ def jenkins_k8s_charms_fixture(
     juju.integrate(f"{oauth2_proxy}:forward-auth", f"{traefik_public}:experimental-forward-auth")
     juju.integrate(f"{oauth2_proxy}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
 
-    juju.wait(jubilant.all_agents_idle, timeout=15 * 60, successes=5, delay=5)
-    juju.wait(jubilant.all_active, timeout=15 * 60, successes=5, delay=5)
+    def _is_transient_controller_error(exc: BaseException) -> bool:
+        error_message = str(exc)
+        return (
+            "controller-service.controller-microk8s.svc.cluster.local" in error_message
+            or "api connection open timed out" in error_message
+            or "cannot open api" in error_message
+        )
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception(_is_transient_controller_error),
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_exponential(multiplier=1, min=5, max=20),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def _wait_all_agents_idle() -> None:
+        juju.wait(jubilant.all_agents_idle, timeout=15 * 60, successes=5, delay=5)
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception(_is_transient_controller_error),
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_exponential(multiplier=1, min=5, max=20),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def _wait_all_active() -> None:
+        juju.wait(jubilant.all_active, timeout=15 * 60, successes=5, delay=5)
+
+    _wait_all_agents_idle()
+    _wait_all_active()
 
     return _JenkinsCharms(jenkins=application.name, traefik=traefik_public, oauth2=oauth2_proxy)
 
