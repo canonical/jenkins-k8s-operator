@@ -31,8 +31,6 @@ jobs:
         chmod +x tests/integration/pre_run_script.sh
         ./tests/integration/pre_run_script.sh"
       juju-channel: 3/stable
-      self-hosted-runner: true
-      self-hosted-runner-label: "xlarge"
       microk8s-addons: "dns ingress rbac hostpath-storage registry"
       with-uv: true
   allure-report:
