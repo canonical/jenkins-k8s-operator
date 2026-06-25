@@ -92,17 +92,17 @@ discover_metallb_range() {
 # Run the range discovery and capture the clean stdout result
 METALLB_RANGE=$(discover_metallb_range)
 
-# lxd should be install and init by a previous step in integration test action.
-log_info "bootstrapping lxd juju controller"
-
 # Assign dynamically detected network path range 
-sg snap_microk8s -c "sudo microk8s enable metallb:$METALLB_RANGE"
+sudo microk8s enable metallb:"$METALLB_RANGE"
 
 # 5. Wait for MetalLB IPAddressPool Custom Resource Definition to be populated using native jsonpath
 CHECK_POOL_CMD='POOL_RANGE=$(sg snap_microk8s -c "microk8s kubectl get ipaddresspool -n metallb-system -o jsonpath=\"{.items[*].spec.addresses[*]}\" 2>/dev/null"); [ -n "$POOL_RANGE" ]'
 if ! retry_command "MetalLB IP address pool" "$CHECK_POOL_CMD"; then
     exit 1
 fi
+
+# lxd should be install and init by a previous step in integration test action.
+log_info "bootstrapping lxd juju controller"
 
 sg snap_microk8s -c "microk8s status --wait-ready --timeout 1200"
 sg snap_microk8s -c "juju bootstrap localhost localhost --debug"
