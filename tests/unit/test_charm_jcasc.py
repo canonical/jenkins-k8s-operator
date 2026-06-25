@@ -352,3 +352,32 @@ def test_build_jcasc_config_handles_empty_jenkins_section(jcasc_input: dict):
     assert "securityRealm" in result["jenkins"]
     assert result["jenkins"]["securityRealm"]["local"]["users"][0]["id"] == "admin"
     assert "disabledAdministrativeMonitors" in result["jenkins"]
+
+
+def test_reconcile_jcasc_config_with_no_admin_password(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given valid state with no admin password set.
+    act: when _reconcile_jcasc_config is called.
+    assert: JCasC config is built with placeholder password and sync is called (deterministic).
+    """
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    # Simulate no admin password secret (state returns None)
+    charm_state = MagicMock(spec=state.State)
+    charm_state.jcasc_config = {}
+    charm_state.proxy_config = None
+    charm_state.auth_proxy_integrated = False
+
+    with patch("jenkins.sync_jcasc_config") as sync_mock:
+        sync_mock.return_value = "hash123"
+        result = charm._reconcile_jcasc_config(harness_container.container, charm_state)
+
+    assert result == "hash123"
+    sync_mock.assert_called_once()
+    call_yaml = sync_mock.call_args.args[1]
+    # Placeholder password should still be present and deterministic
+    assert "${JENKINS_ADMIN_PASSWORD}" in call_yaml
+    assert "id: admin" in call_yaml
