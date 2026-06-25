@@ -24,9 +24,16 @@ from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from juju.client._definitions import UnitStatus
 from juju.model import Model
-from playwright.async_api import async_playwright, expect
-from playwright.async_api._generated import Browser, BrowserContext, BrowserType, Page
-from playwright.async_api._generated import Playwright as AsyncPlaywright
+from playwright.async_api import (
+    Browser,
+    BrowserContext,
+    BrowserType,
+    Page,
+    async_playwright,
+    expect,
+)
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import Playwright as AsyncPlaywright
 
 from .helpers import wait_for
 
@@ -34,6 +41,35 @@ logger = logging.getLogger(__name__)
 
 IDENTITY_PLATFORM_HOSTNAME = "idp.test"
 JENKINS_HOSTNAME = "jenkins.test"
+
+
+async def _goto_with_retry(
+    page: Page,
+    url: str,
+    *,
+    timeout: int = 60,
+    check_interval: int = 5,
+) -> None:
+    """Retry browser navigation to tolerate transient redirect aborts."""
+
+    async def navigate() -> bool:
+        try:
+            response = await page.goto(
+                url=url,
+                timeout=30_000,
+                wait_until="domcontentloaded",
+            )
+            logger.info(
+                "Navigation attempt to %s finished with status: %s",
+                url,
+                response.status if response else None,
+            )
+            return True
+        except PlaywrightError as exc:
+            logger.info("Navigation attempt to %s failed: %s", url, exc)
+            return False
+
+    await wait_for(navigate, timeout=timeout, check_interval=check_interval)
 
 
 @dataclass
@@ -627,27 +663,27 @@ async def totp_fixture(
     await asyncio.sleep(5)
 
     logger.info("Navigating to reset link: %s", reset_page_url)
-    await page.goto(url=reset_page_url, timeout=1000 * 60)
+    await _goto_with_retry(page, reset_page_url)
+    await expect(page.get_by_label("Recovery code", exact=True)).to_be_visible(timeout=1000 * 60)
 
-    async with page.expect_navigation(timeout=1000 * 60):
-        logger.info("Page content:%s", await page.content())
-        await page.get_by_label("Recovery code", exact=True).fill(reset_code)
-        await page.get_by_role("button", name="Submit").click()
+    logger.info("Page content:%s", await page.content())
+    await page.get_by_label("Recovery code", exact=True).fill(reset_code)
+    await page.get_by_role("button", name="Submit").click()
+    await expect(page.get_by_label("New password", exact=True)).to_be_visible(timeout=1000 * 60)
 
-    async with page.expect_navigation(timeout=1000 * 60):
-        logger.info("Changing password: %s", test_credentials.password)
-        await page.get_by_label("New password", exact=True).fill(test_credentials.password)
-        await page.get_by_label("Confirm New password", exact=True).fill(test_credentials.password)
-        await page.get_by_role("button", name="Reset password").click()
+    logger.info("Changing password: %s", test_credentials.password)
+    await page.get_by_label("New password", exact=True).fill(test_credentials.password)
+    await page.get_by_label("Confirm New password", exact=True).fill(test_credentials.password)
+    await page.get_by_role("button", name="Reset password").click()
+    await expect(page.get_by_role("code")).to_be_visible(timeout=1000 * 60)
 
-    async with page.expect_navigation(timeout=1000 * 60):
-        logger.info("Getting OTP Code")
-        code = await page.get_by_role("code").text_content()
-        assert code, "Code content not found"
-        logger.info("Got OTP Code: %s", code)
-        totp = pyotp.TOTP(code)
-        await page.get_by_label("Verify code", exact=True).fill(totp.now())
-        await page.get_by_role("button", name="Save").click()
+    logger.info("Getting OTP Code")
+    code = await page.get_by_role("code").text_content()
+    assert code, "Code content not found"
+    logger.info("Got OTP Code: %s", code)
+    totp = pyotp.TOTP(code)
+    await page.get_by_label("Verify code", exact=True).fill(totp.now())
+    await page.get_by_role("button", name="Save").click()
 
     return totp
 
@@ -667,23 +703,24 @@ async def test_auth_proxy_integration_authorized(
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
     logger.info("Navigating to Jenkins public endpoint: %s", jenkins_endpoint)
-    await page.goto(url=jenkins_endpoint, timeout=1000 * 60 * 10)
+    await _goto_with_retry(page, jenkins_endpoint, timeout=60 * 3)
+    await page.wait_for_url(re.compile(r"https://idp\.test/.*"), timeout=1000 * 60)
+    await expect(page.get_by_label("Email")).to_be_visible(timeout=1000 * 60)
 
-    async with page.expect_navigation(timeout=1000 * 60):
-        logger.info(
-            "Filling in login-ui credentials: %s, %s",
-            test_credentials.email,
-            test_credentials.password,
-        )
-        await page.get_by_label("Email").fill(test_credentials.email)
-        await page.get_by_label("Password").fill(test_credentials.password)
-        await page.get_by_role("button", name="Sign in").click()
-        logger.info("Signing in...")
+    logger.info(
+        "Filling in login-ui credentials: %s, %s",
+        test_credentials.email,
+        test_credentials.password,
+    )
+    await page.get_by_label("Email").fill(test_credentials.email)
+    await page.get_by_label("Password").fill(test_credentials.password)
+    await page.get_by_role("button", name="Sign in").click()
+    logger.info("Signing in...")
+    await expect(page.get_by_label("Authentication code")).to_be_visible(timeout=1000 * 60)
 
-    async with page.expect_navigation(timeout=1000 * 60):
-        logger.info("Authenticating with TOTP")
-        await page.get_by_label("Authentication code").fill(totp.now())
-        await page.get_by_role("button", name="Sign in").click()
-        logger.info("Signing in...")
+    logger.info("Authenticating with TOTP")
+    await page.get_by_label("Authentication code").fill(totp.now())
+    await page.get_by_role("button", name="Sign in").click()
+    logger.info("Signing in...")
 
     await expect(page).to_have_url(re.compile(r"https://jenkins.test/*"))
