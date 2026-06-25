@@ -659,48 +659,6 @@ class Jenkins:
             client=client,
         )
 
-    def reload_jcasc(self) -> None:
-        """Reload JCasC configuration without restarting Jenkins.
-
-        Raises:
-            JenkinsError: if the reload request fails.
-        """
-        try:
-            client = self._get_api_client()
-            client.requester.post_url(f"{self.web_url}/configuration-as-code/reload")
-        except (
-            requests.exceptions.RequestException,
-            jenkinsapi.custom_exceptions.JenkinsAPIException,
-        ) as exc:
-            logger.error("JCasC reload failed: %s", exc)
-            raise JenkinsError("Failed to reload JCasC configuration.") from exc
-
-    def check_jcasc(self, config_content: str) -> bool:
-        """Validate JCasC config via the check endpoint.
-
-        Args:
-            config_content: The YAML content to validate.
-
-        Returns:
-            True if config is valid, False otherwise.
-
-        Raises:
-            JenkinsError: if the check request fails or Jenkins is unreachable.
-        """
-        try:
-            client = self._get_api_client()
-            response = client.requester.post_url(
-                f"{self.web_url}/configuration-as-code/check",
-                data=config_content,
-            )
-            return response.status_code == 200
-        except (
-            requests.exceptions.RequestException,
-            jenkinsapi.custom_exceptions.JenkinsAPIException,
-        ) as exc:
-            logger.error("JCasC validation failed: %s", exc)
-            raise JenkinsError("Failed to validate JCasC configuration.") from exc
-
 
 def _wait_for(
     func: typing.Callable[[], typing.Any], timeout: int = 300, check_interval: int = 10
@@ -1163,15 +1121,19 @@ def build_jcasc_config(
         The merged JCasC configuration dict.
     """
     config = copy.deepcopy(jcasc_config)
-    jenkins_section: typing.Dict[str, typing.Any] = config.get("jenkins", {})
+    jenkins_section: typing.Dict[str, typing.Any] = config.get("jenkins") or {}
 
-    # Conflict check: user provides securityRealm while auth_proxy is active
+    # Conflict check: user provides securityRealm or authorizationStrategy while auth_proxy is active
     if auth_proxy:
-        if "securityRealm" in jenkins_section:
-            logger.warning("Security realm is managed user provided jcasc-config settings.")
+        if "securityRealm" in jenkins_section or "authorizationStrategy" in jenkins_section:
+            logger.warning(
+                "Jenkins security is managed by user-provided jcasc-config; "
+                "auth-proxy bypass not injected."
+            )
         else:
             logger.warning("Bypassing Jenkins security, security via auth proxy assumed.")
-            jenkins_section["securityRealm"] = {"authorizationStrategy": "unsecured"}
+            jenkins_section["securityRealm"] = "none"
+            jenkins_section["authorizationStrategy"] = "unsecured"
 
     # Inject admin credentials if securityRealm not provided by user
     if "securityRealm" not in jenkins_section:
@@ -1196,29 +1158,26 @@ def build_jcasc_config(
         if port:
             jenkins_section["proxy"]["port"] = str(port)
 
-    config.setdefault("jenkins", {}).update(jenkins_section)
+    config["jenkins"] = jenkins_section
     return config
 
 
 def sync_jcasc_config(container: ops.Container, configuration_yaml: str) -> str:
-    """Write JCasC config to disk, validate, and reload. Rollback on failure.
+    """Write JCasC config to disk, with short-circuit if unchanged.
 
-    Handles the full JCasC file lifecycle:
-    1. Pull current config (if any)
-    2. Short-circuit if unchanged
-    3. Push desired config
-    4. Validate via Jenkins API
-    5. Reload if valid, rollback if invalid
+    Runs before Jenkins is up (during pre-startup), so live validation (check endpoint)
+    and reload are not available. Validation happens asynchronously at runtime when
+    Jenkins reads the config on startup.
 
     Args:
         container: The Jenkins workload container.
         configuration_yaml: The full YAML string to write.
 
     Returns:
-        The hash of the configuration applied.
+        The SHA256 hash of the configuration written.
 
     Raises:
-        JenkinsError: if Jenkins API calls fail (check/reload).
+        ops.pebble.APIError: if the container push fails.
     """
     jcasc_path = str(JCASC_CONFIG_PATH)
 

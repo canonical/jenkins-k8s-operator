@@ -40,31 +40,35 @@ JCASC_WITH_SECURITY_REALM = {
 }
 
 
-@pytest.mark.parametrize(
-    "auth_proxy_integrated, expects_unsecured",
-    [
-        pytest.param(True, True, id="auth-proxy-integrated"),
-        pytest.param(False, False, id="auth-proxy-not-integrated"),
-    ],
-)
-def test_build_jcasc_config_security_realm_behavior(
-    auth_proxy_integrated: bool, expects_unsecured: bool
-):
+def test_build_jcasc_config_auth_proxy_bypasses_security():
     """
-    arrange: given user jcasc config and auth-proxy integration state.
+    arrange: given user jcasc config and auth-proxy integrated.
     act: when build_jcasc_config is called.
-    assert: securityRealm behavior follows auth-proxy integration contract.
+    assert: securityRealm and authorizationStrategy are set as siblings for auth-proxy bypass.
     """
     result = jenkins.build_jcasc_config(
         VALID_JCASC_CONFIG,
         proxy_config=None,
-        auth_proxy=auth_proxy_integrated,
+        auth_proxy=True,
     )
 
-    if expects_unsecured:
-        assert result["jenkins"]["securityRealm"] == {"authorizationStrategy": "unsecured"}
-    else:
-        assert result["jenkins"]["securityRealm"]["local"]["users"][0]["id"] == "admin"
+    assert result["jenkins"]["securityRealm"] == "none"
+    assert result["jenkins"]["authorizationStrategy"] == "unsecured"
+
+
+def test_build_jcasc_config_default_injects_admin_realm():
+    """
+    arrange: given user jcasc config and auth-proxy not integrated.
+    act: when build_jcasc_config is called.
+    assert: admin securityRealm with local users is injected.
+    """
+    result = jenkins.build_jcasc_config(
+        VALID_JCASC_CONFIG,
+        proxy_config=None,
+        auth_proxy=False,
+    )
+
+    assert result["jenkins"]["securityRealm"]["local"]["users"][0]["id"] == "admin"
 
 
 def test_build_jcasc_config_preserves_existing_security_realm_without_mutation():
@@ -97,7 +101,8 @@ def test_build_jcasc_config_auth_proxy_preserves_user_security_realm_and_warns()
 
     assert result["jenkins"]["securityRealm"]["local"]["users"][0]["id"] == "custom"
     warning_mock.assert_called_once_with(
-        "Security realm is managed user provided jcasc-config settings."
+        "Jenkins security is managed by user-provided jcasc-config; "
+        "auth-proxy bypass not injected."
     )
 
 
@@ -153,19 +158,25 @@ def test_reconcile_jcasc_config_skips_when_no_config(harness_container: HarnessW
     """
     arrange: given charm_state.jcasc_config is None.
     act: when _reconcile_jcasc_config is called.
-    assert: sync_jcasc_config is not called and empty hash is returned.
+    assert: admin baseline config is applied and sync_jcasc_config is called.
     """
     harness_container.harness.begin()
     charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
 
     charm_state = MagicMock(spec=state.State)
     charm_state.jcasc_config = None
+    charm_state.proxy_config = None
+    charm_state.auth_proxy_integrated = False
 
-    with patch("jenkins.sync_jcasc_config") as sync_mock:
+    with patch("jenkins.sync_jcasc_config", return_value="hash123") as sync_mock:
         result = charm._reconcile_jcasc_config(harness_container.container, charm_state)
 
-    assert result == ""
-    sync_mock.assert_not_called()
+    assert result == "hash123"
+    sync_mock.assert_called_once()
+    # Verify the config passed to sync contains admin securityRealm
+    called_yaml = sync_mock.call_args[0][1]
+    assert "securityRealm" in called_yaml
+    assert "admin" in called_yaml
 
 
 def test_reconcile_jcasc_config_serialization_error_raises_blocked(
@@ -319,3 +330,25 @@ def test_sync_jcasc_config_writes_when_file_missing(harness_container: HarnessWi
 
     assert result == hashlib.sha256(desired.encode("utf-8")).hexdigest()
     push_mock.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "jcasc_input",
+    [
+        pytest.param({"jenkins": None}, id="jenkins-none"),
+        pytest.param({}, id="jenkins-missing"),
+        pytest.param({"jenkins": {}}, id="jenkins-empty"),
+    ],
+)
+def test_build_jcasc_config_handles_empty_jenkins_section(jcasc_input: dict):
+    """
+    arrange: given various empty/None jenkins section configurations.
+    act: when build_jcasc_config is called.
+    assert: no crash and admin securityRealm is injected.
+    """
+    result = jenkins.build_jcasc_config(jcasc_input, proxy_config=None, auth_proxy=False)
+
+    assert "jenkins" in result
+    assert "securityRealm" in result["jenkins"]
+    assert result["jenkins"]["securityRealm"]["local"]["users"][0]["id"] == "admin"
+    assert "disabledAdministrativeMonitors" in result["jenkins"]
