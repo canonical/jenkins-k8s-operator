@@ -407,3 +407,16 @@ def test_jcasc_config_non_dict(mock_charm: MagicMock):
 
     with pytest.raises(state.CharmConfigInvalidError, match="YAML mapping"):
         state.State.from_charm(mock_charm)
+
+
+def test_jcasc_config_with_none_jenkins_section(mock_charm: MagicMock):
+    """
+    arrange: given a charm with 'jenkins:' (None value) in jcasc-config.
+    act: when state is initialized from charm.
+    assert: state parses successfully and jcasc_config has the None jenkins entry.
+    """
+    mock_charm.config = {"jcasc-config": "jenkins:"}
+
+    result = state.State.from_charm(mock_charm)
+
+    assert result.jcasc_config == {"jenkins": None}
