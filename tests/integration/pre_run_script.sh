@@ -99,7 +99,9 @@ sudo microk8s disable metallb
 sudo microk8s enable metallb:"$METALLB_RANGE"
 
 # 5. Wait for MetalLB IPAddressPool Custom Resource Definition to be populated using native jsonpath
-# shellcheck disable=SC2016 - the command is evaluated in the context of the shell, not at parse time
+# disable shell check use single quotes: the command is evaluated in the context of the shell, not
+# at parse time
+# shellcheck disable=SC2016
 CHECK_POOL_CMD='POOL_RANGE=$(sg snap_microk8s -c "microk8s kubectl get ipaddresspool -n metallb-system -o jsonpath=\"{.items[*].spec.addresses[*]}\" 2>/dev/null"); [ -n "$POOL_RANGE" ]'
 if ! retry_command "MetalLB IP address pool" "$CHECK_POOL_CMD"; then
     exit 1
