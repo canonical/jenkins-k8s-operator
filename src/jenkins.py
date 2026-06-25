@@ -1186,8 +1186,9 @@ def sync_jcasc_config(container: ops.Container, configuration_yaml: str) -> str:
     except (ops.pebble.PathError, FileNotFoundError):
         current = ""
 
-    # TODO: Do pebble exec that calculates the hash of the file on disk instead of pulling it to
-    # the operator side. This could improve performance.
+    # TODO (performance enhancement): Calculate file hash via pebble exec on-disk instead of
+    # pulling YAML to operator side. Reduces memory overhead and improves performance for
+    # large configs. Track as: github.com/canonical/jenkins-k8s-operator/issues/<ticket>
     config_hash = hashlib.sha256(configuration_yaml.encode("utf-8")).hexdigest()
     old_config_hash = hashlib.sha256(current.encode("utf-8")).hexdigest()
     if old_config_hash == config_hash:
