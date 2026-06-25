@@ -239,12 +239,15 @@ def _parse_jcasc_config(charm: ops.CharmBase) -> typing.Optional[typing.Dict[str
 
     if not isinstance(parsed, dict):
         raise CharmConfigInvalidError("jcasc-config must be a YAML mapping (dict)")
-    
+
     # Validate jenkins section if present (defence in depth)
-    if "jenkins" in parsed and parsed["jenkins"] is not None:
-        if not isinstance(parsed["jenkins"], dict):
-            raise CharmConfigInvalidError("jcasc-config 'jenkins' section must be a mapping")
-    
+    if (
+        "jenkins" in parsed
+        and parsed["jenkins"] is not None
+        and not isinstance(parsed["jenkins"], dict)
+    ):
+        raise CharmConfigInvalidError("jcasc-config 'jenkins' section must be a mapping")
+
     return parsed
 
 

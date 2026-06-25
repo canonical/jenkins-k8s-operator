@@ -274,7 +274,9 @@ def test_on_rotate_credentials_action_prefers_secret_from_charm_state_and_update
     )
     get_admin_credentials_mock = MagicMock()
     monkeypatch.setattr(jenkins, "get_admin_credentials", get_admin_credentials_mock)
-    monkeypatch.setattr(jenkins.Jenkins, "rotate_credentials", MagicMock(return_value=new_password))
+    monkeypatch.setattr(
+        jenkins.Jenkins, "rotate_credentials", MagicMock(return_value=new_password)
+    )
 
     mock_secret = MagicMock()
     monkeypatch.setattr(jenkins_charm.model, "get_secret", MagicMock(return_value=mock_secret))
@@ -308,7 +310,9 @@ def test_on_rotate_credentials_action_creates_secret_when_missing(
         "_get_state",
         MagicMock(return_value=MagicMock(admin_password=old_password)),
     )
-    monkeypatch.setattr(jenkins.Jenkins, "rotate_credentials", MagicMock(return_value=new_password))
+    monkeypatch.setattr(
+        jenkins.Jenkins, "rotate_credentials", MagicMock(return_value=new_password)
+    )
     monkeypatch.setattr(
         jenkins_charm.model,
         "get_secret",

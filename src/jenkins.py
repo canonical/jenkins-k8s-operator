@@ -14,11 +14,11 @@ import logging
 import re
 import secrets
 import textwrap
+import time
 import typing
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
-import time
 from urllib.parse import urlparse
 
 import jenkinsapi.custom_exceptions
@@ -662,7 +662,7 @@ class Jenkins:
 
 def _wait_for(
     func: typing.Callable[[], typing.Any], timeout: int = 300, check_interval: int = 10
-) -> None:
+) -> typing.Any:
     """Wait for function execution to become truthy.
 
     Args:
@@ -676,14 +676,15 @@ def _wait_for(
     start_time = now = datetime.now()
     min_wait_seconds = timedelta(seconds=timeout)
     while now - start_time < min_wait_seconds:
-        if func():
-            break
+        result = func()
+        if result:
+            return result
         now = datetime.now()
         sleep(check_interval)
-    else:
-        if func():
-            return
-        raise TimeoutError()
+    result = func()
+    if result:
+        return result
+    raise TimeoutError()
 
 
 class StorageMountError(JenkinsBootstrapError):

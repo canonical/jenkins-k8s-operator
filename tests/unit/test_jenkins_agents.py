@@ -64,9 +64,7 @@ def test_get_node_secret_success(container: ops.Container, mock_client: MagicMoc
 
 def test_get_node_secret_raises_on_api_error(container: ops.Container, mock_client: MagicMock):
     """get_node_secret raises JenkinsError on API failure."""
-    mock_client.run_groovy_script.side_effect = (
-        jenkinsapi.custom_exceptions.JenkinsAPIException()
-    )
+    mock_client.run_groovy_script.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
 
     with (
         patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
@@ -99,9 +97,7 @@ def test_add_agent_node_exception_swallows_already_exists(
     agent_meta: state.AgentMeta,
 ):
     """add_agent_node swallows AlreadyExists exception."""
-    mock_client.create_node_with_config.side_effect = (
-        jenkinsapi.custom_exceptions.AlreadyExists()
-    )
+    mock_client.create_node_with_config.side_effect = jenkinsapi.custom_exceptions.AlreadyExists()
 
     with (
         patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),

@@ -560,10 +560,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Raises:
             ReconcileBlockedError: if there was an error installing JCasC configuration.
         """
-        if charm_state.jcasc_config is None:
-            jcasc_config = {}
-        else:
-            jcasc_config = charm_state.jcasc_config
+        jcasc_config = {} if charm_state.jcasc_config is None else charm_state.jcasc_config
 
         desired_config = jenkins.build_jcasc_config(
             jcasc_config,

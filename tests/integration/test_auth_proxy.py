@@ -272,6 +272,7 @@ def identity_platform_traefik_ip_fixture(
     identity_platform_juju: jubilant.Juju,
 ):
     """Identity platform traefik ip."""
+
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type((AssertionError, TypeError, KeyError, IndexError)),
         stop=tenacity.stop_after_attempt(12),
@@ -300,6 +301,7 @@ def jenkins_traefik_ip_fixture(
     model: Model,
 ):
     """Jenkins traefik ip."""
+
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type((AssertionError, TypeError, KeyError, IndexError)),
         stop=tenacity.stop_after_attempt(12),

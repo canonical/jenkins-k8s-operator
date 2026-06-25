@@ -430,5 +430,5 @@ def test_jcasc_config_with_non_dict_jenkins_section(mock_charm: MagicMock):
     """
     mock_charm.config = {"jcasc-config": "jenkins: not_a_dict"}
 
-    with pytest.raises(state.CharmConfigInvalidError, match="jenkins.*section must be a mapping"):
+    with pytest.raises(state.CharmConfigInvalidError, match=r"jenkins.*section must be a mapping"):
         state.State.from_charm(mock_charm)

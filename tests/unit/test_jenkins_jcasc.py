@@ -9,7 +9,7 @@
 import re
 from functools import partial
 from typing import Callable
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import jenkinsapi
 import ops
