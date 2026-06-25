@@ -574,7 +574,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             logger.error("Failed to serialize JCasC config, %s", exc)
             raise ReconcileBlockedError("Failed to serialize JCasC config.") from exc
 
-        return jenkins.sync_jcasc_config(container, desired_yaml)
+        try:
+            return jenkins.sync_jcasc_config(container, desired_yaml)
+        except jenkins.JenkinsError as exc:
+            logger.error("Failed to sync JCasC config: %s", exc)
+            raise ReconcileBlockedError("Failed to sync JCasC configuration.") from exc
 
     def _on_get_admin_password(self, event: ops.ActionEvent) -> None:
         """Handle get-admin-password event.

@@ -668,8 +668,6 @@ class Jenkins:
         try:
             client = self._get_api_client()
             client.requester.post_url(f"{self.web_url}/configuration-as-code/reload")
-        except JenkinsError:
-            raise
         except (
             requests.exceptions.RequestException,
             jenkinsapi.custom_exceptions.JenkinsAPIException,
@@ -696,8 +694,6 @@ class Jenkins:
                 data=config_content,
             )
             return response.status_code == 200
-        except JenkinsError:
-            raise
         except (
             requests.exceptions.RequestException,
             jenkinsapi.custom_exceptions.JenkinsAPIException,

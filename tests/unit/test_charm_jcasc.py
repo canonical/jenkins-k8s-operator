@@ -220,6 +220,35 @@ def test_reconcile_jcasc_config_calls_sync_with_rendered_yaml(
     assert "jenkins:" in call_yaml
 
 
+def test_reconcile_jcasc_config_jenkins_error_raises_blocked(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given sync_jcasc_config raises JenkinsError.
+    act: when _reconcile_jcasc_config is called.
+    assert: ReconcileBlockedError is raised wrapping the JenkinsError.
+    """
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    charm_state = MagicMock(spec=state.State)
+    charm_state.jcasc_config = VALID_JCASC_CONFIG
+    charm_state.proxy_config = None
+    charm_state.auth_proxy_integrated = False
+
+    with (
+        patch(
+            "jenkins.sync_jcasc_config",
+            side_effect=jenkins.JenkinsError("API unreachable"),
+        ),
+        pytest.raises(
+            ReconcileBlockedError,
+            match=r"Failed to sync JCasC configuration\.",
+        ),
+    ):
+        charm._reconcile_jcasc_config(harness_container.container, charm_state)
+
+
 def test_sync_jcasc_config_no_write_when_unchanged(harness_container: HarnessWithContainer):
     """
     arrange: given container has identical current JCasC config.
