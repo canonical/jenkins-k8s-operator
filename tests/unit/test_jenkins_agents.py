@@ -7,9 +7,7 @@
 # pylint:disable=protected-access
 
 import json
-from contextlib import nullcontext
 from secrets import token_hex
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import jenkinsapi
@@ -31,72 +29,83 @@ def agent_meta_fixture() -> state.AgentMeta:
     return state.AgentMeta(executors="3", labels="x86_64", name="agent_node_0")
 
 
-@pytest.mark.parametrize("raise_api_error", [True, False], ids=["api-error", "success"])
-def test_list_agent_nodes(container: ops.Container, mock_client: MagicMock, raise_api_error: bool):
-    """list_agent_nodes handles API errors and success paths."""
+def test_list_agent_nodes_success(container: ops.Container, mock_client: MagicMock):
+    """list_agent_nodes returns list of nodes on success."""
     mock_node = MagicMock()
-    expected_ctx = pytest.raises(jenkins.JenkinsError) if raise_api_error else nullcontext()
+    mock_client.get_nodes.return_value = {"node": mock_node}
 
-    if raise_api_error:
-        mock_client.get_nodes.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
-    else:
-        mock_client.get_nodes.return_value = {"node": mock_node}
-
-    with (
-        patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
-        expected_ctx,
-    ):
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
         result = list(_jenkins_instance(container).list_agent_nodes())
 
-    if not raise_api_error:
-        assert result == [mock_node]
+    assert result == [mock_node]
 
 
-@pytest.mark.parametrize("raise_api_error", [True, False], ids=["api-error", "success"])
-def test_get_node_secret(container: ops.Container, mock_client: MagicMock, raise_api_error: bool):
-    """get_node_secret handles API errors and success path."""
-    expected_ctx = pytest.raises(jenkins.JenkinsError) if raise_api_error else nullcontext()
-    expected_secret = token_hex(8)
-
-    if raise_api_error:
-        mock_client.run_groovy_script.side_effect = (
-            jenkinsapi.custom_exceptions.JenkinsAPIException()
-        )
-    else:
-        mock_client.run_groovy_script.return_value = f"{expected_secret}\n"
+def test_list_agent_nodes_raises_on_api_error(container: ops.Container, mock_client: MagicMock):
+    """list_agent_nodes raises JenkinsError on API failure."""
+    mock_client.get_nodes.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException()
 
     with (
         patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
-        expected_ctx,
+        pytest.raises(jenkins.JenkinsError),
     ):
+        list(_jenkins_instance(container).list_agent_nodes())
+
+
+def test_get_node_secret_success(container: ops.Container, mock_client: MagicMock):
+    """get_node_secret returns the secret on success."""
+    expected_secret = token_hex(8)
+    mock_client.run_groovy_script.return_value = f"{expected_secret}\n"
+
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
         node_secret = _jenkins_instance(container).get_node_secret("jenkins-agent")
 
-    if not raise_api_error:
-        assert node_secret == expected_secret
+    assert node_secret == expected_secret
 
 
-@pytest.mark.parametrize(
-    "side_effect,expect_error",
-    [
-        pytest.param(jenkinsapi.custom_exceptions.JenkinsAPIException, True, id="api-error"),
-        pytest.param(jenkinsapi.custom_exceptions.AlreadyExists, False, id="already-exists"),
-    ],
-)
-def test_add_agent_node_exception_paths(
+def test_get_node_secret_raises_on_api_error(container: ops.Container, mock_client: MagicMock):
+    """get_node_secret raises JenkinsError on API failure."""
+    mock_client.run_groovy_script.side_effect = (
+        jenkinsapi.custom_exceptions.JenkinsAPIException()
+    )
+
+    with (
+        patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
+        pytest.raises(jenkins.JenkinsError),
+    ):
+        _jenkins_instance(container).get_node_secret("jenkins-agent")
+
+
+def test_add_agent_node_exception_raises_on_api_error(
     container: ops.Container,
     mock_client: MagicMock,
     agent_meta: state.AgentMeta,
-    side_effect: Any,
-    expect_error: bool,
 ):
-    """add_agent_node raises on API error and swallows AlreadyExists."""
-    expected_ctx = pytest.raises(jenkins.JenkinsError) if expect_error else nullcontext()
-    mock_client.create_node_with_config.side_effect = side_effect
+    """add_agent_node raises JenkinsError on API error."""
+    mock_client.create_node_with_config.side_effect = (
+        jenkinsapi.custom_exceptions.JenkinsAPIException()
+    )
 
     with (
         patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
         patch.object(jenkins.Jenkins, "_get_node_config", return_value={"json": "{}"}),
-        expected_ctx,
+        pytest.raises(jenkins.JenkinsError),
+    ):
+        _jenkins_instance(container).add_agent_node(agent_meta)
+
+
+def test_add_agent_node_exception_swallows_already_exists(
+    container: ops.Container,
+    mock_client: MagicMock,
+    agent_meta: state.AgentMeta,
+):
+    """add_agent_node swallows AlreadyExists exception."""
+    mock_client.create_node_with_config.side_effect = (
+        jenkinsapi.custom_exceptions.AlreadyExists()
+    )
+
+    with (
+        patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
+        patch.object(jenkins.Jenkins, "_get_node_config", return_value={"json": "{}"}),
     ):
         _jenkins_instance(container).add_agent_node(agent_meta)
 
@@ -166,21 +175,20 @@ def test_get_node_config_builds_websocket_enabled_node_config(
     assert node_kwargs["poll"] is False
 
 
-@pytest.mark.parametrize("raise_api_error", [True, False], ids=["api-error", "success"])
-def test_remove_agent_node(
-    container: ops.Container, mock_client: MagicMock, raise_api_error: bool
-):
-    """remove_agent_node handles API errors and success path."""
-    expected_ctx = pytest.raises(jenkins.JenkinsError) if raise_api_error else nullcontext()
+def test_remove_agent_node_success(container: ops.Container, mock_client: MagicMock):
+    """remove_agent_node removes the node on success."""
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
+        _jenkins_instance(container).remove_agent_node("jenkins-agent-0")
 
-    if raise_api_error:
-        mock_client.delete_node.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
+    mock_client.delete_node.assert_called_once_with(nodename="jenkins-agent-0")
+
+
+def test_remove_agent_node_raises_on_api_error(container: ops.Container, mock_client: MagicMock):
+    """remove_agent_node raises JenkinsError on API failure."""
+    mock_client.delete_node.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException
 
     with (
         patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
-        expected_ctx,
+        pytest.raises(jenkins.JenkinsError),
     ):
         _jenkins_instance(container).remove_agent_node("jenkins-agent-0")
-
-    if not raise_api_error:
-        mock_client.delete_node.assert_called_once_with(nodename="jenkins-agent-0")
