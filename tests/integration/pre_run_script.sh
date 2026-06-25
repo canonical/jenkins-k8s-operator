@@ -93,12 +93,13 @@ discover_metallb_range() {
 METALLB_RANGE=$(discover_metallb_range)
 
 # Assign dynamically detected network path range
-sudo microk8s enable metallb:$METALLB_RANGE
+sudo microk8s enable metallb:"$METALLB_RANGE"
 # 2026-06-25 Restart metallb - metallb just prints "Terminated" and stops setup midway
 sudo microk8s disable metallb
-sudo microk8s enable metallb:$METALLB_RANGE
+sudo microk8s enable metallb:"$METALLB_RANGE"
 
 # 5. Wait for MetalLB IPAddressPool Custom Resource Definition to be populated using native jsonpath
+# shellcheck disable=SC2016 - the command is evaluated in the context of the shell, not at parse time
 CHECK_POOL_CMD='POOL_RANGE=$(sg snap_microk8s -c "microk8s kubectl get ipaddresspool -n metallb-system -o jsonpath=\"{.items[*].spec.addresses[*]}\" 2>/dev/null"); [ -n "$POOL_RANGE" ]'
 if ! retry_command "MetalLB IP address pool" "$CHECK_POOL_CMD"; then
     exit 1
