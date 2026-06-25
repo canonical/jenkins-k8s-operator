@@ -156,33 +156,37 @@ def test_wait_ready_last_successful_check(monkeypatch: pytest.MonkeyPatch, jenki
     _jenkins_instance().wait_ready(1, 1, api_ready=False)
 
 
-@pytest.mark.parametrize(
-    "case",
-    [
-        pytest.param("no-container", id="no-container"),
-        pytest.param("cant-connect", id="cant-connect"),
-        pytest.param("not-mounted", id="not-mounted"),
-    ],
-)
-def test_is_storage_ready_falsey_cases(case: str):
+def test_is_storage_ready_falsey_no_container():
     """
-    arrange: given one of the non-ready storage scenarios.
+    arrange: given no container.
     act: when is_storage_ready is called.
     assert: Falsy value is returned.
     """
-    container: ops.Container | None
-    if case == "no-container":
-        container = None
-    elif case == "cant-connect":
-        mock_container = MagicMock(ops.Container)
-        mock_container.can_connect.return_value = False
-        container = mock_container
-    else:
-        mock_container = MagicMock(ops.Container)
-        mock_container.pull.return_value = io.StringIO("")
-        container = mock_container
+    assert not jenkins.is_storage_ready(container=None)
 
-    assert not jenkins.is_storage_ready(container=container)
+
+def test_is_storage_ready_falsey_cant_connect():
+    """
+    arrange: given a container that cannot connect.
+    act: when is_storage_ready is called.
+    assert: Falsy value is returned.
+    """
+    mock_container = MagicMock(ops.Container)
+    mock_container.can_connect.return_value = False
+
+    assert not jenkins.is_storage_ready(container=mock_container)
+
+
+def test_is_storage_ready_falsey_not_mounted():
+    """
+    arrange: given a container without mounted storage.
+    act: when is_storage_ready is called.
+    assert: Falsy value is returned.
+    """
+    mock_container = MagicMock(ops.Container)
+    mock_container.pull.return_value = io.StringIO("")
+
+    assert not jenkins.is_storage_ready(container=mock_container)
 
 
 def test_is_storage_ready_proc_error():
