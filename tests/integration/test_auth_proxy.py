@@ -23,9 +23,16 @@ from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from juju.client._definitions import UnitStatus
 from juju.model import Model
-from playwright.async_api import Error as PlaywrightError, async_playwright, expect
-from playwright.async_api._generated import Browser, BrowserContext, BrowserType, Page
-from playwright.async_api._generated import Playwright as AsyncPlaywright
+from playwright.async_api import (
+    Browser,
+    BrowserContext,
+    BrowserType,
+    Page,
+    async_playwright,
+    expect,
+)
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import Playwright as AsyncPlaywright
 
 from .helpers import wait_for
 
