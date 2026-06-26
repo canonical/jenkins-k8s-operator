@@ -10,6 +10,7 @@ import textwrap
 import time
 import typing
 from enum import Enum
+from urllib.parse import urlparse
 
 import jenkinsapi.jenkins
 import kubernetes.client
@@ -59,10 +60,12 @@ async def install_plugins(
 
     # block until the UI does not have "Pending" in download progress column.
     await wait_for(
-        lambda: "Pending"
-        not in str(
-            client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
-            encoding="utf-8",
+        lambda: (
+            "Pending"
+            not in str(
+                client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
+                encoding="utf-8",
+            )
         ),
         timeout=60 * 10,
     )
@@ -87,7 +90,7 @@ async def get_model_unit_addresses(model: Model, app_name: str) -> list[str]:
     Returns:
         the IP address of the Jenkins unit.
     """
-    status: FullStatus = await model.get_status()
+    status: FullStatus = await _get_status_with_retry(model)
     # mypy cannot infer the type ApplicationStatus but thinks its the base class type "Type".
     application_status: ApplicationStatus | None = status.applications[app_name]  # type: ignore
     assert application_status, f"Application status {app_name} not found in {status}"
@@ -99,6 +102,84 @@ async def get_model_unit_addresses(model: Model, app_name: str) -> list[str]:
         for unit_status in units_statuses
         if unit_status and unit_status.address
     ]
+
+
+def _is_juju_proxy_error(exc: BaseException) -> bool:
+    """Check if exception is a transient juju kubernetes proxy error.
+
+    Args:
+        exc: The exception to check
+
+    Returns:
+        True if the exception is a known transient proxy error.
+    """
+    name = type(exc).__name__
+    return name in {
+        "ConnectionClosedError",
+        "ConnectionClosed",
+        "ProxyNotConnectedError",
+        "BrokenPipeError",
+    }
+
+
+async def _model_reconnect_on_proxy_error(exc: Exception, attempt: int) -> None:
+    """On proxy error, force model reconnect before retry.
+
+    Args:
+        exc: The exception that triggered this callback
+        attempt: Current attempt number (1-indexed by tenacity)
+    """
+    if not _is_juju_proxy_error(exc):
+        return
+    name = type(exc).__name__
+    logger.warning(
+        "model.get_status() transient failure (attempt %d): %s: %s",
+        attempt,
+        name,
+        exc,
+    )
+    # Note: This is called by tenacity after the exception is caught but
+    # before sleeping/retrying. We need the model reference, but tenacity
+    # doesn't pass the original coroutine args. We'll disconnect/reconnect
+    # in the retry wrapper instead.
+
+
+@tenacity.retry(
+    wait=tenacity.wait_exponential(multiplier=5, max=60),
+    stop=tenacity.stop_after_attempt(3),
+    retry=tenacity.retry_if_exception(_is_juju_proxy_error),
+    reraise=True,
+)
+async def _get_status_with_retry(model: Model) -> FullStatus:
+    """Call ``model.get_status()`` with retries on transient juju proxy errors.
+
+    The kubernetes port-forward proxy that ``python-libjuju`` uses to reach the
+    juju controller (port 17070) occasionally dies mid-test on busy CI runners,
+    surfacing as ``ConnectionClosedError`` / ``ProxyNotConnectedError`` /
+    ``BrokenPipeError``. On retry we force ``model.disconnect()`` /
+    ``model.connect()`` so we don't keep hammering a dead socket.
+
+    Args:
+        model: Juju model
+
+    Returns:
+        The full juju model status.
+    """
+    try:
+        return await model.get_status()
+    except Exception as exc:
+        if _is_juju_proxy_error(exc):
+            # Force the juju model to drop the dead connection so the next
+            # call reopens the k8s port-forward proxy from scratch.
+            try:
+                await model.disconnect()
+            except Exception as disconnect_exc:
+                logger.debug("model.disconnect() ignored error: %s", disconnect_exc)
+            try:
+                await model.connect()
+            except Exception as connect_exc:
+                logger.warning("model.connect() reconnect failed: %s", connect_exc)
+        raise
 
 
 def gen_test_job_xml(node_label: str):
@@ -367,6 +448,29 @@ async def generate_jenkins_client(
         A Jenkins web client.
     """
     jenkins_unit = jenkins_app.units[0]
+    start = time.monotonic()
+    model = ops_test.model
+    assert model is not None
+    current_unit_ips = await get_model_unit_addresses(model=model, app_name=jenkins_app.name)
+    requested_host = urlparse(address).hostname
+    logger.info(
+        "phase=generate_client app=%s unit=%s address=%s requested_host=%s resolved_ips=%s method=%s",
+        jenkins_app.name,
+        jenkins_unit.name,
+        address,
+        requested_host,
+        current_unit_ips,
+        method.value,
+    )
+    if requested_host and requested_host not in current_unit_ips:
+        logger.warning(
+            "phase=generate_client app=%s unit=%s stale_address_detected address_host=%s resolved_ips=%s",
+            jenkins_app.name,
+            jenkins_unit.name,
+            requested_host,
+            current_unit_ips,
+        )
+
     if method == AuthMethod.TOKEN:
         ret, api_token, stderr = await ops_test.juju(
             "ssh",
@@ -381,11 +485,55 @@ async def generate_jenkins_client(
     elif method == AuthMethod.PASSWORD:
         action = await jenkins_unit.run_action("get-admin-password")
         await action.wait()
+        logger.info(
+            "phase=generate_client app=%s unit=%s auth_action=%s action_status=%s action_result_keys=%s",
+            jenkins_app.name,
+            jenkins_unit.name,
+            "get-admin-password",
+            action.status,
+            sorted(action.results.keys()),
+        )
         secret = action.results["password"]
     else:
         raise ValueError(f"Unsupported auth method: {method}")
 
-    return jenkinsapi.jenkins.Jenkins(address, "admin", secret, timeout=60)
+    try:
+        response = requests.get(f"{address}/login", timeout=10)
+        logger.info(
+            "phase=generate_client app=%s unit=%s login_probe_status=%s elapsed_s=%.2f",
+            jenkins_app.name,
+            jenkins_unit.name,
+            response.status_code,
+            time.monotonic() - start,
+        )
+    except requests.RequestException as exc:
+        logger.warning(
+            "phase=generate_client app=%s unit=%s login_probe_error=%s elapsed_s=%.2f",
+            jenkins_app.name,
+            jenkins_unit.name,
+            repr(exc),
+            time.monotonic() - start,
+        )
+
+    try:
+        client = jenkinsapi.jenkins.Jenkins(address, "admin", secret, timeout=60)
+        logger.info(
+            "phase=generate_client app=%s unit=%s client_created=true elapsed_s=%.2f",
+            jenkins_app.name,
+            jenkins_unit.name,
+            time.monotonic() - start,
+        )
+        return client
+    except Exception as exc:
+        logger.warning(
+            "phase=generate_client app=%s unit=%s client_created=false exc_type=%s exc=%s elapsed_s=%.2f",
+            jenkins_app.name,
+            jenkins_unit.name,
+            type(exc).__name__,
+            exc,
+            time.monotonic() - start,
+        )
+        raise
 
 
 async def generate_unit_web_client_from_application(

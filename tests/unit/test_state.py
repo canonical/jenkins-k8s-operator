@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Jenkins-k8s state module tests."""
@@ -322,3 +322,113 @@ def test_agent_meta_from_relation_data_complete():
     )
     assert result is not None
     assert result.name == "agent-0"
+
+
+def test_get_relation_state_invalid_agent_data_raises_relation_error():
+    """
+    arrange: given relation data containing invalid agent metadata.
+    act: when _get_relation_state is called.
+    assert: CharmRelationDataInvalidError is raised.
+    """
+    mock_charm = MagicMock(spec=ops.CharmBase)
+    mock_unit = MagicMock(spec=ops.Unit)
+    mock_relation = MagicMock(spec=ops.Relation)
+    mock_relation.units = [mock_unit]
+    mock_relation.data = {
+        mock_unit: {
+            "executors": "not-an-int",
+            "labels": "linux",
+            "name": "agent-0",
+        }
+    }
+    mock_charm.model.relations = {state.AGENT_RELATION: [mock_relation]}
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(state.CharmRelationDataInvalidError, match="Invalid agent relation data"):
+        state._get_relation_state(mock_charm)
+
+
+def test_jcasc_config_from_charm(mock_charm: MagicMock):
+    """
+    arrange: given a charm with valid jcasc-config set.
+    act: when state is initialized from charm.
+    assert: jcasc_config contains the parsed dict.
+    """
+    test_config = "jenkins:\n  systemMessage: test\n"
+    mock_charm.config = {"jcasc-config": test_config}
+
+    result = state.State.from_charm(mock_charm)
+    assert result.jcasc_config == {"jenkins": {"systemMessage": "test"}}
+
+
+def test_jcasc_config_default(mock_charm: MagicMock):
+    """
+    arrange: given a charm with no explicit jcasc-config.
+    act: when state is initialized from charm.
+    assert: jcasc_config is None.
+    """
+    mock_charm.config = {}
+
+    result = state.State.from_charm(mock_charm)
+    assert result.jcasc_config is None
+
+
+def test_jcasc_config_empty(mock_charm: MagicMock):
+    """
+    arrange: given a charm with whitespace-only jcasc-config.
+    act: when state is initialized from charm.
+    assert: jcasc_config is None.
+    """
+    mock_charm.config = {"jcasc-config": "   "}
+
+    result = state.State.from_charm(mock_charm)
+    assert result.jcasc_config is None
+
+
+def test_jcasc_config_invalid_yaml(mock_charm: MagicMock):
+    """
+    arrange: given a charm with invalid YAML in jcasc-config.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised.
+    """
+    mock_charm.config = {"jcasc-config": "{{invalid: yaml: [["}
+
+    with pytest.raises(state.CharmConfigInvalidError, match="Invalid jcasc-config YAML"):
+        state.State.from_charm(mock_charm)
+
+
+def test_jcasc_config_non_dict(mock_charm: MagicMock):
+    """
+    arrange: given a charm with YAML list (not dict) in jcasc-config.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised.
+    """
+    mock_charm.config = {"jcasc-config": "- item1\n- item2"}
+
+    with pytest.raises(state.CharmConfigInvalidError, match="YAML mapping"):
+        state.State.from_charm(mock_charm)
+
+
+def test_jcasc_config_with_none_jenkins_section(mock_charm: MagicMock):
+    """
+    arrange: given a charm with 'jenkins:' (None value) in jcasc-config.
+    act: when state is initialized from charm.
+    assert: state parses successfully and jcasc_config has the None jenkins entry.
+    """
+    mock_charm.config = {"jcasc-config": "jenkins:"}
+
+    result = state.State.from_charm(mock_charm)
+
+    assert result.jcasc_config == {"jenkins": None}
+
+
+def test_jcasc_config_with_non_dict_jenkins_section(mock_charm: MagicMock):
+    """
+    arrange: given a charm with non-dict jenkins section (e.g. jenkins: 'string').
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised (defence in depth validation).
+    """
+    mock_charm.config = {"jcasc-config": "jenkins: not_a_dict"}
+
+    with pytest.raises(state.CharmConfigInvalidError, match=r"jenkins.*section must be a mapping"):
+        state.State.from_charm(mock_charm)
