@@ -16,8 +16,10 @@ import jenkinsapi.jenkins
 import kubernetes.client
 import requests
 import tenacity
+import websockets.exceptions
 from juju.application import Application
 from juju.client._definitions import ApplicationStatus, FullStatus, UnitStatus
+from juju.client.proxy.proxy import ProxyNotConnectedError
 from juju.model import Model
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
@@ -90,7 +92,20 @@ async def get_model_unit_addresses(model: Model, app_name: str) -> list[str]:
     Returns:
         the IP address of the Jenkins unit.
     """
-    status: FullStatus = await model.get_status()
+
+    @tenacity.retry(
+        wait=tenacity.wait_exponential(multiplier=1, max=10),
+        reraise=True,
+        stop=tenacity.stop_after_attempt(6),
+        retry=tenacity.retry_if_exception_type(
+            (websockets.exceptions.ConnectionClosedError, ProxyNotConnectedError)
+        ),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+    )
+    async def _get_status_with_retry() -> FullStatus:
+        return await model.get_status()
+
+    status: FullStatus = await _get_status_with_retry()
     # mypy cannot infer the type ApplicationStatus but thinks its the base class type "Type".
     application_status: ApplicationStatus | None = status.applications[app_name]  # type: ignore
     assert application_status, f"Application status {app_name} not found in {status}"
