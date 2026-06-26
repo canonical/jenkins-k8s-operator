@@ -90,7 +90,7 @@ async def get_model_unit_addresses(model: Model, app_name: str) -> list[str]:
     Returns:
         the IP address of the Jenkins unit.
     """
-    status: FullStatus = await model.get_status()
+    status: FullStatus = await _get_status_with_retry(model)
     # mypy cannot infer the type ApplicationStatus but thinks its the base class type "Type".
     application_status: ApplicationStatus | None = status.applications[app_name]  # type: ignore
     assert application_status, f"Application status {app_name} not found in {status}"
@@ -102,6 +102,84 @@ async def get_model_unit_addresses(model: Model, app_name: str) -> list[str]:
         for unit_status in units_statuses
         if unit_status and unit_status.address
     ]
+
+
+def _is_juju_proxy_error(exc: BaseException) -> bool:
+    """Check if exception is a transient juju kubernetes proxy error.
+
+    Args:
+        exc: The exception to check
+
+    Returns:
+        True if the exception is a known transient proxy error.
+    """
+    name = type(exc).__name__
+    return name in {
+        "ConnectionClosedError",
+        "ConnectionClosed",
+        "ProxyNotConnectedError",
+        "BrokenPipeError",
+    }
+
+
+async def _model_reconnect_on_proxy_error(exc: Exception, attempt: int) -> None:
+    """On proxy error, force model reconnect before retry.
+
+    Args:
+        exc: The exception that triggered this callback
+        attempt: Current attempt number (1-indexed by tenacity)
+    """
+    if not _is_juju_proxy_error(exc):
+        return
+    name = type(exc).__name__
+    logger.warning(
+        "model.get_status() transient failure (attempt %d): %s: %s",
+        attempt,
+        name,
+        exc,
+    )
+    # Note: This is called by tenacity after the exception is caught but
+    # before sleeping/retrying. We need the model reference, but tenacity
+    # doesn't pass the original coroutine args. We'll disconnect/reconnect
+    # in the retry wrapper instead.
+
+
+@tenacity.retry(
+    wait=tenacity.wait_exponential(multiplier=5, max=60),
+    stop=tenacity.stop_after_attempt(3),
+    retry=tenacity.retry_if_exception(_is_juju_proxy_error),
+    reraise=True,
+)
+async def _get_status_with_retry(model: Model) -> FullStatus:
+    """Call ``model.get_status()`` with retries on transient juju proxy errors.
+
+    The kubernetes port-forward proxy that ``python-libjuju`` uses to reach the
+    juju controller (port 17070) occasionally dies mid-test on busy CI runners,
+    surfacing as ``ConnectionClosedError`` / ``ProxyNotConnectedError`` /
+    ``BrokenPipeError``. On retry we force ``model.disconnect()`` /
+    ``model.connect()`` so we don't keep hammering a dead socket.
+
+    Args:
+        model: Juju model
+
+    Returns:
+        The full juju model status.
+    """
+    try:
+        return await model.get_status()
+    except Exception as exc:
+        if _is_juju_proxy_error(exc):
+            # Force the juju model to drop the dead connection so the next
+            # call reopens the k8s port-forward proxy from scratch.
+            try:
+                await model.disconnect()
+            except Exception as disconnect_exc:
+                logger.debug("model.disconnect() ignored error: %s", disconnect_exc)
+            try:
+                await model.connect()
+            except Exception as connect_exc:
+                logger.warning("model.connect() reconnect failed: %s", connect_exc)
+        raise
 
 
 def gen_test_job_xml(node_label: str):

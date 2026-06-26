@@ -121,6 +121,10 @@ dependency_groups = ["coverage-report"]
 
 [env.integration]
 description = "Run integration tests"
+# pytest-rerunfailures retries tests that hit the known python-libjuju
+# kubernetes port-forward proxy flake (ConnectionClosedError /
+# ProxyNotConnectedError on the controller WebSocket). Scoped via
+# --only-rerun so genuine test failures and assertion errors are NOT retried.
 commands = [
   [
     "playwright",
@@ -135,6 +139,14 @@ commands = [
     "--ignore={[vars]tst_path}unit",
     "--log-cli-level=INFO",
     "-s",
+    "--reruns",
+    "2",
+    "--reruns-delay",
+    "30",
+    "--only-rerun",
+    "ConnectionClosedError",
+    "--only-rerun",
+    "ProxyNotConnectedError",
     { replace = "posargs", extend = "true" },
   ],
 ]
