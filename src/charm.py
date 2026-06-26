@@ -105,9 +105,13 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self,
             jobs=[
                 {
-                    "metrics_path": "/prometheus",
+                    "metrics_path": f"{self._get_ingress_path()}/prometheus",
                     "static_configs": [{"targets": [f"*:{jenkins.WEB_PORT}"]}],
                 }
+            ],
+            refresh_event=[
+                self.server_ingress.on.ready,
+                self.server_ingress.on.revoked,
             ],
         )
         self._grafana = GrafanaDashboardProvider(self)
