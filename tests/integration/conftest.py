@@ -54,6 +54,12 @@ def cloud_fixture(ops_test: OpsTest) -> Optional[str]:
     return ops_test.cloud_name
 
 
+@pytest.fixture(scope="module", name="controller_name")
+def controller_name_fixture() -> str:
+    """The Juju controller name used for cross-model operations."""
+    return os.environ.get("CONTROLLER_NAME", "localhost")
+
+
 @pytest.fixture(scope="module", name="jenkins_image")
 def jenkins_image_fixture(request: FixtureRequest) -> str:
     """The OCI image for Jenkins charm."""
@@ -272,10 +278,10 @@ async def extra_jenkins_k8s_agents_fixture(
 
 
 @pytest_asyncio.fixture(scope="module", name="machine_controller")
-async def machine_controller_fixture() -> AsyncGenerator[Controller, None]:
+async def machine_controller_fixture(controller_name: str) -> AsyncGenerator[Controller, None]:
     """The lxd controller."""
     controller = Controller()
-    await controller.connect_controller("localhost")
+    await controller.connect_controller(controller_name)
     yield controller
     await controller.disconnect()
 
@@ -283,11 +289,12 @@ async def machine_controller_fixture() -> AsyncGenerator[Controller, None]:
 @pytest_asyncio.fixture(scope="module", name="machine_model")
 async def machine_model_fixture(
     machine_controller: Controller,
+    controller_name: str,
 ) -> AsyncGenerator[Model, None]:
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
     model = await machine_controller.add_model(machine_model_name)
-    await model.connect(f"localhost:admin/{model.name}")
+    await model.connect(f"{controller_name}:admin/{model.name}")
     yield model
     await machine_controller.destroy_models(
         model.name, destroy_storage=True, force=True, max_wait=10 * 60
@@ -318,7 +325,10 @@ async def jenkins_machine_agents_fixture(
 
 @pytest_asyncio.fixture(scope="function", name="machine_agent_related_app")
 async def machine_agent_related_app_fixture(
-    jenkins_machine_agents: Application, application: Application, model: Model
+    jenkins_machine_agents: Application,
+    application: Application,
+    model: Model,
+    controller_name: str,
 ):
     """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
     machine_model: Model = jenkins_machine_agents.model
@@ -327,7 +337,7 @@ async def machine_agent_related_app_fixture(
     )
     await model.integrate(
         f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
+        f"{controller_name}:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
     await machine_model.wait_for_idle(
         apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5

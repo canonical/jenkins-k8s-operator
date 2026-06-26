@@ -308,10 +308,33 @@ def patch_dns_resolver_fixture(identity_platform_traefik_ip: str, jenkins_traefi
         return original_getaddrinfo(*args)
 
     socket.getaddrinfo = new_getaddrinfo
+    logger.info("phase=patch_dns_resolver enabled mapping=%s", dns_cache)
+
+    def _contains_expected_ip(resolved: list[tuple], expected_ip: str) -> bool:
+        return any(
+            len(entry) >= 5
+            and isinstance(entry[4], tuple)
+            and len(entry[4]) >= 1
+            and entry[4][0] == expected_ip
+            for entry in resolved
+        )
+
+    idp_resolution = socket.getaddrinfo(IDENTITY_PLATFORM_HOSTNAME, 443)
+    jenkins_resolution = socket.getaddrinfo(JENKINS_HOSTNAME, 443)
+    assert _contains_expected_ip(
+        idp_resolution, identity_platform_traefik_ip
+    ), "Injected IDP hostname did not resolve to expected traefik IP"
+    assert _contains_expected_ip(
+        jenkins_resolution, jenkins_traefik_ip
+    ), "Injected Jenkins hostname did not resolve to expected traefik IP"
 
     yield
 
     socket.getaddrinfo = original_getaddrinfo
+    logger.info("phase=patch_dns_resolver restored")
+    assert (
+        socket.getaddrinfo is original_getaddrinfo
+    ), "Failed to restore original socket.getaddrinfo"
 
 
 @pytest.fixture(scope="module", name="inject_dns")
@@ -331,16 +354,66 @@ def inject_dns_fixture(
     original_manifest = kube_core_client.read_namespaced_config_map(
         name="coredns", namespace="kube-system"
     )
+
+    def _ready_pod_count() -> tuple[int, int, list[str]]:
+        pods = kube_core_client.list_namespaced_pod(
+            namespace="kube-system", label_selector="k8s-app=kube-dns"
+        ).items
+        ready = 0
+        pod_names: list[str] = []
+        for pod in pods:
+            pod_names.append(str(pod.metadata.name))
+            conditions = pod.status.conditions or []
+            if any(condition.type == "Ready" and condition.status == "True" for condition in conditions):
+                ready += 1
+        return len(pods), ready, pod_names
+
+    initial_total, initial_ready, initial_pods = _ready_pod_count()
+    expected_ready = max(1, initial_ready)
+    logger.info(
+        "phase=inject_dns coredns_initial_state total=%s ready=%s expected_ready=%s pods=%s",
+        initial_total,
+        initial_ready,
+        expected_ready,
+        initial_pods,
+    )
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(AssertionError),
+        stop=tenacity.stop_after_attempt(18),
+        wait=tenacity.wait_fixed(5),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def _assert_coredns_stable(phase: str):
+        total, ready, pods = _ready_pod_count()
+        logger.info(
+            "phase=inject_dns coredns_state check_phase=%s total=%s ready=%s expected_ready=%s pods=%s",
+            phase,
+            total,
+            ready,
+            expected_ready,
+            pods,
+        )
+        assert total > 0, "No CoreDNS pods found"
+        assert (
+            ready >= expected_ready
+        ), f"CoreDNS pods not yet ready (ready={ready}, expected_ready={expected_ready})"
+
+    def _restart_coredns_pods() -> None:
+        pods = kube_core_client.list_namespaced_pod(
+            namespace="kube-system", label_selector="k8s-app=kube-dns"
+        )
+        for pod in pods.items:
+            logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
+            kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+
     kube_core_client.replace_namespaced_config_map(
         name="coredns", namespace="kube-system", body=coredns_configmap_manifest
     )
 
-    pods = kube_core_client.list_namespaced_pod(
-        namespace="kube-system", label_selector="k8s-app=kube-dns"
-    )
-    for pod in pods.items:
-        logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-        kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+    _restart_coredns_pods()
+    _assert_coredns_stable("after_patch")
 
     yield
 
@@ -348,12 +421,17 @@ def inject_dns_fixture(
     kube_core_client.replace_namespaced_config_map(
         name="coredns", namespace="kube-system", body=coredns_configmap_manifest
     )
-    pods = kube_core_client.list_namespaced_pod(
-        namespace="kube-system", label_selector="k8s-app=kube-dns"
+    _restart_coredns_pods()
+    _assert_coredns_stable("after_restore")
+
+    restored_manifest = kube_core_client.read_namespaced_config_map(
+        name="coredns", namespace="kube-system"
     )
-    for pod in pods.items:
-        logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-        kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+    restored_data = getattr(restored_manifest, "data", None) or {}
+    original_data = getattr(original_manifest, "data", None) or {}
+    assert restored_data.get("Corefile", "") == original_data.get(
+        "Corefile", ""
+    ), "CoreDNS Corefile restore verification failed"
 
 
 # The playwright fixtures are taken from:
@@ -530,6 +608,7 @@ def jenkins_endpoint_fixture(model: Model, jenkins_k8s_charms: _JenkinsCharms):
 
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
+@pytest.mark.infra_flaky
 @pytest.mark.usefixtures("patch_dns_resolver")
 async def test_auth_proxy_integration(
     jenkins_endpoint: str,
@@ -654,6 +733,7 @@ async def totp_fixture(
 
 @pytest.mark.abort_on_fail
 @pytest.mark.asyncio
+@pytest.mark.infra_flaky
 @pytest.mark.usefixtures("inject_dns")
 async def test_auth_proxy_integration_authorized(
     jenkins_endpoint: str,
