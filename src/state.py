@@ -259,6 +259,46 @@ def _get_admin_password(charm: ops.CharmBase) -> typing.Optional[str]:
         return None
 
 
+def _parse_jcasc_repository(charm: ops.CharmBase) -> typing.Optional[str]:
+    """Parse jcasc-repository config into a URL string.
+    
+    Returns the repository URL if set, None otherwise.
+    """
+    repo_url = typing.cast(str, charm.config.get("jcasc-repository") or "")
+    return repo_url if repo_url.strip() else None
+
+
+def _parse_jcasc_repository_token(
+    charm: ops.CharmBase,
+) -> typing.Optional[typing.Tuple[str, str]]:
+    """Parse jcasc-repository-token secret into (username, token) tuple.
+    
+    Returns a tuple of (username, token) if the secret is set and valid,
+    None if unset.
+    
+    Raises:
+        CharmConfigInvalidError: if the secret is missing required keys.
+    """
+    token_secret_uri = typing.cast(str, charm.config.get("jcasc-repository-token") or "")
+    if not token_secret_uri.strip():
+        return None
+    
+    try:
+        secret = charm.model.get_secret(id=token_secret_uri)
+    except ops.SecretNotFoundError as exc:
+        raise CharmConfigInvalidError(
+            f"jcasc-repository-token secret not found: {token_secret_uri}"
+        ) from exc
+    
+    content = secret.get_content()
+    if "username" not in content or "token" not in content:
+        raise CharmConfigInvalidError(
+            "jcasc-repository-token secret must contain username and token keys"
+        )
+    
+    return (content["username"], content["token"])
+
+
 class ProxyConfig(BaseModel):
     """Configuration for accessing Jenkins through proxy.
 
@@ -303,6 +343,8 @@ class State:
         plugins: The list of allowed plugins to install.
         auth_proxy_integrated: if an auth proxy integrated has been set.
         jcasc_config: Raw JCasC YAML content from charm config.
+        jcasc_repository: Git repository URL for JCasC YAML files.
+        jcasc_repository_token: (username, token) tuple for private repos, or None.
         system_properties: Additional JVM system properties as -D flags.
 
     """
@@ -313,6 +355,8 @@ class State:
     plugins: typing.Optional[typing.Iterable[str]]
     auth_proxy_integrated: bool
     jcasc_config: typing.Optional[typing.Dict[str, typing.Any]]
+    jcasc_repository: typing.Optional[str] = None
+    jcasc_repository_token: typing.Optional[typing.Tuple[str, str]] = None
     system_properties: typing.List[str] = dataclasses.field(default_factory=list)
     admin_password: typing.Optional[str] = None
 
@@ -341,6 +385,15 @@ class State:
         system_properties = _parse_system_properties(charm)
         _validate_deployment_relations(charm)
         jcasc_config = _parse_jcasc_config(charm)
+        jcasc_repository = _parse_jcasc_repository(charm)
+        
+        # Validate mutual exclusion: jcasc-config and jcasc-repository are mutually exclusive
+        if jcasc_config is not None and jcasc_repository is not None:
+            raise CharmConfigInvalidError(
+                "jcasc-config and jcasc-repository are mutually exclusive; set only one"
+            )
+        
+        jcasc_repository_token = _parse_jcasc_repository_token(charm)
         admin_password = _get_admin_password(charm)
 
         return cls(
@@ -350,6 +403,8 @@ class State:
             proxy_config=proxy_config,
             auth_proxy_integrated=is_auth_proxy_integrated,
             jcasc_config=jcasc_config,
+            jcasc_repository=jcasc_repository,
+            jcasc_repository_token=jcasc_repository_token,
             system_properties=system_properties,
             admin_password=admin_password,
         )
