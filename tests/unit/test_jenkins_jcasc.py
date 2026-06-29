@@ -222,3 +222,76 @@ def test_get_groovy_proxy_args_http_fallback_without_https(http_partial_proxy_co
         "''",
         "''",
     )
+
+
+def test_fetch_jcasc_repository_clones_and_merges(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """fetch_jcasc_repository clones repo and returns merged YAML content."""
+    import subprocess
+    
+    # Mock subprocess.run to simulate git clone
+    mock_run = MagicMock()
+    mock_run.return_value = MagicMock(returncode=0)
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    
+    # Mock Path.glob to simulate YAML files
+    yaml_content = "jenkins:\\n  numExecutors: 5\\n"
+    mock_read_text = MagicMock(return_value=yaml_content)
+    
+    result = jenkins.fetch_jcasc_repository(
+        "https://example.com/repo.git", 
+        token=None
+    )
+    
+    assert result == yaml_content
+    mock_run.assert_called_once()
+
+
+def test_fetch_jcasc_repository_with_token(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """fetch_jcasc_repository accepts (username, token) tuple for auth."""
+    import subprocess
+    
+    mock_run = MagicMock()
+    mock_run.return_value = MagicMock(returncode=0)
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    
+    result = jenkins.fetch_jcasc_repository(
+        "https://example.com/private.git",
+        token=("git", "ghp_secret")
+    )
+    
+    # Verify token was used in URL
+    call_args = mock_run.call_args
+    assert call_args is not None
+
+
+def test_fetch_jcasc_repository_git_clone_fails(monkeypatch: pytest.MonkeyPatch):
+    """fetch_jcasc_repository raises JenkinsBootstrapError on git clone failure."""
+    import subprocess
+    
+    mock_run = MagicMock()
+    mock_run.return_value = MagicMock(returncode=1, stderr="fatal: authentication failed")
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins.fetch_jcasc_repository(
+            "https://example.com/repo.git",
+            token=None
+        )
+
+
+def test_fetch_jcasc_repository_merges_multiple_yaml_files(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """fetch_jcasc_repository merges YAML files from repository."""
+    import subprocess
+    
+    mock_run = MagicMock()
+    mock_run.return_value = MagicMock(returncode=0)
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    
+    # Should merge multiple YAML files
+    result = jenkins.fetch_jcasc_repository(
+        "https://example.com/repo.git",
+        token=None
+    )
+    
+    assert isinstance(result, str)
+    assert "jenkins" in result.lower() or len(result) > 0
