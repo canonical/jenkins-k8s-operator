@@ -141,6 +141,20 @@ config:
               allowAnonymousRead: false
           remotingSecurity:
             enabled: true
+    jcasc-repository:
+      type: string
+      default: ""
+      description: >
+        HTTPS URL of a public git repository containing Jenkins Configuration as
+        Code (JCasC) YAML files. When set, the charm clones the repository and
+        merges every *.yaml/*.yml file into the applied configuration. Mutually
+        exclusive with jcasc-config; setting both blocks the charm.
+    jcasc-repository-token:
+      type: secret
+      description: >
+        A Juju user-secret URI granting access to a private jcasc-repository. The
+        secret MUST contain two keys: `username` and `token`. The charm uses them
+        as HTTP Basic auth at clone time. Leave unset for public repositories.
 
 actions:
   get-admin-password:
