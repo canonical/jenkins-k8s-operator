@@ -432,3 +432,76 @@ def test_jcasc_config_with_non_dict_jenkins_section(mock_charm: MagicMock):
 
     with pytest.raises(state.CharmConfigInvalidError, match=r"jenkins.*section must be a mapping"):
         state.State.from_charm(mock_charm)
+
+
+def test_jcasc_repository_and_config_conflict_raises(mock_charm: MagicMock):
+    """
+    arrange: given a charm with both jcasc-config and jcasc-repository set.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised matching "mutually exclusive".
+    """
+    mock_charm.config = {
+        "jcasc-config": "jenkins:\n  numExecutors: 0\n",
+        "jcasc-repository": "https://example.com/repo.git",
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(state.CharmConfigInvalidError, match="mutually exclusive"):
+        state.State.from_charm(mock_charm)
+
+
+def test_jcasc_repository_url_stored(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository set and jcasc-config empty.
+    act: when state is initialized from charm.
+    assert: jcasc_repository field contains the URL and jcasc_config is None.
+    """
+    mock_charm.config = {"jcasc-config": "", "jcasc-repository": "https://example.com/repo.git"}
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_repository == "https://example.com/repo.git"
+    assert charm_state.jcasc_config is None
+
+
+def test_jcasc_repository_token_secret_parsed(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository-token secret URI set.
+    act: when state is initialized from charm.
+    assert: jcasc_repository_token field contains (username, token) tuple.
+    """
+    secret_id = "secret:a1b2c3d4"
+    mock_secret = MagicMock()
+    mock_secret.get_content.return_value = {"username": "git", "token": "ghp_x"}
+    mock_charm.model.get_secret.return_value = mock_secret
+    mock_charm.config = {
+        "jcasc-repository": "https://example.com/r.git",
+        "jcasc-repository-token": secret_id,
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_repository_token == ("git", "ghp_x")
+
+
+def test_jcasc_repository_token_missing_keys_blocks(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository-token missing required keys.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised matching "username and token".
+    """
+    secret_id = "secret:a1b2c3d4"
+    mock_secret = MagicMock()
+    mock_secret.get_content.return_value = {"username": "git"}  # missing 'token'
+    mock_charm.model.get_secret.return_value = mock_secret
+    mock_charm.config = {
+        "jcasc-repository": "https://example.com/r.git",
+        "jcasc-repository-token": secret_id,
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(state.CharmConfigInvalidError, match="username and token"):
+        state.State.from_charm(mock_charm)
+
