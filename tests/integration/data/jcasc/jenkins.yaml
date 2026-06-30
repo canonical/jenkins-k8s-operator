@@ -1,6 +1,0 @@
-jenkins:
-  systemMessage: "Jenkins Configuration as Code (JCasC) via Git Repository"
-  numExecutors: 2
-  mode: NORMAL
-  quietPeriod: 5
-  scmCheckoutRetryCount: 0
