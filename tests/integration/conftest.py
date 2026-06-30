@@ -3,10 +3,12 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
+import base64
 import logging
 import os
 import random
 import secrets
+import shlex
 import string
 from pathlib import Path
 from typing import AsyncGenerator, Iterable, Optional
@@ -39,6 +41,15 @@ from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebCli
 logger = logging.getLogger(__name__)
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
+DATA_DIR = Path(__file__).parent / "data"
+
+
+async def charm_exec(ops_test: OpsTest, unit_name: str, cmd: str) -> None:
+    """Execute a command in the charm container and assert success."""
+    ret, stdout, stderr = await ops_test.juju(
+        "ssh", "--container", "charm", unit_name, *shlex.split(cmd)
+    )
+    assert ret == 0, f"Command failed in charm container: {cmd}\nstderr: {stderr}"
 
 
 @pytest.fixture(scope="module", name="model")
@@ -100,6 +111,47 @@ async def application_fixture(
         timeout=30 * 60,
         idle_period=30,
     )
+    
+    # Stage JCasC git repository and configure charm to use it
+    unit_name = application.units[0].name
+    
+    # Smoke-check git in charm container
+    ret, stdout, stderr = await ops_test.juju(
+        "ssh", "--container", "charm", unit_name, "git", "--version"
+    )
+    assert ret == 0, f"git missing in charm container: {stderr}"
+    
+    # Create repo directory and seed fixture files
+    REPO_DIR = "/tmp/jcasc-repo"  # nosec: hardcoded test path in charm container
+    await charm_exec(ops_test, unit_name, f"mkdir -p {REPO_DIR}/jcasc")
+    for name in ("jenkins.yaml", "unclassified.yaml"):
+        content = (DATA_DIR / "jcasc" / name).read_text(encoding="utf-8")
+        b64 = base64.b64encode(content.encode()).decode()
+        await charm_exec(
+            ops_test,
+            unit_name,
+            f"bash -c 'echo {b64} | base64 -d > {REPO_DIR}/jcasc/{name}'",
+        )
+    
+    # Initialize git repo with fixture files
+    await charm_exec(ops_test, unit_name, f"git -C {REPO_DIR} init")
+    await charm_exec(ops_test, unit_name, f"git -C {REPO_DIR} add .")
+    await charm_exec(
+        ops_test,
+        unit_name,
+        f"git -C {REPO_DIR} -c user.email=test@test -c user.name=test commit -m fixture",
+    )
+    
+    # Point charm at repo and clear jcasc-config (both in same call)
+    await application.set_config({
+        "jcasc-config": "",
+        "jcasc-repository": f"file://{REPO_DIR}",
+        "jcasc-repository-config-path": "jcasc",
+    })
+    await model.wait_for_idle(
+        apps=[application.name], status="active", timeout=20 * 60
+    )
+    
     # slow down update-status so that it doesn't intervene currently running tests
     # don't yield inside the context since juju cleanup is not reliable.
     # model.set_config(...) also doesn't work as well as the following code.
