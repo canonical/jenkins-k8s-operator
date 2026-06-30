@@ -456,7 +456,10 @@ def test_jcasc_repository_url_stored(mock_charm: MagicMock):
     act: when state is initialized from charm.
     assert: jcasc_repository field contains the URL and jcasc_config is None.
     """
-    mock_charm.config = {"jcasc-config": "", "jcasc-repository": "https://example.com/repo.git"}
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "https://example.com/repo.git",
+    }
     mock_charm.model.get_relation.return_value = None
 
     charm_state = state.State.from_charm(mock_charm)
@@ -471,7 +474,7 @@ def test_jcasc_repository_token_secret_parsed(mock_charm: MagicMock):
     act: when state is initialized from charm.
     assert: jcasc_repository_token field contains (username, token) tuple.
     """
-    secret_id = "secret:a1b2c3d4"
+    secret_id = "secret:a1b2c3d4"  # nosec (test fixture, not real secret)
     mock_secret = MagicMock()
     mock_secret.get_content.return_value = {"username": "git", "token": "ghp_x"}
     mock_charm.model.get_secret.return_value = mock_secret
@@ -492,7 +495,7 @@ def test_jcasc_repository_token_missing_keys_blocks(mock_charm: MagicMock):
     act: when state is initialized from charm.
     assert: CharmConfigInvalidError is raised matching "username and token".
     """
-    secret_id = "secret:a1b2c3d4"
+    secret_id = "secret:a1b2c3d4"  # nosec (test fixture, not real secret)
     mock_secret = MagicMock()
     mock_secret.get_content.return_value = {"username": "git"}  # missing 'token'
     mock_charm.model.get_secret.return_value = mock_secret
@@ -505,3 +508,56 @@ def test_jcasc_repository_token_missing_keys_blocks(mock_charm: MagicMock):
     with pytest.raises(state.CharmConfigInvalidError, match="username and token"):
         state.State.from_charm(mock_charm)
 
+
+def test_jcasc_repository_config_path_default(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository set but no config path specified.
+    act: when state is initialized from charm.
+    assert: jcasc_repository_config_path defaults to "jcasc".
+    """
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "https://example.com/repo.git",
+        "jcasc-repository-config-path": "",
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_repository_config_path == "jcasc"
+
+
+def test_jcasc_repository_config_path_custom(mock_charm: MagicMock):
+    """
+    arrange: given a charm with custom jcasc-repository-config-path.
+    act: when state is initialized from charm.
+    assert: jcasc_repository_config_path is set to the custom value.
+    """
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "https://example.com/repo.git",
+        "jcasc-repository-config-path": "jenkins/config",
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_repository_config_path == "jenkins/config"
+
+
+def test_jcasc_repository_config_path_root_directory(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository-config-path set to ".".
+    act: when state is initialized from charm.
+    assert: jcasc_repository_config_path is set to ".".
+    """
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "https://example.com/repo.git",
+        "jcasc-repository-config-path": ".",
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_repository_config_path == "."

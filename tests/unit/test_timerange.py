@@ -72,7 +72,10 @@ def test_restart_time_range_valid_time(time_range: str, expected_range: tuple[in
     ],
 )
 def test_restart_time_range_check_now(
-    patch_hour: int, time_range: str, expected_result: bool, monkeypatch: pytest.MonkeyPatch
+    patch_hour: int,
+    time_range: str,
+    expected_result: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     """
     arrange: given a monkeypatched utcnow and a time range pair.

@@ -105,7 +105,9 @@ async def test_loki_integration(
 
 
 def datasources_exist(
-    loggedin_session: requests.Session, unit_address: str, datasources: typing.Iterable[str]
+    loggedin_session: requests.Session,
+    unit_address: str,
+    datasources: typing.Iterable[str],
 ):
     """Checks if the datasources are registered in Grafana.
 

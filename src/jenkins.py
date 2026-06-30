@@ -13,6 +13,10 @@ import json
 import logging
 import re
 import secrets
+
+# subprocess module is required to run git commands
+import subprocess  # nosec: B404
+import tempfile
 import textwrap
 import time
 import typing
@@ -26,6 +30,7 @@ import jenkinsapi.jenkins
 import ops
 import requests
 import tenacity
+import yaml
 from jenkinsapi.node import Node
 from pydantic import HttpUrl
 
@@ -1204,3 +1209,100 @@ def sync_jcasc_config(container: ops.Container, configuration_yaml: str) -> str:
         make_dirs=True,
     )
     return config_hash
+
+
+def _get_yaml_files_from_config_path(config_path_obj: Path) -> list[Path]:
+    """Get YAML files from either a directory or single file path.
+
+    Args:
+        config_path_obj: Path object pointing to either a directory or file.
+
+    Returns:
+        List of YAML file paths.
+
+    Raises:
+        JenkinsBootstrapError: if path not found or no YAML files found.
+    """
+    if config_path_obj.is_file():
+        return [config_path_obj]
+    if config_path_obj.is_dir():
+        yaml_files = sorted(config_path_obj.glob("*.yaml")) + sorted(config_path_obj.glob("*.yml"))
+        return yaml_files
+    return []
+
+
+def fetch_jcasc_repository(
+    url: str, token: typing.Optional[tuple[str, str]] = None, config_path: str = "jcasc"
+) -> str:
+    """Clone git repository and return merged YAML from specified path.
+
+    Args:
+        url: HTTPS URL of the git repository.
+        token: Optional tuple of (username, token/password) for authentication.
+        config_path: Path within repository: either a directory containing YAML files or
+                     a single YAML file. Defaults to "jcasc".
+
+    Returns:
+        Merged YAML content as a string from all YAML files in the specified directory,
+        or the content of a single YAML file if config_path points to a file.
+
+    Raises:
+        JenkinsBootstrapError: if git clone fails, path not found, or YAML merging fails.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmppath = Path(tmpdir)
+
+        # Build git clone URL with auth if provided
+        if token:
+            username, password = token
+            parsed = urlparse(url)
+            clone_url = f"{parsed.scheme}://{username}:{password}@{parsed.netloc}{parsed.path}"
+        else:
+            clone_url = url
+
+        # Clone repository
+        result = subprocess.run(  # nosec: B603 (array args prevent shell injection)
+            ["/usr/bin/git", "clone", "--depth", "1", clone_url, str(tmppath / "repo")],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        if result.returncode != 0:
+            raise JenkinsBootstrapError(f"Failed to clone repository {url}: {result.stderr}")
+
+        # Find and merge YAML files from specified directory or single file
+        repo_path = tmppath / "repo"
+        config_path_obj = repo_path / config_path
+
+        # Handle both directory and single file cases
+        yaml_files = _get_yaml_files_from_config_path(config_path_obj)
+
+        if not yaml_files:
+            raise JenkinsBootstrapError(
+                f"Path '{config_path}' not found or no YAML files in repository {url}"
+            )
+
+        # Merge YAML files
+        merged_config: dict[str, typing.Any] = {}
+
+        for yaml_file in yaml_files:
+            try:
+                content = yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
+                if content and isinstance(content, dict):
+                    # Deep merge: for each top-level key, merge recursively
+                    for key, value in content.items():
+                        if (
+                            key in merged_config
+                            and isinstance(merged_config[key], dict)
+                            and isinstance(value, dict)
+                        ):
+                            # Merge nested dicts
+                            merged_config[key].update(value)
+                        else:
+                            merged_config[key] = value
+            except yaml.YAMLError as exc:
+                raise JenkinsBootstrapError(f"Invalid YAML in {yaml_file.name}: {exc}") from exc
+
+        # Return merged YAML as string
+        return yaml.dump(merged_config, default_flow_style=False)

@@ -178,7 +178,9 @@ def test__on_config_changed_success_replans_and_restarts(
     with (
         patch.object(jenkins_charm, "_reconcile_storage") as reconcile_storage_mock,
         patch.object(
-            jenkins_charm, "_reconcile_pre_startup_configurations", return_value="hash123"
+            jenkins_charm,
+            "_reconcile_pre_startup_configurations",
+            return_value="hash123",
         ),
         patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
         patch.object(jenkins.Jenkins, "wait_ready"),

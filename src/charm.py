@@ -554,6 +554,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         charm-managed sections (admin credentials, auth proxy), then delegates
         file I/O, validation, and reload to jenkins.sync_jcasc_config.
 
+        If jcasc-repository is set, fetches and merges YAML files from the repository.
+
         Args:
             container: The Jenkins workload container.
             charm_state: The current charm state.
@@ -565,6 +567,37 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             ReconcileBlockedError: if there was an error installing JCasC configuration.
         """
         jcasc_config = {} if charm_state.jcasc_config is None else charm_state.jcasc_config
+
+        # If jcasc-repository is set, fetch and merge repository YAML
+        if charm_state.jcasc_repository:
+            try:
+                repo_yaml_str = jenkins.fetch_jcasc_repository(
+                    charm_state.jcasc_repository,
+                    charm_state.jcasc_repository_token,
+                    charm_state.jcasc_repository_config_path,
+                )
+                # Parse repository YAML and merge with jcasc_config
+                repo_yaml = yaml.safe_load(repo_yaml_str)
+                if repo_yaml and isinstance(repo_yaml, dict):
+                    # Deep merge: for each top-level key, merge recursively
+                    for key, value in repo_yaml.items():
+                        if (
+                            key in jcasc_config
+                            and isinstance(jcasc_config[key], dict)
+                            and isinstance(value, dict)
+                        ):
+                            # Merge nested dicts
+                            jcasc_config[key].update(value)
+                        else:
+                            jcasc_config[key] = value
+            except jenkins.JenkinsBootstrapError as exc:
+                logger.error("Failed to fetch JCasC repository: %s", exc)
+                raise ReconcileBlockedError(
+                    "Failed to fetch JCasC repository configuration."
+                ) from exc
+            except yaml.YAMLError as exc:
+                logger.error("Failed to parse repository YAML: %s", exc)
+                raise ReconcileBlockedError("Failed to parse JCasC repository YAML.") from exc
 
         desired_config = jenkins.build_jcasc_config(
             jcasc_config,
