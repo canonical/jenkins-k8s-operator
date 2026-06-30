@@ -21,7 +21,7 @@ from ops.testing import Harness
 
 import jenkins
 import state
-from charm import JenkinsK8sOperatorCharm
+from charm import REQUIRED_PLUGINS, JenkinsK8sOperatorCharm
 
 from .helpers import combine_root_paths
 from .types_ import HarnessWithContainer
@@ -175,6 +175,19 @@ def patch_is_jenkins_ready_fixture(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(jenkins, "is_jenkins_ready", MagicMock(return_value=True))
 
 
+@pytest.fixture(scope="function", autouse=True)
+def patch_wait_ready_fixture(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
+    """Patch Jenkins wait_ready to avoid long waits in unit tests.
+
+    The readiness behavior is explicitly unit-tested in test_jenkins_readiness.py,
+    so skip patching there.
+    """
+    node_path = getattr(request.node, "path", None)
+    if node_path is not None and node_path.name == "test_jenkins_readiness.py":
+        return
+    monkeypatch.setattr(jenkins.Jenkins, "wait_ready", MagicMock(return_value=None))
+
+
 @pytest.fixture(scope="function", name="container")
 def container_fixture(
     harness: Harness,
@@ -208,7 +221,7 @@ def container_fixture(
         Raises:
             RuntimeError: if the handler for a command has not yet been registered.
         """
-        required_plugins = " ".join(set(jenkins.REQUIRED_PLUGINS))
+        required_plugins = " ".join(set(REQUIRED_PLUGINS))
         # type cast since the fixture contains no_proxy values
         no_proxy_hosts = "|".join(cast(str, proxy_config.no_proxy).split(","))
         # assert for types that cannot be None.

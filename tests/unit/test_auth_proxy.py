@@ -5,83 +5,66 @@
 
 # pylint:disable=protected-access
 
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import MagicMock
 
-import ops
+import pytest
+from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig
 from ops.testing import Harness
 
 from charm import JenkinsK8sOperatorCharm
 
 
-def test_reconcile_auth_proxy_updates_config_when_integrated():
+@pytest.mark.parametrize(
+    "integrated, ingress_url, should_call, expected_protected_urls",
+    [
+        pytest.param(
+            True,
+            "https://example.com/jenkins",
+            True,
+            ["https://example.com/jenkins"],
+            id="integrated-with-ingress",
+        ),
+        pytest.param(True, None, True, [], id="integrated-without-ingress"),
+        pytest.param(
+            False, "https://example.com/jenkins", False, None, id="not-integrated-with-ingress"
+        ),
+        pytest.param(False, None, False, None, id="not-integrated-without-ingress"),
+    ],
+)
+def test_reconcile_auth_proxy(
+    integrated: bool,
+    ingress_url: str | None,
+    should_call: bool,
+    expected_protected_urls: list[str] | None,
+):
     """
-    arrange: given a charm with auth_proxy relation and ingress URL available.
+    arrange: given auth-proxy integration and ingress URL combinations.
     act: when _reconcile_auth_proxy is called.
-    assert: auth proxy config is updated with the ingress URL.
-    """
-    harness = Harness(JenkinsK8sOperatorCharm)
-    harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-
-    # Mock ingress URL
-    harness.charm.server_ingress = MagicMock()
-    harness.charm.server_ingress.url = "https://example.com/jenkins"
-
-    # Mock state with auth_proxy_integrated=True
-    mock_state = MagicMock()
-    mock_state.auth_proxy_integrated = True
-
-    harness.charm._auth_proxy = MagicMock()
-    mock_event = MagicMock(spec=ops.EventBase)
-
-    harness.charm._reconcile_auth_proxy(mock_event, mock_state)
-
-    harness.charm._auth_proxy.update_auth_proxy_config.assert_called_once()
-    call_kwargs = harness.charm._auth_proxy.update_auth_proxy_config.call_args
-    config = call_kwargs.kwargs["auth_proxy_config"]
-    assert config.protected_urls == ["https://example.com/jenkins"]
-
-
-def test_reconcile_auth_proxy_skips_when_not_integrated():
-    """
-    arrange: given a charm without auth_proxy relation.
-    act: when _reconcile_auth_proxy is called.
-    assert: auth proxy config is not updated.
-    """
-    harness = Harness(JenkinsK8sOperatorCharm)
-    harness.begin()
-
-    mock_state = MagicMock()
-    mock_state.auth_proxy_integrated = False
-
-    harness.charm._auth_proxy = MagicMock()
-    mock_event = MagicMock(spec=ops.EventBase)
-
-    harness.charm._reconcile_auth_proxy(mock_event, mock_state)
-
-    harness.charm._auth_proxy.update_auth_proxy_config.assert_not_called()
-
-
-def test_reconcile_auth_proxy_clears_config_when_no_ingress_url():
-    """
-    arrange: given a charm with auth_proxy relation but no ingress URL.
-    act: when _reconcile_auth_proxy is called.
-    assert: auth proxy config is updated with empty protected_urls.
+    assert: auth-proxy configuration update behavior matches expected matrix.
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
 
     harness.charm.server_ingress = MagicMock()
-    harness.charm.server_ingress.url = None
-
-    mock_state = MagicMock()
-    mock_state.auth_proxy_integrated = True
-
+    harness.charm.server_ingress.url = ingress_url
     harness.charm._auth_proxy = MagicMock()
-    mock_event = MagicMock(spec=ops.EventBase)
 
-    harness.charm._reconcile_auth_proxy(mock_event, mock_state)
+    state = SimpleNamespace(auth_proxy_integrated=integrated)
+
+    harness.charm._reconcile_auth_proxy(state=state)  # type: ignore[arg-type]
+
+    if not should_call:
+        harness.charm._auth_proxy.update_auth_proxy_config.assert_not_called()
+        return
 
     harness.charm._auth_proxy.update_auth_proxy_config.assert_called_once()
-    config = harness.charm._auth_proxy.update_auth_proxy_config.call_args[1]["auth_proxy_config"]
-    assert config.protected_urls == []
+    call_kwargs = cast(
+        dict[str, Any], harness.charm._auth_proxy.update_auth_proxy_config.call_args.kwargs
+    )
+    config = cast(AuthProxyConfig, call_kwargs["auth_proxy_config"])
+
+    assert config.protected_urls == expected_protected_urls
+    assert config.allowed_endpoints == []
+    assert config.headers == ["X-Auth-Request-User"]

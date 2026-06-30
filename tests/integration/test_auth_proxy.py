@@ -18,14 +18,22 @@ import pyotp
 import pytest
 import pytest_asyncio
 import requests
+import tenacity
 import yaml
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from juju.client._definitions import UnitStatus
 from juju.model import Model
-from playwright.async_api import async_playwright, expect
-from playwright.async_api._generated import Browser, BrowserContext, BrowserType, Page
-from playwright.async_api._generated import Playwright as AsyncPlaywright
+from playwright.async_api import (
+    Browser,
+    BrowserContext,
+    BrowserType,
+    Page,
+    async_playwright,
+    expect,
+)
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import Playwright as AsyncPlaywright
 
 from .helpers import wait_for
 
@@ -33,6 +41,35 @@ logger = logging.getLogger(__name__)
 
 IDENTITY_PLATFORM_HOSTNAME = "idp.test"
 JENKINS_HOSTNAME = "jenkins.test"
+
+
+async def _goto_with_retry(
+    page: Page,
+    url: str,
+    *,
+    timeout: int = 60,
+    check_interval: int = 5,
+) -> None:
+    """Retry browser navigation to tolerate transient redirect aborts."""
+
+    async def navigate() -> bool:
+        try:
+            response = await page.goto(
+                url=url,
+                timeout=30_000,
+                wait_until="domcontentloaded",
+            )
+            logger.info(
+                "Navigation attempt to %s finished with status: %s",
+                url,
+                response.status if response else None,
+            )
+            return True
+        except PlaywrightError as exc:
+            logger.info("Navigation attempt to %s failed: %s", url, exc)
+            return False
+
+    await wait_for(navigate, timeout=timeout, check_interval=check_interval)
 
 
 @dataclass
@@ -194,8 +231,36 @@ def jenkins_k8s_charms_fixture(
     juju.integrate(f"{oauth2_proxy}:forward-auth", f"{traefik_public}:experimental-forward-auth")
     juju.integrate(f"{oauth2_proxy}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
 
-    juju.wait(jubilant.all_agents_idle, timeout=15 * 60, successes=5, delay=5)
-    juju.wait(jubilant.all_active, timeout=15 * 60, successes=5, delay=5)
+    def _is_transient_controller_error(exc: BaseException) -> bool:
+        error_message = str(exc)
+        return (
+            "controller-service.controller-microk8s.svc.cluster.local" in error_message
+            or "api connection open timed out" in error_message
+            or "cannot open api" in error_message
+        )
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception(_is_transient_controller_error),
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_exponential(multiplier=1, min=5, max=20),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def _wait_all_agents_idle() -> None:
+        juju.wait(jubilant.all_agents_idle, timeout=15 * 60, successes=5, delay=5)
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception(_is_transient_controller_error),
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_exponential(multiplier=1, min=5, max=20),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def _wait_all_active() -> None:
+        juju.wait(jubilant.all_active, timeout=15 * 60, successes=5, delay=5)
+
+    _wait_all_agents_idle()
+    _wait_all_active()
 
     return _JenkinsCharms(jenkins=application.name, traefik=traefik_public, oauth2=oauth2_proxy)
 
@@ -207,11 +272,26 @@ def identity_platform_traefik_ip_fixture(
     identity_platform_juju: jubilant.Juju,
 ):
     """Identity platform traefik ip."""
-    idp_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
-        name=f"{identity_platform_public_traefik}-lb",
-        namespace=identity_platform_juju.model,
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type((AssertionError, TypeError, KeyError, IndexError)),
+        stop=tenacity.stop_after_attempt(12),
+        wait=tenacity.wait_fixed(10),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
     )
-    return idp_traefik_loadbalancer_service.status.load_balancer.ingress[0].ip
+    def _get_lb_ip() -> str:
+        idp_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
+            name=f"{identity_platform_public_traefik}-lb",
+            namespace=identity_platform_juju.model,
+        )
+        ingress = idp_traefik_loadbalancer_service.status.load_balancer.ingress
+        assert ingress, "Identity platform traefik load balancer ingress not ready"
+        ip = ingress[0].ip
+        assert ip, "Identity platform traefik load balancer IP not ready"
+        return str(ip)
+
+    return _get_lb_ip()
 
 
 @pytest.fixture(scope="module", name="jenkins_traefik_ip")
@@ -221,10 +301,25 @@ def jenkins_traefik_ip_fixture(
     model: Model,
 ):
     """Jenkins traefik ip."""
-    jenkins_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
-        name=f"{jenkins_k8s_charms.traefik}-lb", namespace=model.name
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type((AssertionError, TypeError, KeyError, IndexError)),
+        stop=tenacity.stop_after_attempt(12),
+        wait=tenacity.wait_fixed(10),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
     )
-    return jenkins_traefik_loadbalancer_service.status.load_balancer.ingress[0].ip
+    def _get_lb_ip() -> str:
+        jenkins_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
+            name=f"{jenkins_k8s_charms.traefik}-lb", namespace=model.name
+        )
+        ingress = jenkins_traefik_loadbalancer_service.status.load_balancer.ingress
+        assert ingress, "Jenkins traefik load balancer ingress not ready"
+        ip = ingress[0].ip
+        assert ip, "Jenkins traefik load balancer IP not ready"
+        return str(ip)
+
+    return _get_lb_ip()
 
 
 @pytest.fixture(scope="module", name="patch_dns_resolver")
@@ -453,13 +548,22 @@ def jenkins_endpoint_fixture(model: Model, jenkins_k8s_charms: _JenkinsCharms):
     """The Jenkins endpoint URL from public traefik."""
     juju = jubilant.Juju(model=model.name)
 
-    endpoints = _get_traefik_proxied_endpoints(
-        juju=juju, traefik_app_name=jenkins_k8s_charms.traefik
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(AssertionError),
+        stop=tenacity.stop_after_attempt(18),
+        wait=tenacity.wait_fixed(10),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
     )
-    jenkins_endpoint = endpoints.get("jenkins-k8s", {}).get("url")
-    assert jenkins_endpoint, "Jenkins endpoint not found in proxied endpoints"
+    def _get_jenkins_endpoint() -> str:
+        endpoints = _get_traefik_proxied_endpoints(
+            juju=juju, traefik_app_name=jenkins_k8s_charms.traefik
+        )
+        jenkins_endpoint = endpoints.get("jenkins-k8s", {}).get("url")
+        assert jenkins_endpoint, "Jenkins endpoint not found in proxied endpoints"
+        return str(jenkins_endpoint)
 
-    return jenkins_endpoint
+    return _get_jenkins_endpoint()
 
 
 @pytest.mark.abort_on_fail
@@ -561,27 +665,27 @@ async def totp_fixture(
     await asyncio.sleep(5)
 
     logger.info("Navigating to reset link: %s", reset_page_url)
-    await page.goto(url=reset_page_url, timeout=1000 * 60)
+    await _goto_with_retry(page, reset_page_url)
+    await expect(page.get_by_label("Recovery code", exact=True)).to_be_visible(timeout=1000 * 60)
 
-    async with page.expect_navigation(timeout=1000 * 60):
-        logger.info("Page content:%s", await page.content())
-        await page.get_by_label("Recovery code", exact=True).fill(reset_code)
-        await page.get_by_role("button", name="Submit").click()
+    logger.info("Page content:%s", await page.content())
+    await page.get_by_label("Recovery code", exact=True).fill(reset_code)
+    await page.get_by_role("button", name="Submit").click()
+    await expect(page.get_by_label("New password", exact=True)).to_be_visible(timeout=1000 * 60)
 
-    async with page.expect_navigation(timeout=1000 * 60):
-        logger.info("Changing password: %s", test_credentials.password)
-        await page.get_by_label("New password", exact=True).fill(test_credentials.password)
-        await page.get_by_label("Confirm New password", exact=True).fill(test_credentials.password)
-        await page.get_by_role("button", name="Reset password").click()
+    logger.info("Changing password: %s", test_credentials.password)
+    await page.get_by_label("New password", exact=True).fill(test_credentials.password)
+    await page.get_by_label("Confirm New password", exact=True).fill(test_credentials.password)
+    await page.get_by_role("button", name="Reset password").click()
+    await expect(page.get_by_role("code")).to_be_visible(timeout=1000 * 60)
 
-    async with page.expect_navigation(timeout=1000 * 60):
-        logger.info("Getting OTP Code")
-        code = await page.get_by_role("code").text_content()
-        assert code, "Code content not found"
-        logger.info("Got OTP Code: %s", code)
-        totp = pyotp.TOTP(code)
-        await page.get_by_label("Verify code", exact=True).fill(totp.now())
-        await page.get_by_role("button", name="Save").click()
+    logger.info("Getting OTP Code")
+    code = await page.get_by_role("code").text_content()
+    assert code, "Code content not found"
+    logger.info("Got OTP Code: %s", code)
+    totp = pyotp.TOTP(code)
+    await page.get_by_label("Verify code", exact=True).fill(totp.now())
+    await page.get_by_role("button", name="Save").click()
 
     return totp
 
@@ -601,23 +705,24 @@ async def test_auth_proxy_integration_authorized(
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
     logger.info("Navigating to Jenkins public endpoint: %s", jenkins_endpoint)
-    await page.goto(url=jenkins_endpoint, timeout=1000 * 60 * 10)
+    await _goto_with_retry(page, jenkins_endpoint, timeout=60 * 3)
+    await page.wait_for_url(re.compile(r"https://idp\.test/.*"), timeout=1000 * 60)
+    await expect(page.get_by_label("Email")).to_be_visible(timeout=1000 * 60)
 
-    async with page.expect_navigation(timeout=1000 * 60):
-        logger.info(
-            "Filling in login-ui credentials: %s, %s",
-            test_credentials.email,
-            test_credentials.password,
-        )
-        await page.get_by_label("Email").fill(test_credentials.email)
-        await page.get_by_label("Password").fill(test_credentials.password)
-        await page.get_by_role("button", name="Sign in").click()
-        logger.info("Signing in...")
+    logger.info(
+        "Filling in login-ui credentials: %s, %s",
+        test_credentials.email,
+        test_credentials.password,
+    )
+    await page.get_by_label("Email").fill(test_credentials.email)
+    await page.get_by_label("Password").fill(test_credentials.password)
+    await page.get_by_role("button", name="Sign in").click()
+    logger.info("Signing in...")
+    await expect(page.get_by_label("Authentication code")).to_be_visible(timeout=1000 * 60)
 
-    async with page.expect_navigation(timeout=1000 * 60):
-        logger.info("Authenticating with TOTP")
-        await page.get_by_label("Authentication code").fill(totp.now())
-        await page.get_by_role("button", name="Sign in").click()
-        logger.info("Signing in...")
+    logger.info("Authenticating with TOTP")
+    await page.get_by_label("Authentication code").fill(totp.now())
+    await page.get_by_role("button", name="Sign in").click()
+    logger.info("Signing in...")
 
     await expect(page).to_have_url(re.compile(r"https://jenkins.test/*"))

@@ -3,73 +3,131 @@
 
 """Unit tests for the pebble module."""
 
-import functools
-import typing
-from unittest.mock import patch
+from types import SimpleNamespace
+from typing import Any, cast
+from unittest.mock import MagicMock
 
+import ops
 import pytest
-import requests
 
 import jenkins
 import pebble
-import state
-
-from .types_ import HarnessWithContainer
 
 
-def test_replan_jenkins_pebble_error(
-    harness_container: HarnessWithContainer,
-    mocked_get_request: typing.Callable[..., requests.Response],
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    "prefix, system_properties, expected_present, expected_absent",
+    [
+        pytest.param(
+            "/jenkins",
+            [],
+            [
+                f"-D{jenkins.SYSTEM_PROPERTY_HEADLESS}",
+                f"-D{jenkins.SYSTEM_PROPERTY_LOGGING}",
+                f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war",
+                "--prefix=/jenkins",
+            ],
+            [],
+            id="required-java-flags-and-prefix",
+        ),
+        pytest.param(
+            "",
+            ["-Dfoo=bar", "-Dbaz=qux"],
+            ["-Dfoo=bar", "-Dbaz=qux", "--prefix="],
+            [],
+            id="system-properties-present",
+        ),
+        pytest.param(
+            "",
+            [],
+            ["--prefix="],
+            ["  -XX:MaxRAMPercentage=50.0"],
+            id="no-extra-space-when-no-system-properties",
+        ),
+    ],
+)
+def test_get_pebble_layer_command(
+    prefix: str,
+    system_properties: list[str],
+    expected_present: list[str],
+    expected_absent: list[str],
 ):
     """
-    arrange: given a patched jenkins bootstrap method that raises an exception.
-    act: when the a replan is executed.
-    assert: an error is raised.
+    arrange: given Jenkins environment and system properties from parameterized inputs.
+    act: when get_pebble_layer is called.
+    assert: command includes expected fragments and excludes forbidden fragments.
     """
-    # speed up waiting by changing default argument values
-    monkeypatch.setattr(requests, "get", functools.partial(mocked_get_request, status_code=200))
-    with (
-        patch.object(jenkins.Jenkins, "wait_ready"),
-        patch.object(jenkins.Jenkins, "bootstrap") as bootstrap_mock,
-    ):
-        bootstrap_mock.side_effect = jenkins.JenkinsBootstrapError
-        harness = harness_container.harness
-        harness.begin()
+    env = {
+        "JENKINS_HOME": str(jenkins.JENKINS_HOME_PATH),
+        "JENKINS_PREFIX": prefix,
+        "CASC_JENKINS_CONFIG": str(jenkins.JCASC_CONFIG_PATH),
+        "JENKINS_ADMIN_PASSWORD": "secret",
+        "CONFIGURATION_HASH": "hash123",
+    }
+    fake_state = SimpleNamespace(system_properties=system_properties)
 
-        env = jenkins.Environment(
-            JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
-            JENKINS_PREFIX="/",
-        )
+    layer = pebble.compute_pebble_layer(env, fake_state)  # type: ignore[arg-type]
+    layer_dict = cast(dict[str, Any], layer.to_dict())
+    command = layer_dict["services"]["jenkins"]["command"]
 
-        with pytest.raises(jenkins.JenkinsBootstrapError):
-            pebble.replan_jenkins(
-                harness_container.container,
-                jenkins.Jenkins(env),
-                state.State.from_charm(harness.charm),
-            )
+    for fragment in expected_present:
+        assert fragment in command
+    for fragment in expected_absent:
+        assert fragment not in command
 
 
-@pytest.mark.usefixtures("patch_os_environ")
-def test_replan_jenkins_when_not_ready(harness_container: HarnessWithContainer):
+@pytest.mark.parametrize(
+    "prefix, expected_url",
+    [
+        pytest.param("/prefix", f"http://localhost:{jenkins.WEB_PORT}/prefix", id="with-prefix"),
+        pytest.param("", f"http://localhost:{jenkins.WEB_PORT}", id="without-prefix"),
+    ],
+)
+def test_get_pebble_layer_sets_check_url_with_prefix(prefix: str, expected_url: str):
     """
-    arrange: given a mocked jenkins version raises TimeoutError on the second call.
-    act: when the a replan is executed.
-    assert: an error is raised.
+    arrange: given an ingress prefix in Jenkins environment.
+    act: when get_pebble_layer is called.
+    assert: the readiness check URL includes the same prefix.
     """
-    harness = harness_container.harness
-    harness.begin()
-    with patch.object(jenkins.Jenkins, "wait_ready") as wait_ready_mock:
-        wait_ready_mock.side_effect = TimeoutError
+    env = {
+        "JENKINS_HOME": str(jenkins.JENKINS_HOME_PATH),
+        "JENKINS_PREFIX": prefix,
+        "CASC_JENKINS_CONFIG": str(jenkins.JCASC_CONFIG_PATH),
+        "JENKINS_ADMIN_PASSWORD": "secret",
+        "CONFIGURATION_HASH": "hash123",
+    }
+    fake_state = SimpleNamespace(system_properties=[])
 
-        env = jenkins.Environment(
-            JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
-            JENKINS_PREFIX="/",
-        )
+    layer = pebble.compute_pebble_layer(env, fake_state)  # type: ignore[arg-type]
+    layer_dict = cast(dict[str, Any], layer.to_dict())
+    check_url = layer_dict["checks"][jenkins.ONLINE_CHECK_NAME]["http"]["url"]
 
-        with pytest.raises(jenkins.JenkinsBootstrapError):
-            pebble.replan_jenkins(
-                harness_container.container,
-                jenkins.Jenkins(env),
-                state.State.from_charm(harness.charm),
-            )
+    assert check_url == expected_url
+
+
+@pytest.mark.parametrize(
+    "stdout, expected",
+    [
+        pytest.param("2.504.1\n", "2.504.1", id="trailing-newline"),
+        pytest.param(" 2.504.1 \n", "2.504.1", id="surrounding-whitespace"),
+    ],
+)
+def test_get_jenkins_version_executes_expected_command(stdout: str, expected: str):
+    """
+    arrange: given a container whose exec process returns a Jenkins version string.
+    act: when get_jenkins_version is called.
+    assert: expected command is executed and stdout is stripped.
+    """
+    process = MagicMock(spec=ops.pebble.ExecProcess)
+    process.wait_output.return_value = (stdout, "")
+    container = MagicMock(spec=ops.Container)
+    container.exec.return_value = process
+
+    version = pebble.get_jenkins_version(container)
+
+    container.exec.assert_called_once_with(
+        ["java", "-jar", str(pebble.JENKINS_WAR_PATH), "--version"],
+        timeout=30,
+        user=jenkins.USER,
+        group=jenkins.GROUP,
+    )
+    assert version == expected

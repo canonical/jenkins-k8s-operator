@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Jenkins States."""
@@ -9,6 +9,7 @@ import os
 import typing
 
 import ops
+import yaml
 from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
 
 from timerange import InvalidTimeRangeError, Range
@@ -154,6 +155,110 @@ def _is_auth_proxy_integrated(relation: typing.Optional[ops.Relation]) -> bool:
     return bool(relation)
 
 
+def _parse_restart_time_range(charm: ops.CharmBase) -> typing.Optional[Range]:
+    """Parse restart-time-range from charm config."""
+    try:
+        time_range_str = typing.cast(str, charm.config.get("restart-time-range"))
+        return Range.from_str(time_range_str) if time_range_str else None
+    except InvalidTimeRangeError as exc:
+        logger.error("Invalid config value for restart-time-range, %s", exc)
+        raise CharmConfigInvalidError("Invalid config value for restart-time range.") from exc
+
+
+def _get_relation_state(
+    charm: ops.CharmBase,
+) -> tuple[
+    typing.Optional[typing.Mapping[ops.Relation, list[AgentMeta]]],
+    bool,
+]:
+    """Build relation-derived state used by the charm."""
+    try:
+        agent_relation_meta_map = _get_agent_meta_map_from_relation(
+            charm.model.relations[AGENT_RELATION]
+        )
+        is_auth_proxy_integrated = _is_auth_proxy_integrated(
+            charm.model.get_relation(AUTH_PROXY_RELATION)
+        )
+        return agent_relation_meta_map, is_auth_proxy_integrated
+    except ValidationError as exc:
+        logger.error("Invalid agent relation data received, %s", exc)
+        raise CharmRelationDataInvalidError(f"Invalid {AGENT_RELATION} relation data.") from exc
+
+
+def _parse_proxy_config() -> typing.Optional["ProxyConfig"]:
+    """Parse proxy configuration from environment."""
+    try:
+        return ProxyConfig.from_env()
+    except ValidationError as exc:
+        logger.error("Invalid juju model proxy configuration, %s", exc)
+        raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
+
+
+def _parse_system_properties(charm: ops.CharmBase) -> list[str]:
+    """Parse custom JVM system properties from charm config."""
+    system_properties_cfg = typing.cast(str, charm.config.get("system-properties"))
+    system_properties: list[str] = []
+    if not system_properties_cfg:
+        return system_properties
+
+    for entry in (part.strip() for part in system_properties_cfg.split(",")):
+        if not entry:
+            continue
+        if "=" not in entry or entry.startswith("="):
+            raise CharmConfigInvalidError(
+                "Invalid system-properties entry; expected key=value pairs separated by commas."
+            )
+        system_properties.append(f"-D{entry}")
+    return system_properties
+
+
+def _validate_deployment_relations(charm: ops.CharmBase) -> None:
+    """Validate supported deployment topology and required integrations."""
+    if charm.app.planned_units() > 1:
+        raise CharmIllegalNumUnitsError("The Jenkins charm supports only 1 unit of deployment.")
+
+    agent_discovery_ingress = charm.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME)
+    server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
+    if agent_discovery_ingress and not server_ingress:
+        raise CharmConfigInvalidError(
+            f"{INGRESS_RELATION_NAME} integration is required when using "
+            f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME}"
+        )
+
+
+def _parse_jcasc_config(charm: ops.CharmBase) -> typing.Optional[typing.Dict[str, typing.Any]]:
+    """Parse JCasC YAML from charm config into a mapping."""
+    raw_jcasc = typing.cast(str, charm.config.get("jcasc-config") or "")
+    if not raw_jcasc.strip():
+        return None
+
+    try:
+        parsed = yaml.safe_load(raw_jcasc)
+    except yaml.YAMLError as exc:
+        raise CharmConfigInvalidError(f"Invalid jcasc-config YAML: {exc}") from exc
+
+    if not isinstance(parsed, dict):
+        raise CharmConfigInvalidError("jcasc-config must be a YAML mapping (dict)")
+
+    # Validate jenkins section if present (defence in depth)
+    if (
+        "jenkins" in parsed
+        and parsed["jenkins"] is not None
+        and not isinstance(parsed["jenkins"], dict)
+    ):
+        raise CharmConfigInvalidError("jcasc-config 'jenkins' section must be a mapping")
+
+    return parsed
+
+
+def _get_admin_password(charm: ops.CharmBase) -> typing.Optional[str]:
+    """Fetch admin password from Juju secret, if present."""
+    try:
+        return charm.model.get_secret(label=charm.app.name).get_content().get("password")
+    except ops.SecretNotFoundError:
+        return None
+
+
 class ProxyConfig(BaseModel):
     """Configuration for accessing Jenkins through proxy.
 
@@ -197,6 +302,7 @@ class State:
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
         auth_proxy_integrated: if an auth proxy integrated has been set.
+        jcasc_config: Raw JCasC YAML content from charm config.
         system_properties: Additional JVM system properties as -D flags.
 
     """
@@ -206,7 +312,9 @@ class State:
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
     auth_proxy_integrated: bool
+    jcasc_config: typing.Optional[typing.Dict[str, typing.Any]]
     system_properties: typing.List[str] = dataclasses.field(default_factory=list)
+    admin_password: typing.Optional[str] = None
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -223,60 +331,17 @@ class State:
             CharmRelationDataInvalidError: if invalid relation data was received.
             CharmIllegalNumUnitsError: if more than 1 unit of Jenkins charm is deployed.
         """
-        try:
-            time_range_str = typing.cast(str, charm.config.get("restart-time-range"))
-            restart_time_range = Range.from_str(time_range_str) if time_range_str else None
-        except InvalidTimeRangeError as exc:
-            logger.error("Invalid config value for restart-time-range, %s", exc)
-            raise CharmConfigInvalidError("Invalid config value for restart-time range.") from exc
-
-        try:
-            agent_relation_meta_map = _get_agent_meta_map_from_relation(
-                charm.model.relations[AGENT_RELATION]
-            )
-            is_auth_proxy_integrated = _is_auth_proxy_integrated(
-                charm.model.get_relation(AUTH_PROXY_RELATION)
-            )
-        except ValidationError as exc:
-            logger.error("Invalid agent relation data received, %s", exc)
-            raise CharmRelationDataInvalidError(
-                f"Invalid {AGENT_RELATION} relation data."
-            ) from exc
-
-        try:
-            proxy_config = ProxyConfig.from_env()
-        except ValidationError as exc:
-            logger.error("Invalid juju model proxy configuration, %s", exc)
-            raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
+        restart_time_range = _parse_restart_time_range(charm)
+        agent_relation_meta_map, is_auth_proxy_integrated = _get_relation_state(charm)
+        proxy_config = _parse_proxy_config()
 
         plugins_str = typing.cast(str, charm.config.get("allowed-plugins"))
         plugins = (plugin.strip() for plugin in plugins_str.split(",")) if plugins_str else None
 
-        # Parse custom JVM system properties to pass as -D flags
-        system_properties_cfg = typing.cast(str, charm.config.get("system-properties"))
-        system_properties: list[str] = []
-        if system_properties_cfg:
-            for entry in (part.strip() for part in system_properties_cfg.split(",")):
-                if not entry:
-                    continue
-                if "=" not in entry or entry.startswith("="):
-                    raise CharmConfigInvalidError(
-                        "Invalid system-properties entry; expected key=value pairs "
-                        "separated by commas."
-                    )
-                system_properties.append(f"-D{entry}")
-
-        if charm.app.planned_units() > 1:
-            raise CharmIllegalNumUnitsError(
-                "The Jenkins charm supports only 1 unit of deployment."
-            )
-        agent_discovery_ingress = charm.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME)
-        server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
-        if agent_discovery_ingress and not server_ingress:
-            raise CharmConfigInvalidError(
-                f"{INGRESS_RELATION_NAME} integration is required when using "
-                f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME}"
-            )
+        system_properties = _parse_system_properties(charm)
+        _validate_deployment_relations(charm)
+        jcasc_config = _parse_jcasc_config(charm)
+        admin_password = _get_admin_password(charm)
 
         return cls(
             restart_time_range=restart_time_range,
@@ -284,5 +349,7 @@ class State:
             plugins=plugins,
             proxy_config=proxy_config,
             auth_proxy_integrated=is_auth_proxy_integrated,
+            jcasc_config=jcasc_config,
             system_properties=system_properties,
+            admin_password=admin_password,
         )

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Charm Jenkins."""
@@ -8,12 +8,15 @@
 # pylint: disable=too-many-instance-attributes
 
 import ipaddress
+import itertools
 import logging
+import secrets
 import socket
 import typing
 from urllib.parse import urlparse
 
 import ops
+import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
@@ -39,6 +42,31 @@ from state import (
 )
 
 logger = logging.getLogger(__name__)
+
+# The plugins that are required for Jenkins to work
+REQUIRED_PLUGINS = [
+    "instance-identity",  # required to connect agent nodes to server
+    "prometheus",  # required for COS integration
+    "monitoring",  # required for session invalidation
+    "configuration-as-code",  # required for JCasC declarative config management
+]
+
+
+class ReconcileBlockedError(Exception):
+    """Raised by sub-reconcilers to signal the charm should enter BlockedStatus.
+
+    Attributes:
+        message: The blocked status message.
+    """
+
+    def __init__(self, message: str):
+        """Initialize ReconcileBlockedError.
+
+        Args:
+            message: The blocked status message to surface to the user.
+        """
+        self.message = message
+        super().__init__(message)
 
 
 class JenkinsK8sOperatorCharm(ops.CharmBase):
@@ -67,7 +95,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             relation_name=INGRESS_RELATION_NAME,
             port=jenkins.WEB_PORT,
         )
-        self.jenkins = jenkins.Jenkins(self.calculate_env())
         self._loki = LogProxyConsumer(
             self,
             relation_name="logging",
@@ -78,9 +105,13 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self,
             jobs=[
                 {
-                    "metrics_path": "/prometheus",
+                    "metrics_path": f"{self._get_ingress_path()}/prometheus",
                     "static_configs": [{"targets": [f"*:{jenkins.WEB_PORT}"]}],
                 }
+            ],
+            refresh_event=[
+                self.server_ingress.on.ready,
+                self.server_ingress.on.revoked,
             ],
         )
         self._grafana = GrafanaDashboardProvider(self)
@@ -88,6 +119,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         # Register all events to funnel through reconcile
         for event in [
+            self.on.jenkins_pebble_ready,
             self.on.jenkins_home_storage_attached,
             self.on.upgrade_charm,
             self.on.config_changed,
@@ -103,7 +135,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.on.update_status,
         ]:
             self.framework.observe(event, self._reconcile)
-        self.framework.observe(self.on.jenkins_pebble_ready, self._on_jenkins_pebble_ready)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
 
@@ -138,8 +169,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ""
         return path
 
-    def calculate_env(self) -> jenkins.Environment:
+    def calculate_env(self, config_hash: str, admin_password: str) -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
+
+        Args:
+            config_hash: The hash of the JCasC configurations applied.
+            admin_password: The admin password for JCasC secret interpolation.
 
         Returns:
             The dictionary mapping of environment variables for the Jenkins service.
@@ -147,6 +182,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         return jenkins.Environment(
             JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
             JENKINS_PREFIX=self._get_ingress_path(),
+            CASC_JENKINS_CONFIG=str(jenkins.JCASC_CONFIG_PATH),
+            JENKINS_ADMIN_PASSWORD=admin_password,
+            CONFIGURATION_HASH=config_hash,
         )
 
     def _reconcile(self, event: ops.EventBase) -> None:
@@ -156,30 +194,51 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         making the charm converge regardless of event ordering.
 
         Args:
-            event: The event that triggered reconciliation.
+            event: The triggering Juju event (unused, present for observe callback compatibility).
+
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
         if not check_result.success:
             self.unit.status = ops.WaitingStatus(check_result.reason or "")
-            event.defer()
             return
 
-        state = self._get_state()
-        if state is None:
+        charm_state = self._get_state()
+        if charm_state is None:
             return
 
-        # Storage ownership only needs correction on attach/upgrade events
-        if isinstance(event, (ops.StorageAttachedEvent, ops.UpgradeCharmEvent)):
+        try:
+            # Storage ownership only needs correction on attach/upgrade events
+            logger.info("Reconciling storage")
             self._reconcile_storage(container)
 
-        self._reconcile_pebble(container, state)
-        self._reconcile_agents(event, state)
-        self._reconcile_agent_discovery()
-        self._reconcile_auth_proxy(event, state)
-        # Plugin removal only runs on update-status (matching original behaviour)
-        if isinstance(event, ops.UpdateStatusEvent):
-            self._reconcile_plugins(container, state)
+            # Reconcile jenkins configuration filesystem
+            configuration_hash = self._reconcile_pre_startup_configurations(container, charm_state)
+            # pass in configuration hash to trigger pebble layer update
+            logger.info("Reconciling admin user")
+            admin_password = self._reconcile_admin(container, charm_state)
+            jenkins_environment = self.calculate_env(configuration_hash, admin_password)
+            logger.info("Reconciling pebble plan")
+            self._reconcile_pebble(container, charm_state, jenkins_environment)
+
+            logger.info("Waiting for Jenkins to come up")
+            admin_client = jenkins.Jenkins(self._jenkins_prefix, admin_password, container)
+            admin_client.wait_ready(api_ready=True)
+
+            # Post Jenkins server startup reconciliations
+            logger.info("Reconciling API Token")
+            self._reconcile_api_token(admin_client=admin_client)
+            logger.info("Reconciling agents")
+            self._reconcile_agents(charm_state, client=admin_client)
+            logger.info("Reconciling agent discovery")
+            self._reconcile_agent_discovery()
+            logger.info("Reconciling auth proxy")
+            self._reconcile_auth_proxy(charm_state)
+            logger.info("Reconciling plugins")
+            self._reconcile_plugins(charm_state, admin_client, container)
+        except ReconcileBlockedError as exc:
+            self.unit.status = ops.BlockedStatus(exc.message)
+            return
 
         self.unit.status = ops.ActiveStatus(self._agent_status_message)
 
@@ -191,59 +250,98 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """
         self.storage.reconcile_storage(container=container)
 
-    def _reconcile_pebble(self, container: ops.Container, charm_state: State) -> None:
+    def _reconcile_admin(self, container: ops.Container, charm_state: State) -> str:
+        """Ensure the admin user is set up and return the admin password.
+
+        Args:
+            container: The Jenkins workload container.
+            charm_state: The current charm state.
+
+        Returns:
+            The admin password for JCasC secret interpolation.
+        """
+        # Charm state fetches it using juju secrets.
+        if charm_state.admin_password:
+            return charm_state.admin_password
+
+        # Backwards compatibility: fetch admin password from container and migrate to juju secrets.
+        admin_setup = False
+        try:
+            password_or_token = jenkins.get_admin_credentials(container).password_or_token
+            admin_setup = True
+        except jenkins.JenkinsBootstrapError as exc:
+            logger.debug("Admin password not yet setup, setting up admin user: %s", exc)
+
+        # Generate admin password and set it using juju secrets if secret not yet configured.
+        if not admin_setup:
+            # Generate admin user secret using secrets.token_hex() and set it in the container
+            password_or_token = secrets.token_hex(16)
+        self.app.add_secret(content={"password": password_or_token}, label=self.app.name)
+        return password_or_token
+
+    def _reconcile_api_token(self, admin_client: jenkins.Jenkins) -> None:
+        """Ensure the admin user's API token is set up.
+
+        Args:
+            admin_client: The Jenkins client for the admin user.
+
+        Returns:
+            Jenkins API client.
+        """
+        try:
+            admin_client.get_admin_api_client()
+            return
+        except jenkins.JenkinsBootstrapError:
+            logger.info("Jenkins admin API client not yet available, generating API token.")
+
+        try:
+            admin_client.generate_admin_user_token()
+        except jenkins.JenkinsBootstrapError:
+            logger.error("Failed to generate Jenkins admin API token.")
+            raise
+
+    def _reconcile_pebble(
+        self,
+        container: ops.Container,
+        charm_state: State,
+        jenkins_environment: jenkins.Environment,
+    ) -> None:
         """Ensure the Pebble layer matches desired state.
 
         Args:
             container: The Jenkins workload container.
             charm_state: The current charm state.
+            jenkins_environment: The environment variables for the Jenkins service.
         """
-        # Recalculate environment to pick up changes (e.g. ingress prefix)
-        self.jenkins.environment = self.calculate_env()
-        desired_layer = pebble.get_pebble_layer(self.jenkins, charm_state)
-        try:
-            current_services = container.get_plan().services
-        except Exception:  # pylint: disable=broad-except
-            current_services = {}
-        desired_services = desired_layer.services
+        desired_layer = pebble.compute_pebble_layer(
+            typing.cast(dict[str, str], jenkins_environment), charm_state
+        )
+        container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
+        container.replan()
 
-        # Only replan if the layer has changed
-        if current_services != desired_services:
-            container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
-            container.replan()
-
-    def _reconcile_agents(self, event: ops.EventBase, state: State) -> None:
+    def _reconcile_agents(self, state: State, client: jenkins.Jenkins) -> None:
         """Reconcile Jenkins agent nodes to match relation state.
 
         Args:
-            event: The triggering event (for deferral if Jenkins not ready).
             state: The current charm state.
+            client: Jenkins API client.
         """
         if not state.agent_relation_meta:
             return
 
-        container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        if not jenkins.is_jenkins_ready(container=container):
-            self.unit.status = ops.WaitingStatus("Jenkins service not yet ready.")
-            event.defer()
-            return
-
-        # Make sure Jenkins is fully up and running before interacting with it.
-        self.jenkins.wait_ready()
-
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
-        agent_nodes = self.jenkins.list_agent_nodes(container=container)
+        agent_nodes = client.list_agent_nodes()
         agent_node_names = [node.name for node in agent_nodes]
 
         self._add_agent_nodes_from_relation(
             agent_relation=state.agent_relation_meta,
-            container=container,
             agent_node_names=agent_node_names,
+            api_client=client,
         )
         self._remove_agent_nodes_not_in_relation(
             agent_relation=state.agent_relation_meta,
-            container=container,
             agent_node_names=agent_node_names,
+            api_client=client,
         )
 
     def _reconcile_agent_discovery(self) -> None:
@@ -254,11 +352,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 continue
             relation.data[self.model.unit].update({"url": self._agent_discovery_url})
 
-    def _reconcile_auth_proxy(self, event: ops.EventBase, state: State) -> None:
+    def _reconcile_auth_proxy(self, state: State) -> None:
         """Reconcile auth proxy configuration.
 
         Args:
-            event: The triggering event.
             state: The current charm state.
         """
         if state.auth_proxy_integrated:
@@ -276,12 +373,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 )
             self._auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
 
-    def _reconcile_plugins(self, container: ops.Container, state: State) -> None:
+    def _reconcile_plugins(
+        self, state: State, admin_client: jenkins.Jenkins, container: ops.Container
+    ) -> None:
         """Remove plugins that are installed but not allowed.
 
         Args:
-            container: The Jenkins workload container.
             state: The current charm state.
+            admin_client: The Jenkins admin client.
+            container: The workload container.
         """
         if state.restart_time_range and not timerange.check_now_within_bound_hours(
             state.restart_time_range.start, state.restart_time_range.end
@@ -289,11 +389,23 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         try:
-            self.jenkins.remove_unlisted_plugins(plugins=state.plugins, container=container)
+            admin_client.remove_unlisted_plugins(
+                plugins=itertools.chain(state.plugins or [], REQUIRED_PLUGINS),
+                container=container,
+            )
         except (jenkins.JenkinsPluginError, jenkins.JenkinsError) as exc:
             logger.error("Failed to remove unlisted plugin, %s", exc)
         except TimeoutError as exc:
             logger.error("Failed to remove plugins, %s", exc)
+
+    @property
+    def _jenkins_prefix(self) -> str:
+        """Return the path prefix for Jenkins.
+
+        Returns:
+            The path prefix for Jenkins.
+        """
+        return self._get_ingress_path()
 
     @property
     def _agent_discovery_url(self) -> str:
@@ -321,8 +433,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             try:
                 unit_ip = str(binding.network.bind_address)
                 ipaddress.ip_address(unit_ip)
-                env_dict = typing.cast(typing.Dict[str, str], self.jenkins.environment)
-                return f"http://{unit_ip}:{jenkins.WEB_PORT}{env_dict['JENKINS_PREFIX']}"
+                return f"http://{unit_ip}:{jenkins.WEB_PORT}{self._jenkins_prefix}"
             except ValueError as exc:
                 logger.error(
                     "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
@@ -344,15 +455,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
     def _add_agent_nodes_from_relation(
         self,
         agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
-        container: ops.Container,
         agent_node_names: list[str],
+        api_client: jenkins.Jenkins,
     ) -> None:
         """Add agent nodes from relation data.
 
         Args:
             agent_relation: Mapping of agent relation to agent metadata.
-            container: The workload container.
             agent_node_names: The node names of agents.
+            api_client: The Jenkins API client.
 
         Raises:
             JenkinsError: if there was an error while registering agent nodes to Jenkins.
@@ -361,7 +472,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             unregistered_agents = [agent for agent in agents if agent.name not in agent_node_names]
             for unregistered_agent in unregistered_agents:
                 try:
-                    self.jenkins.add_agent_node(agent_meta=unregistered_agent, container=container)
+                    api_client.add_agent_node(agent_meta=unregistered_agent)
                 except jenkins.JenkinsError:
                     logger.exception("Failed to register agent node: %s", unregistered_agent)
                     raise
@@ -369,8 +480,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             agent_relation_data: dict[str, str] = {"url": self._agent_discovery_url}
             for meta in agents:
                 try:
-                    agent_relation_data[f"{meta.name}_secret"] = self.jenkins.get_node_secret(
-                        node_name=meta.name, container=container
+                    agent_relation_data[f"{meta.name}_secret"] = api_client.get_node_secret(
+                        node_name=meta.name
                     )
                 except jenkins.JenkinsError:
                     logger.exception("Failed to get secret for registered node: %s", meta)
@@ -380,15 +491,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
     def _remove_agent_nodes_not_in_relation(
         self,
         agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
-        container: ops.Container,
         agent_node_names: list[str],
+        api_client: jenkins.Jenkins,
     ) -> None:
         """Remove agent nodes not found in relation data.
 
         Args:
             agent_relation: Mapping of agent relation to agent metadata.
-            container: The Jenkins workload container.
             agent_node_names: The agents registered on Jenkins server.
+            api_client: The Jenkins API client.
 
         Raises:
             JenkinsError: if there was an error while removing agent nodes from Jenkins.
@@ -399,54 +510,78 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         agents_not_in_relation = set(agent_node_names) - all_agent_names_from_relation
         for agent_name in agents_not_in_relation:
             try:
-                self.jenkins.remove_agent_node(agent_name=agent_name, container=container)
+                api_client.remove_agent_node(agent_name=agent_name)
             except jenkins.JenkinsError:
                 logger.exception("Failed to remove registered node: %s", agent_name)
                 raise
 
-    def _bootstrap_jenkins(self, event: ops.EventBase) -> None:
-        """Bootstrap Jenkins on first pebble-ready.
+    def _reconcile_pre_startup_configurations(
+        self, container: ops.Container, charm_state: State
+    ) -> str:
+        """Reconcile configurations that need to be in place before Jenkins starts up.
 
-        This performs the full install and version detection that only needs
-        to happen once (or on upgrade).
+        Unlock wizard, pre-install plugins and JCasC configuration before starting Jenkins service.
 
         Args:
-            event: The event that triggered the bootstrap.
+            container: The Jenkins workload container.
+            charm_state: The current charm state.
+
+        Returns:
+            The hash of the JCasC configurations applied.
 
         Raises:
             TimeoutError: if there was an error waiting for Jenkins service to come up.
             JenkinsBootstrapError: if there was an error installing Jenkins.
-            JenkinsError: if there was an error fetching Jenkins version.
         """
-        container = self.unit.get_container(JENKINS_SERVICE_NAME)
-        check_result = precondition.check(container=container, storages=self.model.storages)
-        if not check_result.success:
-            self.unit.status = ops.WaitingStatus(check_result.reason or "")
-            event.defer()
-            return
+        logger.info("Getting jenkins version")
+        version = pebble.get_jenkins_version(container)
+        logger.info("Unlocking wizard")
+        jenkins.unlock_wizard(container, version)
+        logger.info("Installing plugins")
+        jenkins.install_plugins(container, REQUIRED_PLUGINS, charm_state.proxy_config)
+        logger.info("Reconciling JCasC configuration")
+        jenkins.install_logging_config(container)
+        return self._reconcile_jcasc_config(container, charm_state)
 
-        state = self._get_state()
-        if state is None:  # pragma: nocover
-            return
+    def _reconcile_jcasc_config(
+        self,
+        container: ops.Container,
+        charm_state: State,
+    ) -> str:
+        """Reconcile JCasC configuration to desired state.
 
-        self.unit.status = ops.MaintenanceStatus("Installing Jenkins.")
-        pebble.replan_jenkins(container, self.jenkins, state)
-        try:
-            version = self.jenkins.version
-        except jenkins.JenkinsError as exc:
-            logger.error("Failed to get Jenkins version, %s", exc)
-            raise
-
-        self.unit.set_workload_version(version)
-        self.unit.status = ops.ActiveStatus()
-
-    def _on_jenkins_pebble_ready(self, event: ops.PebbleReadyEvent) -> None:
-        """Configure and start Jenkins server on first pebble ready.
+        Builds the desired JCasC config by merging user-provided config with
+        charm-managed sections (admin credentials, auth proxy), then delegates
+        file I/O, validation, and reload to jenkins.sync_jcasc_config.
 
         Args:
-            event: The event fired when pebble is ready.
+            container: The Jenkins workload container.
+            charm_state: The current charm state.
+
+        Returns:
+            The hash of the JCasC configuration applied.
+
+        Raises:
+            ReconcileBlockedError: if there was an error installing JCasC configuration.
         """
-        self._bootstrap_jenkins(event)
+        jcasc_config = {} if charm_state.jcasc_config is None else charm_state.jcasc_config
+
+        desired_config = jenkins.build_jcasc_config(
+            jcasc_config,
+            charm_state.proxy_config,
+            charm_state.auth_proxy_integrated,
+        )
+        try:
+            desired_yaml = yaml.dump(desired_config, default_flow_style=False, sort_keys=False)
+        except yaml.YAMLError as exc:
+            logger.error("Failed to serialize JCasC config, %s", exc)
+            raise ReconcileBlockedError("Failed to serialize JCasC config.") from exc
+
+        try:
+            return jenkins.sync_jcasc_config(container, desired_yaml)
+        except jenkins.JenkinsError as exc:
+            logger.error("Failed to sync JCasC config: %s", exc)
+            raise ReconcileBlockedError("Failed to sync JCasC configuration.") from exc
 
     def _on_get_admin_password(self, event: ops.ActionEvent) -> None:
         """Handle get-admin-password event.
@@ -458,8 +593,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if not jenkins.is_storage_ready(container):
             event.fail("Jenkins storage not yet mounted.")
             return
+        charm_state = self._get_state()
+        if not charm_state:
+            event.fail("Jenkins charm is not yet ready.")
+            return
+
+        if charm_state.admin_password:
+            event.set_results({"password": charm_state.admin_password})
+            return
+
         credentials = jenkins.get_admin_credentials(container)
         event.set_results({"password": credentials.password_or_token})
+        return
 
     def _on_rotate_credentials(self, event: ops.ActionEvent) -> None:
         """Invalidate all sessions and reset admin account password.
@@ -471,14 +616,46 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if not jenkins.is_storage_ready(container):
             event.fail("Jenkins storage not yet mounted.")
             return
-        if not jenkins.is_jenkins_ready(container):
+        charm_state = self._get_state()
+        if not charm_state:
+            event.fail("Jenkins charm is not yet ready.")
+            return
+
+        current_password = charm_state.admin_password
+        try:
+            if not current_password:
+                current_password = jenkins.get_admin_credentials(container).password_or_token
+        except jenkins.JenkinsBootstrapError as exc:
+            logger.error("Failed to get admin credentials, %s", exc)
+            event.fail("Jenkins has not yet bootstrapped.")
+            return
+
+        admin_client = jenkins.Jenkins(self._jenkins_prefix, current_password, container)
+        try:
+            admin_client.wait_ready(api_ready=True)
+        except TimeoutError as exc:
+            logger.warning(
+                "phase=rotate_credentials wait_ready_timeout unit=%s app=%s jenkins_prefix=%s error=%s",
+                self.unit.name,
+                self.app.name,
+                self._jenkins_prefix,
+                exc,
+            )
             event.fail("Jenkins service is not yet ready.")
             return
+
         try:
-            password = self.jenkins.rotate_credentials(container)
+            password = admin_client.rotate_credentials(container)
         except jenkins.JenkinsError:
             event.fail("Error invalidating user sessions. See logs.")
             return
+
+        try:
+            secret = self.model.get_secret(label=self.app.name)
+            secret.set_content({"password": password})
+        except ops.SecretNotFoundError:
+            self.app.add_secret(content={"password": password}, label=self.app.name)
+
         event.set_results({"password": password})
 
 
