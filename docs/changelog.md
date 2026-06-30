@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+## 2026-06-30
+
+- Add `jcasc-repository` charm configuration option to support JCasC configuration from git repositories with optional private repository authentication and mutual exclusion validation with `jcasc-config`.
+
 ## 2026-02-02
 
 - Add Java `system-properties` configuration to charm config.
