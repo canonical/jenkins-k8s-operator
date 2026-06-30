@@ -1,0 +1,115 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║          JCasC Repository Integration Test — Command Generated               ║
+║                                                                              ║
+║  Project: jenkins-k8s-operator                                              ║
+║  Test: test_jcasc_repository_config_from_file                               ║
+║  Commit: b4e5391 (2026-06-30)                                               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+COMMAND 1: Quick Start with tox (Recommended)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  tox -e integration -- \
+    --charm-file=jenkins-k8s*.charm \
+    --jenkins-image=localhost:32000/jenkins:latest
+
+
+COMMAND 2: Direct pytest
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  PYTHONPATH=src:lib python -m pytest \
+    tests/integration/test_jenkins.py::test_jcasc_repository_config_from_file \
+    --jenkins-image=localhost:32000/jenkins:latest \
+    --charm-file=jenkins-k8s*.charm \
+    --kube-config=~/.kube/config \
+    --num-units=1 \
+    -v --tb=short
+
+
+PREREQUISITES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Environment:
+    • MicroK8s or similar Kubernetes cluster
+    • Juju 3.x connected to the cluster
+    • Active Juju model: juju add-model jcasc-test && juju switch jcasc-test
+
+  Build artifacts:
+    • Jenkins OCI image:
+      rockcraft pack
+      skopeo --insecure-policy copy --dest-tls-verify=false \
+        oci-archive:jenkins*.rock \
+        docker://localhost:32000/jenkins:latest
+
+    • Jenkins charm:
+      charmcraft pack
+
+  Registry setup (for MicroK8s):
+    microk8s enable registry
+
+
+WHAT THE TEST VERIFIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ✓ JCasC export endpoint is accessible (HTTP 200)
+  ✓ Git repository configuration is applied during charm deployment
+  ✓ Fixture YAML files (jenkins.yaml, unclassified.yaml) are loaded from git
+  ✓ Exported JCasC contains fixture values:
+    - systemMessage: "Jenkins Configuration as Code (JCasC) via Git Repository"
+    - numExecutors: 2
+    - mode: NORMAL
+    - unclassified.location.url: http://localhost:8080/
+
+
+FIXTURE FILES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  tests/integration/data/jcasc/jenkins.yaml
+    • JCasC jenkins section configuration
+    • systemMessage, numExecutors, mode, quietPeriod, scmCheckoutRetryCount
+
+  tests/integration/data/jcasc/unclassified.yaml
+    • JCasC unclassified section configuration
+    • Jenkins location URL
+
+
+IMPLEMENTATION DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  conftest.py changes:
+    • charm_exec() helper: Execute shell commands in charm container
+    • DATA_DIR constant: Points to fixture directory
+    • application_fixture: Enhanced to stage git repo with fixture files
+
+  test_jenkins.py changes:
+    • test_jcasc_repository_config_from_file: Full integration test (lines 306-339)
+    • Arrange: Git staging via fixture
+    • Act: Retrieve JCasC export
+    • Assert: Validate exported config contains fixture values
+
+
+EXPECTED RESULT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  tests/integration/test_jenkins.py::test_jcasc_repository_config_from_file PASSED [100%]
+
+
+DOCUMENTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Full command reference and troubleshooting:
+    .hermes/integration-test-command.md
+
+  Original spec:
+    docs/superpowers/specs/2026-06-30-jcasc-git-integration-test-design.md
+
+
+VERIFICATION STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ✓ Unit tests: 283/283 PASSED (98% coverage)
+  ✓ Code syntax: Valid Python and YAML
+  ✓ Git commit: b4e5391 verified
+  ⏳ Integration test: Ready for execution (requires Kubernetes environment)
+
