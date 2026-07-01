@@ -46,7 +46,7 @@ def _stage_workload_clone(harness, container, monkeypatch, files, config_path="j
         A dict with the recorded exec calls under keys "git", "find", "rm".
     """
     monkeypatch.setattr(jenkins.secrets, "token_hex", lambda _n: "deadbeefcafe")
-    dest = "/tmp/jcasc-clone-deadbeefcafe"
+    dest = "/tmp/jcasc-clone-deadbeefcafe"  # nosec: B108 — test fixture hardcoded path
     base = dest if config_path == "." else f"{dest}/{config_path}"
 
     jenkins_root = harness.get_filesystem_root("jenkins")

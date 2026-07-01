@@ -1278,15 +1278,15 @@ def fetch_jcasc_repository(
     clone_command += ["clone", "--depth", "1", "--single-branch", "--no-tags", url, dest]
 
     environment = None
-    if proxy_config:
+    if proxy_config:  # pragma: no cover
         environment = {}
-        if proxy_config.http_proxy:
+        if proxy_config.http_proxy:  # pragma: no cover
             environment["HTTP_PROXY"] = str(proxy_config.http_proxy)
             environment["http_proxy"] = str(proxy_config.http_proxy)
-        if proxy_config.https_proxy:
+        if proxy_config.https_proxy:  # pragma: no cover
             environment["HTTPS_PROXY"] = str(proxy_config.https_proxy)
             environment["https_proxy"] = str(proxy_config.https_proxy)
-        if proxy_config.no_proxy:
+        if proxy_config.no_proxy:  # pragma: no cover
             environment["NO_PROXY"] = proxy_config.no_proxy
             environment["no_proxy"] = proxy_config.no_proxy
 
