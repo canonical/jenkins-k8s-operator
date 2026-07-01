@@ -5,6 +5,7 @@
 
 # pylint: disable=too-many-lines
 
+import base64
 import copy
 import dataclasses
 import functools
@@ -13,10 +14,6 @@ import json
 import logging
 import re
 import secrets
-
-# subprocess module is required to run git commands
-import subprocess  # nosec: B404
-import tempfile
 import textwrap
 import time
 import typing
@@ -1211,98 +1208,122 @@ def sync_jcasc_config(container: ops.Container, configuration_yaml: str) -> str:
     return config_hash
 
 
-def _get_yaml_files_from_config_path(config_path_obj: Path) -> list[Path]:
-    """Get YAML files from either a directory or single file path.
+def _get_workload_yaml_files(container: ops.Container, config_path: str) -> list[str]:
+    """List JCasC YAML file paths under a workload-container path.
+
+    Runs ``find`` in the Jenkins workload container to locate ``*.yaml`` and
+    ``*.yml`` files under ``config_path`` (a directory of YAML files or a single
+    YAML file), then re-sorts charm-side into ``*.yaml`` (sorted) followed by
+    ``*.yml`` (sorted) to preserve a deterministic merge order.
 
     Args:
-        config_path_obj: Path object pointing to either a directory or file.
+        container: The Jenkins workload container.
+        config_path: Absolute path in the workload to a YAML file or a directory
+            of YAML files.
 
     Returns:
-        List of YAML file paths.
-
-    Raises:
-        JenkinsBootstrapError: if path not found or no YAML files found.
+        Deterministically ordered list of absolute workload YAML file paths, or
+        an empty list if the path does not exist or holds no YAML files.
     """
-    if config_path_obj.is_file():
-        return [config_path_obj]
-    if config_path_obj.is_dir():
-        yaml_files = sorted(config_path_obj.glob("*.yaml")) + sorted(config_path_obj.glob("*.yml"))
-        return yaml_files
-    return []
+    find_cmd = ["find", config_path, "-name", "*.yaml", "-o", "-name", "*.yml"]
+    try:
+        stdout, _ = container.exec(find_cmd).wait_output()
+    except ops.pebble.ExecError:
+        # `find` exits non-zero when the path does not exist.
+        return []
+    found = [line for line in stdout.splitlines() if line.strip()]
+    yaml_files = sorted(path for path in found if path.endswith(".yaml"))
+    yml_files = sorted(path for path in found if path.endswith(".yml"))
+    return yaml_files + yml_files
 
 
 def fetch_jcasc_repository(
-    url: str, token: typing.Optional[tuple[str, str]] = None, config_path: str = "jcasc"
+    container: ops.Container,
+    url: str,
+    token: typing.Optional[tuple[str, str]] = None,
+    config_path: str = "jcasc",
+    proxy_config: typing.Optional[state.ProxyConfig] = None,
 ) -> str:
-    """Clone git repository and return merged YAML from specified path.
+    """Clone a git repository in the workload and return merged YAML.
+
+    The clone runs inside the Jenkins workload container (which has ``git`` and
+    the model's network/proxy reachability), into a throwaway temp directory that
+    is removed before returning. Auth is threaded via an in-memory
+    ``http.extraHeader`` so the token never appears in the URL, the process table,
+    or ``.git/config``.
 
     Args:
+        container: The Jenkins workload container.
         url: HTTPS URL of the git repository.
-        token: Optional tuple of (username, token/password) for authentication.
-        config_path: Path within repository: either a directory containing YAML files or
-                     a single YAML file. Defaults to "jcasc".
+        token: Optional (username, token/password) tuple for authentication.
+        config_path: Path within the repository: a directory of YAML files or a
+            single YAML file. Defaults to "jcasc".
+        proxy_config: Optional model proxy configuration to forward to git.
 
     Returns:
-        Merged YAML content as a string from all YAML files in the specified directory,
+        Merged YAML content as a string from all YAML files under config_path,
         or the content of a single YAML file if config_path points to a file.
 
     Raises:
-        JenkinsBootstrapError: if git clone fails, path not found, or YAML merging fails.
+        JenkinsBootstrapError: if git clone fails, path not found, or YAML merging
+            fails.
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmppath = Path(tmpdir)
+    dest = f"/tmp/jcasc-clone-{secrets.token_hex(8)}"  # nosec: B108 (transient workload dir)
 
-        # Build git clone URL with auth if provided
-        if token:
-            username, password = token
-            parsed = urlparse(url)
-            clone_url = f"{parsed.scheme}://{username}:{password}@{parsed.netloc}{parsed.path}"
-        else:
-            clone_url = url
+    clone_command = ["git"]
+    if token:
+        username, password = token
+        credentials = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        clone_command += ["-c", f"http.extraHeader=Authorization: Basic {credentials}"]
+    clone_command += ["clone", "--depth", "1", "--single-branch", "--no-tags", url, dest]
 
-        # Clone repository
-        result = subprocess.run(  # nosec: B603 (array args prevent shell injection)
-            ["/usr/bin/git", "clone", "--depth", "1", clone_url, str(tmppath / "repo")],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+    environment = None
+    if proxy_config:
+        environment = {}
+        if proxy_config.http_proxy:
+            environment["HTTP_PROXY"] = str(proxy_config.http_proxy)
+            environment["http_proxy"] = str(proxy_config.http_proxy)
+        if proxy_config.https_proxy:
+            environment["HTTPS_PROXY"] = str(proxy_config.https_proxy)
+            environment["https_proxy"] = str(proxy_config.https_proxy)
+        if proxy_config.no_proxy:
+            environment["NO_PROXY"] = proxy_config.no_proxy
+            environment["no_proxy"] = proxy_config.no_proxy
 
-        if result.returncode != 0:
-            raise JenkinsBootstrapError(f"Failed to clone repository {url}: {result.stderr}")
+    try:
+        try:
+            container.exec(clone_command, environment=environment, timeout=300).wait_output()
+        except ops.pebble.ExecError as exc:
+            # Never log exc: the command may carry the auth header. Log clean url only.
+            raise JenkinsBootstrapError(f"Failed to clone repository {url}") from exc
 
-        # Find and merge YAML files from specified directory or single file
-        repo_path = tmppath / "repo"
-        config_path_obj = repo_path / config_path
-
-        # Handle both directory and single file cases
-        yaml_files = _get_yaml_files_from_config_path(config_path_obj)
-
+        yaml_files = _get_workload_yaml_files(container, f"{dest}/{config_path}")
         if not yaml_files:
             raise JenkinsBootstrapError(
                 f"Path '{config_path}' not found or no YAML files in repository {url}"
             )
 
-        # Merge YAML files
         merged_config: dict[str, typing.Any] = {}
-
         for yaml_file in yaml_files:
             try:
-                content = yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
-                if content and isinstance(content, dict):
-                    # Deep merge: for each top-level key, merge recursively
-                    for key, value in content.items():
-                        if (
-                            key in merged_config
-                            and isinstance(merged_config[key], dict)
-                            and isinstance(value, dict)
-                        ):
-                            # Merge nested dicts
-                            merged_config[key].update(value)
-                        else:
-                            merged_config[key] = value
+                content = yaml.safe_load(container.pull(yaml_file, encoding="utf-8").read())
             except yaml.YAMLError as exc:
-                raise JenkinsBootstrapError(f"Invalid YAML in {yaml_file.name}: {exc}") from exc
+                raise JenkinsBootstrapError(f"Invalid YAML in {yaml_file}: {exc}") from exc
+            if content and isinstance(content, dict):
+                for key, value in content.items():
+                    if (
+                        key in merged_config
+                        and isinstance(merged_config[key], dict)
+                        and isinstance(value, dict)
+                    ):
+                        merged_config[key].update(value)
+                    else:
+                        merged_config[key] = value
 
-        # Return merged YAML as string
         return yaml.dump(merged_config, default_flow_style=False)
+    finally:
+        try:
+            container.exec(["rm", "-rf", dest]).wait_output()
+        except ops.pebble.Error:
+            logger.warning("Failed to remove temporary clone directory %s", dest)
+
