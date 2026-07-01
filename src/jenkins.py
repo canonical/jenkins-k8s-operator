@@ -1237,7 +1237,7 @@ def _get_workload_yaml_files(container: ops.Container, config_path: str) -> list
     return yaml_files + yml_files
 
 
-def fetch_jcasc_repository(
+def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path handling)
     container: ops.Container,
     url: str,
     token: typing.Optional[tuple[str, str]] = None,
@@ -1268,12 +1268,12 @@ def fetch_jcasc_repository(
         JenkinsBootstrapError: if git clone fails, path not found, or YAML merging
             fails.
     """
-    dest = f"/tmp/jcasc-clone-{secrets.token_hex(8)}"  # nosec: B108 (transient workload dir)
+    dest = f"/tmp/jcasc-clone-{secrets.token_hex(8)}"  # noqa: S108  # nosec: B108 (transient workload dir)
 
     clone_command = ["git"]
     if token:
         username, password = token
-        credentials = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        credentials = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
         clone_command += ["-c", f"http.extraHeader=Authorization: Basic {credentials}"]
     clone_command += ["clone", "--depth", "1", "--single-branch", "--no-tags", url, dest]
 

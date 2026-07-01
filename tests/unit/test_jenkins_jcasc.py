@@ -7,7 +7,6 @@
 # pylint:disable=protected-access
 
 import re
-import base64
 import secrets
 from functools import partial
 from pathlib import Path
@@ -20,6 +19,7 @@ import pytest
 import requests
 
 import jenkins
+
 from .helpers import combine_root_paths
 from .types_ import HarnessWithContainer
 
@@ -356,7 +356,7 @@ def test_fetch_jcasc_repository_merges_multiple_yaml_files(
         "01-jenkins.yaml": "jenkins:\n  numExecutors: 5\n",
         "02-security.yaml": "jenkins:\n  securityRealm: admin\n",
     }
-    calls = _stage_workload_clone(harness_container.harness, container, monkeypatch, files)
+    _stage_workload_clone(harness_container.harness, container, monkeypatch, files)
 
     result = jenkins.fetch_jcasc_repository(container, "https://example.com/repo.git", token=None)
 
@@ -399,7 +399,7 @@ def test_fetch_jcasc_repository_config_path_root_directory(
     container = harness_container.container
 
     files = {"config.yaml": "jenkins:\n  systemMessage: from root\n"}
-    calls = _stage_workload_clone(
+    _stage_workload_clone(
         harness_container.harness, container, monkeypatch, files, config_path="."
     )
 
@@ -460,7 +460,7 @@ def test_fetch_jcasc_repository_config_path_types(
     harness_container.harness.begin()
     container = harness_container.container
 
-    calls = _stage_workload_clone(
+    _stage_workload_clone(
         harness_container.harness, container, monkeypatch, files, config_path=config_path
     )
 

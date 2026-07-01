@@ -54,7 +54,7 @@ async def charm_exec(ops_test: OpsTest, unit_name: str, cmd: str) -> None:
     Raises:
         AssertionError: If the command fails (non-zero exit code).
     """
-    ret, stdout, stderr = await ops_test.juju(
+    ret, _, stderr = await ops_test.juju(
         "ssh", "--container", "charm", unit_name, "bash", "-c", cmd
     )
     assert ret == 0, f"Command failed in charm container: {cmd}\nstderr: {stderr}"
@@ -124,37 +124,37 @@ async def application_fixture(
     unit_name = application.units[0].name
 
     # Smoke-check git in charm container
-    ret, stdout, stderr = await ops_test.juju(
+    ret, _, stderr = await ops_test.juju(
         "ssh", "--container", "charm", unit_name, "git", "--version"
     )
     assert ret == 0, f"git missing in charm container: {stderr}"
 
     # Create repo directory and seed fixture files
-    REPO_DIR = "/tmp/jcasc-repo"  # nosec: hardcoded test path in charm container
-    await charm_exec(ops_test, unit_name, f"mkdir -p {REPO_DIR}/jcasc")
+    repo_dir = "/tmp/jcasc-repo"  # nosec: hardcoded test path in charm container
+    await charm_exec(ops_test, unit_name, f"mkdir -p {repo_dir}/jcasc")
     for name in ("jenkins.yaml", "unclassified.yaml"):
         content = (DATA_DIR / "jcasc" / name).read_text(encoding="utf-8")
         b64 = base64.b64encode(content.encode()).decode()
         await charm_exec(
             ops_test,
             unit_name,
-            f"bash -c 'echo {b64} | base64 -d > {REPO_DIR}/jcasc/{name}'",
+            f"bash -c 'echo {b64} | base64 -d > {repo_dir}/jcasc/{name}'",
         )
 
     # Initialize git repo with fixture files
-    await charm_exec(ops_test, unit_name, f"git -C {REPO_DIR} init")
-    await charm_exec(ops_test, unit_name, f"git -C {REPO_DIR} add .")
+    await charm_exec(ops_test, unit_name, f"git -C {repo_dir} init")
+    await charm_exec(ops_test, unit_name, f"git -C {repo_dir} add .")
     await charm_exec(
         ops_test,
         unit_name,
-        f"git -C {REPO_DIR} -c user.email=test@test -c user.name=test commit -m fixture",
+        f"git -C {repo_dir} -c user.email=test@test -c user.name=test commit -m fixture",
     )
 
     # Point charm at repo and clear jcasc-config (both in same call)
     await application.set_config(
         {
             "jcasc-config": "",
-            "jcasc-repository": f"file://{REPO_DIR}",
+            "jcasc-repository": f"file://{repo_dir}",
             "jcasc-repository-config-path": "jcasc",
         }
     )
