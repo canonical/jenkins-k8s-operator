@@ -1326,4 +1326,3 @@ def fetch_jcasc_repository(
             container.exec(["rm", "-rf", dest]).wait_output()
         except ops.pebble.Error:
             logger.warning("Failed to remove temporary clone directory %s", dest)
-

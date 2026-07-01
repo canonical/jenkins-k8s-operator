@@ -45,12 +45,12 @@ DATA_DIR = Path(__file__).parent / "data"
 
 async def charm_exec(ops_test: OpsTest, unit_name: str, cmd: str) -> None:
     """Execute a command in the charm container via juju ssh.
-    
+
     Args:
         ops_test: OpsTest fixture for juju CLI access.
         unit_name: Name of the unit (e.g., "jenkins-k8s/0").
         cmd: Command to execute in the charm container.
-        
+
     Raises:
         AssertionError: If the command fails (non-zero exit code).
     """
@@ -119,16 +119,16 @@ async def application_fixture(
         timeout=30 * 60,
         idle_period=30,
     )
-    
+
     # Stage JCasC git repository and configure charm to use it
     unit_name = application.units[0].name
-    
+
     # Smoke-check git in charm container
     ret, stdout, stderr = await ops_test.juju(
         "ssh", "--container", "charm", unit_name, "git", "--version"
     )
     assert ret == 0, f"git missing in charm container: {stderr}"
-    
+
     # Create repo directory and seed fixture files
     REPO_DIR = "/tmp/jcasc-repo"  # nosec: hardcoded test path in charm container
     await charm_exec(ops_test, unit_name, f"mkdir -p {REPO_DIR}/jcasc")
@@ -140,7 +140,7 @@ async def application_fixture(
             unit_name,
             f"bash -c 'echo {b64} | base64 -d > {REPO_DIR}/jcasc/{name}'",
         )
-    
+
     # Initialize git repo with fixture files
     await charm_exec(ops_test, unit_name, f"git -C {REPO_DIR} init")
     await charm_exec(ops_test, unit_name, f"git -C {REPO_DIR} add .")
@@ -149,17 +149,17 @@ async def application_fixture(
         unit_name,
         f"git -C {REPO_DIR} -c user.email=test@test -c user.name=test commit -m fixture",
     )
-    
+
     # Point charm at repo and clear jcasc-config (both in same call)
-    await application.set_config({
-        "jcasc-config": "",
-        "jcasc-repository": f"file://{REPO_DIR}",
-        "jcasc-repository-config-path": "jcasc",
-    })
-    await model.wait_for_idle(
-        apps=[application.name], status="active", timeout=20 * 60
+    await application.set_config(
+        {
+            "jcasc-config": "",
+            "jcasc-repository": f"file://{REPO_DIR}",
+            "jcasc-repository-config-path": "jcasc",
+        }
     )
-    
+    await model.wait_for_idle(apps=[application.name], status="active", timeout=20 * 60)
+
     # slow down update-status so that it doesn't intervene currently running tests
     # don't yield inside the context since juju cleanup is not reliable.
     # model.set_config(...) also doesn't work as well as the following code.

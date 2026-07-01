@@ -273,7 +273,9 @@ def test_get_groovy_proxy_args_http_fallback_without_https(http_partial_proxy_co
     )
 
 
-def test_fetch_jcasc_repository_clones_and_merges(harness_container, monkeypatch: pytest.MonkeyPatch):
+def test_fetch_jcasc_repository_clones_and_merges(
+    harness_container, monkeypatch: pytest.MonkeyPatch
+):
     """fetch_jcasc_repository clones repo and returns merged YAML content."""
     harness_container.harness.begin()
     container = harness_container.container
@@ -300,9 +302,7 @@ def test_fetch_jcasc_repository_with_token(harness_container, monkeypatch: pytes
     calls = _stage_workload_clone(harness_container.harness, container, monkeypatch, files)
 
     result = jenkins.fetch_jcasc_repository(
-        container,
-        "https://example.com/private.git",
-        token=("git", "ghp_secret")
+        container, "https://example.com/private.git", token=("git", "ghp_secret")
     )
 
     assert "jenkins" in result.lower()
@@ -316,13 +316,17 @@ def test_fetch_jcasc_repository_with_token(harness_container, monkeypatch: pytes
     assert "ghp_secret" not in " ".join(git_cmd)
 
 
-def test_fetch_jcasc_repository_git_clone_fails(harness_container, monkeypatch: pytest.MonkeyPatch):
+def test_fetch_jcasc_repository_git_clone_fails(
+    harness_container, monkeypatch: pytest.MonkeyPatch
+):
     """fetch_jcasc_repository raises JenkinsBootstrapError on git clone failure."""
     harness_container.harness.begin()
     container = harness_container.container
 
     def git_fail_handler(argv):
-        raise ops.pebble.ExecError(command=argv, exit_code=1, stdout="", stderr="fatal: authentication failed")
+        raise ops.pebble.ExecError(
+            command=argv, exit_code=1, stdout="", stderr="fatal: authentication failed"
+        )
 
     def rm_handler(argv):
         return (0, "", "")
@@ -362,7 +366,9 @@ def test_fetch_jcasc_repository_merges_multiple_yaml_files(
     assert "securityRealm" in result or "admin" in result
 
 
-def test_fetch_jcasc_repository_custom_config_path(harness_container, monkeypatch: pytest.MonkeyPatch):
+def test_fetch_jcasc_repository_custom_config_path(
+    harness_container, monkeypatch: pytest.MonkeyPatch
+):
     """fetch_jcasc_repository uses custom config_path parameter."""
     harness_container.harness.begin()
     container = harness_container.container
@@ -404,7 +410,9 @@ def test_fetch_jcasc_repository_config_path_root_directory(
     assert "systemMessage" in result or "from root" in result
 
 
-def test_fetch_jcasc_repository_missing_config_path(harness_container, monkeypatch: pytest.MonkeyPatch):
+def test_fetch_jcasc_repository_missing_config_path(
+    harness_container, monkeypatch: pytest.MonkeyPatch
+):
     """fetch_jcasc_repository raises JenkinsBootstrapError when custom config_path doesn't exist."""
     harness_container.harness.begin()
     container = harness_container.container
@@ -451,7 +459,9 @@ def test_fetch_jcasc_repository_config_path_types(
     harness_container.harness.begin()
     container = harness_container.container
 
-    calls = _stage_workload_clone(harness_container.harness, container, monkeypatch, files, config_path=config_path)
+    calls = _stage_workload_clone(
+        harness_container.harness, container, monkeypatch, files, config_path=config_path
+    )
 
     result = jenkins.fetch_jcasc_repository(
         container, "https://example.com/repo.git", token=None, config_path=config_path

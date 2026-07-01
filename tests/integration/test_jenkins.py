@@ -322,17 +322,17 @@ async def test_jcasc_repository_config_from_file(
     response = jenkins_client.requester.post_url(f"{web_address}/configuration-as-code/export")
     assert response.status_code == 200, "JCasC export endpoint should be accessible"
     exported = response.text
-    
+
     # Verify jenkins section exists (from fixture jenkins.yaml)
     assert "jenkins" in exported, "Exported JCasC should contain jenkins section"
-    
+
     # Verify specific fixture values are present in the exported config
     assert "Jenkins Configuration as Code (JCasC) via Git Repository" in exported, (
         "systemMessage from git repository fixture should be in exported config"
     )
     assert "numExecutors: 2" in exported, "numExecutors: 2 from fixture should be applied"
     assert "mode: NORMAL" in exported, "mode: NORMAL from fixture should be applied"
-    
+
     # Verify unclassified section from fixture is present
     assert "unclassified:" in exported, "Exported JCasC should contain unclassified section"
     assert "location:" in exported, "location section should be present in unclassified"
