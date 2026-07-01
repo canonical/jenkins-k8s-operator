@@ -8,6 +8,7 @@
 
 import re
 import base64
+import secrets
 from functools import partial
 from pathlib import Path
 from typing import Callable
@@ -45,8 +46,8 @@ def _stage_workload_clone(harness, container, monkeypatch, files, config_path="j
     Returns:
         A dict with the recorded exec calls under keys "git", "find", "rm".
     """
-    monkeypatch.setattr(jenkins.secrets, "token_hex", lambda _n: "deadbeefcafe")
-    dest = "/tmp/jcasc-clone-deadbeefcafe"  # nosec: B108 — test fixture hardcoded path
+    random_token = secrets.token_hex(8)
+    dest = f"/tmp/jcasc-clone-{random_token}"
     base = dest if config_path == "." else f"{dest}/{config_path}"
 
     jenkins_root = harness.get_filesystem_root("jenkins")
