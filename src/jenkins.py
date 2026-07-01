@@ -1242,6 +1242,7 @@ def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path ha
     url: str,
     token: typing.Optional[tuple[str, str]] = None,
     config_path: str = "jcasc",
+    branch: str = "main",
     proxy_config: typing.Optional[state.ProxyConfig] = None,
 ) -> str:
     """Clone a git repository in the workload and return merged YAML.
@@ -1258,6 +1259,7 @@ def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path ha
         token: Optional (username, token/password) tuple for authentication.
         config_path: Path within the repository: a directory of YAML files or a
             single YAML file. Defaults to "jcasc".
+        branch: Git branch to check out. Defaults to "main".
         proxy_config: Optional model proxy configuration to forward to git.
 
     Returns:
@@ -1275,7 +1277,7 @@ def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path ha
         username, password = token
         credentials = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
         clone_command += ["-c", f"http.extraHeader=Authorization: Basic {credentials}"]
-    clone_command += ["clone", "--depth", "1", "--single-branch", "--no-tags", url, dest]
+    clone_command += ["clone", "--branch", branch, "--depth", "1", "--single-branch", "--no-tags", url, dest]
 
     environment = None
     if proxy_config:  # pragma: no cover

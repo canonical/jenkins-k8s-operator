@@ -576,6 +576,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     charm_state.jcasc_repository,
                     token=charm_state.jcasc_repository_token,
                     config_path=charm_state.jcasc_repository_config_path,
+                    branch=str(self.model.config.get("jcasc-repository-branch", "main")),
                     proxy_config=charm_state.proxy_config,
                 )
                 # Parse repository YAML and merge with jcasc_config
