@@ -47,7 +47,7 @@ def _stage_workload_clone(harness, container, monkeypatch, files, config_path="j
         A dict with the recorded exec calls under keys "git", "find", "rm".
     """
     random_token = secrets.token_hex(8)
-    dest = f"/tmp/jcasc-clone-{random_token}"
+    dest = f"/tmp/jcasc-clone-{random_token}"  # nosec: B108 (transient test dir with dynamic suffix)
     base = dest if config_path == "." else f"{dest}/{config_path}"
 
     jenkins_root = harness.get_filesystem_root("jenkins")
@@ -59,7 +59,7 @@ def _stage_workload_clone(harness, container, monkeypatch, files, config_path="j
         fs_path.write_text(body, encoding="utf-8")
         staged_paths.append(wpath)
 
-    calls = {"git": [], "find": [], "rm": []}
+    calls: dict[str, list[list[str]]] = {"git": [], "find": [], "rm": []}
 
     def git_handler(argv):
         calls["git"].append(argv)
