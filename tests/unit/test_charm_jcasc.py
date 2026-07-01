@@ -441,6 +441,7 @@ jenkins:
         "https://github.com/example/jcasc-repo",
         token=None,
         config_path="jcasc",
+        branch="main",
         proxy_config=None,
     )
 
