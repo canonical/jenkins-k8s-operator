@@ -1270,6 +1270,10 @@ def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path ha
         JenkinsBootstrapError: if git clone fails, path not found, or YAML merging
             fails.
     """
+    # Note: branch parameter allows integration tests to reference test data from
+    # feature branches without requiring merge to main first. Defaults to "main"
+    # for backward compatibility. If the branch does not exist on the remote, the
+    # git clone will fail with a clear error message.
     dest = f"/tmp/jcasc-clone-{secrets.token_hex(8)}"  # noqa: S108  # nosec: B108 (transient workload dir)
 
     clone_command = ["git"]
