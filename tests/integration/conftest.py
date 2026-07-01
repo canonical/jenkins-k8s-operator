@@ -3,7 +3,6 @@
 
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
-import base64
 import logging
 import os
 import random
@@ -173,7 +172,6 @@ async def application_fixture(
     async with ops_test.fast_forward(fast_interval="5h", slow_interval="5h"):
         pass
     yield application
-
 
 
 @pytest.fixture(scope="module", name="unit")

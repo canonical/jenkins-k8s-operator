@@ -1281,7 +1281,17 @@ def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path ha
         username, password = token
         credentials = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
         clone_command += ["-c", f"http.extraHeader=Authorization: Basic {credentials}"]
-    clone_command += ["clone", "--branch", branch, "--depth", "1", "--single-branch", "--no-tags", url, dest]
+    clone_command += [
+        "clone",
+        "--branch",
+        branch,
+        "--depth",
+        "1",
+        "--single-branch",
+        "--no-tags",
+        url,
+        dest,
+    ]
 
     environment = None
     if proxy_config:  # pragma: no cover
