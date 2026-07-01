@@ -101,7 +101,7 @@ When an agent departs the relation, the charm unregisters the Jenkins agent node
 
 The `src/charm.py` is the default entry point for a charm and has the JenkinsK8sOperatorCharm Python class which inherits from CharmBase.
 
-CharmBase is the base class from which all Charms are formed, defined by [Ops](https://juju.is/docs/sdk/ops) (Python framework for developing charms).
+CharmBase is the base class from which all Charms are formed, defined by [Ops](https://canonical.com/juju/docs/ops/latest/) (Python framework for developing charms).
 
 > See more in the Juju docs: [Charm](https://canonical.com/juju/docs/juju-cli/3.6/reference/charm/).
 

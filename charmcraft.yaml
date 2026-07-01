@@ -11,7 +11,7 @@ assumes:
 summary: Jenkins Continuous Integration Server
 
 description: |
-  A [Juju](https://juju.is/) [charm](https://juju.is/docs/olm/charmed-operators)
+  A [Juju](https://canonical.com/juju/) [charm](https://canonical.com/juju/docs/juju-cli/3.6/reference/)
   deploying and managing [Jenkins](https://jenkins.io/) on Kubernetes. Jenkins is an open source
   automation server, providing plugins to support building, deploying and automating any project.
 
