@@ -1,0 +1,8 @@
+jenkins:
+  systemMessage: "Hello from JCasC repository! This configuration was loaded from a Git repository."
+  numExecutors: 3
+  
+unclassified:
+  location:
+    adminAddress: "admin@example.com"
+    url: "http://jenkins.test/"
