@@ -7,11 +7,9 @@
 # pylint:disable=protected-access
 
 import re
-
-# subprocess module is used in git clone, imported to patch with mocks in tests
-import subprocess  # nosec: B404
-import tempfile
+import base64
 from functools import partial
+from pathlib import Path
 from typing import Callable
 from unittest.mock import MagicMock
 
@@ -21,7 +19,7 @@ import pytest
 import requests
 
 import jenkins
-
+from .helpers import combine_root_paths
 from .types_ import HarnessWithContainer
 
 
@@ -34,44 +32,51 @@ def _failing_container() -> ops.Container:
     return mock_container
 
 
-def _mock_tempdir(tmp_path):
-    """Factory for mock TemporaryDirectory context manager.
+def _stage_workload_clone(harness, container, monkeypatch, files, config_path="jcasc"):
+    """Stage YAML files on the workload FS and wire git/find/rm exec handlers.
 
     Args:
-        tmp_path: pytest tmp_path fixture
+        harness: The ops testing Harness.
+        container: The jenkins workload container.
+        monkeypatch: pytest monkeypatch fixture.
+        files: Mapping of path-relative-to-config_path -> YAML text.
+        config_path: Repo subdir/file the charm will read (default "jcasc").
 
     Returns:
-        Callable returning context manager that yields tmp_path string.
+        A dict with the recorded exec calls under keys "git", "find", "rm".
     """
+    monkeypatch.setattr(jenkins.secrets, "token_hex", lambda _n: "deadbeefcafe")
+    dest = "/tmp/jcasc-clone-deadbeefcafe"
+    base = dest if config_path == "." else f"{dest}/{config_path}"
 
-    def factory():
-        class MockTempDir:
-            def __enter__(self):
-                return str(tmp_path)
+    jenkins_root = harness.get_filesystem_root("jenkins")
+    staged_paths = []
+    for rel, body in files.items():
+        wpath = f"{base}/{rel}" if rel else base
+        fs_path = combine_root_paths(jenkins_root, Path(wpath))
+        fs_path.parent.mkdir(parents=True, exist_ok=True)
+        fs_path.write_text(body, encoding="utf-8")
+        staged_paths.append(wpath)
 
-            def __exit__(self, *args):
-                pass
+    calls = {"git": [], "find": [], "rm": []}
 
-        return MockTempDir()
+    def git_handler(argv):
+        calls["git"].append(argv)
+        return (0, "", "")
 
-    return factory
+    def find_handler(argv):
+        calls["find"].append(argv)
+        return (0, "".join(f"{p}\n" for p in staged_paths), "")
 
+    def rm_handler(argv):
+        calls["rm"].append(argv)
+        return (0, "", "")
 
-def _mock_subprocess_run(returncode: int = 0, stderr: str = ""):
-    """Factory for mock subprocess.run function.
-
-    Args:
-        returncode: Exit code to return
-        stderr: Error message to return
-
-    Returns:
-        Mock function that records call args and returns configured result.
-    """
-
-    def mock_run(*args, **kwargs):
-        return MagicMock(returncode=returncode, stderr=stderr)
-
-    return mock_run
+    for name, handler in (("git", git_handler), ("find", find_handler), ("rm", rm_handler)):
+        harness.register_command_handler(  # type: ignore # pylint: disable=no-member
+            container=container, executable=name, handler=handler
+        )
+    return calls
 
 
 def test__unlock_wizard(
@@ -268,182 +273,188 @@ def test_get_groovy_proxy_args_http_fallback_without_https(http_partial_proxy_co
     )
 
 
-def test_fetch_jcasc_repository_clones_and_merges(tmp_path, monkeypatch: pytest.MonkeyPatch):
+def test_fetch_jcasc_repository_clones_and_merges(harness_container, monkeypatch: pytest.MonkeyPatch):
     """fetch_jcasc_repository clones repo and returns merged YAML content."""
-    # Create fake repo structure with YAML file
-    repo_dir = tmp_path / "repo"
-    jcasc_dir = repo_dir / "jcasc"
-    jcasc_dir.mkdir(parents=True)
+    harness_container.harness.begin()
+    container = harness_container.container
 
-    yaml_file = jcasc_dir / "jenkins.yaml"
-    yaml_file.write_text("jenkins:\n  numExecutors: 5\n", encoding="utf-8")
+    files = {"jenkins.yaml": "jenkins:\n  numExecutors: 5\n"}
+    calls = _stage_workload_clone(harness_container.harness, container, monkeypatch, files)
 
-    monkeypatch.setattr(subprocess, "run", _mock_subprocess_run())
-    monkeypatch.setattr(tempfile, "TemporaryDirectory", _mock_tempdir(tmp_path))
-
-    result = jenkins.fetch_jcasc_repository("https://example.com/repo.git", token=None)
+    result = jenkins.fetch_jcasc_repository(container, "https://example.com/repo.git", token=None)
 
     assert "jenkins" in result.lower()
     assert "numExecutors" in result or "5" in result
+    # Verify git clone was called (no auth header when token is None)
+    assert len(calls["git"]) == 1
+    git_cmd = calls["git"][0]
+    assert "git" in git_cmd and "clone" in git_cmd
 
 
-def test_fetch_jcasc_repository_with_token(tmp_path, monkeypatch: pytest.MonkeyPatch):
+def test_fetch_jcasc_repository_with_token(harness_container, monkeypatch: pytest.MonkeyPatch):
     """fetch_jcasc_repository accepts (username, token) tuple for auth."""
-    # Create fake repo structure
-    repo_dir = tmp_path / "repo"
-    jcasc_dir = repo_dir / "jcasc"
-    jcasc_dir.mkdir(parents=True)
+    harness_container.harness.begin()
+    container = harness_container.container
 
-    yaml_file = jcasc_dir / "config.yaml"
-    yaml_file.write_text("jenkins:\n  securityRealm: admin\n", encoding="utf-8")
+    files = {"config.yaml": "jenkins:\n  securityRealm: admin\n"}
+    calls = _stage_workload_clone(harness_container.harness, container, monkeypatch, files)
 
-    # Track if auth URL was used
-    auth_url_used = []
+    result = jenkins.fetch_jcasc_repository(
+        container,
+        "https://example.com/private.git",
+        token=("git", "ghp_secret")
+    )
 
-    def mock_run_with_auth(*args, **kwargs):
-        # args is [["git", "clone", "--depth", "1", URL, dest], ...]
-        if isinstance(args[0], list) and len(args[0]) >= 5:
-            # URL is at index 4
-            auth_url_used.append(args[0][4])
-        return MagicMock(returncode=0)
-
-    monkeypatch.setattr(subprocess, "run", mock_run_with_auth)
-    monkeypatch.setattr(tempfile, "TemporaryDirectory", _mock_tempdir(tmp_path))
-
-    jenkins.fetch_jcasc_repository("https://example.com/private.git", token=("git", "ghp_secret"))
-
-    # Verify token was used in URL
-    assert len(auth_url_used) > 0
-    assert "git:ghp_secret" in auth_url_used[0]
+    assert "jenkins" in result.lower()
+    # Verify auth header was set (not in URL)
+    assert len(calls["git"]) == 1
+    git_cmd = calls["git"][0]
+    assert "-c" in git_cmd
+    auth_idx = git_cmd.index("-c") + 1
+    assert "http.extraHeader=Authorization: Basic" in git_cmd[auth_idx]
+    # Token should NOT be in the URL
+    assert "ghp_secret" not in " ".join(git_cmd)
 
 
-def test_fetch_jcasc_repository_git_clone_fails(monkeypatch: pytest.MonkeyPatch):
+def test_fetch_jcasc_repository_git_clone_fails(harness_container, monkeypatch: pytest.MonkeyPatch):
     """fetch_jcasc_repository raises JenkinsBootstrapError on git clone failure."""
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        _mock_subprocess_run(returncode=1, stderr="fatal: authentication failed"),
+    harness_container.harness.begin()
+    container = harness_container.container
+
+    def git_fail_handler(argv):
+        raise ops.pebble.ExecError(command=argv, exit_code=1, stdout="", stderr="fatal: authentication failed")
+
+    def rm_handler(argv):
+        return (0, "", "")
+
+    monkeypatch.setattr(jenkins.secrets, "token_hex", lambda _n: "deadbeefcafe")
+
+    harness_container.harness.register_command_handler(
+        container=container, executable="git", handler=git_fail_handler
+    )
+    harness_container.harness.register_command_handler(
+        container=container, executable="rm", handler=rm_handler
     )
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
-        jenkins.fetch_jcasc_repository("https://example.com/repo.git", token=None)
+        jenkins.fetch_jcasc_repository(container, "https://example.com/repo.git", token=None)
 
 
 def test_fetch_jcasc_repository_merges_multiple_yaml_files(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+    harness_container, monkeypatch: pytest.MonkeyPatch
 ):
     """fetch_jcasc_repository merges YAML files from repository."""
-    # Create multiple YAML files in repo
-    repo_dir = tmp_path / "repo"
-    jcasc_dir = repo_dir / "jcasc"
-    jcasc_dir.mkdir(parents=True)
+    harness_container.harness.begin()
+    container = harness_container.container
 
-    # Create multiple YAML files
-    (jcasc_dir / "01-jenkins.yaml").write_text("jenkins:\n  numExecutors: 5\n", encoding="utf-8")
-    (jcasc_dir / "02-security.yaml").write_text(
-        "jenkins:\n  securityRealm: admin\n", encoding="utf-8"
-    )
+    files = {
+        "01-jenkins.yaml": "jenkins:\n  numExecutors: 5\n",
+        "02-security.yaml": "jenkins:\n  securityRealm: admin\n",
+    }
+    calls = _stage_workload_clone(harness_container.harness, container, monkeypatch, files)
 
-    monkeypatch.setattr(subprocess, "run", _mock_subprocess_run())
-    monkeypatch.setattr(tempfile, "TemporaryDirectory", _mock_tempdir(tmp_path))
-
-    result = jenkins.fetch_jcasc_repository("https://example.com/repo.git", token=None)
+    result = jenkins.fetch_jcasc_repository(container, "https://example.com/repo.git", token=None)
 
     assert isinstance(result, str)
     assert "jenkins" in result.lower()
-    # Both config keys should be present
+    # Both config keys should be present (deep merged)
     assert "numExecutors" in result or "5" in result
     assert "securityRealm" in result or "admin" in result
 
 
-def test_fetch_jcasc_repository_custom_config_path(tmp_path, monkeypatch: pytest.MonkeyPatch):
+def test_fetch_jcasc_repository_custom_config_path(harness_container, monkeypatch: pytest.MonkeyPatch):
     """fetch_jcasc_repository uses custom config_path parameter."""
-    # Create repo structure with custom config directory
-    repo_dir = tmp_path / "repo"
-    config_dir = repo_dir / "config"
-    config_dir.mkdir(parents=True)
+    harness_container.harness.begin()
+    container = harness_container.container
 
-    # Create YAML in custom directory
-    (config_dir / "jenkins.yaml").write_text("jenkins:\n  numExecutors: 10\n", encoding="utf-8")
-
-    monkeypatch.setattr(subprocess, "run", _mock_subprocess_run())
-    monkeypatch.setattr(tempfile, "TemporaryDirectory", _mock_tempdir(tmp_path))
+    files = {"jenkins.yaml": "jenkins:\n  numExecutors: 10\n"}
+    calls = _stage_workload_clone(
+        harness_container.harness, container, monkeypatch, files, config_path="config"
+    )
 
     result = jenkins.fetch_jcasc_repository(
-        "https://example.com/repo.git", token=None, config_path="config"
+        container, "https://example.com/repo.git", token=None, config_path="config"
     )
 
     assert isinstance(result, str)
     assert "jenkins" in result.lower()
     assert "numExecutors" in result or "10" in result
+    # Verify find was called with correct path
+    assert len(calls["find"]) == 1
+    assert "config" in " ".join(calls["find"][0])
 
 
 def test_fetch_jcasc_repository_config_path_root_directory(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+    harness_container, monkeypatch: pytest.MonkeyPatch
 ):
     """fetch_jcasc_repository loads YAML from root when config_path is '.'."""
-    # Create YAML files in repo root
-    repo_dir = tmp_path / "repo"
-    repo_dir.mkdir(parents=True)
+    harness_container.harness.begin()
+    container = harness_container.container
 
-    (repo_dir / "config.yaml").write_text(
-        "jenkins:\n  systemMessage: from root\n", encoding="utf-8"
+    files = {"config.yaml": "jenkins:\n  systemMessage: from root\n"}
+    calls = _stage_workload_clone(
+        harness_container.harness, container, monkeypatch, files, config_path="."
     )
 
-    monkeypatch.setattr(subprocess, "run", _mock_subprocess_run())
-    monkeypatch.setattr(tempfile, "TemporaryDirectory", _mock_tempdir(tmp_path))
-
     result = jenkins.fetch_jcasc_repository(
-        "https://example.com/repo.git", token=None, config_path="."
+        container, "https://example.com/repo.git", token=None, config_path="."
     )
 
     assert isinstance(result, str)
     assert "systemMessage" in result or "from root" in result
 
 
-def test_fetch_jcasc_repository_missing_config_path(tmp_path, monkeypatch: pytest.MonkeyPatch):
+def test_fetch_jcasc_repository_missing_config_path(harness_container, monkeypatch: pytest.MonkeyPatch):
     """fetch_jcasc_repository raises JenkinsBootstrapError when custom config_path doesn't exist."""
-    repo_dir = tmp_path / "repo"
-    repo_dir.mkdir(parents=True)
+    harness_container.harness.begin()
+    container = harness_container.container
 
-    monkeypatch.setattr(subprocess, "run", _mock_subprocess_run())
-    monkeypatch.setattr(tempfile, "TemporaryDirectory", _mock_tempdir(tmp_path))
+    # Stage with no files, so find will return empty
+    def find_empty_handler(argv):
+        return (0, "", "")
+
+    def git_noop_handler(argv):
+        return (0, "", "")
+
+    def rm_noop_handler(argv):
+        return (0, "", "")
+
+    harness_container.harness.register_command_handler(
+        container=container, executable="git", handler=git_noop_handler
+    )
+    harness_container.harness.register_command_handler(
+        container=container, executable="find", handler=find_empty_handler
+    )
+    harness_container.harness.register_command_handler(
+        container=container, executable="rm", handler=rm_noop_handler
+    )
+    monkeypatch.setattr(jenkins.secrets, "token_hex", lambda _n: "deadbeefcafe")
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
         jenkins.fetch_jcasc_repository(
-            "https://example.com/repo.git", token=None, config_path="nonexistent"
+            container, "https://example.com/repo.git", token=None, config_path="nonexistent"
         )
 
 
 @pytest.mark.parametrize(
-    "config_path,setup_func",
+    "config_path,files",
     [
-        (
-            "jcasc",
-            lambda p: (p / "jcasc").mkdir()
-            or (p / "jcasc" / "jenkins.yaml").write_text("jenkins:\n  systemMessage: test"),
-        ),
-        (
-            "jenkins.yaml",
-            lambda p: (p / "jenkins.yaml").write_text("jenkins:\n  systemMessage: test"),
-        ),
+        ("jcasc", {"jenkins.yaml": "jenkins:\n  systemMessage: test\n"}),
+        ("jenkins.yaml", {"jenkins.yaml": "jenkins:\n  systemMessage: test\n"}),
     ],
     ids=["directory_with_yaml_files", "single_yaml_file"],
 )
 def test_fetch_jcasc_repository_config_path_types(
-    tmp_path, monkeypatch: pytest.MonkeyPatch, config_path: str, setup_func: Callable
+    harness_container, monkeypatch: pytest.MonkeyPatch, config_path: str, files: dict
 ):
     """fetch_jcasc_repository handles both directory and single file config paths."""
-    repo_dir = tmp_path / "repo"
-    repo_dir.mkdir(parents=True)
+    harness_container.harness.begin()
+    container = harness_container.container
 
-    setup_func(repo_dir)
-
-    monkeypatch.setattr(subprocess, "run", _mock_subprocess_run())
-    monkeypatch.setattr(tempfile, "TemporaryDirectory", _mock_tempdir(tmp_path))
+    calls = _stage_workload_clone(harness_container.harness, container, monkeypatch, files, config_path=config_path)
 
     result = jenkins.fetch_jcasc_repository(
-        "https://example.com/repo.git", token=None, config_path=config_path
+        container, "https://example.com/repo.git", token=None, config_path=config_path
     )
 
     assert isinstance(result, str)

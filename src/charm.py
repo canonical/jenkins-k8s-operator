@@ -572,9 +572,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if charm_state.jcasc_repository:
             try:
                 repo_yaml_str = jenkins.fetch_jcasc_repository(
+                    container,
                     charm_state.jcasc_repository,
-                    charm_state.jcasc_repository_token,
-                    charm_state.jcasc_repository_config_path,
+                    token=charm_state.jcasc_repository_token,
+                    config_path=charm_state.jcasc_repository_config_path,
+                    proxy_config=charm_state.proxy_config,
                 )
                 # Parse repository YAML and merge with jcasc_config
                 repo_yaml = yaml.safe_load(repo_yaml_str)

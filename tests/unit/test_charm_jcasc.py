@@ -436,7 +436,13 @@ jenkins:
         result = charm._reconcile_jcasc_config(harness_container.container, charm_state)
 
     # Verify fetch was called with correct args including config_path
-    fetch_mock.assert_called_once_with("https://github.com/example/jcasc-repo", None, "jcasc")
+    fetch_mock.assert_called_once_with(
+        harness_container.container,
+        "https://github.com/example/jcasc-repo",
+        token=None,
+        config_path="jcasc",
+        proxy_config=None,
+    )
 
     # Verify sync was called
     assert result == "hash123"
