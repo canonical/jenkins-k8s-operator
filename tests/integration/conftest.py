@@ -9,6 +9,7 @@ import os
 import random
 import secrets
 import string
+import subprocess
 from pathlib import Path
 from typing import AsyncGenerator, Iterable, Optional
 
@@ -103,11 +104,41 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Pat
     return latest_charm
 
 
+def _get_current_branch() -> str:
+    """Get the current git branch name for GitHub raw URL references.
+
+    Falls back to 'main' if not in a git repo or on a detached HEAD.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=Path(__file__).parent.parent.parent,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+        branch = result.stdout.strip()
+        # Handle detached HEAD state
+        if branch == "HEAD":
+            logger.warning("On detached HEAD; using default branch 'main' for test fixture")
+            return "main"
+        return branch
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        logger.warning("Failed to detect git branch; using default branch 'main' for test fixture")
+        return "main"
+
+
 @pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
     ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
 ) -> AsyncGenerator[Application, None]:
-    """Deploy the charm."""
+    """Deploy the charm using GitHub-hosted JCasC test data.
+
+    This fixture deploys the charm and configures it to pull JCasC YAML files
+    from the current git branch on GitHub, avoiding the need for git in the
+    charm container.
+    """
     resources = {"jenkins-image": jenkins_image}
     # Deploy the charm and wait for active/idle status
     application = await model.deploy(charm, resources=resources)
@@ -120,42 +151,18 @@ async def application_fixture(
         idle_period=30,
     )
 
-    # Stage JCasC git repository and configure charm to use it
-    unit_name = application.units[0].name
+    # Get the current git branch for fixture data reference
+    branch = _get_current_branch()
 
-    # Smoke-check git in charm container
-    ret, _, stderr = await ops_test.juju(
-        "ssh", "--container", "charm", unit_name, "git", "--version"
-    )
-    assert ret == 0, f"git missing in charm container: {stderr}"
-
-    # Create repo directory and seed fixture files
-    repo_dir = "/tmp/jcasc-repo"  # nosec: hardcoded test path in charm container
-    await charm_exec(ops_test, unit_name, f"mkdir -p {repo_dir}/jcasc")
-    for name in ("jenkins.yaml", "unclassified.yaml"):
-        content = (DATA_DIR / "jcasc" / name).read_text(encoding="utf-8")
-        b64 = base64.b64encode(content.encode()).decode()
-        await charm_exec(
-            ops_test,
-            unit_name,
-            f"bash -c 'echo {b64} | base64 -d > {repo_dir}/jcasc/{name}'",
-        )
-
-    # Initialize git repo with fixture files
-    await charm_exec(ops_test, unit_name, f"git -C {repo_dir} init")
-    await charm_exec(ops_test, unit_name, f"git -C {repo_dir} add .")
-    await charm_exec(
-        ops_test,
-        unit_name,
-        f"git -C {repo_dir} -c user.email=test@test -c user.name=test commit -m fixture",
-    )
-
-    # Point charm at repo and clear jcasc-config (both in same call)
+    # Configure charm to use GitHub-hosted JCasC test data
+    # The jcasc-repository will clone the repo and check out the specified branch,
+    # then read YAML files from tests/integration/data/jcasc
     await application.set_config(
         {
             "jcasc-config": "",
-            "jcasc-repository": f"file://{repo_dir}",
-            "jcasc-repository-config-path": "jcasc",
+            "jcasc-repository": "https://github.com/canonical/jenkins-k8s-operator.git",
+            "jcasc-repository-branch": branch,
+            "jcasc-repository-config-path": "tests/integration/data/jcasc",
         }
     )
     await model.wait_for_idle(apps=[application.name], status="active", timeout=20 * 60)
@@ -166,6 +173,7 @@ async def application_fixture(
     async with ops_test.fast_forward(fast_interval="5h", slow_interval="5h"):
         pass
     yield application
+
 
 
 @pytest.fixture(scope="module", name="unit")
