@@ -8,7 +8,6 @@ import os
 import random
 import secrets
 import string
-import subprocess
 from pathlib import Path
 from typing import AsyncGenerator, Iterable, Optional
 
@@ -108,24 +107,19 @@ def _get_current_branch() -> str:
 
     Falls back to 'main' if not in a git repo or on a detached HEAD.
     """
+    # Try reading .git/HEAD to determine the branch without subprocess
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=Path(__file__).parent.parent.parent,
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=True,
-        )
-        branch = result.stdout.strip()
-        # Handle detached HEAD state
-        if branch == "HEAD":
-            logger.warning("On detached HEAD; using default branch 'main' for test fixture")
-            return "main"
-        return branch
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-        logger.warning("Failed to detect git branch; using default branch 'main' for test fixture")
-        return "main"
+        git_dir = Path(__file__).parent.parent.parent / ".git"
+        if git_dir.exists() and (git_dir / "HEAD").exists():
+            with open(git_dir / "HEAD") as f:
+                head_content = f.read().strip()
+                if head_content.startswith("ref: refs/heads/"):
+                    return head_content.replace("ref: refs/heads/", "")
+    except OSError:
+        pass
+
+    # Fallback to 'main' if we can't determine the branch
+    return "main"
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
