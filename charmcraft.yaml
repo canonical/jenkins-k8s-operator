@@ -162,6 +162,14 @@ config:
         Path to the directory within the jcasc-repository containing YAML files.
         Relative to the repository root. Defaults to "jcasc" for backward
         compatibility. Use "." to load YAML files from the repository root.
+    jcasc-repository-branch:
+      type: string
+      default: "main"
+      description: >
+        Git branch to check out when cloning jcasc-repository.
+        Defaults to "main". Used primarily for testing so that
+        integration tests can reference test data in feature branches
+        without requiring a merge to main first.
 
 actions:
   get-admin-password:
