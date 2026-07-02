@@ -42,11 +42,9 @@ parts:
       - astral-uv
   templates:
     plugin: dump
-    source: .
-    prime:
-      - templates/jenkins-auth-proxy-config.xml
-      - templates/jenkins-config.xml
-      - templates/logging.properties
+    source: templates
+    organize:
+      "*": templates/
 
 platforms:
   ubuntu@24.04:amd64:
