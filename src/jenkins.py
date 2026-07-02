@@ -1317,7 +1317,7 @@ def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path ha
             )
             container.exec(clone_command, environment=environment, timeout=300).wait_output()
             logger.info("Repository clone successful: %s", url)
-        except ops.pebble.ExecError as exc:
+        except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
             # Never log exc: the command may carry the auth header. Log clean url only.
             logger.error(
                 "Failed to clone repository: url=%s branch=%s", url, branch, exc_info=True
@@ -1345,6 +1345,8 @@ def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path ha
                     yaml_file,
                     list(content.keys()) if isinstance(content, dict) else "not a dict",
                 )
+            except ops.pebble.PathError as exc:
+                raise JenkinsBootstrapError(f"Cannot read YAML file {yaml_file}: {exc}") from exc
             except yaml.YAMLError as exc:
                 raise JenkinsBootstrapError(f"Invalid YAML in {yaml_file}: {exc}") from exc
             if content and isinstance(content, dict):
