@@ -570,6 +570,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         # If jcasc-repository is set, fetch and merge repository YAML
         if charm_state.jcasc_repository:
+            logger.info(
+                "Fetching JCasC from repository: url=%s branch=%s config_path=%s",
+                charm_state.jcasc_repository,
+                self.model.config.get("jcasc-repository-branch", "main"),
+                charm_state.jcasc_repository_config_path,
+            )
             try:
                 repo_yaml_str = jenkins.fetch_jcasc_repository(
                     container,
@@ -581,6 +587,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 )
                 # Parse repository YAML and merge with jcasc_config
                 repo_yaml = yaml.safe_load(repo_yaml_str)
+                logger.info(
+                    "Loaded repository YAML, top-level keys: %s",
+                    list(repo_yaml.keys()) if repo_yaml and isinstance(repo_yaml, dict) else "none or not a dict",
+                )
                 if repo_yaml and isinstance(repo_yaml, dict):
                     # Deep merge: for each top-level key, merge recursively
                     for key, value in repo_yaml.items():
@@ -593,6 +603,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                             jcasc_config[key].update(value)
                         else:
                             jcasc_config[key] = value
+                    logger.info("Merged repository config with charm config, final top-level keys: %s", list(jcasc_config.keys()))
             except jenkins.JenkinsBootstrapError as exc:
                 logger.error("Failed to fetch JCasC repository: %s", exc)
                 raise ReconcileBlockedError(
