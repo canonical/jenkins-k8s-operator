@@ -589,7 +589,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 repo_yaml = yaml.safe_load(repo_yaml_str)
                 logger.info(
                     "Loaded repository YAML, top-level keys: %s",
-                    list(repo_yaml.keys()) if repo_yaml and isinstance(repo_yaml, dict) else "none or not a dict",
+                    list(repo_yaml.keys())
+                    if repo_yaml and isinstance(repo_yaml, dict)
+                    else "none or not a dict",
                 )
                 if repo_yaml and isinstance(repo_yaml, dict):
                     # Deep merge: for each top-level key, merge recursively
@@ -603,11 +605,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                             jcasc_config[key].update(value)
                         else:
                             jcasc_config[key] = value
-                    logger.info("Merged repository config with charm config, final top-level keys: %s", list(jcasc_config.keys()))
+                    logger.info(
+                        "Merged repository config with charm config, final top-level keys: %s",
+                        list(jcasc_config.keys()),
+                    )
             except jenkins.JenkinsBootstrapError as exc:
                 logger.error("Failed to fetch JCasC repository: %s", exc)
+                # Include the underlying error in the status message for CI debugging
+                error_detail = str(exc)[:100]  # Truncate to fit in status message
                 raise ReconcileBlockedError(
-                    "Failed to fetch JCasC repository configuration."
+                    f"Failed to fetch JCasC repository configuration: {error_detail}"
                 ) from exc
             except yaml.YAMLError as exc:
                 logger.error("Failed to parse repository YAML: %s", exc)

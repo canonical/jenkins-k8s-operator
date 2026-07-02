@@ -482,7 +482,7 @@ def test_reconcile_jcasc_config_repository_fetch_error_raises_blocked(
         ),
         pytest.raises(
             ReconcileBlockedError,
-            match=r"Failed to fetch JCasC repository configuration\.",
+            match=r"Failed to fetch JCasC repository configuration: git clone failed",
         ),
     ):
         charm._reconcile_jcasc_config(harness_container.container, charm_state)

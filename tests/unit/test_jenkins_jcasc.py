@@ -6,6 +6,7 @@
 # Need access to protected functions for testing
 # pylint:disable=protected-access
 
+import base64
 import re
 import secrets
 from functools import partial
@@ -307,13 +308,15 @@ def test_fetch_jcasc_repository_with_token(harness_container, monkeypatch: pytes
     )
 
     assert "jenkins" in result.lower()
-    # Verify auth header was set (not in URL)
+    # Verify auth header was set with base64-encoded credentials (not in URL)
     assert len(calls["git"]) == 1
     git_cmd = calls["git"][0]
     assert "-c" in git_cmd
     auth_idx = git_cmd.index("-c") + 1
-    assert "http.extraHeader=Authorization: Basic" in git_cmd[auth_idx]
-    # Token should NOT be in the URL
+    # The header should contain Authorization: Basic {base64(git:ghp_secret)}
+    expected_creds = base64.b64encode(b"git:ghp_secret").decode("ascii")
+    assert f"http.extraHeader=Authorization: Basic {expected_creds}" in git_cmd[auth_idx]
+    # Plain token should NOT be in the URL or command
     assert "ghp_secret" not in " ".join(git_cmd)
 
 

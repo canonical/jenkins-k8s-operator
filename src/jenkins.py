@@ -1315,21 +1315,22 @@ def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path ha
                 config_path,
                 dest,
             )
-            result = container.exec(clone_command, environment=environment, timeout=300).wait_output()
+            container.exec(clone_command, environment=environment, timeout=300).wait_output()
             logger.info("Repository clone successful: %s", url)
         except ops.pebble.ExecError as exc:
             # Never log exc: the command may carry the auth header. Log clean url only.
             logger.error(
-                "Failed to clone repository: url=%s branch=%s exit_code=%s stderr=%s",
-                url,
-                branch,
-                exc.exit_code if hasattr(exc, "exit_code") else "unknown",
-                exc.stderr[:200] if hasattr(exc, "stderr") else "no stderr",
+                "Failed to clone repository: url=%s branch=%s", url, branch, exc_info=True
             )
             raise JenkinsBootstrapError(f"Failed to clone repository {url}") from exc
 
         yaml_files = _get_workload_yaml_files(container, f"{dest}/{config_path}")
-        logger.info("Found %d YAML files in repository path '%s': %s", len(yaml_files), config_path, yaml_files)
+        logger.info(
+            "Found %d YAML files in repository path '%s': %s",
+            len(yaml_files),
+            config_path,
+            yaml_files,
+        )
         if not yaml_files:
             raise JenkinsBootstrapError(
                 f"Path '{config_path}' not found or no YAML files in repository {url}"
@@ -1339,7 +1340,11 @@ def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path ha
         for yaml_file in yaml_files:
             try:
                 content = yaml.safe_load(container.pull(yaml_file, encoding="utf-8").read())
-                logger.info("Loaded YAML file %s, top-level keys: %s", yaml_file, list(content.keys()) if isinstance(content, dict) else "not a dict")
+                logger.info(
+                    "Loaded YAML file %s, top-level keys: %s",
+                    yaml_file,
+                    list(content.keys()) if isinstance(content, dict) else "not a dict",
+                )
             except yaml.YAMLError as exc:
                 raise JenkinsBootstrapError(f"Invalid YAML in {yaml_file}: {exc}") from exc
             if content and isinstance(content, dict):
@@ -1353,7 +1358,10 @@ def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path ha
                     else:
                         merged_config[key] = value
 
-        logger.info("Merged JCasC configuration from repository, top-level keys: %s", list(merged_config.keys()))
+        logger.info(
+            "Merged JCasC configuration from repository, top-level keys: %s",
+            list(merged_config.keys()),
+        )
         return yaml.dump(merged_config, default_flow_style=False)
     finally:
         try:
