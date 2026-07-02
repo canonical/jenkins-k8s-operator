@@ -3,6 +3,7 @@
 
 """Integration tests for jenkins-k8s-operator charm."""
 
+import os
 import typing
 from pathlib import Path
 from secrets import token_hex
@@ -309,6 +310,11 @@ def _get_current_branch() -> str:
 
     Falls back to 'main' if not in a git repo or on a detached HEAD.
     """
+    # In GitHub Actions CI (pull_request event), GITHUB_HEAD_REF contains the source branch
+    github_head_ref = os.environ.get("GITHUB_HEAD_REF")
+    if github_head_ref:
+        return github_head_ref
+
     # Try reading .git/HEAD to determine the branch without subprocess
     try:
         git_dir = Path(__file__).parent.parent.parent / ".git"
