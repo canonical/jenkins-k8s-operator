@@ -4,6 +4,7 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import typing
+from pathlib import Path
 from secrets import token_hex
 
 import jenkinsapi
@@ -303,6 +304,26 @@ async def test_jcasc_reload_without_restart(
     assert new_message in exported_response.text
 
 
+def _get_current_branch() -> str:
+    """Get the current git branch name for GitHub raw URL references.
+
+    Falls back to 'main' if not in a git repo or on a detached HEAD.
+    """
+    # Try reading .git/HEAD to determine the branch without subprocess
+    try:
+        git_dir = Path(__file__).parent.parent.parent / ".git"
+        if git_dir.exists() and (git_dir / "HEAD").exists():
+            with open(git_dir / "HEAD") as f:
+                head_content = f.read().strip()
+                if head_content.startswith("ref: refs/heads/"):
+                    return head_content.replace("ref: refs/heads/", "")
+    except OSError:
+        pass
+
+    # Fallback to 'main' if we can't determine the branch
+    return "main"
+
+
 async def test_jcasc_repository_config_from_file(
     ops_test: OpsTest,
     application: Application,
@@ -318,6 +339,25 @@ async def test_jcasc_repository_config_from_file(
     integrates correctly with the JCasC system. The test fixture stages a
     file:// git repository inside the charm container with fixture YAML files.
     """
+    # Get the current git branch for fixture data reference
+    branch = _get_current_branch()
+
+    # Configure charm to use GitHub-hosted JCasC test data
+    # The jcasc-repository will clone the repo and check out the specified branch,
+    # then read YAML files from tests/integration/data/jcasc
+    await application.set_config(
+        {
+            "jcasc-config": "",
+            "jcasc-repository": "https://github.com/canonical/jenkins-k8s-operator.git",
+            "jcasc-repository-branch": branch,
+            "jcasc-repository-config-path": "tests/integration/data/jcasc",
+        }
+    )
+
+    model = ops_test.model
+    assert model is not None
+    await model.wait_for_idle(apps=[application.name], status="active", timeout=20 * 60)
+
     # Verify the JCasC export endpoint is accessible
     response = jenkins_client.requester.post_url(f"{web_address}/configuration-as-code/export")
     assert response.status_code == 200, "JCasC export endpoint should be accessible"

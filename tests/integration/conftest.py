@@ -102,36 +102,11 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Pat
     return latest_charm
 
 
-def _get_current_branch() -> str:
-    """Get the current git branch name for GitHub raw URL references.
-
-    Falls back to 'main' if not in a git repo or on a detached HEAD.
-    """
-    # Try reading .git/HEAD to determine the branch without subprocess
-    try:
-        git_dir = Path(__file__).parent.parent.parent / ".git"
-        if git_dir.exists() and (git_dir / "HEAD").exists():
-            with open(git_dir / "HEAD") as f:
-                head_content = f.read().strip()
-                if head_content.startswith("ref: refs/heads/"):
-                    return head_content.replace("ref: refs/heads/", "")
-    except OSError:
-        pass
-
-    # Fallback to 'main' if we can't determine the branch
-    return "main"
-
-
 @pytest_asyncio.fixture(scope="module", name="application")
 async def application_fixture(
     ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
 ) -> AsyncGenerator[Application, None]:
-    """Deploy the charm using GitHub-hosted JCasC test data.
-
-    This fixture deploys the charm and configures it to pull JCasC YAML files
-    from the current git branch on GitHub, avoiding the need for git in the
-    charm container.
-    """
+    """Deploy the charm using GitHub-hosted JCasC test data."""
     resources = {"jenkins-image": jenkins_image}
     # Deploy the charm and wait for active/idle status
     application = await model.deploy(charm, resources=resources)
@@ -143,22 +118,6 @@ async def application_fixture(
         timeout=30 * 60,
         idle_period=30,
     )
-
-    # Get the current git branch for fixture data reference
-    branch = _get_current_branch()
-
-    # Configure charm to use GitHub-hosted JCasC test data
-    # The jcasc-repository will clone the repo and check out the specified branch,
-    # then read YAML files from tests/integration/data/jcasc
-    await application.set_config(
-        {
-            "jcasc-config": "",
-            "jcasc-repository": "https://github.com/canonical/jenkins-k8s-operator.git",
-            "jcasc-repository-branch": branch,
-            "jcasc-repository-config-path": "tests/integration/data/jcasc",
-        }
-    )
-    await model.wait_for_idle(apps=[application.name], status="active", timeout=20 * 60)
 
     # slow down update-status so that it doesn't intervene currently running tests
     # don't yield inside the context since juju cleanup is not reliable.
