@@ -28,7 +28,12 @@ def test_reconcile_storage():
                 can_connect=True,  # type: ignore
                 execs=[
                     testing.Exec(
-                        ["chown", "-R", f"{JENKINS_USER}:{JENKINS_USER}", JENKINS_HOME_DIR],
+                        [
+                            "chown",
+                            "-R",
+                            f"{JENKINS_USER}:{JENKINS_USER}",
+                            JENKINS_HOME_DIR,
+                        ],
                         return_code=0,
                         stdout="",
                     ),

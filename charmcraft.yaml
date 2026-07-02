@@ -42,11 +42,9 @@ parts:
       - astral-uv
   templates:
     plugin: dump
-    source: .
-    prime:
-      - templates/jenkins-auth-proxy-config.xml
-      - templates/jenkins-config.xml
-      - templates/logging.properties
+    source: templates
+    organize:
+      "*": templates/
 
 platforms:
   ubuntu@24.04:amd64:
@@ -141,6 +139,35 @@ config:
               allowAnonymousRead: false
           remotingSecurity:
             enabled: true
+    jcasc-repository:
+      type: string
+      default: ""
+      description: >
+        HTTPS URL of a public git repository containing Jenkins Configuration as
+        Code (JCasC) YAML files. When set, the charm clones the repository and
+        merges every *.yaml/*.yml file into the applied configuration. Mutually
+        exclusive with jcasc-config; setting both blocks the charm.
+    jcasc-repository-token:
+      type: secret
+      description: >
+        A Juju user-secret URI granting access to a private jcasc-repository. The
+        secret MUST contain two keys: `username` and `token`. The charm uses them
+        as HTTP Basic auth at clone time. Leave unset for public repositories.
+    jcasc-repository-config-path:
+      type: string
+      default: "jcasc"
+      description: >
+        Path to the directory within the jcasc-repository containing YAML files.
+        Relative to the repository root. Defaults to "jcasc" for backward
+        compatibility. Use "." to load YAML files from the repository root.
+    jcasc-repository-branch:
+      type: string
+      default: "main"
+      description: >
+        Git branch to check out when cloning jcasc-repository.
+        Defaults to "main". Used primarily for testing so that
+        integration tests can reference test data in feature branches
+        without requiring a merge to main first.
 
 actions:
   get-admin-password:

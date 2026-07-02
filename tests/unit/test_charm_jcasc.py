@@ -154,7 +154,9 @@ def test_build_jcasc_config_injects_proxy_name_without_port():
     assert result["jenkins"]["proxy"] == {"name": "proxy-no-port.example.com"}
 
 
-def test_reconcile_jcasc_config_skips_when_no_config(harness_container: HarnessWithContainer):
+def test_reconcile_jcasc_config_skips_when_no_config(
+    harness_container: HarnessWithContainer,
+):
     """
     arrange: given charm_state.jcasc_config is None.
     act: when _reconcile_jcasc_config is called.
@@ -167,6 +169,9 @@ def test_reconcile_jcasc_config_skips_when_no_config(harness_container: HarnessW
     charm_state.jcasc_config = None
     charm_state.proxy_config = None
     charm_state.auth_proxy_integrated = False
+    charm_state.jcasc_repository = None
+    charm_state.jcasc_repository_token = None
+    charm_state.jcasc_repository_config_path = None
 
     with patch("jenkins.sync_jcasc_config", return_value="hash123") as sync_mock:
         result = charm._reconcile_jcasc_config(harness_container.container, charm_state)
@@ -194,6 +199,9 @@ def test_reconcile_jcasc_config_serialization_error_raises_blocked(
     charm_state.jcasc_config = VALID_JCASC_CONFIG
     charm_state.proxy_config = None
     charm_state.auth_proxy_integrated = False
+    charm_state.jcasc_repository = None
+    charm_state.jcasc_repository_token = None
+    charm_state.jcasc_repository_config_path = None
 
     with (
         patch("yaml.dump", side_effect=yaml.YAMLError("bad-yaml")),
@@ -220,6 +228,8 @@ def test_reconcile_jcasc_config_calls_sync_with_rendered_yaml(
     charm_state.jcasc_config = VALID_JCASC_CONFIG
     charm_state.proxy_config = None
     charm_state.auth_proxy_integrated = False
+    charm_state.jcasc_repository = None
+    charm_state.jcasc_repository_token = None
 
     with patch("jenkins.sync_jcasc_config") as sync_mock:
         sync_mock.return_value = "hash123"
@@ -246,6 +256,9 @@ def test_reconcile_jcasc_config_jenkins_error_raises_blocked(
     charm_state.jcasc_config = VALID_JCASC_CONFIG
     charm_state.proxy_config = None
     charm_state.auth_proxy_integrated = False
+    charm_state.jcasc_repository = None
+    charm_state.jcasc_repository_token = None
+    charm_state.jcasc_repository_config_path = None
 
     with (
         patch(
@@ -260,7 +273,9 @@ def test_reconcile_jcasc_config_jenkins_error_raises_blocked(
         charm._reconcile_jcasc_config(harness_container.container, charm_state)
 
 
-def test_sync_jcasc_config_no_write_when_unchanged(harness_container: HarnessWithContainer):
+def test_sync_jcasc_config_no_write_when_unchanged(
+    harness_container: HarnessWithContainer,
+):
     """
     arrange: given container has identical current JCasC config.
     act: when sync_jcasc_config is called.
@@ -310,7 +325,9 @@ def test_sync_jcasc_config_writes_when_changed(harness_container: HarnessWithCon
     )
 
 
-def test_sync_jcasc_config_writes_when_file_missing(harness_container: HarnessWithContainer):
+def test_sync_jcasc_config_writes_when_file_missing(
+    harness_container: HarnessWithContainer,
+):
     """
     arrange: given current config file is missing.
     act: when sync_jcasc_config is called.
@@ -370,6 +387,9 @@ def test_reconcile_jcasc_config_with_no_admin_password(
     charm_state.jcasc_config = {}
     charm_state.proxy_config = None
     charm_state.auth_proxy_integrated = False
+    charm_state.jcasc_repository = None
+    charm_state.jcasc_repository_token = None
+    charm_state.jcasc_repository_config_path = None
 
     with patch("jenkins.sync_jcasc_config") as sync_mock:
         sync_mock.return_value = "hash123"
@@ -381,3 +401,88 @@ def test_reconcile_jcasc_config_with_no_admin_password(
     # Placeholder password should still be present and deterministic
     assert "${JENKINS_ADMIN_PASSWORD}" in call_yaml
     assert "id: admin" in call_yaml
+
+
+def test_reconcile_jcasc_config_with_repository(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given valid state with jcasc_repository set.
+    act: when _reconcile_jcasc_config is called.
+    assert: fetch_jcasc_repository is called and result is merged with config.
+    """
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    charm_state = MagicMock(spec=state.State)
+    charm_state.jcasc_config = VALID_JCASC_CONFIG
+    charm_state.proxy_config = None
+    charm_state.auth_proxy_integrated = False
+    charm_state.jcasc_repository = "https://github.com/example/jcasc-repo"
+    charm_state.jcasc_repository_token = None
+    charm_state.jcasc_repository_config_path = "jcasc"
+
+    repo_yaml = """
+jenkins:
+  remotingSecurity:
+    enabled: true
+"""
+
+    with (
+        patch("jenkins.fetch_jcasc_repository", return_value=repo_yaml) as fetch_mock,
+        patch("jenkins.sync_jcasc_config") as sync_mock,
+    ):
+        sync_mock.return_value = "hash123"
+        result = charm._reconcile_jcasc_config(harness_container.container, charm_state)
+
+    # Verify fetch was called with correct args including config_path
+    fetch_mock.assert_called_once_with(
+        harness_container.container,
+        "https://github.com/example/jcasc-repo",
+        token=None,
+        config_path="jcasc",
+        branch="main",
+        proxy_config=None,
+    )
+
+    # Verify sync was called
+    assert result == "hash123"
+    sync_mock.assert_called_once()
+
+    # Verify merged config contains both systemMessage (from jcasc_config) and remotingSecurity (from repo)
+    call_yaml = sync_mock.call_args.args[1]
+    assert "systemMessage: Managed by Juju" in call_yaml
+    assert "remotingSecurity:" in call_yaml
+    assert "enabled: true" in call_yaml
+
+
+def test_reconcile_jcasc_config_repository_fetch_error_raises_blocked(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given fetch_jcasc_repository raises JenkinsBootstrapError.
+    act: when _reconcile_jcasc_config is called.
+    assert: ReconcileBlockedError is raised wrapping the error.
+    """
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    charm_state = MagicMock(spec=state.State)
+    charm_state.jcasc_config = None
+    charm_state.proxy_config = None
+    charm_state.auth_proxy_integrated = False
+    charm_state.jcasc_repository = "https://github.com/example/jcasc-repo"
+    charm_state.jcasc_repository_token = None
+    charm_state.jcasc_repository_config_path = "jcasc"
+
+    with (
+        patch(
+            "jenkins.fetch_jcasc_repository",
+            side_effect=jenkins.JenkinsBootstrapError("git clone failed"),
+        ),
+        pytest.raises(
+            ReconcileBlockedError,
+            match=r"Failed to fetch JCasC repository configuration: git clone failed",
+        ),
+    ):
+        charm._reconcile_jcasc_config(harness_container.container, charm_state)

@@ -38,7 +38,9 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
 async def test_plugins_remove_delay(
-    ops_test: OpsTest, update_status_env: typing.Iterable[str], unit_web_client: UnitWebClient
+    ops_test: OpsTest,
+    update_status_env: typing.Iterable[str],
+    unit_web_client: UnitWebClient,
 ):
     """
     arrange: given a Jenkins with plugins being installed through UI.
@@ -422,10 +424,18 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
             Whether the backup file has successfully been created.
         """
         ret, stdout, stderr = await ops_test.juju(
-            "ssh", "--container", "jenkins", unit_web_client.unit.name, "ls", backup_path
+            "ssh",
+            "--container",
+            "jenkins",
+            unit_web_client.unit.name,
+            "ls",
+            backup_path,
         )
         logger.info(
-            "Run backup path ls result: code: %s stdout: %s, stderr: %s", ret, stdout, stderr
+            "Run backup path ls result: code: %s stdout: %s, stderr: %s",
+            ret,
+            stdout,
+            stderr,
         )
         return ret == 0 and "FULL" in stdout
 
