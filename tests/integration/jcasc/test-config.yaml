@@ -1,3 +1,6 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 jenkins:
   systemMessage: "Hello from JCasC repository! This configuration was loaded from a Git repository."
   numExecutors: 3
