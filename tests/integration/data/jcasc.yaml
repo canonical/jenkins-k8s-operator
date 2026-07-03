@@ -1,0 +1,13 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+jenkins:
+  systemMessage: "Jenkins Configuration as Code (JCasC) via Git Repository"
+  numExecutors: 2
+  mode: NORMAL
+  quietPeriod: 5
+  scmCheckoutRetryCount: 0
+
+unclassified:
+  location:
+    url: "http://localhost:8080/"

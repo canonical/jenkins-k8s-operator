@@ -39,6 +39,24 @@ from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebCli
 logger = logging.getLogger(__name__)
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
+DATA_DIR = Path(__file__).parent / "data"
+
+
+async def charm_exec(ops_test: OpsTest, unit_name: str, cmd: str) -> None:
+    """Execute a command in the charm container via juju ssh.
+
+    Args:
+        ops_test: OpsTest fixture for juju CLI access.
+        unit_name: Name of the unit (e.g., "jenkins-k8s/0").
+        cmd: Command to execute in the charm container.
+
+    Raises:
+        AssertionError: If the command fails (non-zero exit code).
+    """
+    ret, _, stderr = await ops_test.juju(
+        "ssh", "--container", "charm", unit_name, "bash", "-c", cmd
+    )
+    assert ret == 0, f"Command failed in charm container: {cmd}\nstderr: {stderr}"
 
 
 @pytest.fixture(scope="module", name="model")
@@ -88,7 +106,7 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Pat
 async def application_fixture(
     ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
 ) -> AsyncGenerator[Application, None]:
-    """Deploy the charm."""
+    """Deploy the charm using GitHub-hosted JCasC test data."""
     resources = {"jenkins-image": jenkins_image}
     # Deploy the charm and wait for active/idle status
     application = await model.deploy(charm, resources=resources)
@@ -97,9 +115,10 @@ async def application_fixture(
         raise_on_error=False,
         wait_for_active=True,
         raise_on_blocked=True,
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
     )
+
     # slow down update-status so that it doesn't intervene currently running tests
     # don't yield inside the context since juju cleanup is not reliable.
     # model.set_config(...) also doesn't work as well as the following code.
@@ -120,18 +139,26 @@ def model_app_unit_fixture(model: Model, application: Application, unit: Unit):
     return ModelAppUnit(model=model, app=application, unit=unit)
 
 
-@pytest_asyncio.fixture(scope="module", name="unit_ip")
+@pytest_asyncio.fixture(scope="function", name="unit_ip")
 async def unit_ip_fixture(model: Model, application: Application):
     """Get Jenkins charm unit IP."""
     unit_ips = await get_model_unit_addresses(model=model, app_name=application.name)
     assert unit_ips, f"Unit IP address not found for {application.name}"
+    logger.info(
+        "phase=unit_ip_fixture model=%s app=%s resolved_ips=%s",
+        model.name,
+        application.name,
+        unit_ips,
+    )
     return unit_ips[0]
 
 
-@pytest.fixture(scope="module", name="web_address")
+@pytest.fixture(scope="function", name="web_address")
 def web_address_fixture(unit_ip: str):
     """Get Jenkins charm web address."""
-    return f"http://{unit_ip}:8080"
+    address = f"http://{unit_ip}:8080"
+    logger.info("phase=web_address_fixture address=%s", address)
+    return address
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_client")
@@ -141,7 +168,52 @@ async def jenkins_client_fixture(
     web_address: str,
 ) -> jenkinsapi.jenkins.Jenkins:
     """The Jenkins API client."""
-    jenkins_client = await generate_jenkins_client(ops_test, application, web_address)
+    logger.info(
+        "phase=jenkins_client_fixture start model=%s app=%s web_address=%s",
+        ops_test.model_name,
+        application.name,
+        web_address,
+    )
+    try:
+        jenkins_client = await generate_jenkins_client(ops_test, application, web_address)
+    except Exception as exc:
+        logger.error(
+            "phase=jenkins_client_fixture failed model=%s app=%s web_address=%s exc_type=%s exc=%s",
+            ops_test.model_name,
+            application.name,
+            web_address,
+            type(exc).__name__,
+            exc,
+        )
+        model = ops_test.model
+        if model is not None:
+            try:
+                status = await model.get_status()
+                app_status = status.applications.get(application.name)
+                unit_keys = []
+                if app_status is not None and app_status.units:
+                    unit_keys = sorted(app_status.units.keys())
+                logger.error(
+                    "phase=jenkins_client_fixture model_snapshot app=%s app_status=%s app_message=%s units=%s",
+                    application.name,
+                    getattr(app_status, "status", None),
+                    getattr(app_status, "status_info", None),
+                    unit_keys,
+                )
+            except Exception as status_exc:
+                logger.error(
+                    "phase=jenkins_client_fixture model_snapshot_failed exc_type=%s exc=%s",
+                    type(status_exc).__name__,
+                    status_exc,
+                )
+        raise
+    logger.info(
+        "phase=jenkins_client_fixture success model=%s app=%s web_address=%s client_baseurl=%s",
+        ops_test.model_name,
+        application.name,
+        web_address,
+        jenkins_client.baseurl,
+    )
     return jenkins_client
 
 
@@ -430,7 +502,7 @@ async def jenkins_with_proxy_fixture(
         apps=[application.name],
         wait_for_active=True,
         raise_on_blocked=True,
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
     )
     # slow down update-status so that it doesn't intervene currently running tests
@@ -563,7 +635,7 @@ async def prometheus_related_fixture(application: Application, model: Model):
     await model.wait_for_idle(
         status="active",
         apps=[prometheus.name, application.name],
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
         raise_on_error=False,
     )
@@ -581,7 +653,7 @@ async def loki_related_fixture(application: Application, model: Model):
     await model.wait_for_idle(
         status="active",
         apps=[loki.name, application.name],
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
         raise_on_error=False,
     )
@@ -599,7 +671,7 @@ async def grafana_related_fixture(application: Application, model: Model):
     await model.wait_for_idle(
         status="active",
         apps=[grafana.name, application.name],
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
         raise_on_error=False,
     )
@@ -749,7 +821,7 @@ async def traefik_application_fixture(model: Model):
     await model.wait_for_idle(
         status="active",
         apps=[traefik.name],
-        timeout=20 * 60,
+        timeout=30 * 60,
         idle_period=30,
         raise_on_error=False,
     )

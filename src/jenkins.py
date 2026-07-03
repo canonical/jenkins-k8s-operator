@@ -1,28 +1,33 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Functions to operate Jenkins."""
 
 # pylint: disable=too-many-lines
 
+import base64
+import copy
 import dataclasses
 import functools
-import itertools
+import hashlib
 import json
 import logging
 import re
 import secrets
 import textwrap
+import time
 import typing
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
+from urllib.parse import urlparse
 
 import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
-import jenkinsapi.utils.requester
 import ops
 import requests
+import tenacity
+import yaml
 from jenkinsapi.node import Node
 from pydantic import HttpUrl
 
@@ -46,18 +51,14 @@ LAST_EXEC_VERSION_PATH = JENKINS_HOME_PATH / Path("jenkins.install.InstallUtil.l
 WIZARD_VERSION_PATH = JENKINS_HOME_PATH / Path("jenkins.install.UpgradeWizard.state")
 # The Jenkins bootstrapping config path
 CONFIG_FILE_PATH = JENKINS_HOME_PATH / "config.xml"
+# The JCasC configuration file path
+JCASC_CONFIG_PATH = JENKINS_HOME_PATH / "jenkins.yaml"
 # The Jenkins plugins installation directory
 PLUGINS_PATH = JENKINS_HOME_PATH / "plugins"
 # The Jenkins logging configuration path
 LOGGING_CONFIG_PATH = JENKINS_HOME_PATH / "logging.properties"
 # The Jenkins logging path as defined in templates/logging.properties file
 LOGGING_PATH = JENKINS_HOME_PATH / "logs/jenkins.log"
-# The plugins that are required for Jenkins to work
-REQUIRED_PLUGINS = [
-    "instance-identity",  # required to connect agent nodes to server
-    "prometheus",  # required for COS integration
-    "monitoring",  # required for session invalidation
-]
 USER = "jenkins"
 GROUP = "jenkins"
 BUILT_IN_NODE_NAME = "Built-In Node"
@@ -74,6 +75,8 @@ DEFAULT_JENKINS_CONFIG = "templates/jenkins-config.xml"
 JENKINS_LOGGING_CONFIG = "templates/logging.properties"
 
 ONLINE_CHECK_NAME = "online"
+
+ADMIN_USER = "admin"
 
 
 class JenkinsError(Exception):
@@ -98,10 +101,16 @@ class Environment(typing.TypedDict):
     Attributes:
         JENKINS_HOME: The Jenkins home directory.
         JENKINS_PREFIX: The prefix in which Jenkins will be accessible.
+        CASC_JENKINS_CONFIG: Path to the JCasC configuration file.
+        JENKINS_ADMIN_PASSWORD: The admin password for JCasC secret interpolation.
+        CONFIGURATION_HASH: The hash of the JCasC configurations applied.
     """
 
     JENKINS_HOME: str
     JENKINS_PREFIX: str
+    CASC_JENKINS_CONFIG: str
+    JENKINS_ADMIN_PASSWORD: str
+    CONFIGURATION_HASH: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -126,12 +135,15 @@ def get_admin_credentials(container: ops.Container) -> Credentials:
     Returns:
         The Jenkins admin account credentials.
     """
-    user = "admin"
-    password_file_contents = str(container.pull(PASSWORD_FILE_PATH, encoding="utf-8").read())
-    return Credentials(username=user, password_or_token=password_file_contents.strip())
+    try:
+        password_file_contents = str(container.pull(PASSWORD_FILE_PATH, encoding="utf-8").read())
+        return Credentials(username=ADMIN_USER, password_or_token=password_file_contents.strip())
+    except ops.pebble.PathError as exc:
+        logger.debug("Admin password not yet setup.")
+        raise JenkinsBootstrapError("Admin password not yet setup.") from exc
 
 
-def _get_api_credentials(container: ops.Container) -> Credentials:
+def get_api_credentials(container: ops.Container) -> Credentials:
     """Retrieve admin API credentials.
 
     Args:
@@ -145,7 +157,7 @@ def _get_api_credentials(container: ops.Container) -> Credentials:
     """
     try:
         token = str(container.pull(API_TOKEN_PATH, encoding="utf-8").read())
-        return Credentials(username="admin", password_or_token=token.strip())
+        return Credentials(username=ADMIN_USER, password_or_token=token.strip())
     except ops.pebble.PathError as exc:
         logger.debug("Admin API token not yet setup.")
         raise JenkinsBootstrapError("Admin API credentials not yet setup.") from exc
@@ -155,21 +167,22 @@ class Jenkins:
     """Wrapper for Jenkins functionality.
 
     Attrs:
-        environment: the Jenkins environment configuration.
         web_url: the Jenkins web URL.
         login_url: the Jenkins login URL.
         version: the Jenkins version.
     """
 
-    environment: Environment
-
-    def __init__(self, environment: Environment):
+    def __init__(self, jenkins_prefix: str, admin_password: str, container: ops.Container):
         """Construct a Jenkins class.
 
         Args:
-            environment: the Jenkins environment.
+            jenkins_prefix: The URL path prefix where Jenkins is exposed.
+            admin_password: The Jenkins admin password.
+            container: The Jenkins workload container.
         """
-        self.environment = environment
+        self._jenkins_prefix = jenkins_prefix
+        self._admin_password = admin_password
+        self._container = container
 
     @property
     def web_url(self) -> str:
@@ -177,8 +190,7 @@ class Jenkins:
 
         Returns: the web URL.
         """
-        env_dict = typing.cast(typing.Dict[str, str], self.environment)
-        return f"http://localhost:{WEB_PORT}{env_dict['JENKINS_PREFIX']}"
+        return f"http://localhost:{WEB_PORT}{self._jenkins_prefix}"
 
     @property
     def login_url(self) -> str:
@@ -200,17 +212,12 @@ class Jenkins:
         """
         try:
             return requests.get(self.web_url, timeout=10).headers["X-Jenkins"]
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+        except (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+        ) as exc:
             logger.error("Failed to get Jenkins version, %s", exc)
             raise JenkinsError("Failed to get Jenkins version.") from exc
-
-    def update_prefix(self, prefix: str) -> None:
-        """Update jenkins prefix.
-
-        Args:
-            prefix: the new prefix.
-        """
-        self.environment.update({"JENKINS_PREFIX": prefix})
 
     def _is_ready(self) -> bool:
         """Check if Jenkins webserver is ready.
@@ -223,52 +230,77 @@ class Jenkins:
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             return False
 
-    def wait_ready(self, timeout: int = 300, check_interval: int = 10) -> None:
+    def _is_api_ready(self) -> bool:
+        """Check if Jenkins API is fully functional (crumb issuance works).
+
+        This is a stronger readiness check than _is_ready. Jenkins may serve pages
+        (login_url returns 200) before its security subsystem is fully initialized.
+        This method verifies that the crumb issuer endpoint is functional, which is
+        required for API token generation during bootstrap.
+
+        Returns:
+            True if Jenkins API is fully functional. False otherwise.
+        """
+        try:
+            resp = requests.get(
+                f"{self.web_url}/crumbIssuer/api/json",
+                auth=("admin", self._admin_password),
+                timeout=10,
+            )
+            return resp.ok and "crumb" in resp.json()
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.JSONDecodeError,
+        ):
+            return False
+
+    def wait_ready(
+        self, timeout: int = 300, check_interval: int = 10, api_ready: bool = True
+    ) -> None:
         """Wait until Jenkins service is up.
 
         Args:
             timeout: Time in seconds to wait for jenkins to become ready in 10 second intervals.
             check_interval: Time in seconds to wait between ready checks.
+            api_ready: Whether to require API readiness (crumb issuer available) instead of
+                only web readiness.
 
         Raises:
             TimeoutError: if Jenkins status check did not pass within the timeout duration.
         """
+        start = time.monotonic()
+        logger.info(
+            "phase=wait_ready start web_url=%s api_ready=%s timeout=%s check_interval=%s",
+            self.web_url,
+            api_ready,
+            timeout,
+            check_interval,
+        )
         try:
-            _wait_for(self._is_ready, timeout=timeout, check_interval=check_interval)
+            if api_ready:
+                result = _wait_for(
+                    self._is_api_ready, timeout=timeout, check_interval=check_interval
+                )
+            else:
+                result = _wait_for(self._is_ready, timeout=timeout, check_interval=check_interval)
+            logger.info(
+                "phase=wait_ready success web_url=%s api_ready=%s elapsed_s=%.2f",
+                self.web_url,
+                api_ready,
+                time.monotonic() - start,
+            )
+            return result
         except TimeoutError as exc:
+            logger.warning(
+                "phase=wait_ready timeout web_url=%s api_ready=%s elapsed_s=%.2f",
+                self.web_url,
+                api_ready,
+                time.monotonic() - start,
+            )
             raise TimeoutError("Timed out waiting for Jenkins to become ready.") from exc
 
-    def _unlock_wizard(self, container: ops.Container) -> None:
-        """Write to executed version and updated version file to bypass Jenkins setup wizard.
-
-        Args:
-            container: The Jenkins workload container.
-
-        Raises:
-            JenkinsBootstrapError: if the wizard can not be unlocked.
-        """
-        try:
-            version = self.version
-            container.push(
-                LAST_EXEC_VERSION_PATH,
-                version,
-                encoding="utf-8",
-                make_dirs=True,
-                user=USER,
-                group=GROUP,
-            )
-            container.push(
-                WIZARD_VERSION_PATH,
-                version,
-                encoding="utf-8",
-                make_dirs=True,
-                user=USER,
-                group=GROUP,
-            )
-        except (ops.pebble.PathError, JenkinsError) as exc:
-            raise JenkinsBootstrapError("Failed to unlock wizard.") from exc
-
-    def _get_client(self, client_credentials: Credentials) -> jenkinsapi.jenkins.Jenkins:
+    def get_admin_user_client(self) -> jenkinsapi.jenkins.Jenkins:
         """Get the Jenkins client.
 
         Args:
@@ -279,111 +311,94 @@ class Jenkins:
         """
         return jenkinsapi.jenkins.Jenkins(
             baseurl=self.web_url,
-            username=client_credentials.username,
-            password=client_credentials.password_or_token,
+            username=ADMIN_USER,
+            password=self._admin_password,
             timeout=60,
         )
 
-    def _setup_user_token(self, container: ops.Container) -> None:
-        """Configure admin user API token.
+    def get_admin_api_client(self) -> jenkinsapi.jenkins.Jenkins:
+        """Get the Jenkins client authenticated with admin API token.
 
-        Args:
-            container: The Jenkins workload container.
+        Returns:
+            The Jenkins client authenticated with admin API token.
 
         Raises:
-            JenkinsBootstrapError: if the token can not be setup.
+            JenkinsBootstrapError: if admin API credentials are not yet available.
         """
         try:
-            client = self._get_client(get_admin_credentials(container))
-            token: str = client.generate_new_api_token(JUJU_API_TOKEN)
-            container.push(API_TOKEN_PATH, token, user=USER, group=GROUP)
-        except ops.pebble.PathError as exc:
-            raise JenkinsBootstrapError("Failed to setup user token.") from exc
-        except jenkinsapi.utils.requester.JenkinsAPIException as e:
-            # Jenkins api exception when generating user token
-            # We check if security is disabled
-            logger.info("Generate token failed, checking if security is disabled")
-            response = client.requester.get_url(
-                f"{client.base_server_url()}/manage/api/json?tree=useSecurity"
+            credentials = get_api_credentials(self._container)
+            return jenkinsapi.jenkins.Jenkins(
+                baseurl=self.web_url,
+                username=credentials.username,
+                password=credentials.password_or_token,
+                timeout=60,
             )
+        except JenkinsBootstrapError as exc:
+            logger.debug("Admin API credentials not yet available.")
+            raise JenkinsBootstrapError("Admin API credentials not yet available.") from exc
+
+    def _get_api_client(self) -> jenkinsapi.jenkins.Jenkins:
+        """Get the Jenkins client.
+
+        Returns:
+            The Jenkins client.
+        """
+        credentials = get_api_credentials(self._container)
+        return jenkinsapi.jenkins.Jenkins(
+            baseurl=self.web_url,
+            username=credentials.username,
+            password=credentials.password_or_token,
+            timeout=60,
+        )
+
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(5),
+        wait=tenacity.wait_exponential(multiplier=2, min=2, max=30),
+        retry=tenacity.retry_if_exception_type(jenkinsapi.custom_exceptions.JenkinsAPIException),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def generate_admin_user_token(self) -> None:
+        """Generate and store the admin user API token with retry.
+
+        Creates a fresh client on each attempt to ensure a new session/crumb pair.
+
+        Raises:
+            JenkinsBootstrapError: if the token can not be generated after retries.
+        """
+        try:
+            client = self.get_admin_user_client()
+            token: str = client.generate_new_api_token(JUJU_API_TOKEN)
+            self._container.push(API_TOKEN_PATH, token, user=USER, group=GROUP)
+        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+            # Check if security is disabled before retrying
             try:
-                if response.status_code == 200 and not response.json()["useSecurity"]:
-                    # !! Write a random string to the api token as a temporary workaround,
-                    # Prefix it to signify that it's a placeholder token
-                    # Follow-up changes will be needed to rework this.
-                    container.push(
+                check_response = requests.get(
+                    f"{self.web_url}/manage/api/json?tree=useSecurity",
+                    timeout=10,
+                )
+                if check_response.status_code == 200 and not check_response.json()["useSecurity"]:
+                    # Security disabled — write placeholder token
+                    self._container.push(
                         API_TOKEN_PATH,
                         f"placeholder-{secrets.token_hex(16)}",
                         user=USER,
                         group=GROUP,
                     )
                     return
-            # Not in the case where security is disabled, reraise the exception
             except (requests.exceptions.JSONDecodeError, KeyError):
-                logger.error(
-                    "Failed parsing jenkins's security config in response, will raise initial error"
-                )
-            logger.error(
-                "Generate token failed but security is not disabled, API response: HTTP %s",
-                response.status_code,
+                logger.error("Failed parsing jenkins's security config, will retry")
+            logger.warning(
+                "Token generation failed (API response may indicate crumb/session race): %s",
+                exc,
             )
-            raise JenkinsBootstrapError("Failed to setup user token") from e
+            raise JenkinsBootstrapError("Failed to generate user token.") from exc
 
-    def _configure_proxy(
-        self, container: ops.Container, proxy_config: state.ProxyConfig | None = None
-    ) -> None:
-        """Configure Jenkins proxy settings if proxy configuration values are provided.
-
-        Args:
-            container: The Jenkins workload container
-            proxy_config: The proxy settings to apply.
-
-        Raises:
-            JenkinsBootstrapError: if an error occurred running proxy configuration script.
-        """
-        if not proxy_config:
-            return
-
-        client = self._get_client(_get_api_credentials(container))
-        parsed_args = ", ".join(_get_groovy_proxy_args(proxy_config))
-        script = f"proxy = new ProxyConfiguration({parsed_args})\nproxy.save()"
-        try:
-            client.run_groovy_script(script)
-        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
-            logger.error("Failed to configure proxy, %s", exc)
-            raise JenkinsBootstrapError("Proxy configuration failed.") from exc
-
-    def bootstrap(
-        self,
-        container: ops.Container,
-        jenkins_config_file: str,
-        proxy_config: state.ProxyConfig | None = None,
-    ) -> None:
-        """Initialize and install Jenkins.
-
-        Args:
-            container: The Jenkins workload container.
-            jenkins_config_file: the path to the Jenkins configuration file to install.
-            proxy_config: The Jenkins proxy configuration settings.
-
-        Raises:
-            JenkinsBootstrapError: if there was an error installing the plugins plugins.
-        """
-        try:
-            self._unlock_wizard(container)
-            _install_configs(container, jenkins_config_file)
-            self._setup_user_token(container)
-            self._configure_proxy(container, proxy_config)
-            _install_plugins(container, proxy_config)
-        except JenkinsBootstrapError as exc:
-            raise JenkinsBootstrapError("Failed to bootstrap Jenkins.") from exc
-
-    def get_node_secret(self, node_name: str, container: ops.Container) -> str:
+    def get_node_secret(self, node_name: str) -> str:
         """Get node secret from jenkins.
 
         Args:
             node_name: The registered node to fetch the secret from.
-            container: The Jenkins workload container.
 
         Returns:
             The Jenkins agent node secret.
@@ -391,7 +406,7 @@ class Jenkins:
         Raises:
             JenkinsError: if an error occurred running groovy script getting the node secret.
         """
-        client = self._get_client(_get_api_credentials(container))
+        client = self._get_api_client()
         try:
             script = (
                 f"println(jenkins.model.Jenkins.getInstance()"
@@ -402,21 +417,16 @@ class Jenkins:
             logger.error("Failed to run get_node_secret groovy script, %s", exc)
             raise JenkinsError("Failed to run groovy script getting node secret.") from exc
 
-    def _get_node_config(
-        self,
-        agent_meta: state.AgentMeta,
-        container: ops.Container,
-    ) -> dict[str, typing.Any]:
+    def _get_node_config(self, agent_meta: state.AgentMeta) -> dict[str, typing.Any]:
         """Get agent node configuration dictionary values.
 
         Args:
             agent_meta: The Jenkins agent metadata to create the node from.
-            container: The Jenkins workload container.
 
         Returns:
             A dictionary mapping of agent configuration values.
         """
-        client = self._get_client(_get_api_credentials(container))
+        client = self._get_api_client()
         node = Node(
             jenkins_obj=client,
             baseurl=self.web_url,
@@ -437,19 +447,18 @@ class Jenkins:
         attribs["json"] = json.dumps(meta)
         return attribs
 
-    def add_agent_node(self, agent_meta: state.AgentMeta, container: ops.Container) -> None:
+    def add_agent_node(self, agent_meta: state.AgentMeta) -> None:
         """Add a Jenkins agent node.
 
         Args:
             agent_meta: The Jenkins agent metadata to create the node from.
-            container: The Jenkins workload container.
 
         Raises:
             JenkinsError: if an error occurred running groovy script creating the node.
         """
-        client = self._get_client(_get_api_credentials(container))
+        client = self._get_api_client()
         try:
-            config = self._get_node_config(agent_meta=agent_meta, container=container)
+            config = self._get_node_config(agent_meta=agent_meta)
             client.create_node_with_config(name=agent_meta.name, config=config)
         except jenkinsapi.custom_exceptions.AlreadyExists:
             pass
@@ -457,11 +466,8 @@ class Jenkins:
             logger.error("Failed to add agent node, %s", exc)
             raise JenkinsError("Failed to add agent node.") from exc
 
-    def list_agent_nodes(self, container: ops.Container) -> list[jenkinsapi.node.Node]:
+    def list_agent_nodes(self) -> list[jenkinsapi.node.Node]:
         """Get agent nodes from Jenkins.
-
-        Args:
-            container: The Jenkins workload container.
 
         Raises:
             JenkinsError: if there was an error listing agent nodes.
@@ -469,24 +475,23 @@ class Jenkins:
         Returns:
             Registered Jenkins agent nodes.
         """
-        client = self._get_client(_get_api_credentials(container))
+        client = self._get_api_client()
         try:
             return client.get_nodes().values()
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             logger.error("Failed to list agent nodes, %s", exc)
             raise JenkinsError("Failed to list agent nodes.") from exc
 
-    def remove_agent_node(self, agent_name: str, container: ops.Container) -> None:
+    def remove_agent_node(self, agent_name: str) -> None:
         """Remove a Jenkins agent node.
 
         Args:
             agent_name: The agent node name to remove.
-            container: The Jenkins workload container.
 
         Raises:
             JenkinsError: if an error occurred running groovy script removing the node.
         """
-        client = self._get_client(_get_api_credentials(container))
+        client = self._get_api_client()
         try:
             client.delete_node(nodename=agent_name)
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
@@ -520,20 +525,21 @@ class Jenkins:
                 a long running job.
         """
         try:
-            _wait_for(functools.partial(self._is_shutdown, client), timeout=300, check_interval=1)
+            _wait_for(
+                functools.partial(self._is_shutdown, client),
+                timeout=300,
+                check_interval=1,
+            )
         except TimeoutError as exc:
             raise TimeoutError("Timed out waiting for Jenkins to be shutdown.") from exc
 
-    def safe_restart(self, container: ops.Container) -> None:
+    def safe_restart(self) -> None:
         """Safely restart Jenkins server after all jobs are done executing.
-
-        Args:
-            container: The Jenkins workload container to interact with filesystem.
 
         Raises:
             JenkinsError: if there was an API error calling safe restart.
         """
-        client = self._get_client(_get_api_credentials(container))
+        client = self._get_api_client()
         try:
             # Workaround for https://github.com/pycontribs/jenkinsapi/issues/844
             client.safe_restart(wait_for_reboot=False)
@@ -547,31 +553,22 @@ class Jenkins:
             raise JenkinsError("Failed to restart Jenkins safely.") from exc
 
     # This groovy script is tested in integration test.
-    def _invalidate_sessions(self, container: ops.Container) -> None:  # pragma: no cover
-        """Invalidate active Jenkins user sessions.
-
-        Args:
-            container: The workload container.
-        """
-        client = self._get_client(get_admin_credentials(container))
-        client.run_groovy_script(
-            """
+    def _invalidate_sessions(self) -> None:  # pragma: no cover
+        """Invalidate active Jenkins user sessions."""
+        client = self._get_api_client()
+        client.run_groovy_script("""
     import net.bull.javamelody.*;
     def sess = SessionListener.newInstance();
-    sess.invalidateAllSessions();"""
-        )
+    sess.invalidateAllSessions();""")
 
     # This groovy script is tested in integration test.
-    def _set_new_password(
-        self, container: ops.Container, new_password: str
-    ) -> None:  # pragma: no cover
+    def _set_new_password(self, new_password: str) -> None:  # pragma: no cover
         """Set new password for admin user.
 
         Args:
-            container: The workload container
             new_password: New password to set for admin user.
         """
-        client = self._get_client(get_admin_credentials(container))
+        client = self._get_api_client()
         client.run_groovy_script(
             'User.getById("admin",false).addProperty(hudson.security.'
             "HudsonPrivateSecurityRealm.Details"
@@ -592,8 +589,8 @@ class Jenkins:
         """
         new_password = secrets.token_hex(16)
         try:
-            self._invalidate_sessions(container)
-            self._set_new_password(container, new_password)
+            self._invalidate_sessions()
+            self._set_new_password(new_password)
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             logger.error("Failed to invalidate sessions, %s", exc)
             raise JenkinsError("Failed to invalidate sessions") from exc
@@ -629,19 +626,15 @@ class Jenkins:
         except TimeoutError as exc:
             raise JenkinsPluginError("Plugins currently being installed.") from exc
 
-        client = self._get_client(_get_api_credentials(container))
-        res = client.run_groovy_script(
-            """
+        client = self._get_api_client()
+        res = client.run_groovy_script("""
     def plugins = jenkins.model.Jenkins.instance.getPluginManager().getPlugins()
     plugins.each {
         println "${it.getShortName()} (${it.getVersion()}) => ${it.getDependencies()}"
     }
-    """
-        )
+    """)
         dependency_lookup = _build_dependencies_lookup(res.splitlines())
-        allowed_plugins = _get_allowed_plugins(
-            itertools.chain(plugins, REQUIRED_PLUGINS), dependency_lookup
-        )
+        allowed_plugins = _get_allowed_plugins(plugins, dependency_lookup)
         plugins_to_remove = set(dependency_lookup.keys()) - set(allowed_plugins)
         if not plugins_to_remove:
             return
@@ -655,7 +648,7 @@ class Jenkins:
         logger.debug("Removed %s", plugins_to_remove)
         top_level_plugins = _filter_dependent_plugins(plugins_to_remove, dependency_lookup)
         try:
-            self.safe_restart(container)
+            self.safe_restart()
             self.wait_ready()
         except (JenkinsError, TimeoutError) as exc:
             logger.error("Failed to restart Jenkins after removing plugins, %s", exc)
@@ -671,7 +664,7 @@ class Jenkins:
 
 def _wait_for(
     func: typing.Callable[[], typing.Any], timeout: int = 300, check_interval: int = 10
-) -> None:
+) -> typing.Any:
     """Wait for function execution to become truthy.
 
     Args:
@@ -685,14 +678,15 @@ def _wait_for(
     start_time = now = datetime.now()
     min_wait_seconds = timedelta(seconds=timeout)
     while now - start_time < min_wait_seconds:
-        if func():
-            break
+        result = func()
+        if result:
+            return result
         now = datetime.now()
         sleep(check_interval)
-    else:
-        if func():
-            return
-        raise TimeoutError()
+    result = func()
+    if result:
+        return result
+    raise TimeoutError()
 
 
 class StorageMountError(JenkinsBootstrapError):
@@ -770,7 +764,11 @@ def _install_config(container: ops.Container, filename: str, destination_path: P
     try:
         jenkins_config_file = Path(filename).read_text(encoding="utf-8")
         container.push(
-            destination_path, jenkins_config_file, user=USER, group=GROUP, make_dirs=True
+            destination_path,
+            jenkins_config_file,
+            user=USER,
+            group=GROUP,
+            make_dirs=True,
         )
     except ops.pebble.PathError as exc:
         raise JenkinsBootstrapError("Failed to install configuration.") from exc
@@ -839,74 +837,6 @@ def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[s
         yield f"'{proxy_config.http_proxy.password or ''}'"
     if proxy_config.no_proxy:
         yield f"'{proxy_config.no_proxy}'"
-
-
-def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
-    """Get JVM system property arguments for proxy.
-
-    Args:
-        proxy_config: The proxy settings to apply.
-
-    Yields:
-        JVM System property proxy arguments.
-    """
-    if proxy_config.http_proxy:
-        yield f"-Dhttp.proxyHost={proxy_config.http_proxy.host}"
-        yield f"-Dhttp.proxyPort={proxy_config.http_proxy.port}"
-        if proxy_config.http_proxy.user and proxy_config.http_proxy.password:
-            yield f"-Dhttp.proxyUser={proxy_config.http_proxy.user}"
-            yield f"-Dhttp.proxyPassword={proxy_config.http_proxy.password}"
-    if proxy_config.https_proxy:
-        yield f"-Dhttps.proxyHost={proxy_config.https_proxy.host}"
-        yield f"-Dhttps.proxyPort={proxy_config.https_proxy.port}"
-        if proxy_config.https_proxy.user and proxy_config.https_proxy.password:
-            yield f"-Dhttps.proxyUser={proxy_config.https_proxy.user}"
-            yield f"-Dhttps.proxyPassword={proxy_config.https_proxy.password}"
-    if proxy_config.no_proxy:
-        formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
-        yield f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"'
-
-
-def _install_plugins(
-    container: ops.Container, proxy_config: state.ProxyConfig | None = None
-) -> None:
-    """Install Jenkins plugins.
-
-    Download Jenkins plugins. A restart is required for the changes to take effect.
-
-    Args:
-        container: The Jenkins workload container.
-        proxy_config: The proxy settings to apply.
-
-    Raises:
-        JenkinsBootstrapError: if an error occurred installing the plugin.
-    """
-    proxy_args = [] if not proxy_config else _get_java_proxy_args(proxy_config)
-    command = [
-        "java",
-        *proxy_args,
-        "-jar",
-        f"jenkins-plugin-manager-{JENKINS_PLUGIN_MANAGER_VERSION}.jar",
-        "-w",
-        "jenkins.war",
-        "-d",
-        str(PLUGINS_PATH),
-        "-p",
-        " ".join(set(REQUIRED_PLUGINS)),
-        "--latest",
-    ]
-    proc: ops.pebble.ExecProcess = container.exec(
-        command,
-        working_dir=str(EXECUTABLES_PATH),
-        timeout=600,
-        user=USER,
-        group=GROUP,
-    )
-    try:
-        proc.wait_output()
-    except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
-        logger.error("Failed to install plugins, %s", exc)
-        raise JenkinsBootstrapError("Failed to install plugins.") from exc
 
 
 PLUGIN_NAME_GROUP = r"^([a-zA-Z0-9-_]+)"
@@ -1029,7 +959,8 @@ def _get_allowed_plugins(
 
 
 def _filter_dependent_plugins(
-    plugins: typing.Iterable[str], dependency_lookup: typing.Mapping[str, typing.Iterable[str]]
+    plugins: typing.Iterable[str],
+    dependency_lookup: typing.Mapping[str, typing.Iterable[str]],
 ) -> set[str]:
     """Filter out dependencies from the iterable consisting of all plugins.
 
@@ -1062,13 +993,380 @@ def _set_jenkins_system_message(message: str, client: jenkinsapi.jenkins.Jenkins
     try:
         # escape newline character to set the message in the script as a single line string.
         message = "\\n".join(message.split("\n"))
-        script = textwrap.dedent(
-            f"""
+        script = textwrap.dedent(f"""
             Jenkins j = Jenkins.instance
             j.systemMessage = "{message}"
-            """
-        )
+            """)
         client.run_groovy_script(script)
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to set system message, %s", exc)
         raise JenkinsError("Failed to set system message.") from exc
+
+
+def unlock_wizard(container: ops.Container, version: str) -> None:
+    """Write to executed version and updated version file to bypass Jenkins setup wizard.
+
+    Args:
+        container: The Jenkins workload container.
+        version: The version to write to the files to bypass the wizard.
+
+    Raises:
+        JenkinsBootstrapError: if the wizard can not be unlocked.
+    """
+    try:
+        container.push(
+            LAST_EXEC_VERSION_PATH,
+            version,
+            encoding="utf-8",
+            make_dirs=True,
+            user=USER,
+            group=GROUP,
+        )
+        container.push(
+            WIZARD_VERSION_PATH,
+            version,
+            encoding="utf-8",
+            make_dirs=True,
+            user=USER,
+            group=GROUP,
+        )
+    except ops.pebble.PathError as exc:
+        raise JenkinsError("Failed to unlock wizard.") from exc
+
+
+def install_plugins(
+    container: ops.Container,
+    plugins: list[str],
+    proxy_config: state.ProxyConfig | None = None,
+) -> None:
+    """Install Jenkins plugins.
+
+    Download Jenkins plugins. A restart is required for the changes to take effect.
+
+    Args:
+        container: The Jenkins workload container.
+        plugins: The list of plugins to install.
+        proxy_config: The proxy settings to apply.
+
+    Raises:
+        JenkinsBootstrapError: if an error occurred installing the plugin.
+    """
+    proxy_args = [] if not proxy_config else _get_java_proxy_args(proxy_config)
+    command = [
+        "java",
+        *proxy_args,
+        "-jar",
+        f"jenkins-plugin-manager-{JENKINS_PLUGIN_MANAGER_VERSION}.jar",
+        "-w",
+        "jenkins.war",
+        "-d",
+        str(PLUGINS_PATH),
+        "-p",
+        " ".join(set(plugins)),
+        "--latest",
+    ]
+    proc: ops.pebble.ExecProcess = container.exec(
+        command,
+        working_dir=str(EXECUTABLES_PATH),
+        timeout=600,
+        user=USER,
+        group=GROUP,
+    )
+    try:
+        proc.wait_output()
+    except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
+        logger.error("Failed to install plugins, %s", exc)
+        raise JenkinsBootstrapError("Failed to install plugins.") from exc
+
+
+def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:
+    """Get JVM system property arguments for proxy.
+
+    Args:
+        proxy_config: The proxy settings to apply.
+
+    Yields:
+        JVM System property proxy arguments.
+    """
+    if proxy_config.http_proxy:
+        yield f"-Dhttp.proxyHost={proxy_config.http_proxy.host}"
+        yield f"-Dhttp.proxyPort={proxy_config.http_proxy.port}"
+        if proxy_config.http_proxy.user and proxy_config.http_proxy.password:
+            yield f"-Dhttp.proxyUser={proxy_config.http_proxy.user}"
+            yield f"-Dhttp.proxyPassword={proxy_config.http_proxy.password}"
+    if proxy_config.https_proxy:
+        yield f"-Dhttps.proxyHost={proxy_config.https_proxy.host}"
+        yield f"-Dhttps.proxyPort={proxy_config.https_proxy.port}"
+        if proxy_config.https_proxy.user and proxy_config.https_proxy.password:
+            yield f"-Dhttps.proxyUser={proxy_config.https_proxy.user}"
+            yield f"-Dhttps.proxyPassword={proxy_config.https_proxy.password}"
+    if proxy_config.no_proxy:
+        formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
+        yield f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"'
+
+
+def build_jcasc_config(
+    jcasc_config: dict[str, typing.Any],
+    proxy_config: typing.Optional[state.ProxyConfig] = None,
+    auth_proxy: bool = False,
+) -> typing.Dict[str, typing.Any]:
+    """Build the desired JCasC config by merging user config with charm-managed sections.
+
+    Injects admin credentials (local securityRealm) when the user hasn't provided one.
+    Checks for conflicts with auth_proxy relation.
+
+    Args:
+        jcasc_config: User-provided JCasC mapping from charm config.
+        proxy_config: Optional model proxy configuration to inject into Jenkins config.
+        auth_proxy: Whether auth proxy integration is active.
+
+    Returns:
+        The merged JCasC configuration dict.
+    """
+    config = copy.deepcopy(jcasc_config)
+    jenkins_section: typing.Dict[str, typing.Any] = config.get("jenkins") or {}
+
+    # Conflict check: user provides securityRealm or authorizationStrategy while auth_proxy is active
+    if auth_proxy:
+        if "securityRealm" in jenkins_section or "authorizationStrategy" in jenkins_section:
+            logger.warning(
+                "Jenkins security is managed by user-provided jcasc-config; "
+                "auth-proxy bypass not injected."
+            )
+        else:
+            logger.warning("Bypassing Jenkins security, security via auth proxy assumed.")
+            jenkins_section["securityRealm"] = "none"
+            jenkins_section["authorizationStrategy"] = "unsecured"
+
+    # Inject admin credentials if securityRealm not provided by user
+    if "securityRealm" not in jenkins_section:
+        jenkins_section["securityRealm"] = {
+            "local": {
+                "allowsSignup": True,
+                "users": [{"id": "admin", "password": "${JENKINS_ADMIN_PASSWORD}"}],
+            }
+        }
+
+    # Updates managed by the charm, user not expected to update Jenkins manually
+    jenkins_section["disabledAdministrativeMonitors"] = [
+        "hudson.model.UpdateCenter$CoreUpdateMonitor"
+    ]
+
+    if proxy_config and (proxy_config.https_proxy or proxy_config.http_proxy):
+        proxy = urlparse(proxy_config.https_proxy or proxy_config.http_proxy)
+        host, port = proxy.hostname, proxy.port
+        jenkins_section["proxy"] = {
+            "name": host,
+        }
+        if port:
+            jenkins_section["proxy"]["port"] = str(port)
+
+    config["jenkins"] = jenkins_section
+    return config
+
+
+def sync_jcasc_config(container: ops.Container, configuration_yaml: str) -> str:
+    """Write JCasC config to disk, with short-circuit if unchanged.
+
+    Runs before Jenkins is up (during pre-startup), so live validation (check endpoint)
+    and reload are not available. Validation happens asynchronously at runtime when
+    Jenkins reads the config on startup.
+
+    Args:
+        container: The Jenkins workload container.
+        configuration_yaml: The full YAML string to write.
+
+    Returns:
+        The SHA256 hash of the configuration written.
+
+    Raises:
+        ops.pebble.APIError: if the container push fails.
+    """
+    jcasc_path = str(JCASC_CONFIG_PATH)
+
+    try:
+        current = container.pull(jcasc_path).read()
+    except (ops.pebble.PathError, FileNotFoundError):
+        current = ""
+
+    # TODO (performance enhancement): Calculate file hash via pebble exec on-disk instead of
+    # pulling YAML to operator side. Reduces memory overhead and improves performance for
+    # large configs. Track as: github.com/canonical/jenkins-k8s-operator/issues/<ticket>
+    config_hash = hashlib.sha256(configuration_yaml.encode("utf-8")).hexdigest()
+    old_config_hash = hashlib.sha256(current.encode("utf-8")).hexdigest()
+    if old_config_hash == config_hash:
+        return config_hash
+
+    container.push(
+        jcasc_path,
+        configuration_yaml,
+        encoding="utf-8",
+        user=USER,
+        group=GROUP,
+        make_dirs=True,
+    )
+    return config_hash
+
+
+def _get_workload_yaml_files(container: ops.Container, config_path: str) -> list[str]:
+    """List JCasC YAML file paths under a workload-container path.
+
+    Runs ``find`` in the Jenkins workload container to locate ``*.yaml`` and
+    ``*.yml`` files under ``config_path`` (a directory of YAML files or a single
+    YAML file), then re-sorts charm-side into ``*.yaml`` (sorted) followed by
+    ``*.yml`` (sorted) to preserve a deterministic merge order.
+
+    Args:
+        container: The Jenkins workload container.
+        config_path: Absolute path in the workload to a YAML file or a directory
+            of YAML files.
+
+    Returns:
+        Deterministically ordered list of absolute workload YAML file paths, or
+        an empty list if the path does not exist or holds no YAML files.
+    """
+    find_cmd = ["find", config_path, "-name", "*.yaml", "-o", "-name", "*.yml"]
+    try:
+        stdout, _ = container.exec(find_cmd).wait_output()
+    except ops.pebble.ExecError:
+        # `find` exits non-zero when path doesn't exist, is inaccessible, or permission denied.
+        return []
+    found = [line for line in stdout.splitlines() if line.strip()]
+    yaml_files = sorted(path for path in found if path.endswith(".yaml"))
+    yml_files = sorted(path for path in found if path.endswith(".yml"))
+    return yaml_files + yml_files
+
+
+def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path handling)
+    container: ops.Container,
+    url: str,
+    token: typing.Optional[tuple[str, str]] = None,
+    config_path: str = "jcasc",
+    branch: str = "main",
+    proxy_config: typing.Optional[state.ProxyConfig] = None,
+) -> str:
+    """Clone a git repository in the workload and return merged YAML.
+
+    The clone runs inside the Jenkins workload container (which has ``git`` and
+    the model's network/proxy reachability), into a throwaway temp directory that
+    is removed before returning. Auth is threaded via an in-memory
+    ``http.extraHeader`` so the token never appears in the URL, the process table,
+    or ``.git/config``.
+
+    Args:
+        container: The Jenkins workload container.
+        url: HTTPS URL of the git repository.
+        token: Optional (username, token/password) tuple for authentication.
+        config_path: Path within the repository: a directory of YAML files or a
+            single YAML file. Defaults to "jcasc".
+        branch: Git branch to check out. Defaults to "main".
+        proxy_config: Optional model proxy configuration to forward to git.
+
+    Returns:
+        Merged YAML content as a string from all YAML files under config_path,
+        or the content of a single YAML file if config_path points to a file.
+
+    Raises:
+        JenkinsBootstrapError: if git clone fails, path not found, or YAML merging
+            fails.
+    """
+    # Note: branch parameter allows integration tests to reference test data from
+    # feature branches without requiring merge to main first. Defaults to "main"
+    # for backward compatibility. If the branch does not exist on the remote, the
+    # git clone will fail with a clear error message.
+    dest = f"/tmp/jcasc-clone-{secrets.token_hex(8)}"  # noqa: S108  # nosec: B108 (transient workload dir)
+
+    clone_command = ["git"]
+    if token:
+        username, password = token
+        credentials = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
+        clone_command += ["-c", f"http.extraHeader=Authorization: Basic {credentials}"]
+    clone_command += [
+        "clone",
+        "--branch",
+        branch,
+        "--depth",
+        "1",
+        "--single-branch",
+        "--no-tags",
+        url,
+        dest,
+    ]
+
+    environment = None
+    if proxy_config:  # pragma: no cover
+        environment = {}
+        if proxy_config.http_proxy:  # pragma: no cover
+            environment["HTTP_PROXY"] = str(proxy_config.http_proxy)
+            environment["http_proxy"] = str(proxy_config.http_proxy)
+        if proxy_config.https_proxy:  # pragma: no cover
+            environment["HTTPS_PROXY"] = str(proxy_config.https_proxy)
+            environment["https_proxy"] = str(proxy_config.https_proxy)
+        if proxy_config.no_proxy:  # pragma: no cover
+            environment["NO_PROXY"] = proxy_config.no_proxy
+            environment["no_proxy"] = proxy_config.no_proxy
+
+    try:
+        try:
+            logger.info(
+                "Cloning JCasC repository: url=%s branch=%s config_path=%s dest=%s",
+                url,
+                branch,
+                config_path,
+                dest,
+            )
+            container.exec(clone_command, environment=environment, timeout=300).wait_output()
+            logger.info("Repository clone successful: %s", url)
+        except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
+            # Log traceback but not the command args (which may contain auth token in env).
+            logger.error(
+                "Failed to clone repository: url=%s branch=%s", url, branch, exc_info=True
+            )
+            raise JenkinsBootstrapError(f"Failed to clone repository {url}") from exc
+
+        yaml_files = _get_workload_yaml_files(container, f"{dest}/{config_path}")
+        logger.info(
+            "Found %d YAML files in repository path '%s': %s",
+            len(yaml_files),
+            config_path,
+            yaml_files,
+        )
+        if not yaml_files:
+            raise JenkinsBootstrapError(
+                f"Path '{config_path}' not found or no YAML files in repository {url}"
+            )
+
+        merged_config: dict[str, typing.Any] = {}
+        for yaml_file in yaml_files:
+            try:
+                content = yaml.safe_load(container.pull(yaml_file, encoding="utf-8").read())
+                logger.info(
+                    "Loaded YAML file %s, top-level keys: %s",
+                    yaml_file,
+                    list(content.keys()) if isinstance(content, dict) else "not a dict",
+                )
+            except ops.pebble.PathError as exc:
+                raise JenkinsBootstrapError(f"Cannot read YAML file {yaml_file}: {exc}") from exc
+            except yaml.YAMLError as exc:
+                raise JenkinsBootstrapError(f"Invalid YAML in {yaml_file}: {exc}") from exc
+            if content and isinstance(content, dict):
+                for key, value in content.items():
+                    if (
+                        key in merged_config
+                        and isinstance(merged_config[key], dict)
+                        and isinstance(value, dict)
+                    ):
+                        merged_config[key].update(value)
+                    else:
+                        merged_config[key] = value
+
+        logger.info(
+            "Merged JCasC configuration from repository, top-level keys: %s",
+            list(merged_config.keys()),
+        )
+        return yaml.dump(merged_config, default_flow_style=False)
+    finally:
+        try:
+            container.exec(["rm", "-rf", dest]).wait_output()
+        except ops.pebble.Error:
+            logger.warning("Failed to remove temporary clone directory %s", dest)

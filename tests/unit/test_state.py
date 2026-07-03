@@ -1,4 +1,4 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Jenkins-k8s state module tests."""
@@ -299,3 +299,265 @@ def test_system_properties_invalid_entries_raise(mock_charm: MagicMock, bad_valu
         state.State.from_charm(mock_charm)
 
     assert "expected key=value" in str(excinfo.value.msg)
+
+
+def test_agent_meta_from_relation_data_missing_fields():
+    """
+    arrange: given relation data missing required fields.
+    act: when from_agent_relation is called.
+    assert: None is returned.
+    """
+    result = state.AgentMeta.from_agent_relation({"executors": "1", "labels": "linux"})
+    assert result is None
+
+
+def test_agent_meta_from_relation_data_complete():
+    """
+    arrange: given relation data with all required fields.
+    act: when from_agent_relation is called.
+    assert: AgentMeta is returned.
+    """
+    result = state.AgentMeta.from_agent_relation(
+        {"executors": "1", "labels": "linux", "name": "agent-0"}
+    )
+    assert result is not None
+    assert result.name == "agent-0"
+
+
+def test_get_relation_state_invalid_agent_data_raises_relation_error():
+    """
+    arrange: given relation data containing invalid agent metadata.
+    act: when _get_relation_state is called.
+    assert: CharmRelationDataInvalidError is raised.
+    """
+    mock_charm = MagicMock(spec=ops.CharmBase)
+    mock_unit = MagicMock(spec=ops.Unit)
+    mock_relation = MagicMock(spec=ops.Relation)
+    mock_relation.units = [mock_unit]
+    mock_relation.data = {
+        mock_unit: {
+            "executors": "not-an-int",
+            "labels": "linux",
+            "name": "agent-0",
+        }
+    }
+    mock_charm.model.relations = {state.AGENT_RELATION: [mock_relation]}
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(state.CharmRelationDataInvalidError, match="Invalid agent relation data"):
+        state._get_relation_state(mock_charm)
+
+
+def test_jcasc_config_from_charm(mock_charm: MagicMock):
+    """
+    arrange: given a charm with valid jcasc-config set.
+    act: when state is initialized from charm.
+    assert: jcasc_config contains the parsed dict.
+    """
+    test_config = "jenkins:\n  systemMessage: test\n"
+    mock_charm.config = {"jcasc-config": test_config}
+
+    result = state.State.from_charm(mock_charm)
+    assert result.jcasc_config == {"jenkins": {"systemMessage": "test"}}
+
+
+def test_jcasc_config_default(mock_charm: MagicMock):
+    """
+    arrange: given a charm with no explicit jcasc-config.
+    act: when state is initialized from charm.
+    assert: jcasc_config is None.
+    """
+    mock_charm.config = {}
+
+    result = state.State.from_charm(mock_charm)
+    assert result.jcasc_config is None
+
+
+def test_jcasc_config_empty(mock_charm: MagicMock):
+    """
+    arrange: given a charm with whitespace-only jcasc-config.
+    act: when state is initialized from charm.
+    assert: jcasc_config is None.
+    """
+    mock_charm.config = {"jcasc-config": "   "}
+
+    result = state.State.from_charm(mock_charm)
+    assert result.jcasc_config is None
+
+
+def test_jcasc_config_invalid_yaml(mock_charm: MagicMock):
+    """
+    arrange: given a charm with invalid YAML in jcasc-config.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised.
+    """
+    mock_charm.config = {"jcasc-config": "{{invalid: yaml: [["}
+
+    with pytest.raises(state.CharmConfigInvalidError, match="Invalid jcasc-config YAML"):
+        state.State.from_charm(mock_charm)
+
+
+def test_jcasc_config_non_dict(mock_charm: MagicMock):
+    """
+    arrange: given a charm with YAML list (not dict) in jcasc-config.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised.
+    """
+    mock_charm.config = {"jcasc-config": "- item1\n- item2"}
+
+    with pytest.raises(state.CharmConfigInvalidError, match="YAML mapping"):
+        state.State.from_charm(mock_charm)
+
+
+def test_jcasc_config_with_none_jenkins_section(mock_charm: MagicMock):
+    """
+    arrange: given a charm with 'jenkins:' (None value) in jcasc-config.
+    act: when state is initialized from charm.
+    assert: state parses successfully and jcasc_config has the None jenkins entry.
+    """
+    mock_charm.config = {"jcasc-config": "jenkins:"}
+
+    result = state.State.from_charm(mock_charm)
+
+    assert result.jcasc_config == {"jenkins": None}
+
+
+def test_jcasc_config_with_non_dict_jenkins_section(mock_charm: MagicMock):
+    """
+    arrange: given a charm with non-dict jenkins section (e.g. jenkins: 'string').
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised (defence in depth validation).
+    """
+    mock_charm.config = {"jcasc-config": "jenkins: not_a_dict"}
+
+    with pytest.raises(state.CharmConfigInvalidError, match=r"jenkins.*section must be a mapping"):
+        state.State.from_charm(mock_charm)
+
+
+def test_jcasc_repository_and_config_conflict_raises(mock_charm: MagicMock):
+    """
+    arrange: given a charm with both jcasc-config and jcasc-repository set.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised matching "mutually exclusive".
+    """
+    mock_charm.config = {
+        "jcasc-config": "jenkins:\n  numExecutors: 0\n",
+        "jcasc-repository": "https://example.com/repo.git",
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(state.CharmConfigInvalidError, match="mutually exclusive"):
+        state.State.from_charm(mock_charm)
+
+
+def test_jcasc_repository_url_stored(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository set and jcasc-config empty.
+    act: when state is initialized from charm.
+    assert: jcasc_repository field contains the URL and jcasc_config is None.
+    """
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "https://example.com/repo.git",
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_repository == "https://example.com/repo.git"
+    assert charm_state.jcasc_config is None
+
+
+def test_jcasc_repository_token_secret_parsed(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository-token secret URI set.
+    act: when state is initialized from charm.
+    assert: jcasc_repository_token field contains (username, token) tuple.
+    """
+    secret_id = "secret:a1b2c3d4"  # nosec (test fixture, not real secret)
+    mock_secret = MagicMock()
+    mock_secret.get_content.return_value = {"username": "git", "token": "ghp_x"}
+    mock_charm.model.get_secret.return_value = mock_secret
+    mock_charm.config = {
+        "jcasc-repository": "https://example.com/r.git",
+        "jcasc-repository-token": secret_id,
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_repository_token == ("git", "ghp_x")
+
+
+def test_jcasc_repository_token_missing_keys_blocks(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository-token missing required keys.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised matching "username and token".
+    """
+    secret_id = "secret:a1b2c3d4"  # nosec (test fixture, not real secret)
+    mock_secret = MagicMock()
+    mock_secret.get_content.return_value = {"username": "git"}  # missing 'token'
+    mock_charm.model.get_secret.return_value = mock_secret
+    mock_charm.config = {
+        "jcasc-repository": "https://example.com/r.git",
+        "jcasc-repository-token": secret_id,
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(state.CharmConfigInvalidError, match="username and token"):
+        state.State.from_charm(mock_charm)
+
+
+def test_jcasc_repository_config_path_default(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository set but no config path specified.
+    act: when state is initialized from charm.
+    assert: jcasc_repository_config_path defaults to "jcasc".
+    """
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "https://example.com/repo.git",
+        "jcasc-repository-config-path": "",
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_repository_config_path == "jcasc"
+
+
+def test_jcasc_repository_config_path_custom(mock_charm: MagicMock):
+    """
+    arrange: given a charm with custom jcasc-repository-config-path.
+    act: when state is initialized from charm.
+    assert: jcasc_repository_config_path is set to the custom value.
+    """
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "https://example.com/repo.git",
+        "jcasc-repository-config-path": "jenkins/config",
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_repository_config_path == "jenkins/config"
+
+
+def test_jcasc_repository_config_path_root_directory(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository-config-path set to ".".
+    act: when state is initialized from charm.
+    assert: jcasc_repository_config_path is set to ".".
+    """
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "https://example.com/repo.git",
+        "jcasc-repository-config-path": ".",
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_repository_config_path == "."

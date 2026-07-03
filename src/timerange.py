@@ -24,10 +24,11 @@ class Range(BaseModel):
     start: int = Field(..., ge=0, lt=24)
     end: int = Field(..., ge=0, lt=24)
 
-    # pylint don't quite understand that this is a classmethod using Pydantic.
+    # pylint: disable=no-self-argument
     @root_validator(skip_on_failure=True)
-    def validate_range(  # pylint: disable=no-self-argument
-        cls: "Range",
+    # Pydantic root validators receive cls, not self (framework requirement).
+    def validate_range(
+        cls: "Range",  # noqa: N805
         values: dict,
     ) -> dict:
         """Validate the time range.
@@ -62,7 +63,7 @@ class Range(BaseModel):
             UpdateTimeRange: if a valid time range was given.
         """
         try:
-            (start_hour, end_hour) = (int(hour) for hour in time_range.split("-"))
+            start_hour, end_hour = (int(hour) for hour in time_range.split("-"))
         except ValueError as exc:
             raise InvalidTimeRangeError(
                 f"Invalid time range {time_range}, time range must be an integer."

@@ -11,7 +11,7 @@ assumes:
 summary: Jenkins Continuous Integration Server
 
 description: |
-  A [Juju](https://juju.is/) [charm](https://juju.is/docs/olm/charmed-operators)
+  A [Juju](https://canonical.com/juju/) [charm](https://canonical.com/juju/docs/juju-cli/3.6/reference/)
   deploying and managing [Jenkins](https://jenkins.io/) on Kubernetes. Jenkins is an open source
   automation server, providing plugins to support building, deploying and automating any project.
 
@@ -42,11 +42,9 @@ parts:
       - astral-uv
   templates:
     plugin: dump
-    source: .
-    prime:
-      - templates/jenkins-auth-proxy-config.xml
-      - templates/jenkins-config.xml
-      - templates/logging.properties
+    source: templates
+    organize:
+      "*": templates/
 
 platforms:
   ubuntu@24.04:amd64:
@@ -118,6 +116,58 @@ config:
         Comma-separated JVM system properties to pass to the Jenkins process at startup.
         Specify entries as key=value without the -D prefix. These are appended as -Dkey=value.
         Example: jenkins.model.Jenkins.crumbIssuerProxyCompatibility=true
+    jcasc-config:
+      type: string
+      description: |
+        Jenkins Configuration as Code (JCasC) YAML content. This is the declarative
+        way to manage Jenkins configuration (security, clouds, credentials, views, etc.).
+        The charm auto-injects admin credentials if the user config omits securityRealm,
+        and injects auth proxy config when the relation is active.
+        See https://www.jenkins.io/projects/jcasc/ for schema reference.
+      default: |
+        jenkins:
+          systemMessage: "Managed by jenkins-k8s charm via JCasC\n"
+          numExecutors: 0
+          securityRealm:
+            local:
+              allowsSignup: false
+              users:
+                - id: "admin"
+                  password: "${JENKINS_ADMIN_PASSWORD}"
+          authorizationStrategy:
+            loggedInUsersCanDoAnything:
+              allowAnonymousRead: false
+          remotingSecurity:
+            enabled: true
+    jcasc-repository:
+      type: string
+      default: ""
+      description: >
+        HTTPS URL of a public git repository containing Jenkins Configuration as
+        Code (JCasC) YAML files. When set, the charm clones the repository and
+        merges every *.yaml/*.yml file into the applied configuration. Mutually
+        exclusive with jcasc-config; setting both blocks the charm.
+    jcasc-repository-token:
+      type: secret
+      description: >
+        A Juju user-secret URI granting access to a private jcasc-repository. The
+        secret MUST contain two keys: `username` and `token`. The charm uses them
+        as HTTP Basic auth at clone time. Leave unset for public repositories.
+    jcasc-repository-config-path:
+      type: string
+      default: "jcasc"
+      description: >
+        Path to the directory within the jcasc-repository containing YAML files.
+        Relative to the repository root. Defaults to "jcasc" for backward
+        compatibility. Use "." to load YAML files from the repository root.
+    jcasc-repository-branch:
+      type: string
+      default: "main"
+      description: >
+        Git branch to check out when cloning jcasc-repository.
+        Defaults to "main". Used primarily for testing so that
+        integration tests can reference test data in feature branches
+        without requiring a merge to main first.
 
 actions:
   get-admin-password:

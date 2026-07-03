@@ -145,7 +145,7 @@ resource "juju_integration" "public_ingress_oauth2_proxy_k8s" {
 resource "juju_integration" "jenkins_k8s_jenkins_agent_k8s_agent" {
   model = var.model
 
-  depends_on = [null_resource.wait_for_jenkins_up, null_resource.wait_for_certs_settle]
+  depends_on = [null_resource.wait_for_jenkins_up]
 
   application {
     name     = module.jenkins_k8s.app_name

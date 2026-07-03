@@ -5,97 +5,71 @@
 
 # pylint:disable=protected-access
 
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from typing import Any, cast
+from unittest.mock import MagicMock
 
-import ops
-from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyRequirer
-from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
+import pytest
+from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig
 from ops.testing import Harness
 
 from charm import JenkinsK8sOperatorCharm
 
 
-@patch("jenkins.is_storage_ready", return_value=False)
-def test_on_auth_proxy_relation_joined_when_jenkins_storage_not_ready(_):
+@pytest.mark.parametrize(
+    "integrated, ingress_url, should_call, expected_protected_urls",
+    [
+        pytest.param(
+            True,
+            "https://example.com/jenkins",
+            True,
+            ["https://example.com/jenkins"],
+            id="integrated-with-ingress",
+        ),
+        pytest.param(True, None, True, [], id="integrated-without-ingress"),
+        pytest.param(
+            False,
+            "https://example.com/jenkins",
+            False,
+            None,
+            id="not-integrated-with-ingress",
+        ),
+        pytest.param(False, None, False, None, id="not-integrated-without-ingress"),
+    ],
+)
+def test_reconcile_auth_proxy(
+    integrated: bool,
+    ingress_url: str | None,
+    should_call: bool,
+    expected_protected_urls: list[str] | None,
+):
     """
-    arrange: given a charm with no connectable container.
-    act: when auth_proxy relation joined event is fired.
-    assert: the event is deferred.
-    """
-    harness = Harness(JenkinsK8sOperatorCharm)
-    harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
-
-    assert mock_event.defer.to_be_called_once()
-
-
-@patch("jenkins.is_storage_ready", return_value=False)
-def test_on_auth_proxy_relation_joined_when_ingress_not_ready(_):
-    """
-    arrange: given a charm with ready storage but no ingress related.
-    act: when auth_proxy relation joined event is fired.
-    assert: the event is deferred.
-    """
-    harness = Harness(JenkinsK8sOperatorCharm)
-    harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
-
-    assert mock_event.defer.to_be_called_once()
-
-
-@patch("jenkins.is_storage_ready", return_value=True)
-@patch("pebble.replan_jenkins")
-def test_on_auth_proxy_relation_joined(replan_mock, _):
-    """
-    arrange: given a charm with ready storage and ingress related.
-    act: when auth_proxy relation joined event is fired.
-    assert: the pebble service is replaned.
+    arrange: given auth-proxy integration and ingress URL combinations.
+    act: when _reconcile_auth_proxy is called.
+    assert: auth-proxy configuration update behavior matches expected matrix.
     """
     harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    mock_ingress = MagicMock(spec=IngressPerAppRequirer)
-    mock_ingress.url.return_value = "https://example.com"
-    harness.charm.auth_proxy_observer.ingress = mock_ingress
-    harness.charm.auth_proxy_observer.auth_proxy = MagicMock(spec=AuthProxyRequirer)
-    harness.charm.auth_proxy_observer._on_auth_proxy_relation_joined(mock_event)
 
-    replan_mock.assert_called_once()
+    harness.charm.server_ingress = MagicMock()
+    harness.charm.server_ingress.url = ingress_url
+    harness.charm._auth_proxy = MagicMock()
 
+    state = SimpleNamespace(auth_proxy_integrated=integrated)
 
-@patch("jenkins.is_storage_ready", return_value=False)
-def test_auth_proxy_relation_departed_when_jenkins_storage_not_ready(_):
-    """
-    arrange: given a charm with no connectable container.
-    act: when auth_proxy departed joined event is fired.
-    assert: the event is deferred.
-    """
-    harness = Harness(JenkinsK8sOperatorCharm)
-    harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    mock_event = MagicMock(spec=ops.RelationCreatedEvent)
-    harness.charm.auth_proxy_observer._auth_proxy_relation_departed(mock_event)
+    harness.charm._reconcile_auth_proxy(state=state)  # type: ignore[arg-type]
 
-    assert mock_event.defer.to_be_called_once()
+    if not should_call:
+        harness.charm._auth_proxy.update_auth_proxy_config.assert_not_called()
+        return
 
+    harness.charm._auth_proxy.update_auth_proxy_config.assert_called_once()
+    call_kwargs = cast(
+        dict[str, Any],
+        harness.charm._auth_proxy.update_auth_proxy_config.call_args.kwargs,
+    )
+    config = cast(AuthProxyConfig, call_kwargs["auth_proxy_config"])
 
-@patch("jenkins.is_storage_ready", return_value=True)
-@patch("pebble.replan_jenkins")
-def test_auth_proxy_relation_departed(replan_mock, _):
-    """
-    arrange: given a charm with ready storage and ingress related.
-    act: when auth_proxy relation departed event is fired.
-    assert: the pebble service is replaned.
-    """
-    harness = Harness(JenkinsK8sOperatorCharm)
-    harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-    mock_event = MagicMock(spec=ops.RelationDepartedEvent)
-    harness.charm.auth_proxy_observer._auth_proxy_relation_departed(mock_event)
-
-    replan_mock.assert_called_once()
+    assert config.protected_urls == expected_protected_urls
+    assert config.allowed_endpoints == []
+    assert config.headers == ["X-Auth-Request-User"]
