@@ -6,8 +6,11 @@
 # Need access to protected functions for testing
 # pylint:disable=protected-access
 
+import base64
 import re
+import secrets
 from functools import partial
+from pathlib import Path
 from typing import Callable
 from unittest.mock import MagicMock
 
@@ -18,6 +21,7 @@ import requests
 
 import jenkins
 
+from .helpers import combine_root_paths
 from .types_ import HarnessWithContainer
 
 
@@ -28,6 +32,53 @@ def _failing_container() -> ops.Container:
         side_effect=ops.pebble.PathError(kind="not-found", message="Path not found.")
     )
     return mock_container
+
+
+def _stage_workload_clone(harness, container, monkeypatch, files, config_path="jcasc"):
+    """Stage YAML files on the workload FS and wire git/find/rm exec handlers.
+
+    Args:
+        harness: The ops testing Harness.
+        container: The jenkins workload container.
+        monkeypatch: pytest monkeypatch fixture.
+        files: Mapping of path-relative-to-config_path -> YAML text.
+        config_path: Repo subdir/file the charm will read (default "jcasc").
+
+    Returns:
+        A dict with the recorded exec calls under keys "git", "find", "rm".
+    """
+    random_token = secrets.token_hex(8)
+    dest = f"/tmp/jcasc-clone-{random_token}"  # nosec: B108 (transient test dir with dynamic suffix)
+    base = dest if config_path == "." else f"{dest}/{config_path}"
+
+    jenkins_root = harness.get_filesystem_root("jenkins")
+    staged_paths = []
+    for rel, body in files.items():
+        wpath = f"{base}/{rel}" if rel else base
+        fs_path = combine_root_paths(jenkins_root, Path(wpath))
+        fs_path.parent.mkdir(parents=True, exist_ok=True)
+        fs_path.write_text(body, encoding="utf-8")
+        staged_paths.append(wpath)
+
+    calls: dict[str, list[list[str]]] = {"git": [], "find": [], "rm": []}
+
+    def git_handler(argv):
+        calls["git"].append(argv)
+        return (0, "", "")
+
+    def find_handler(argv):
+        calls["find"].append(argv)
+        return (0, "".join(f"{p}\n" for p in staged_paths), "")
+
+    def rm_handler(argv):
+        calls["rm"].append(argv)
+        return (0, "", "")
+
+    for name, handler in (("git", git_handler), ("find", find_handler), ("rm", rm_handler)):
+        harness.register_command_handler(  # type: ignore # pylint: disable=no-member
+            container=container, executable=name, handler=handler
+        )
+    return calls
 
 
 def test__unlock_wizard(
@@ -222,3 +273,205 @@ def test_get_groovy_proxy_args_http_fallback_without_https(http_partial_proxy_co
         "''",
         "''",
     )
+
+
+def test_fetch_jcasc_repository_clones_and_merges(
+    harness_container, monkeypatch: pytest.MonkeyPatch
+):
+    """fetch_jcasc_repository clones repo and returns merged YAML content."""
+    harness_container.harness.begin()
+    container = harness_container.container
+
+    files = {"jenkins.yaml": "jenkins:\n  numExecutors: 5\n"}
+    calls = _stage_workload_clone(harness_container.harness, container, monkeypatch, files)
+
+    result = jenkins.fetch_jcasc_repository(container, "https://example.com/repo.git", token=None)
+
+    assert "jenkins" in result.lower()
+    assert "numExecutors" in result or "5" in result
+    # Verify git clone was called (no auth header when token is None)
+    assert len(calls["git"]) == 1
+    git_cmd = calls["git"][0]
+    assert "git" in git_cmd and "clone" in git_cmd
+
+
+def test_fetch_jcasc_repository_with_token(harness_container, monkeypatch: pytest.MonkeyPatch):
+    """fetch_jcasc_repository accepts (username, token) tuple for auth."""
+    harness_container.harness.begin()
+    container = harness_container.container
+
+    files = {"config.yaml": "jenkins:\n  securityRealm: admin\n"}
+    calls = _stage_workload_clone(harness_container.harness, container, monkeypatch, files)
+
+    result = jenkins.fetch_jcasc_repository(
+        container, "https://example.com/private.git", token=("git", "ghp_secret")
+    )
+
+    assert "jenkins" in result.lower()
+    # Verify auth header was set with base64-encoded credentials (not in URL)
+    assert len(calls["git"]) == 1
+    git_cmd = calls["git"][0]
+    assert "-c" in git_cmd
+    auth_idx = git_cmd.index("-c") + 1
+    # The header should contain Authorization: Basic {base64(git:ghp_secret)}
+    expected_creds = base64.b64encode(b"git:ghp_secret").decode("ascii")
+    assert f"http.extraHeader=Authorization: Basic {expected_creds}" in git_cmd[auth_idx]
+    # Plain token should NOT be in the URL or command
+    assert "ghp_secret" not in " ".join(git_cmd)
+
+
+def test_fetch_jcasc_repository_git_clone_fails(
+    harness_container, monkeypatch: pytest.MonkeyPatch
+):
+    """fetch_jcasc_repository raises JenkinsBootstrapError on git clone failure."""
+    harness_container.harness.begin()
+    container = harness_container.container
+
+    def git_fail_handler(argv):
+        raise ops.pebble.ExecError(
+            command=argv, exit_code=1, stdout="", stderr="fatal: authentication failed"
+        )
+
+    def rm_handler(argv):
+        return (0, "", "")
+
+    monkeypatch.setattr(jenkins.secrets, "token_hex", lambda _n: "deadbeefcafe")
+
+    harness_container.harness.register_command_handler(
+        container=container, executable="git", handler=git_fail_handler
+    )
+    harness_container.harness.register_command_handler(
+        container=container, executable="rm", handler=rm_handler
+    )
+
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins.fetch_jcasc_repository(container, "https://example.com/repo.git", token=None)
+
+
+def test_fetch_jcasc_repository_merges_multiple_yaml_files(
+    harness_container, monkeypatch: pytest.MonkeyPatch
+):
+    """fetch_jcasc_repository merges YAML files from repository."""
+    harness_container.harness.begin()
+    container = harness_container.container
+
+    files = {
+        "01-jenkins.yaml": "jenkins:\n  numExecutors: 5\n",
+        "02-security.yaml": "jenkins:\n  securityRealm: admin\n",
+    }
+    _stage_workload_clone(harness_container.harness, container, monkeypatch, files)
+
+    result = jenkins.fetch_jcasc_repository(container, "https://example.com/repo.git", token=None)
+
+    assert isinstance(result, str)
+    assert "jenkins" in result.lower()
+    # Both config keys should be present (deep merged)
+    assert "numExecutors" in result or "5" in result
+    assert "securityRealm" in result or "admin" in result
+
+
+def test_fetch_jcasc_repository_custom_config_path(
+    harness_container, monkeypatch: pytest.MonkeyPatch
+):
+    """fetch_jcasc_repository uses custom config_path parameter."""
+    harness_container.harness.begin()
+    container = harness_container.container
+
+    files = {"jenkins.yaml": "jenkins:\n  numExecutors: 10\n"}
+    calls = _stage_workload_clone(
+        harness_container.harness, container, monkeypatch, files, config_path="config"
+    )
+
+    result = jenkins.fetch_jcasc_repository(
+        container, "https://example.com/repo.git", token=None, config_path="config"
+    )
+
+    assert isinstance(result, str)
+    assert "jenkins" in result.lower()
+    assert "numExecutors" in result or "10" in result
+    # Verify find was called with correct path
+    assert len(calls["find"]) == 1
+    assert "config" in " ".join(calls["find"][0])
+
+
+def test_fetch_jcasc_repository_config_path_root_directory(
+    harness_container, monkeypatch: pytest.MonkeyPatch
+):
+    """fetch_jcasc_repository loads YAML from root when config_path is '.'."""
+    harness_container.harness.begin()
+    container = harness_container.container
+
+    files = {"config.yaml": "jenkins:\n  systemMessage: from root\n"}
+    _stage_workload_clone(
+        harness_container.harness, container, monkeypatch, files, config_path="."
+    )
+
+    result = jenkins.fetch_jcasc_repository(
+        container, "https://example.com/repo.git", token=None, config_path="."
+    )
+
+    assert isinstance(result, str)
+    assert "systemMessage" in result or "from root" in result
+
+
+def test_fetch_jcasc_repository_missing_config_path(
+    harness_container, monkeypatch: pytest.MonkeyPatch
+):
+    """fetch_jcasc_repository raises JenkinsBootstrapError when custom config_path doesn't exist."""
+    harness_container.harness.begin()
+    container = harness_container.container
+
+    # Stage with no files, so find will return empty
+    def find_empty_handler(argv):
+        return (0, "", "")
+
+    def git_noop_handler(argv):
+        return (0, "", "")
+
+    def rm_noop_handler(argv):
+        return (0, "", "")
+
+    harness_container.harness.register_command_handler(
+        container=container, executable="git", handler=git_noop_handler
+    )
+    harness_container.harness.register_command_handler(
+        container=container, executable="find", handler=find_empty_handler
+    )
+    harness_container.harness.register_command_handler(
+        container=container, executable="rm", handler=rm_noop_handler
+    )
+    monkeypatch.setattr(jenkins.secrets, "token_hex", lambda _n: "deadbeefcafe")
+
+    with pytest.raises(jenkins.JenkinsBootstrapError):
+        jenkins.fetch_jcasc_repository(
+            container, "https://example.com/repo.git", token=None, config_path="nonexistent"
+        )
+
+
+@pytest.mark.parametrize(
+    "config_path,files",
+    [
+        ("jcasc", {"jenkins.yaml": "jenkins:\n  systemMessage: test\n"}),
+        ("jenkins.yaml", {"jenkins.yaml": "jenkins:\n  systemMessage: test\n"}),
+    ],
+    ids=["directory_with_yaml_files", "single_yaml_file"],
+)
+def test_fetch_jcasc_repository_config_path_types(
+    harness_container, monkeypatch: pytest.MonkeyPatch, config_path: str, files: dict
+):
+    """fetch_jcasc_repository handles both directory and single file config paths."""
+    harness_container.harness.begin()
+    container = harness_container.container
+
+    _stage_workload_clone(
+        harness_container.harness, container, monkeypatch, files, config_path=config_path
+    )
+
+    result = jenkins.fetch_jcasc_repository(
+        container, "https://example.com/repo.git", token=None, config_path=config_path
+    )
+
+    assert isinstance(result, str)
+    assert "jenkins" in result.lower()
+    assert "jenkins:" in result
+    assert "systemMessage: test" in result

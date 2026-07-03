@@ -28,7 +28,11 @@ from charm import JenkinsK8sOperatorCharm
         ),
         pytest.param(True, None, True, [], id="integrated-without-ingress"),
         pytest.param(
-            False, "https://example.com/jenkins", False, None, id="not-integrated-with-ingress"
+            False,
+            "https://example.com/jenkins",
+            False,
+            None,
+            id="not-integrated-with-ingress",
         ),
         pytest.param(False, None, False, None, id="not-integrated-without-ingress"),
     ],
@@ -61,7 +65,8 @@ def test_reconcile_auth_proxy(
 
     harness.charm._auth_proxy.update_auth_proxy_config.assert_called_once()
     call_kwargs = cast(
-        dict[str, Any], harness.charm._auth_proxy.update_auth_proxy_config.call_args.kwargs
+        dict[str, Any],
+        harness.charm._auth_proxy.update_auth_proxy_config.call_args.kwargs,
     )
     config = cast(AuthProxyConfig, call_kwargs["auth_proxy_config"])
 

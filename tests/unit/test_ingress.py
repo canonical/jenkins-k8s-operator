@@ -26,14 +26,18 @@ def _patch_reconcile_dependencies(monkeypatch: pytest.MonkeyPatch):
         MagicMock(return_value="config-hash"),
     )
     monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_admin", MagicMock(return_value="admin-password")
+        JenkinsK8sOperatorCharm,
+        "_reconcile_admin",
+        MagicMock(return_value="admin-password"),
     )
     monkeypatch.setattr(
         JenkinsK8sOperatorCharm, "_reconcile_api_token", MagicMock(return_value=None)
     )
     monkeypatch.setattr(JenkinsK8sOperatorCharm, "_reconcile_agents", MagicMock(return_value=None))
     monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_agent_discovery", MagicMock(return_value=None)
+        JenkinsK8sOperatorCharm,
+        "_reconcile_agent_discovery",
+        MagicMock(return_value=None),
     )
     monkeypatch.setattr(
         JenkinsK8sOperatorCharm, "_reconcile_auth_proxy", MagicMock(return_value=None)

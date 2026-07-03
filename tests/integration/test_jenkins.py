@@ -3,7 +3,9 @@
 
 """Integration tests for jenkins-k8s-operator charm."""
 
+import os
 import typing
+from pathlib import Path
 from secrets import token_hex
 
 import jenkinsapi
@@ -301,3 +303,82 @@ async def test_jcasc_reload_without_restart(
         f"{web_address}/configuration-as-code/export"
     )
     assert new_message in exported_response.text
+
+
+def _get_current_branch() -> str:
+    """Get the current git branch name for GitHub raw URL references.
+
+    Falls back to 'main' if not in a git repo or on a detached HEAD.
+    """
+    # In GitHub Actions CI (pull_request event), GITHUB_HEAD_REF contains the source branch
+    github_head_ref = os.environ.get("GITHUB_HEAD_REF")
+    if github_head_ref:
+        return github_head_ref
+
+    # Try reading .git/HEAD to determine the branch without subprocess
+    try:
+        git_dir = Path(__file__).parent.parent.parent / ".git"
+        if git_dir.exists() and (git_dir / "HEAD").exists():
+            with open(git_dir / "HEAD") as f:
+                head_content = f.read().strip()
+                if head_content.startswith("ref: refs/heads/"):
+                    return head_content.replace("ref: refs/heads/", "")
+    except OSError:
+        pass
+
+    # Fallback to 'main' if we can't determine the branch
+    return "main"
+
+
+async def test_jcasc_repository_config_from_file(
+    ops_test: OpsTest,
+    application: Application,
+    web_address: str,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+):
+    """
+    arrange: given a deployed Jenkins charm with jcasc-repository configured.
+    act: when the charm is active/idle.
+    assert: the JCasC configuration from git repository is applied and accessible.
+
+    Note: This test verifies that the jcasc-repository configuration option
+    integrates correctly with the JCasC system. The test fixture stages a
+    file:// git repository inside the charm container with fixture YAML files.
+    """
+    # Get the current git branch for fixture data reference
+    branch = _get_current_branch()
+
+    # Configure charm to use GitHub-hosted JCasC test data
+    # The jcasc-repository will clone the repo and check out the specified branch,
+    # then read YAML files from tests/integration/data/jcasc
+    await application.set_config(
+        {
+            "jcasc-config": "",
+            "jcasc-repository": "https://github.com/canonical/jenkins-k8s-operator.git",
+            "jcasc-repository-branch": branch,
+            "jcasc-repository-config-path": "tests/integration/data/jcasc",
+        }
+    )
+
+    model = ops_test.model
+    assert model is not None
+    await model.wait_for_idle(apps=[application.name], status="active", timeout=20 * 60)
+
+    # Verify the JCasC export endpoint is accessible
+    response = jenkins_client.requester.post_url(f"{web_address}/configuration-as-code/export")
+    assert response.status_code == 200, "JCasC export endpoint should be accessible"
+    exported = response.text
+
+    # Verify jenkins section exists (from fixture jenkins.yaml)
+    assert "jenkins" in exported, "Exported JCasC should contain jenkins section"
+
+    # Verify specific fixture values are present in the exported config
+    assert "Jenkins Configuration as Code (JCasC) via Git Repository" in exported, (
+        "systemMessage from git repository fixture should be in exported config"
+    )
+    assert "numExecutors: 2" in exported, "numExecutors: 2 from fixture should be applied"
+    assert "mode: NORMAL" in exported, "mode: NORMAL from fixture should be applied"
+
+    # Verify unclassified section from fixture is present
+    assert "unclassified:" in exported, "Exported JCasC should contain unclassified section"
+    assert "location:" in exported, "location section should be present in unclassified"

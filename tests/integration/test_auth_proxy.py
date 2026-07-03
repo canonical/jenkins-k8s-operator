@@ -591,7 +591,9 @@ async def test_auth_proxy_integration(
             timeout=5,
         )
         logger.info(
-            "Auth UI test status code: %s, url: %s End", response.status_code, response.url
+            "Auth UI test status code: %s, url: %s End",
+            response.status_code,
+            response.url,
         )
         return response.status_code == 200 and IDENTITY_PLATFORM_HOSTNAME in response.url
 

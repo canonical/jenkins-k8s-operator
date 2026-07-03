@@ -148,4 +148,6 @@ dmypy.json
 # OS artifacts
 .DS_Store
 
+# AI artifacts
 .worktrees
+docs/superpowers/

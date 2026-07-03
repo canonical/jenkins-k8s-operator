@@ -262,7 +262,7 @@ def test_version_error(monkeypatch: pytest.MonkeyPatch, exception: Exception):
     jenkins_instance = _jenkins_instance()
 
     with pytest.raises(jenkins.JenkinsError):
-        jenkins_instance.version  # pylint: disable=pointless-statement  # noqa: B018
+        _ = jenkins_instance.version
 
 
 def test_version(

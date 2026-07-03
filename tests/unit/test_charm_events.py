@@ -87,7 +87,9 @@ def test__agent_relation_handlers_reconcile_agents(
     with (
         patch.object(jenkins_charm, "_reconcile_storage"),
         patch.object(
-            jenkins_charm, "_reconcile_pre_startup_configurations", return_value="hash123"
+            jenkins_charm,
+            "_reconcile_pre_startup_configurations",
+            return_value="hash123",
         ),
         patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
         patch("jenkins.Jenkins.wait_ready"),
@@ -123,7 +125,9 @@ def test__agent_discovery_ingress_handlers_reconfigure_agents(
     with (
         patch.object(jenkins_charm, "_reconcile_storage"),
         patch.object(
-            jenkins_charm, "_reconcile_pre_startup_configurations", return_value="hash123"
+            jenkins_charm,
+            "_reconcile_pre_startup_configurations",
+            return_value="hash123",
         ),
         patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
         patch("jenkins.Jenkins.wait_ready"),
@@ -152,7 +156,9 @@ def test__upgrade_charm_reconciles_storage_and_agents(
     with (
         patch.object(jenkins_charm, "_reconcile_storage") as reconcile_storage_mock,
         patch.object(
-            jenkins_charm, "_reconcile_pre_startup_configurations", return_value="hash123"
+            jenkins_charm,
+            "_reconcile_pre_startup_configurations",
+            return_value="hash123",
         ),
         patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
         patch("jenkins.Jenkins.wait_ready"),
@@ -189,7 +195,9 @@ def test__auth_proxy_relation_handlers_delegate(
     with (
         patch.object(jenkins_charm, "_reconcile_storage"),
         patch.object(
-            jenkins_charm, "_reconcile_pre_startup_configurations", return_value="hash123"
+            jenkins_charm,
+            "_reconcile_pre_startup_configurations",
+            return_value="hash123",
         ),
         patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
         patch("jenkins.Jenkins.wait_ready"),

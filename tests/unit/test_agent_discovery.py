@@ -75,7 +75,10 @@ def test_agent_discovery_url_priority(_mock_fqdn):
         ),
         (_state_with_ingress(public_url=public_url, discovery_url=None), public_url),
         (_state_with_juju_info_bind("192.168.0.1"), "http://192.168.0.1:8080"),
-        (_state_with_juju_info_bind("invalidaddress"), f"http://{_MONKEYPATCHED_FQDN}:8080"),
+        (
+            _state_with_juju_info_bind("invalidaddress"),
+            f"http://{_MONKEYPATCHED_FQDN}:8080",
+        ),
         (_base_state(), f"http://{_MONKEYPATCHED_FQDN}:8080"),
     ]
 

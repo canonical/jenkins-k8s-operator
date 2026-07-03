@@ -21,7 +21,9 @@ from .types_ import HarnessWithContainer
 
 
 def _make_state(
-    *, plugins: list[str] | None = None, restart_time_range: timerange.Range | None = None
+    *,
+    plugins: list[str] | None = None,
+    restart_time_range: timerange.Range | None = None,
 ):
     charm_state = MagicMock(spec=state.State)
     charm_state.plugins = plugins

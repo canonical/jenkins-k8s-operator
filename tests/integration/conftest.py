@@ -39,6 +39,24 @@ from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebCli
 logger = logging.getLogger(__name__)
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
+DATA_DIR = Path(__file__).parent / "data"
+
+
+async def charm_exec(ops_test: OpsTest, unit_name: str, cmd: str) -> None:
+    """Execute a command in the charm container via juju ssh.
+
+    Args:
+        ops_test: OpsTest fixture for juju CLI access.
+        unit_name: Name of the unit (e.g., "jenkins-k8s/0").
+        cmd: Command to execute in the charm container.
+
+    Raises:
+        AssertionError: If the command fails (non-zero exit code).
+    """
+    ret, _, stderr = await ops_test.juju(
+        "ssh", "--container", "charm", unit_name, "bash", "-c", cmd
+    )
+    assert ret == 0, f"Command failed in charm container: {cmd}\nstderr: {stderr}"
 
 
 @pytest.fixture(scope="module", name="model")
@@ -88,7 +106,7 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Pat
 async def application_fixture(
     ops_test: OpsTest, charm: str, model: Model, jenkins_image: str
 ) -> AsyncGenerator[Application, None]:
-    """Deploy the charm."""
+    """Deploy the charm using GitHub-hosted JCasC test data."""
     resources = {"jenkins-image": jenkins_image}
     # Deploy the charm and wait for active/idle status
     application = await model.deploy(charm, resources=resources)
@@ -100,6 +118,7 @@ async def application_fixture(
         timeout=30 * 60,
         idle_period=30,
     )
+
     # slow down update-status so that it doesn't intervene currently running tests
     # don't yield inside the context since juju cleanup is not reliable.
     # model.set_config(...) also doesn't work as well as the following code.

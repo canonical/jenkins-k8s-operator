@@ -217,7 +217,9 @@ async def test_openid_connect_plugin(
 
 
 async def test_kubernetes_plugin(
-    unit_web_client: UnitWebClient, kube_config: str, kube_core_client: kubernetes.client.CoreV1Api
+    unit_web_client: UnitWebClient,
+    kube_config: str,
+    kube_core_client: kubernetes.client.CoreV1Api,
 ):
     """
     arrange: given a Jenkins charm with kubernetes plugin installed and credentials from microk8s.
