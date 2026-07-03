@@ -1229,7 +1229,7 @@ def _get_workload_yaml_files(container: ops.Container, config_path: str) -> list
     try:
         stdout, _ = container.exec(find_cmd).wait_output()
     except ops.pebble.ExecError:
-        # `find` exits non-zero when the path does not exist.
+        # `find` exits non-zero when path doesn't exist, is inaccessible, or permission denied.
         return []
     found = [line for line in stdout.splitlines() if line.strip()]
     yaml_files = sorted(path for path in found if path.endswith(".yaml"))
@@ -1318,7 +1318,7 @@ def fetch_jcasc_repository(  # noqa: C901 (complexity unavoidable: token/path ha
             container.exec(clone_command, environment=environment, timeout=300).wait_output()
             logger.info("Repository clone successful: %s", url)
         except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
-            # Never log exc: the command may carry the auth header. Log clean url only.
+            # Log traceback but not the command args (which may contain auth token in env).
             logger.error(
                 "Failed to clone repository: url=%s branch=%s", url, branch, exc_info=True
             )

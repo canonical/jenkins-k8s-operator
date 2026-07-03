@@ -594,14 +594,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     else "none or not a dict",
                 )
                 if repo_yaml and isinstance(repo_yaml, dict):
-                    # Deep merge: for each top-level key, merge recursively
+                    # Merge repository config: top-level keys are merged (nested dicts replace base)
                     for key, value in repo_yaml.items():
                         if (
                             key in jcasc_config
                             and isinstance(jcasc_config[key], dict)
                             and isinstance(value, dict)
                         ):
-                            # Merge nested dicts
+                            # Second-level keys in value replace those in jcasc_config[key]
                             jcasc_config[key].update(value)
                         else:
                             jcasc_config[key] = value
