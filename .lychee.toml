@@ -1,0 +1,9 @@
+# Ignore intermittently failing upstream endpoints that return transient 503 in CI.
+exclude = [
+  "https://ubuntu.com/community/ethos/code-of-conduct",
+  "https://ubuntu.com/legal/contributors",
+  "https://ubuntu.com/security/disclosure-policy",
+  "https://ubuntu.com/kubernetes",
+  "https://ubuntu.com/community/code-of-conduct",
+  "https://documentation.ubuntu.com/pebble/",
+]
