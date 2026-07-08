@@ -219,6 +219,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             logger.info("Reconciling admin user")
             admin_password = self._reconcile_admin(container, charm_state)
             jenkins_environment = self.calculate_env(configuration_hash, admin_password)
+            # Inject secret environment variables if configured
+            if charm_state.jcasc_environment_secrets:
+                typing.cast(dict[str, str], jenkins_environment).update(
+                    charm_state.jcasc_environment_secrets
+                )
             logger.info("Reconciling pebble plan")
             self._reconcile_pebble(container, charm_state, jenkins_environment)
 
