@@ -271,3 +271,60 @@ def test_secret_changed_ignores_unmatched_secret(harness: Harness):
         jenkins_charm._on_secret_changed(mock_event)
 
     reconcile_mock.assert_not_called()
+
+
+def test_jcasc_environment_secrets_injected_during_reconcile(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given a charm with jcasc-environment-secrets configured.
+    act: when _reconcile is triggered.
+    assert: the environment secrets are injected into jenkins_environment.
+    """
+    secret_id = "secret:jcasc1234"  # nosec (test fixture, not real secret)
+    harness_container.harness.update_config({"jcasc-environment-secrets": secret_id})
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    # Mock the secret retrieval to return test environment variables
+    def mock_get_secret(**kwargs):
+        mock_secret = MagicMock()
+        mock_secret.get_content.return_value = {"VAR1": "value1", "VAR2": "value2"}
+        return mock_secret
+
+    # Capture the jenkins_environment dict passed to _reconcile_pebble
+    captured_env = {}
+
+    def capture_reconcile_pebble(container, state, jenkins_environment):
+        captured_env.update(jenkins_environment)
+
+    with (
+        patch.object(jenkins_charm, "_reconcile_storage"),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_pre_startup_configurations",
+            return_value="hash123",
+        ),
+        patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
+        patch("jenkins.Jenkins.wait_ready"),
+        patch.object(jenkins_charm, "_reconcile_api_token"),
+        patch.object(jenkins_charm, "_reconcile_agents"),
+        patch.object(jenkins_charm, "_reconcile_agent_discovery"),
+        patch.object(jenkins_charm, "_reconcile_auth_proxy"),
+        patch.object(jenkins_charm, "_reconcile_plugins"),
+        patch.object(
+            jenkins_charm.model,
+            "get_secret",
+            side_effect=mock_get_secret,
+        ),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_pebble",
+            side_effect=capture_reconcile_pebble,
+        ),
+    ):
+        jenkins_charm._reconcile(MagicMock(spec=ops.UpdateStatusEvent))
+
+    # Verify the injected secrets are present in jenkins_environment
+    assert captured_env.get("VAR1") == "value1"
+    assert captured_env.get("VAR2") == "value2"
