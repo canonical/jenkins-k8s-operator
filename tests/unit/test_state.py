@@ -661,7 +661,18 @@ def test_jcasc_environment_secrets_missing_secret_blocks(mock_charm: MagicMock):
         "jcasc-repository": "",
         "jcasc-environment-secrets": secret_id,
     }
-    mock_charm.model.get_secret.side_effect = ops.SecretNotFoundError()
+    
+    # Use side_effect to properly handle get_secret with both id= and label= parameters
+    def mock_get_secret(id=None, label=None):  # pylint: disable=redefined-builtin
+        if label:
+            # For admin password lookup by label - return a secret with no content
+            admin_secret = MagicMock()
+            admin_secret.get_content.return_value = {}
+            return admin_secret
+        # For jcasc-environment-secrets lookup (id=secret_id) - raise error
+        raise ops.SecretNotFoundError()
+    
+    mock_charm.model.get_secret = mock_get_secret
     mock_charm.model.get_relation.return_value = None
 
     with pytest.raises(state.CharmConfigInvalidError, match="secret not found"):
