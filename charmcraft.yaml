@@ -168,6 +168,16 @@ config:
         Defaults to "main". Used primarily for testing so that
         integration tests can reference test data in feature branches
         without requiring a merge to main first.
+    jcasc-environment-secrets:
+      type: secret
+      description: >
+        A Juju user-secret URI containing key-value pairs to inject as
+        environment variables for JCasC interpolation. The secret content is a
+        mapping where each key becomes an environment variable (must be a valid
+        POSIX environment variable name: ^[a-zA-Z_][a-zA-Z0-9_]*$). Values can
+        reference other environment variables using ${VAR_NAME} syntax in JCasC
+        configuration files. Secret rotations automatically trigger charm
+        reconciliation to apply updated values.
 
 actions:
   get-admin-password:
