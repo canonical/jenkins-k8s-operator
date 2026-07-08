@@ -350,7 +350,7 @@ def _parse_jcasc_environment_secrets(
     # Validate all keys are valid POSIX environment variable names
     # Pattern: starts with letter or underscore, followed by letters, digits, or underscores
     env_var_pattern = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-    invalid_keys = [key for key in content.keys() if not env_var_pattern.match(key)]
+    invalid_keys = [key for key in content if not env_var_pattern.match(key)]
 
     if invalid_keys:
         raise CharmConfigInvalidError(
