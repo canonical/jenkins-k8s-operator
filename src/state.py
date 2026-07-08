@@ -6,6 +6,7 @@
 import dataclasses
 import logging
 import os
+import re
 import typing
 
 import ops
@@ -317,6 +318,46 @@ def _parse_jcasc_repository_config_path(charm: ops.CharmBase) -> str:
         )
 
     return path
+
+
+def _parse_jcasc_environment_secrets(
+    charm: ops.CharmBase,
+) -> typing.Optional[typing.Dict[str, str]]:
+    """Parse jcasc-environment-secrets secret into a dict of environment variables.
+
+    Returns a dict of environment variables if the secret is set and valid,
+    None if unset or empty.
+
+    Raises:
+        CharmConfigInvalidError: if the secret is missing or has invalid keys.
+    """
+    secret_uri = typing.cast(str, charm.config.get("jcasc-environment-secrets") or "")
+    if not secret_uri.strip():
+        return None
+
+    try:
+        secret = charm.model.get_secret(id=secret_uri)
+    except ops.SecretNotFoundError as exc:
+        raise CharmConfigInvalidError(
+            f"jcasc-environment-secrets secret not found: {secret_uri}"
+        ) from exc
+
+    content = secret.get_content()
+    if not content:
+        logger.warning("jcasc-environment-secrets secret is empty, ignoring")
+        return None
+
+    # Validate all keys are valid POSIX environment variable names
+    # Pattern: starts with letter or underscore, followed by letters, digits, or underscores
+    env_var_pattern = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+    invalid_keys = [key for key in content.keys() if not env_var_pattern.match(key)]
+
+    if invalid_keys:
+        raise CharmConfigInvalidError(
+            f"jcasc-environment-secrets contains invalid environment variable names: {', '.join(invalid_keys)}"
+        )
+
+    return dict(content)
 
 
 class ProxyConfig(BaseModel):
