@@ -379,6 +379,7 @@ class State:
     jcasc_repository: typing.Optional[str] = None
     jcasc_repository_token: typing.Optional[typing.Tuple[str, str]] = None
     jcasc_repository_config_path: str = "jcasc"
+    jcasc_environment_secrets: typing.Optional[typing.Dict[str, str]] = None
     system_properties: typing.List[str] = dataclasses.field(default_factory=list)
     admin_password: typing.Optional[str] = None
 
