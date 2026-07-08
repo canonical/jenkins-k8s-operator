@@ -561,3 +561,126 @@ def test_jcasc_repository_config_path_root_directory(mock_charm: MagicMock):
     charm_state = state.State.from_charm(mock_charm)
 
     assert charm_state.jcasc_repository_config_path == "."
+
+
+def test_jcasc_environment_secrets_unset(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-environment-secrets not set.
+    act: when state is initialized from charm.
+    assert: jcasc_environment_secrets field is None.
+    """
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "",
+        "jcasc-environment-secrets": "",
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_environment_secrets is None
+
+
+def test_jcasc_environment_secrets_secret_parsed(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-environment-secrets secret URI set.
+    act: when state is initialized from charm.
+    assert: jcasc_environment_secrets field contains the secret content dict.
+    """
+    secret_id = "secret:e5f6g7h8"  # nosec (test fixture, not real secret)
+    mock_secret = MagicMock()
+    mock_secret.get_content.return_value = {"VAR1": "value1", "VAR2": "value2"}
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "",
+        "jcasc-environment-secrets": secret_id,
+    }
+    
+    # Use side_effect to properly handle get_secret(id=...) call
+    def mock_get_secret(id=None):  # pylint: disable=redefined-builtin
+        if id == secret_id:
+            return mock_secret
+        raise ops.SecretNotFoundError()
+    
+    mock_charm.model.get_secret = mock_get_secret
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_environment_secrets == {"VAR1": "value1", "VAR2": "value2"}
+
+
+def test_jcasc_environment_secrets_empty_secret_ignored(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-environment-secrets pointing to empty secret.
+    act: when state is initialized from charm.
+    assert: jcasc_environment_secrets field is None.
+    """
+    secret_id = "secret:e5f6g7h8"  # nosec (test fixture, not real secret)
+    mock_secret = MagicMock()
+    mock_secret.get_content.return_value = {}  # empty secret
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "",
+        "jcasc-environment-secrets": secret_id,
+    }
+    
+    # Use side_effect to properly handle get_secret(id=...) call
+    def mock_get_secret(id=None):  # pylint: disable=redefined-builtin
+        if id == secret_id:
+            return mock_secret
+        raise ops.SecretNotFoundError()
+    
+    mock_charm.model.get_secret = mock_get_secret
+    mock_charm.model.get_relation.return_value = None
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.jcasc_environment_secrets is None
+
+
+def test_jcasc_environment_secrets_missing_secret_blocks(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-environment-secrets pointing to missing secret.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised mentioning secret not found.
+    """
+    secret_id = "secret:e5f6g7h8"  # nosec (test fixture, not real secret)
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "",
+        "jcasc-environment-secrets": secret_id,
+    }
+    mock_charm.model.get_secret.side_effect = ops.SecretNotFoundError()
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(state.CharmConfigInvalidError, match="secret not found"):
+        state.State.from_charm(mock_charm)
+
+
+def test_jcasc_environment_secrets_invalid_env_var_names_blocks(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-environment-secrets containing invalid env var names.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised mentioning invalid names.
+    """
+    secret_id = "secret:e5f6g7h8"  # nosec (test fixture, not real secret)
+    mock_secret = MagicMock()
+    # Keys with invalid characters: spaces, hyphens, etc.
+    mock_secret.get_content.return_value = {"VALID_VAR": "val", "123INVALID": "val", "NO-HYPHEN": "val"}
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "",
+        "jcasc-environment-secrets": secret_id,
+    }
+    # Use side_effect to properly handle get_secret(id=...) call
+    def mock_get_secret(id=None):  # pylint: disable=redefined-builtin
+        if id == secret_id:
+            return mock_secret
+        raise ops.SecretNotFoundError()
+    
+    mock_charm.model.get_secret = mock_get_secret
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(state.CharmConfigInvalidError, match="invalid environment variable names"):
+        state.State.from_charm(mock_charm)
