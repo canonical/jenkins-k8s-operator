@@ -459,6 +459,7 @@ class State:
 
         jcasc_repository_token = _parse_jcasc_repository_token(charm)
         jcasc_repository_config_path = _parse_jcasc_repository_config_path(charm)
+        jcasc_environment_secrets = _parse_jcasc_environment_secrets(charm)
         admin_password = _get_admin_password(charm)
 
         return cls(
@@ -471,6 +472,7 @@ class State:
             jcasc_repository=jcasc_repository,
             jcasc_repository_token=jcasc_repository_token,
             jcasc_repository_config_path=jcasc_repository_config_path,
+            jcasc_environment_secrets=jcasc_environment_secrets,
             system_properties=system_properties,
             admin_password=admin_password,
         )
