@@ -596,10 +596,15 @@ def test_jcasc_environment_secrets_secret_parsed(mock_charm: MagicMock):
         "jcasc-environment-secrets": secret_id,
     }
     
-    # Use side_effect to properly handle get_secret(id=...) call
-    def mock_get_secret(id=None):  # pylint: disable=redefined-builtin
+    # Use side_effect to properly handle get_secret with both id= and label= parameters
+    def mock_get_secret(id=None, label=None):  # pylint: disable=redefined-builtin
         if id == secret_id:
             return mock_secret
+        if label:
+            # For admin password lookup by label - return a secret with no content
+            admin_secret = MagicMock()
+            admin_secret.get_content.return_value = {}
+            return admin_secret
         raise ops.SecretNotFoundError()
     
     mock_charm.model.get_secret = mock_get_secret
@@ -625,10 +630,15 @@ def test_jcasc_environment_secrets_empty_secret_ignored(mock_charm: MagicMock):
         "jcasc-environment-secrets": secret_id,
     }
     
-    # Use side_effect to properly handle get_secret(id=...) call
-    def mock_get_secret(id=None):  # pylint: disable=redefined-builtin
+    # Use side_effect to properly handle get_secret with both id= and label= parameters
+    def mock_get_secret(id=None, label=None):  # pylint: disable=redefined-builtin
         if id == secret_id:
             return mock_secret
+        if label:
+            # For admin password lookup by label - return a secret with no content
+            admin_secret = MagicMock()
+            admin_secret.get_content.return_value = {}
+            return admin_secret
         raise ops.SecretNotFoundError()
     
     mock_charm.model.get_secret = mock_get_secret
@@ -673,10 +683,15 @@ def test_jcasc_environment_secrets_invalid_env_var_names_blocks(mock_charm: Magi
         "jcasc-repository": "",
         "jcasc-environment-secrets": secret_id,
     }
-    # Use side_effect to properly handle get_secret(id=...) call
-    def mock_get_secret(id=None):  # pylint: disable=redefined-builtin
+    # Use side_effect to properly handle get_secret with both id= and label= parameters
+    def mock_get_secret(id=None, label=None):  # pylint: disable=redefined-builtin
         if id == secret_id:
             return mock_secret
+        if label:
+            # For admin password lookup by label - return a secret with no content
+            admin_secret = MagicMock()
+            admin_secret.get_content.return_value = {}
+            return admin_secret
         raise ops.SecretNotFoundError()
     
     mock_charm.model.get_secret = mock_get_secret
