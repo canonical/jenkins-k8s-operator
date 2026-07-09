@@ -6,6 +6,7 @@
 # Need access to protected functions for testing
 # pylint:disable=protected-access
 
+import secrets
 import typing
 from unittest.mock import MagicMock, patch
 
@@ -238,7 +239,7 @@ def test_jcasc_environment_secrets_injected_during_reconcile(
     act: when _reconcile is triggered.
     assert: the environment secrets are injected into jenkins_environment.
     """
-    secret_id = "secret:jcasc1234"  # nosec (test fixture, not real secret)
+    secret_id = f"secret:{secrets.token_hex(4)}"
     harness_container.harness.update_config({"jcasc-environment-secrets": secret_id})
     harness_container.harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)

@@ -3,6 +3,7 @@
 
 """Jenkins-k8s state module tests."""
 
+import secrets
 import typing
 from unittest.mock import MagicMock
 
@@ -474,7 +475,7 @@ def test_jcasc_repository_token_secret_parsed(mock_charm: MagicMock):
     act: when state is initialized from charm.
     assert: jcasc_repository_token field contains (username, token) tuple.
     """
-    secret_id = "secret:a1b2c3d4"  # nosec (test fixture, not real secret)
+    secret_id = f"secret:{secrets.token_hex(4)}"
     mock_secret = MagicMock()
     mock_secret.get_content.return_value = {"username": "git", "token": "ghp_x"}
     mock_charm.model.get_secret.return_value = mock_secret
@@ -495,7 +496,7 @@ def test_jcasc_repository_token_missing_keys_blocks(mock_charm: MagicMock):
     act: when state is initialized from charm.
     assert: CharmConfigInvalidError is raised matching "username and token".
     """
-    secret_id = "secret:a1b2c3d4"  # nosec (test fixture, not real secret)
+    secret_id = f"secret:{secrets.token_hex(4)}"
     mock_secret = MagicMock()
     mock_secret.get_content.return_value = {"username": "git"}  # missing 'token'
     mock_charm.model.get_secret.return_value = mock_secret
@@ -587,7 +588,7 @@ def test_jcasc_environment_secrets_secret_parsed(mock_charm: MagicMock):
     act: when state is initialized from charm.
     assert: jcasc_environment_secrets field contains the secret content dict.
     """
-    secret_id = "secret:e5f6g7h8"  # nosec (test fixture, not real secret)
+    secret_id = f"secret:{secrets.token_hex(4)}"
     mock_secret = MagicMock()
     mock_secret.get_content.return_value = {"VAR1": "value1", "VAR2": "value2"}
     mock_charm.config = {
@@ -621,7 +622,7 @@ def test_jcasc_environment_secrets_empty_secret_ignored(mock_charm: MagicMock):
     act: when state is initialized from charm.
     assert: jcasc_environment_secrets field is None.
     """
-    secret_id = "secret:e5f6g7h8"  # nosec (test fixture, not real secret)
+    secret_id = f"secret:{secrets.token_hex(4)}"
     mock_secret = MagicMock()
     mock_secret.get_content.return_value = {}  # empty secret
     mock_charm.config = {
@@ -655,7 +656,7 @@ def test_jcasc_environment_secrets_missing_secret_blocks(mock_charm: MagicMock):
     act: when state is initialized from charm.
     assert: CharmConfigInvalidError is raised mentioning secret not found.
     """
-    secret_id = "secret:e5f6g7h8"  # nosec (test fixture, not real secret)
+    secret_id = f"secret:{secrets.token_hex(4)}"
     mock_charm.config = {
         "jcasc-config": "",
         "jcasc-repository": "",
@@ -685,7 +686,7 @@ def test_jcasc_environment_secrets_invalid_env_var_names_blocks(mock_charm: Magi
     act: when state is initialized from charm.
     assert: CharmConfigInvalidError is raised mentioning invalid names.
     """
-    secret_id = "secret:e5f6g7h8"  # nosec (test fixture, not real secret)
+    secret_id = f"secret:{secrets.token_hex(4)}"
     mock_secret = MagicMock()
     # Keys with invalid characters: spaces, hyphens, etc.
     mock_secret.get_content.return_value = {
