@@ -170,23 +170,33 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ""
         return path
 
-    def calculate_env(self, config_hash: str, admin_password: str) -> jenkins.Environment:
+    def calculate_env(
+        self,
+        config_hash: str,
+        admin_password: str,
+        jcasc_environment_secrets: typing.Optional[dict[str, str]] = None,
+    ) -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
 
         Args:
             config_hash: The hash of the JCasC configurations applied.
             admin_password: The admin password for JCasC secret interpolation.
+            jcasc_environment_secrets: Environment variables from Juju secret URI.
 
         Returns:
             The dictionary mapping of environment variables for the Jenkins service.
         """
-        return jenkins.Environment(
+        jenkins_environment = jenkins.Environment(
             JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
             JENKINS_PREFIX=self._get_ingress_path(),
             CASC_JENKINS_CONFIG=str(jenkins.JCASC_CONFIG_PATH),
             JENKINS_ADMIN_PASSWORD=admin_password,
             CONFIGURATION_HASH=config_hash,
         )
+        if jcasc_environment_secrets:
+            typing.cast(dict[str, str], jenkins_environment).update(jcasc_environment_secrets)
+
+        return jenkins_environment
 
     def _reconcile(self, event: ops.EventBase) -> None:
         """Single top-level reconcile method invoked by all event handlers.
@@ -218,12 +228,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             # pass in configuration hash to trigger pebble layer update
             logger.info("Reconciling admin user")
             admin_password = self._reconcile_admin(container, charm_state)
-            jenkins_environment = self.calculate_env(configuration_hash, admin_password)
-            # Inject secret environment variables if configured
-            if charm_state.jcasc_environment_secrets:
-                typing.cast(dict[str, str], jenkins_environment).update(
-                    charm_state.jcasc_environment_secrets
-                )
+            jenkins_environment = self.calculate_env(
+                configuration_hash,
+                admin_password,
+                charm_state.jcasc_environment_secrets,
+            )
             logger.info("Reconciling pebble plan")
             self._reconcile_pebble(container, charm_state, jenkins_environment)
 
