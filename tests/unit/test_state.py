@@ -284,9 +284,7 @@ def test_invalid_num_units(mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatc
         pytest.param({"system-properties": "x="}, ["-Dx="], id="empty value allowed"),
     ],
 )
-def test_system_properties_parsing(
-    mock_charm: MagicMock, config_value: dict, expected: list[str]
-):
+def test_system_properties_parsing(mock_charm: MagicMock, config_value: dict, expected: list[str]):
     """
     arrange: given various system-properties config values.
     act: when state is initialized from charm.
@@ -578,9 +576,7 @@ def test_jcasc_environment_secrets_unset(mock_charm: MagicMock):
     assert charm_state.jcasc_environment_secrets is None
 
 
-def test_jcasc_environment_secrets_secret_parsed(
-    mock_charm: MagicMock, secret_id: str
-):
+def test_jcasc_environment_secrets_secret_parsed(mock_charm: MagicMock, secret_id: str):
     """
     arrange: given a charm with jcasc-environment-secrets secret URI set.
     act: when state is initialized from charm.
@@ -601,9 +597,7 @@ def test_jcasc_environment_secrets_secret_parsed(
     assert charm_state.jcasc_environment_secrets == {"VAR1": "value1", "VAR2": "value2"}
 
 
-def test_jcasc_environment_secrets_empty_secret_ignored(
-    mock_charm: MagicMock, secret_id: str
-):
+def test_jcasc_environment_secrets_empty_secret_ignored(mock_charm: MagicMock, secret_id: str):
     """
     arrange: given a charm with jcasc-environment-secrets pointing to empty secret.
     act: when state is initialized from charm.
@@ -622,9 +616,7 @@ def test_jcasc_environment_secrets_empty_secret_ignored(
     assert charm_state.jcasc_environment_secrets is None
 
 
-def test_jcasc_environment_secrets_missing_secret_blocks(
-    mock_charm: MagicMock, secret_id: str
-):
+def test_jcasc_environment_secrets_missing_secret_blocks(mock_charm: MagicMock, secret_id: str):
     """
     arrange: given a charm with jcasc-environment-secrets pointing to missing secret.
     act: when state is initialized from charm.

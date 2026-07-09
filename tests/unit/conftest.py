@@ -14,7 +14,6 @@ import jenkinsapi.jenkins
 import pytest
 import requests
 import yaml
-import ops
 from ops.charm import CharmBase
 from ops.model import Container
 from ops.pebble import ExecError
