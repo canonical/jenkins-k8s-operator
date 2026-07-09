@@ -23,6 +23,7 @@ JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
 INGRESS_RELATION_NAME = "ingress"
 AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
+ENV_VAR_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 class CharmStateBaseError(Exception):
@@ -347,10 +348,8 @@ def _parse_jcasc_environment_secrets(
         logger.warning("jcasc-environment-secrets secret is empty, ignoring")
         return None
 
-    # Validate all keys are valid POSIX environment variable names
-    # Pattern: starts with letter or underscore, followed by letters, digits, or underscores
-    env_var_pattern = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-    invalid_keys = [key for key in content if not env_var_pattern.match(key)]
+    # Validate all keys are valid POSIX environment variable names.
+    invalid_keys = [key for key in content if not ENV_VAR_NAME_PATTERN.match(key)]
 
     if invalid_keys:
         raise CharmConfigInvalidError(
