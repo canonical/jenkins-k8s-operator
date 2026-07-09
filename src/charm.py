@@ -137,7 +137,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.framework.observe(event, self._reconcile)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
-        self.framework.observe(self.on.secret_changed, self._on_secret_changed)
+        self.framework.observe(self.on.secret_changed, self._reconcile)
 
     def _get_state(self) -> typing.Optional[State]:
         """Derive the charm state fresh from current config and relation data.
@@ -726,17 +726,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.app.add_secret(content={"password": password}, label=self.app.name)
 
         event.set_results({"password": password})
-
-    def _on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
-        """Handle secret rotation, reconcile only for jcasc-environment-secrets.
-
-        Args:
-            event: The secret changed event.
-        """
-        secret_uri = typing.cast(str, self.model.config.get("jcasc-environment-secrets") or "")
-        if secret_uri.strip() and event.secret.id == secret_uri:
-            logger.info("jcasc-environment-secrets rotated, triggering reconciliation")
-            self._reconcile(event)
 
 
 if __name__ == "__main__":  # pragma: nocover
