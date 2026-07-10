@@ -133,11 +133,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.on[AUTH_PROXY_RELATION].relation_joined,
             self.on[AUTH_PROXY_RELATION].relation_departed,
             self.on.update_status,
+            self.on.secret_changed,
         ]:
             self.framework.observe(event, self._reconcile)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
-        self.framework.observe(self.on.secret_changed, self._on_secret_changed)
 
     def _get_state(self) -> typing.Optional[State]:
         """Derive the charm state fresh from current config and relation data.
@@ -289,9 +289,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         # Generate admin password and set it using juju secrets if secret not yet configured.
         if not admin_setup:
-            # Generate admin user secret using secrets.token_hex() and set it in the container
             password_or_token = secrets.token_hex(16)
-        self.app.add_secret(content={"password": password_or_token}, label=self.app.name)
+
+        # Use set_content to update an existing secret in-place (no secret_changed event)
+        # so the blanket secret_changed -> _reconcile observer does not cause an
+        # infinite event loop during bootstrap. Fall back to add_secret (which fires
+        # secret_changed once) when the secret does not yet exist.
+        try:
+            secret = self.model.get_secret(label=self.app.name)
+            secret.set_content({"password": password_or_token})
+        except ops.SecretNotFoundError:
+            self.app.add_secret(content={"password": password_or_token}, label=self.app.name)
+
         return password_or_token
 
     def _reconcile_api_token(self, admin_client: jenkins.Jenkins) -> None:
@@ -726,18 +735,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.app.add_secret(content={"password": password}, label=self.app.name)
 
         event.set_results({"password": password})
-
-
-    def _on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
-        """Handle secret rotation, reconcile only for jcasc-environment-secrets.
-
-        Args:
-            event: The secret changed event.
-        """
-        secret_uri = typing.cast(str, self.model.config.get("jcasc-environment-secrets") or "")
-        if secret_uri.strip() and event.secret.id == secret_uri:
-            logger.info("jcasc-environment-secrets rotated, triggering reconciliation")
-            self._reconcile(event)
 
 
 if __name__ == "__main__":  # pragma: nocover
