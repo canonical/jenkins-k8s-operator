@@ -21,9 +21,19 @@ variable "jenkins_agent_k8s" {
 
 variable "jenkins_k8s" {
   type = object({
-    app_name    = optional(string, "jenkins-k8s")
-    channel     = optional(string, "latest/stable")
-    config      = optional(map(string), {})
+    app_name = optional(string, "jenkins-k8s")
+    channel  = optional(string, "latest/stable")
+    config = optional(object({
+      restart_time_range           = optional(string)
+      allowed_plugins              = optional(string)
+      system_properties            = optional(string)
+      jcasc_config                 = optional(string)
+      jcasc_repository             = optional(string)
+      jcasc_repository_token       = optional(string)
+      jcasc_repository_config_path = optional(string)
+      jcasc_repository_branch      = optional(string)
+      jcasc_environment_secrets    = optional(string)
+    }), {})
     constraints = optional(string, "")
     revision    = optional(number)
     base        = optional(string, "ubuntu@24.04")

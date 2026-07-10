@@ -33,9 +33,35 @@ module "jenkins-k8s" {
   source = "git::https://github.com/canonical/jenkins-k8s-operator//terraform"
 
   model = juju_model.my_model.name
-  # (Customize configuration variables here if needed)
+
+  # Charm configuration options (all optional; unset options keep charm defaults).
+  # config = {
+  #   allowed_plugins   = "git,kubernetes,ldap"
+  #   system_properties = "jenkins.model.Jenkins.crumbIssuerProxyCompatibility=true"
+  #   jcasc_repository  = "https://github.com/my-org/my-jcasc"
+  # }
 }
 ```
+
+The `config` variable is a typed object whose attributes map directly to the
+charm configuration options in `charmcraft.yaml`:
+
+| Terraform attribute            | Charm config option            |
+| ------------------------------ | ------------------------------ |
+| `restart_time_range`           | `restart-time-range`           |
+| `allowed_plugins`              | `allowed-plugins`              |
+| `system_properties`            | `system-properties`            |
+| `jcasc_config`                 | `jcasc-config`                 |
+| `jcasc_repository`             | `jcasc-repository`             |
+| `jcasc_repository_token`       | `jcasc-repository-token`       |
+| `jcasc_repository_config_path` | `jcasc-repository-config-path` |
+| `jcasc_repository_branch`      | `jcasc-repository-branch`      |
+| `jcasc_environment_secrets`    | `jcasc-environment-secrets`    |
+
+The `jcasc_repository_token` and `jcasc_environment_secrets` options take a Juju
+user-secret URI. See
+[the configurations tab](https://charmhub.io/jenkins-k8s/configurations) for
+option semantics and defaults.
 
 Create integrations, for instance:
 
