@@ -294,7 +294,7 @@ def _parse_jcasc_repository_token(
             f"jcasc-repository-token secret not found: {token_secret_uri}"
         ) from exc
 
-    content = secret.get_content()
+    content = secret.get_content(refresh=True)
     if "username" not in content or "token" not in content:
         raise CharmConfigInvalidError(
             "jcasc-repository-token secret must contain username and token keys"
