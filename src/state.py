@@ -6,6 +6,7 @@
 import dataclasses
 import logging
 import os
+import re
 import typing
 
 import ops
@@ -22,6 +23,7 @@ JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
 INGRESS_RELATION_NAME = "ingress"
 AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
+ENV_VAR_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 class CharmStateBaseError(Exception):
@@ -292,7 +294,7 @@ def _parse_jcasc_repository_token(
             f"jcasc-repository-token secret not found: {token_secret_uri}"
         ) from exc
 
-    content = secret.get_content()
+    content = secret.get_content(refresh=True)
     if "username" not in content or "token" not in content:
         raise CharmConfigInvalidError(
             "jcasc-repository-token secret must contain username and token keys"
@@ -317,6 +319,44 @@ def _parse_jcasc_repository_config_path(charm: ops.CharmBase) -> str:
         )
 
     return path
+
+
+def _parse_jcasc_environment_secrets(
+    charm: ops.CharmBase,
+) -> typing.Optional[typing.Dict[str, str]]:
+    """Parse jcasc-environment-secrets secret into a dict of environment variables.
+
+    Returns a dict of environment variables if the secret is set and valid,
+    None if unset or empty.
+
+    Raises:
+        CharmConfigInvalidError: if the secret is missing or has invalid keys.
+    """
+    secret_uri = typing.cast(str, charm.config.get("jcasc-environment-secrets") or "")
+    if not secret_uri.strip():
+        return None
+
+    try:
+        secret = charm.model.get_secret(id=secret_uri)
+    except ops.SecretNotFoundError as exc:
+        raise CharmConfigInvalidError(
+            f"jcasc-environment-secrets secret not found: {secret_uri}"
+        ) from exc
+
+    content = secret.get_content()
+    if not content:
+        logger.warning("jcasc-environment-secrets secret is empty, ignoring")
+        return None
+
+    # Validate all keys are valid POSIX environment variable names.
+    invalid_keys = [key for key in content if not ENV_VAR_NAME_PATTERN.match(key)]
+
+    if invalid_keys:
+        raise CharmConfigInvalidError(
+            f"jcasc-environment-secrets contains invalid environment variable names: {', '.join(invalid_keys)}"
+        )
+
+    return dict(content)
 
 
 class ProxyConfig(BaseModel):
@@ -379,6 +419,7 @@ class State:
     jcasc_repository: typing.Optional[str] = None
     jcasc_repository_token: typing.Optional[typing.Tuple[str, str]] = None
     jcasc_repository_config_path: str = "jcasc"
+    jcasc_environment_secrets: typing.Optional[typing.Dict[str, str]] = None
     system_properties: typing.List[str] = dataclasses.field(default_factory=list)
     admin_password: typing.Optional[str] = None
 
@@ -417,6 +458,7 @@ class State:
 
         jcasc_repository_token = _parse_jcasc_repository_token(charm)
         jcasc_repository_config_path = _parse_jcasc_repository_config_path(charm)
+        jcasc_environment_secrets = _parse_jcasc_environment_secrets(charm)
         admin_password = _get_admin_password(charm)
 
         return cls(
@@ -429,6 +471,7 @@ class State:
             jcasc_repository=jcasc_repository,
             jcasc_repository_token=jcasc_repository_token,
             jcasc_repository_config_path=jcasc_repository_config_path,
+            jcasc_environment_secrets=jcasc_environment_secrets,
             system_properties=system_properties,
             admin_password=admin_password,
         )

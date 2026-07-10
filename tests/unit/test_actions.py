@@ -226,6 +226,28 @@ def test_on_rotate_credentials_action_jenkins_not_ready(
     mock_event.fail.assert_called_once_with("Jenkins service is not yet ready.")
 
 
+def test_on_rotate_credentials_action_fails_when_charm_state_not_ready(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """
+    arrange: given storage is ready but charm state cannot be loaded.
+    act: when rotate_credentials action is run.
+    assert: action fails with charm-not-ready message.
+    """
+    harness = harness_container.harness
+    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
+    harness.begin()
+    mock_event = MagicMock(spec=ops.ActionEvent)
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    monkeypatch.setattr(jenkins_charm, "_get_state", MagicMock(return_value=None))
+
+    jenkins_charm._on_rotate_credentials(mock_event)
+
+    mock_event.fail.assert_called_once_with("Jenkins charm is not yet ready.")
+
+
 def test_on_rotate_credentials_action_fails_when_jenkins_not_bootstrapped(
     harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
 ):

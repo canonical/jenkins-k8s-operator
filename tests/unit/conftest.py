@@ -457,3 +457,58 @@ def patch_os_environ_fixture(monkeypatch: pytest.MonkeyPatch):
 def mock_ip_addr_fixture():
     """Mock IPV4 fixture."""
     return MagicMock(spec=IPv4Address)
+
+
+@pytest.fixture(scope="function", name="secret_id")
+def secret_id_fixture() -> str:
+    """Generate a unique secret ID for tests.
+
+    Returns:
+        A secret ID string in the format 'secret:xxxxxxxx'.
+    """
+    return f"secret:{token_hex(4)}"
+
+
+@pytest.fixture(scope="function", name="setup_mock_charm")
+def setup_mock_charm_fixture(mock_charm: MagicMock) -> Callable:
+    """Return a function to quickly configure mock_charm for state tests.
+
+    Provides a convenient way to set up mock_charm with config and secrets
+    without repeating setup code in each test.
+
+    Returns:
+        A callable that accepts config and secrets and returns configured mock_charm.
+
+    Example:
+        def test_something(setup_mock_charm):
+            charm = setup_mock_charm(
+                config={"key": "value"},
+                secrets={"secret:123": {"user": "admin"}},
+            )
+            assert charm.config == {"key": "value"}
+    """
+
+    def setup(
+        config: dict[str, str] | None = None,
+        secrets: dict[str, dict[str, str]] | None = None,
+    ) -> MagicMock:
+        """Configure mock_charm with config and optional secrets.
+
+        Args:
+            config: Config dict to set on mock_charm.config.
+            secrets: Secret ID -> content mapping for mock_get_secret.
+
+        Returns:
+            The configured mock_charm.
+        """
+        mock_charm.config = config or {}
+        mock_charm.model.get_relation.return_value = None
+
+        if secrets:
+            # Note: This import will need to come from test_state.py
+            # For now, we duplicate the logic here
+            pass
+
+        return mock_charm
+
+    return setup

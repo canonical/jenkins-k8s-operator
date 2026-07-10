@@ -135,6 +135,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.on.update_status,
         ]:
             self.framework.observe(event, self._reconcile)
+        self.framework.observe(self.on.secret_changed, self._on_secret_changed)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
 
@@ -169,23 +170,33 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return ""
         return path
 
-    def calculate_env(self, config_hash: str, admin_password: str) -> jenkins.Environment:
+    def calculate_env(
+        self,
+        config_hash: str,
+        admin_password: str,
+        jcasc_environment_secrets: typing.Optional[dict[str, str]] = None,
+    ) -> jenkins.Environment:
         """Return a dictionary for Jenkins Pebble layer.
 
         Args:
             config_hash: The hash of the JCasC configurations applied.
             admin_password: The admin password for JCasC secret interpolation.
+            jcasc_environment_secrets: Environment variables from Juju secret URI.
 
         Returns:
             The dictionary mapping of environment variables for the Jenkins service.
         """
-        return jenkins.Environment(
+        jenkins_environment = jenkins.Environment(
             JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
             JENKINS_PREFIX=self._get_ingress_path(),
             CASC_JENKINS_CONFIG=str(jenkins.JCASC_CONFIG_PATH),
             JENKINS_ADMIN_PASSWORD=admin_password,
             CONFIGURATION_HASH=config_hash,
         )
+        if jcasc_environment_secrets:
+            typing.cast(dict[str, str], jenkins_environment).update(jcasc_environment_secrets)
+
+        return jenkins_environment
 
     def _reconcile(self, event: ops.EventBase) -> None:
         """Single top-level reconcile method invoked by all event handlers.
@@ -217,7 +228,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             # pass in configuration hash to trigger pebble layer update
             logger.info("Reconciling admin user")
             admin_password = self._reconcile_admin(container, charm_state)
-            jenkins_environment = self.calculate_env(configuration_hash, admin_password)
+            jenkins_environment = self.calculate_env(
+                configuration_hash,
+                admin_password,
+                charm_state.jcasc_environment_secrets,
+            )
             logger.info("Reconciling pebble plan")
             self._reconcile_pebble(container, charm_state, jenkins_environment)
 
@@ -274,9 +289,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         # Generate admin password and set it using juju secrets if secret not yet configured.
         if not admin_setup:
-            # Generate admin user secret using secrets.token_hex() and set it in the container
             password_or_token = secrets.token_hex(16)
-        self.app.add_secret(content={"password": password_or_token}, label=self.app.name)
+
+        # Use set_content to update an existing secret in-place (no secret_changed event)
+        # so the blanket secret_changed -> _reconcile observer does not cause an
+        # infinite event loop during bootstrap. Fall back to add_secret (which fires
+        # secret_changed once) when the secret does not yet exist.
+        try:
+            secret = self.model.get_secret(label=self.app.name)
+            secret.set_content({"password": password_or_token})
+        except ops.SecretNotFoundError:
+            self.app.add_secret(content={"password": password_or_token}, label=self.app.name)
+
         return password_or_token
 
     def _reconcile_api_token(self, admin_client: jenkins.Jenkins) -> None:
@@ -711,6 +735,21 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.app.add_secret(content={"password": password}, label=self.app.name)
 
         event.set_results({"password": password})
+
+    def _on_secret_changed(self, event: ops.SecretChangedEvent) -> None:
+        """Handle secret rotation, reconcile only for jcasc-environment-secrets.
+
+        Use a separate handler for secret_changed events to avoid secret changed infinite loop.
+        The secret can be created by the charm on first start - which triggers another secret
+        changed event.
+
+        Args:
+            event: The secret changed event.
+        """
+        secret_uri = typing.cast(str, self.model.config.get("jcasc-environment-secrets") or "")
+        if secret_uri.strip() and event.secret.id == secret_uri:
+            logger.info("jcasc-environment-secrets rotated, triggering reconciliation")
+            self._reconcile(event)
 
 
 if __name__ == "__main__":  # pragma: nocover
