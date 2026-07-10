@@ -12,11 +12,13 @@ def pytest_addoption(parser: pytest.Parser):
     Args:
         parser: pytest command line parser.
     """
-    # The prebuilt charm file.
-    parser.addoption("--charm-file", action="append", default=[])
-    # The Jenkins image name:tag.
-    parser.addoption("--jenkins-image", action="store", default="")
-    # The path to kubernetes config.
-    parser.addoption("--kube-config", action="store", default="~/.kube/config")
-    # The number of jenkins agents to deploy and relate.
-    parser.addoption("--num-units", action="store", default="2")
+    # Guard against duplicate registration (e.g., when pytest-operator is installed).
+    for option in ("--charm-file", "--jenkins-image", "--kube-config", "--num-units"):
+        try:
+            parser.addoption(
+                option,
+                action="append" if option == "--charm-file" else "store",
+                default=[],
+            )
+        except ValueError:
+            pass
