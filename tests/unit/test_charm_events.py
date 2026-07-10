@@ -217,7 +217,7 @@ def test_secret_changed_observer_registered(harness: Harness):
     """
     arrange: given a charm being initialized.
     act: when the charm is set up.
-    assert: the secret_changed event observer targets _reconcile directly.
+    assert: the secret_changed event observer targets _on_secret_changed.
     """
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
@@ -225,10 +225,10 @@ def test_secret_changed_observer_registered(harness: Harness):
     observers = typing.cast(list[tuple[str, str, str, str]], jenkins_charm.framework._observers)
 
     assert any(
-        method_name == "_reconcile" and event_kind == "secret_changed"
+        method_name == "_on_secret_changed" and event_kind == "secret_changed"
         for _, method_name, _, event_kind in observers
     )
-    assert not hasattr(jenkins_charm, "_on_secret_changed")
+    assert hasattr(jenkins_charm, "_on_secret_changed")
 
 
 def test_jcasc_environment_secrets_injected_during_reconcile(
