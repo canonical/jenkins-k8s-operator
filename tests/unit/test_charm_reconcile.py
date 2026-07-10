@@ -251,6 +251,34 @@ def test_reconcile_admin_generates_password_when_container_credentials_missing(
     )
 
 
+def test_reconcile_admin_updates_existing_secret(
+    harness_container: HarnessWithContainer,
+):
+    """_reconcile_admin updates existing app secret via set_content when secret already exists."""
+    harness = harness_container.harness
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    charm_state = MagicMock(spec=state.State)
+    charm_state.admin_password = None
+
+    mock_secret = MagicMock()
+
+    with (
+        patch.object(
+            jenkins,
+            "get_admin_credentials",
+            side_effect=jenkins.JenkinsBootstrapError("missing"),
+        ),
+        patch.object(charm.secrets, "token_hex", return_value="generated-password"),
+        patch.object(jenkins_charm.model, "get_secret", return_value=mock_secret),
+    ):
+        result = jenkins_charm._reconcile_admin(harness_container.container, charm_state)
+
+    assert result == "generated-password"
+    mock_secret.set_content.assert_called_once_with({"password": "generated-password"})
+
+
 def test_reconcile_api_token_returns_when_api_client_exists(
     harness_container: HarnessWithContainer,
 ):

@@ -252,6 +252,17 @@ def test_get_java_proxy_args_without_credentials_omits_auth_flags(partial_proxy_
     assert not any(flag.startswith("-Dhttps.proxyPassword=") for flag in args)
 
 
+def test_get_java_proxy_args_http_only(http_partial_proxy_config):
+    """_get_java_proxy_args only emits http flags when https proxy is absent."""
+    args = tuple(jenkins._get_java_proxy_args(http_partial_proxy_config))
+
+    assert any(flag.startswith("-Dhttp.proxyHost=") for flag in args)
+    assert any(flag.startswith("-Dhttp.proxyPort=") for flag in args)
+    assert not any(flag.startswith("-Dhttps.proxyHost=") for flag in args)
+    assert not any(flag.startswith("-Dhttps.proxyPort=") for flag in args)
+    assert not any(flag.startswith("-Dhttp.nonProxyHosts=") for flag in args)
+
+
 def test_get_groovy_proxy_args_uses_https_proxy_first(proxy_config):
     """_get_groovy_proxy_args prefers https proxy values when both proxies are present."""
     args = tuple(jenkins._get_groovy_proxy_args(proxy_config))

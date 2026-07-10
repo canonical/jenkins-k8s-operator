@@ -530,6 +530,24 @@ def test_jcasc_repository_token_missing_keys_blocks(mock_charm: MagicMock):
         state.State.from_charm(mock_charm)
 
 
+def test_jcasc_repository_token_secret_not_found_blocks(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository-token pointing to missing secret.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised mentioning token secret not found.
+    """
+    secret_id = f"secret:{secrets.token_hex(4)}"
+    mock_charm.model.get_secret.side_effect = ops.SecretNotFoundError()
+    mock_charm.config = {
+        "jcasc-repository": "https://example.com/r.git",
+        "jcasc-repository-token": secret_id,
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(state.CharmConfigInvalidError, match="token secret not found"):
+        state.State.from_charm(mock_charm)
+
+
 @pytest.mark.parametrize(
     "config_path_value, expected",
     [
@@ -556,6 +574,26 @@ def test_jcasc_repository_config_path(
     charm_state = state.State.from_charm(mock_charm)
 
     assert charm_state.jcasc_repository_config_path == expected
+
+
+def test_jcasc_repository_config_path_absolute_path_raises(mock_charm: MagicMock):
+    """
+    arrange: given a charm with jcasc-repository-config-path set to absolute path.
+    act: when state is initialized from charm.
+    assert: CharmConfigInvalidError is raised.
+    """
+    mock_charm.config = {
+        "jcasc-config": "",
+        "jcasc-repository": "https://example.com/repo.git",
+        "jcasc-repository-config-path": "/absolute/path",
+    }
+    mock_charm.model.get_relation.return_value = None
+
+    with pytest.raises(
+        state.CharmConfigInvalidError,
+        match="jcasc-repository-config-path must be relative",
+    ):
+        state.State.from_charm(mock_charm)
 
 
 def test_jcasc_environment_secrets_unset(mock_charm: MagicMock):

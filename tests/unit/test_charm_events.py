@@ -286,3 +286,45 @@ def test_jcasc_environment_secrets_injected_during_reconcile(
     # Verify the injected secrets are present in jenkins_environment
     assert captured_env.get("VAR1") == "value1"
     assert captured_env.get("VAR2") == "value2"
+
+
+def test__on_secret_changed_triggers_reconcile_for_matching_secret(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given a charm with jcasc-environment-secrets configured.
+    act: when _on_secret_changed is called with a matching secret URI.
+    assert: _reconcile is triggered.
+    """
+    secret_id = f"secret:{secrets.token_hex(4)}"
+    harness_container.harness.update_config({"jcasc-environment-secrets": secret_id})
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    event = MagicMock(spec=ops.SecretChangedEvent)
+    event.secret.id = secret_id
+
+    with patch.object(jenkins_charm, "_reconcile") as reconcile_mock:
+        jenkins_charm._on_secret_changed(event)
+
+    reconcile_mock.assert_called_once_with(event)
+
+
+def test__on_secret_changed_does_not_trigger_reconcile_for_unconfigured_secret(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given a charm without jcasc-environment-secrets configured.
+    act: when _on_secret_changed is called with a secret URI.
+    assert: _reconcile is not triggered.
+    """
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    event = MagicMock(spec=ops.SecretChangedEvent)
+    event.secret.id = "secret:some-other-secret"
+
+    with patch.object(jenkins_charm, "_reconcile") as reconcile_mock:
+        jenkins_charm._on_secret_changed(event)
+
+    reconcile_mock.assert_not_called()
