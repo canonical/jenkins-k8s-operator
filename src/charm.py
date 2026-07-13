@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 import ops
 import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.haproxy.v2.haproxy_route import HaproxyRouteRequirer
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
@@ -32,6 +33,7 @@ from state import (
     AGENT_DISCOVERY_INGRESS_RELATION_NAME,
     AGENT_RELATION,
     AUTH_PROXY_RELATION,
+    HAPROXY_ROUTE_RELATION_NAME,
     INGRESS_RELATION_NAME,
     JENKINS_SERVICE_NAME,
     AgentMeta,
@@ -116,6 +118,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         )
         self._grafana = GrafanaDashboardProvider(self)
         self._auth_proxy = AuthProxyRequirer(self)
+        self._haproxy_route = HaproxyRouteRequirer(
+            self,
+            relation_name=HAPROXY_ROUTE_RELATION_NAME,
+            service=self.app.name,
+            ports=[jenkins.WEB_PORT],
+        )
 
         # Register all events to funnel through reconcile
         for event in [
@@ -132,6 +140,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.server_ingress.on.revoked,
             self.on[AUTH_PROXY_RELATION].relation_joined,
             self.on[AUTH_PROXY_RELATION].relation_departed,
+            self._haproxy_route.on.ready,
+            self._haproxy_route.on.removed,
             self.on.update_status,
         ]:
             self.framework.observe(event, self._reconcile)
@@ -249,6 +259,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._reconcile_agent_discovery()
             logger.info("Reconciling auth proxy")
             self._reconcile_auth_proxy(charm_state)
+            logger.info("Reconciling haproxy route")
+            self._reconcile_haproxy_route(charm_state)
             logger.info("Reconciling plugins")
             self._reconcile_plugins(charm_state, admin_client, container)
         except ReconcileBlockedError as exc:
@@ -397,6 +409,26 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 )
             self._auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
 
+    def _reconcile_haproxy_route(self, state: State) -> None:
+        """Publish haproxy-route requirements when an external hostname is configured.
+
+        The requirement is published only when both the haproxy-route relation is
+        established and the external-hostname config is set. HAProxy performs
+        hostname-based routing on this value; it is also the join key for edge
+        OIDC authentication via HAProxy SPOE.
+
+        Args:
+            state: The current charm state.
+        """
+        relation = self.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
+        if relation is None or state.external_hostname is None:
+            return
+        self._haproxy_route.provide_haproxy_route_requirements(
+            service=self.app.name,
+            ports=[jenkins.WEB_PORT],
+            hostname=state.external_hostname,
+        )
+
     def _reconcile_plugins(
         self, state: State, admin_client: jenkins.Jenkins, container: ops.Container
     ) -> None:
@@ -443,14 +475,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             The charm's agent discovery url.
         """
         if ingress_url := self.agent_discovery_ingress.url:
-            return ingress_url
+            return ingress_url.rstrip("/")
         if ingress_url := self.server_ingress.url:
             logger.warning(
                 "Using public ingress with protected endpoints (e.g. oathkeeper)"
                 "will result in agent discovery failure. Use %s for agents discovery.",
                 AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             )
-            return ingress_url
+            return ingress_url.rstrip("/")
 
         # Fallback to pod IP
         if binding := self.model.get_binding("juju-info"):
