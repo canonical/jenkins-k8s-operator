@@ -48,6 +48,7 @@ async def oauth_integrator_fixture(
             "issuer_url": base_url,
             "authorization_endpoint": f"{base_url}/protocol/openid-connect/auth",
             "token_endpoint": f"{base_url}/protocol/openid-connect/token",
+            "introspection_endpoint": f"{base_url}/protocol/openid-connect/token/introspect",
             "jwks_endpoint": f"{base_url}/protocol/openid-connect/certs",
             "userinfo_endpoint": f"{base_url}/protocol/openid-connect/userinfo",
             "scope": "openid email profile",
