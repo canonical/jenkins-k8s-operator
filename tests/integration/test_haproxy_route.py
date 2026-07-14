@@ -54,7 +54,7 @@ async def oauth_integrator_fixture(
             "scope": "openid email profile",
         },
     )
-    await model.wait_for_idle(apps=[integrator.name], status="active", timeout=20 * 60)
+    await model.wait_for_idle(apps=[integrator.name], status="blocked", timeout=20 * 60)
     return integrator
 
 
