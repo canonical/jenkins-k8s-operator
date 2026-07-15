@@ -19,6 +19,7 @@ from .types_ import KeycloakOIDCMetadata
 EXTERNAL_HOSTNAME = "jenkins.internal"
 SPOE_EXTERNAL_HOSTNAME = "jenkins-spoe.internal"
 HAPROXY_ROUTE_RELATION = "haproxy-route"
+SELF_SIGNED_CERTIFICATES_APP_NAME = "self-signed-certificates"
 
 
 @pytest_asyncio.fixture(scope="function", name="haproxy_model")
@@ -46,7 +47,16 @@ async def haproxy_fixture(haproxy_model: Model) -> Application:
         channel="2.8/edge",
         config={"external-hostname": EXTERNAL_HOSTNAME},
     )
-    await haproxy_model.wait_for_idle(apps=[haproxy.name], status="active", timeout=20 * 60)
+    self_signed_certificates = await haproxy_model.deploy(
+        SELF_SIGNED_CERTIFICATES_APP_NAME,
+        channel="1/stable",
+    )
+    await haproxy_model.integrate(
+        f"{haproxy.name}:certificates", f"{self_signed_certificates.name}:certificates"
+    )
+    await haproxy_model.wait_for_idle(
+        apps=[haproxy.name, self_signed_certificates.name], status="active", timeout=20 * 60
+    )
     # Create offer for cross-model relation with jenkins-k8s
     await haproxy_model.create_offer(
         f"{haproxy.name}:{HAPROXY_ROUTE_RELATION}", HAPROXY_ROUTE_RELATION
@@ -127,7 +137,16 @@ async def haproxy_with_spoe_fixture(
         channel="latest/edge",
         config={"external-hostname": SPOE_EXTERNAL_HOSTNAME},
     )
-    await haproxy_model.wait_for_idle(apps=[haproxy.name], status="active", timeout=20 * 60)
+    self_signed_certificates = await haproxy_model.deploy(
+        SELF_SIGNED_CERTIFICATES_APP_NAME,
+        channel="1/stable",
+    )
+    await haproxy_model.integrate(
+        f"{haproxy.name}:certificates", f"{self_signed_certificates.name}:certificates"
+    )
+    await haproxy_model.wait_for_idle(
+        apps=[haproxy.name, self_signed_certificates.name], status="active", timeout=20 * 60
+    )
 
     # Wire haproxy to haproxy-spoe-auth via spoe-auth relation
     await haproxy_model.integrate(
