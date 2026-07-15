@@ -43,7 +43,7 @@ async def haproxy_fixture(haproxy_model: Model) -> Application:
     """Deploy HAProxy to the machine model and create an offer for CMR."""
     haproxy = await haproxy_model.deploy(
         "haproxy",
-        channel="latest/edge",
+        channel="2.8/edge",
         config={"external-hostname": EXTERNAL_HOSTNAME},
     )
     await haproxy_model.wait_for_idle(apps=[haproxy.name], status="active", timeout=20 * 60)
