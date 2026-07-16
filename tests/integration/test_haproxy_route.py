@@ -12,6 +12,7 @@ import requests
 from juju.application import Application
 from juju.controller import Controller
 from juju.model import Model
+from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
 from .helpers import get_model_unit_addresses
 from .types_ import KeycloakOIDCMetadata
@@ -39,17 +40,26 @@ async def haproxy_model_fixture(
     await model.disconnect()
 
 
+@pytest_asyncio.fixture(scope="module", name="self_signed_certificates")
+async def self_signed_certificates_fixture(haproxy_model: Model) -> Application:
+    """Deploy self-signed-certificates to the machine model."""
+    self_signed_certificates = await haproxy_model.deploy(
+        SELF_SIGNED_CERTIFICATES_APP_NAME,
+        channel="1/stable",
+    )
+    assert isinstance(self_signed_certificates, Application)
+    return self_signed_certificates
+
+
 @pytest_asyncio.fixture(scope="module", name="haproxy")
-async def haproxy_fixture(haproxy_model: Model) -> Application:
+async def haproxy_fixture(
+    haproxy_model: Model, self_signed_certificates: Application
+) -> Application:
     """Deploy HAProxy to the machine model and create an offer for CMR."""
     haproxy = await haproxy_model.deploy(
         "haproxy",
         channel="2.8/edge",
         config={"external-hostname": EXTERNAL_HOSTNAME},
-    )
-    self_signed_certificates = await haproxy_model.deploy(
-        SELF_SIGNED_CERTIFICATES_APP_NAME,
-        channel="1/stable",
     )
     await haproxy_model.integrate(
         f"{haproxy.name}:certificates", f"{self_signed_certificates.name}:certificates"
@@ -62,6 +72,26 @@ async def haproxy_fixture(haproxy_model: Model) -> Application:
         f"{haproxy.name}:{HAPROXY_ROUTE_RELATION}", HAPROXY_ROUTE_RELATION
     )
     return haproxy
+
+
+@pytest_asyncio.fixture(scope="module", name="ca_cert_path")
+async def ca_cert_path_fixture(
+    self_signed_certificates: Application,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> str:
+    """Fetch the self-signed CA certificate and write it to a temp file.
+
+    Used to verify TLS connections against HAProxy's self-signed cert instead
+    of disabling certificate verification outright.
+    """
+    unit = self_signed_certificates.units[0]
+    action = await unit.run_action("get-ca-certificate")
+    await action.wait()
+    ca_certificate = action.results["ca-certificate"]
+
+    ca_cert_file = tmp_path_factory.mktemp("certs") / "ca.pem"
+    ca_cert_file.write_text(ca_certificate, encoding="utf-8")
+    return str(ca_cert_file)
 
 
 @pytest_asyncio.fixture(scope="module", name="oauth_integrator")
@@ -163,6 +193,7 @@ async def test_haproxy_route_serves_jenkins(
     application: Application,
     haproxy: Application,
     haproxy_model: Model,
+    ca_cert_path: str,
 ):
     """
     arrange: deploy haproxy on machine model and set jenkins external-hostname.
@@ -182,14 +213,18 @@ async def test_haproxy_route_serves_jenkins(
 
     haproxy_ip = (await get_model_unit_addresses(haproxy_model, haproxy.name))[0]
     # HAProxy is fronted by TLS (self-signed-certificates relation), so plain HTTP
-    # requests are redirected (302) to HTTPS. Query HTTPS directly, skipping cert
-    # verification since the CA is self-signed.
-    response = requests.get(
+    # requests are redirected (302) to HTTPS. Query HTTPS directly, verifying
+    # against the deployment's own self-signed CA certificate. The cert is issued
+    # for EXTERNAL_HOSTNAME, not the raw IP, so HostHeaderSSLAdapter is used to
+    # verify the Host header against the cert instead of the connection IP.
+    session = requests.Session()
+    session.mount("https://", HostHeaderSSLAdapter())
+    response = session.get(
         f"https://{haproxy_ip}",
         headers={"Host": EXTERNAL_HOSTNAME},
         timeout=30,
         allow_redirects=False,
-        verify=False,
+        verify=ca_cert_path,
     )
     # Jenkins' own security realm answers (no SPOE in this tier): unauthenticated
     # access returns 403 with the Jenkins auth page, or 200 if a login page is served.
@@ -206,6 +241,7 @@ async def test_haproxy_spoe_redirects_to_oidc(
     haproxy_with_spoe: Application,
     haproxy_model: Model,
     keycloak_oidc_meta: KeycloakOIDCMetadata,
+    ca_cert_path: str,
 ):
     """
     arrange: deploy full SPOE auth stack (haproxy + haproxy-spoe-auth +
@@ -240,14 +276,19 @@ async def test_haproxy_spoe_redirects_to_oidc(
     haproxy_ip = (await get_model_unit_addresses(haproxy_model, haproxy_with_spoe.name))[0]
 
     # HAProxy is fronted by TLS (self-signed-certificates relation); query HTTPS
-    # directly so the 302 we assert on is the SPOE->OIDC redirect, not a
-    # plain HTTP->HTTPS upgrade redirect.
-    response = requests.get(
+    # directly, verifying against the deployment's own self-signed CA
+    # certificate. The cert is issued for SPOE_EXTERNAL_HOSTNAME, not the raw
+    # IP, so HostHeaderSSLAdapter is used to verify the Host header against the
+    # cert instead of the connection IP. The 302 we assert on is the
+    # SPOE->OIDC redirect, not a plain HTTP->HTTPS upgrade redirect.
+    session = requests.Session()
+    session.mount("https://", HostHeaderSSLAdapter())
+    response = session.get(
         f"https://{haproxy_ip}",
         headers={"Host": SPOE_EXTERNAL_HOSTNAME},
         timeout=30,
         allow_redirects=False,  # Don't follow redirects - we want to see the 302
-        verify=False,
+        verify=ca_cert_path,
     )
 
     # SPOE auth redirects unauthenticated requests to OIDC provider

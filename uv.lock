@@ -1014,6 +1014,7 @@ integration = [
     { name = "pytest-playwright" },
     { name = "pytest-rerunfailures" },
     { name = "python-keycloak" },
+    { name = "requests-toolbelt" },
     { name = "tenacity" },
 ]
 lint = [
@@ -1079,6 +1080,7 @@ integration = [
     { name = "pytest-playwright", specifier = "==0.7.2" },
     { name = "pytest-rerunfailures", specifier = "==15.1" },
     { name = "python-keycloak", specifier = "==7.1.1" },
+    { name = "requests-toolbelt", specifier = ">=1.0.0" },
     { name = "tenacity", specifier = "==9.1.4" },
 ]
 lint = [
