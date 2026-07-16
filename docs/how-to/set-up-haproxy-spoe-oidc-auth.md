@@ -2,8 +2,8 @@
 
 This guide fronts Jenkins with HAProxy and enforces OIDC login at the edge
 using HAProxy's SPOE `haproxy-spoe-auth` charm. Jenkins keeps its own security
-realm; HAProxy gatekeeps browser access to the configured hostname. No identity
-headers are passed to Jenkins — this is edge gatekeeping only.
+realm; HAProxy guards browser access to the configured hostname. No identity
+headers are passed to Jenkins — this is edge access control only.
 
 ## Deployment graph
 
@@ -15,7 +15,7 @@ keep agents on traefik or direct discovery.
 
 ## Prerequisites
 
-- An OIDC provider. For testing, a lightweight dockerized provider (Dex, Keycloak,
+- An OIDC provider. For testing, a lightweight containerized provider (Dex, Keycloak,
   or a mock OIDC server) is sufficient — the full Canonical Identity Platform
   (Kratos/Hydra) is NOT required.
 - The `oauth-external-idp-integrator` charm to bridge that provider onto the
