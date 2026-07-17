@@ -3,14 +3,10 @@
 
 """Integration tests for the jenkins-k8s haproxy-route relation."""
 
-import secrets
-from typing import AsyncGenerator
-
 import pytest
 import pytest_asyncio
 import requests
 from juju.application import Application
-from juju.controller import Controller
 from juju.model import Model
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
@@ -23,27 +19,10 @@ HAPROXY_ROUTE_RELATION = "haproxy-route"
 SELF_SIGNED_CERTIFICATES_APP_NAME = "self-signed-certificates"
 
 
-@pytest_asyncio.fixture(scope="module", name="haproxy_model")
-async def haproxy_model_fixture(
-    request: pytest.FixtureRequest,
-    machine_controller: Controller,
-) -> AsyncGenerator[Model, None]:
-    """Create a model on the LXD controller for HAProxy (machine charm)."""
-    haproxy_model_name = f"haproxy-{secrets.token_hex(2)}"
-    model = await machine_controller.add_model(haproxy_model_name)
-    await model.connect(f"localhost:admin/{model.name}")
-    yield model
-    if not request.config.option.keep_models:
-        await machine_controller.destroy_models(
-            model.name, destroy_storage=True, force=True, max_wait=10 * 60
-        )
-    await model.disconnect()
-
-
 @pytest_asyncio.fixture(scope="module", name="self_signed_certificates")
-async def self_signed_certificates_fixture(haproxy_model: Model) -> Application:
+async def self_signed_certificates_fixture(machine_model: Model) -> Application:
     """Deploy self-signed-certificates to the machine model."""
-    self_signed_certificates = await haproxy_model.deploy(
+    self_signed_certificates = await machine_model.deploy(
         SELF_SIGNED_CERTIFICATES_APP_NAME,
         channel="1/stable",
     )
@@ -53,22 +32,22 @@ async def self_signed_certificates_fixture(haproxy_model: Model) -> Application:
 
 @pytest_asyncio.fixture(scope="module", name="haproxy")
 async def haproxy_fixture(
-    haproxy_model: Model, self_signed_certificates: Application
+    machine_model: Model, self_signed_certificates: Application
 ) -> Application:
     """Deploy HAProxy to the machine model and create an offer for CMR."""
-    haproxy = await haproxy_model.deploy(
+    haproxy = await machine_model.deploy(
         "haproxy",
         channel="2.8/edge",
         config={"external-hostname": EXTERNAL_HOSTNAME},
     )
-    await haproxy_model.integrate(
+    await machine_model.integrate(
         f"{haproxy.name}:certificates", f"{self_signed_certificates.name}:certificates"
     )
-    await haproxy_model.wait_for_idle(
+    await machine_model.wait_for_idle(
         apps=[haproxy.name, self_signed_certificates.name], status="active", timeout=20 * 60
     )
     # Create offer for cross-model relation with jenkins-k8s
-    await haproxy_model.create_offer(
+    await machine_model.create_offer(
         f"{haproxy.name}:{HAPROXY_ROUTE_RELATION}", HAPROXY_ROUTE_RELATION
     )
     return haproxy
@@ -96,7 +75,7 @@ async def ca_cert_path_fixture(
 
 @pytest_asyncio.fixture(scope="module", name="oauth_integrator")
 async def oauth_integrator_fixture(
-    haproxy_model: Model,
+    machine_model: Model,
     keycloak_oidc_meta: KeycloakOIDCMetadata,
 ) -> Application:
     """Deploy oauth-external-idp-integrator configured for Keycloak.
@@ -108,7 +87,7 @@ async def oauth_integrator_fixture(
     # e.g. http://10.1.2.3:8080/realms/oidc_test/.well-known/openid-configuration
     base_url = keycloak_oidc_meta.well_known_endpoint.rsplit("/.well-known", 1)[0]
 
-    integrator = await haproxy_model.deploy(
+    integrator = await machine_model.deploy(
         "oauth-external-idp-integrator",
         channel="latest/edge",
         config={
@@ -123,13 +102,13 @@ async def oauth_integrator_fixture(
             "scope": "openid email profile",
         },
     )
-    await haproxy_model.wait_for_idle(apps=[integrator.name], status="blocked", timeout=20 * 60)
+    await machine_model.wait_for_idle(apps=[integrator.name], status="blocked", timeout=20 * 60)
     return integrator
 
 
 @pytest_asyncio.fixture(scope="module", name="haproxy_spoe_auth")
 async def haproxy_spoe_auth_fixture(
-    haproxy_model: Model,
+    machine_model: Model,
     oauth_integrator: Application,
 ) -> Application:
     """Deploy haproxy-spoe-auth configured for the SPOE hostname.
@@ -137,20 +116,20 @@ async def haproxy_spoe_auth_fixture(
     The hostname config MUST match Jenkins' external-hostname for the
     SPOE protection to apply to the correct backend. This is a machine charm.
     """
-    spoe_auth = await haproxy_model.deploy(
+    spoe_auth = await machine_model.deploy(
         "haproxy-spoe-auth",
         channel="latest/edge",
         config={"hostname": SPOE_EXTERNAL_HOSTNAME},
     )
     # haproxy-spoe-auth requires oauth relation (optional: false)
-    await haproxy_model.integrate(f"{spoe_auth.name}:oauth", f"{oauth_integrator.name}:oauth")
-    await haproxy_model.wait_for_idle(
+    await machine_model.integrate(f"{spoe_auth.name}:oauth", f"{oauth_integrator.name}:oauth")
+    await machine_model.wait_for_idle(
         apps=[oauth_integrator.name], status="active", timeout=20 * 60
     )
     # haproxy-spoe-auth also requires the spoe-auth relation (wired in the
     # haproxy_with_spoe fixture); until then it stays blocked, so only wait
     # for the oauth side to settle here.
-    await haproxy_model.wait_for_idle(
+    await machine_model.wait_for_idle(
         apps=[spoe_auth.name],
         status="blocked",
         timeout=20 * 60,
@@ -160,7 +139,7 @@ async def haproxy_spoe_auth_fixture(
 
 @pytest_asyncio.fixture(scope="module", name="haproxy_with_spoe")
 async def haproxy_with_spoe_fixture(
-    haproxy_model: Model,
+    machine_model: Model,
     haproxy: Application,
     haproxy_spoe_auth: Application,
 ) -> Application:
@@ -176,10 +155,10 @@ async def haproxy_with_spoe_fixture(
     # hostname config for SPOE to apply to the correct backend).
     await haproxy.set_config({"external-hostname": SPOE_EXTERNAL_HOSTNAME})
     # Wire haproxy to haproxy-spoe-auth via spoe-auth relation
-    await haproxy_model.integrate(
+    await machine_model.integrate(
         f"{haproxy.name}:spoe-auth", f"{haproxy_spoe_auth.name}:spoe-auth"
     )
-    await haproxy_model.wait_for_idle(
+    await machine_model.wait_for_idle(
         apps=[haproxy.name, haproxy_spoe_auth.name],
         status="active",
         timeout=20 * 60,
@@ -192,7 +171,7 @@ async def test_haproxy_route_serves_jenkins(
     model: Model,
     application: Application,
     haproxy: Application,
-    haproxy_model: Model,
+    machine_model: Model,
     ca_cert_path: str,
 ):
     """
@@ -206,12 +185,12 @@ async def test_haproxy_route_serves_jenkins(
     # Cross-model relation: k8s model (jenkins) -> machine model (haproxy)
     await model.integrate(
         f"{application.name}:{HAPROXY_ROUTE_RELATION}",
-        f"localhost:admin/{haproxy_model.name}.{HAPROXY_ROUTE_RELATION}",
+        f"localhost:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
     )
-    await haproxy_model.wait_for_idle(apps=[haproxy.name], wait_for_active=True, timeout=20 * 60)
+    await machine_model.wait_for_idle(apps=[haproxy.name], wait_for_active=True, timeout=20 * 60)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
 
-    haproxy_ip = (await get_model_unit_addresses(haproxy_model, haproxy.name))[0]
+    haproxy_ip = (await get_model_unit_addresses(machine_model, haproxy.name))[0]
     # HAProxy is fronted by TLS (self-signed-certificates relation), so plain HTTP
     # requests are redirected (302) to HTTPS. Query HTTPS directly, verifying
     # against the deployment's own self-signed CA certificate. The cert is issued
@@ -239,7 +218,7 @@ async def test_haproxy_spoe_redirects_to_oidc(
     model: Model,
     application: Application,
     haproxy_with_spoe: Application,
-    haproxy_model: Model,
+    machine_model: Model,
     keycloak_oidc_meta: KeycloakOIDCMetadata,
     ca_cert_path: str,
 ):
@@ -266,14 +245,14 @@ async def test_haproxy_spoe_redirects_to_oidc(
     if HAPROXY_ROUTE_RELATION not in existing_endpoints:
         await model.integrate(
             f"{application.name}:{HAPROXY_ROUTE_RELATION}",
-            f"localhost:admin/{haproxy_model.name}.{HAPROXY_ROUTE_RELATION}",
+            f"localhost:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
         )
-    await haproxy_model.wait_for_idle(
+    await machine_model.wait_for_idle(
         apps=[haproxy_with_spoe.name], wait_for_active=True, timeout=20 * 60
     )
     await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
 
-    haproxy_ip = (await get_model_unit_addresses(haproxy_model, haproxy_with_spoe.name))[0]
+    haproxy_ip = (await get_model_unit_addresses(machine_model, haproxy_with_spoe.name))[0]
 
     # HAProxy is fronted by TLS (self-signed-certificates relation); query HTTPS
     # directly, verifying against the deployment's own self-signed CA

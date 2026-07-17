@@ -13,35 +13,6 @@ from charm import JenkinsK8sOperatorCharm
 from state import State
 
 
-def _patch_reconcile_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Patch non-haproxy-route reconcile paths for focused event tests."""
-    monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
-    monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_storage", MagicMock(return_value=None)
-    )
-    monkeypatch.setattr(
-        JenkinsK8sOperatorCharm,
-        "_reconcile_pre_startup_configurations",
-        MagicMock(return_value="config-hash"),
-    )
-    monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_admin", MagicMock(return_value="admin-password")
-    )
-    monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_api_token", MagicMock(return_value=None)
-    )
-    monkeypatch.setattr(JenkinsK8sOperatorCharm, "_reconcile_agents", MagicMock(return_value=None))
-    monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_agent_discovery", MagicMock(return_value=None)
-    )
-    monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_auth_proxy", MagicMock(return_value=None)
-    )
-    monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_plugins", MagicMock(return_value=None)
-    )
-
-
 @pytest.mark.parametrize(
     "config_value, expected",
     [
@@ -105,6 +76,35 @@ def test_reconcile_haproxy_route_publishes_when_hostname_and_relation_present(
         ports=[jenkins.WEB_PORT],
         hostname="jenkins.example.com",
     )
+
+
+def test_reconcile_haproxy_route_retracts_when_hostname_cleared(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """
+    arrange: given a charm with a haproxy-route relation and published requirements.
+    act: when _reconcile_haproxy_route runs after the hostname is cleared.
+    assert: the haproxy-route application relation data is cleared.
+    """
+    harness = Harness(JenkinsK8sOperatorCharm)
+    harness.update_config({"external-hostname": "jenkins.example.com"})
+    relation_id = harness.add_relation("haproxy-route", "haproxy")
+    harness.add_relation_unit(relation_id, "haproxy/0")
+    harness.set_leader(True)
+    harness.begin()
+
+    provide_mock = MagicMock()
+    monkeypatch.setattr(
+        harness.charm._haproxy_route, "provide_haproxy_route_requirements", provide_mock
+    )
+
+    harness.charm._reconcile_haproxy_route(State.from_charm(harness.charm))
+    provide_mock.assert_called_once()
+
+    harness.update_config({"external-hostname": ""})
+    harness.charm._reconcile_haproxy_route(State.from_charm(harness.charm))
+
+    assert harness.get_relation_data(relation_id, harness.charm.app) == {}
 
 
 def test_reconcile_haproxy_route_noop_without_hostname(monkeypatch: pytest.MonkeyPatch):

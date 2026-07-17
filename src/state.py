@@ -264,6 +264,16 @@ def _get_admin_password(charm: ops.CharmBase) -> typing.Optional[str]:
         return None
 
 
+def _parse_external_hostname(charm: ops.CharmBase) -> typing.Optional[str]:
+    """Parse external-hostname config into a hostname string.
+
+    Returns the hostname if set and non-empty after stripping, None otherwise.
+    """
+    external_hostname = typing.cast(str, charm.config.get("external-hostname") or "")
+    external_hostname = external_hostname.strip()
+    return external_hostname if external_hostname else None
+
+
 def _parse_jcasc_repository(charm: ops.CharmBase) -> typing.Optional[str]:
     """Parse jcasc-repository config into a URL string.
 
@@ -463,9 +473,7 @@ class State:
         jcasc_repository_config_path = _parse_jcasc_repository_config_path(charm)
         jcasc_environment_secrets = _parse_jcasc_environment_secrets(charm)
         admin_password = _get_admin_password(charm)
-
-        external_hostname_config = typing.cast(str, charm.config.get("external-hostname", ""))
-        external_hostname = external_hostname_config.strip() or None
+        external_hostname = _parse_external_hostname(charm)
 
         return cls(
             restart_time_range=restart_time_range,
