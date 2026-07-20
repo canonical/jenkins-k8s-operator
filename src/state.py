@@ -11,7 +11,7 @@ import typing
 
 import ops
 import yaml
-from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, field_validator
 
 from timerange import InvalidTimeRangeError, Range
 
@@ -23,6 +23,7 @@ JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
 INGRESS_RELATION_NAME = "ingress"
 AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
+HAPROXY_ROUTE_RELATION_NAME = "haproxy-route"
 ENV_VAR_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
@@ -91,9 +92,9 @@ class AgentMeta(BaseModel):
     labels: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
 
-    @validator("executors")
-    # Pydantic validators receive cls, not self (framework requirement).
-    def numeric_executors(cls, value: str) -> int:  # noqa: N805
+    @field_validator("executors")
+    @classmethod
+    def numeric_executors(cls, value: str) -> int:
         """Validate executors field can be converted to int.
 
         Args:
@@ -263,6 +264,16 @@ def _get_admin_password(charm: ops.CharmBase) -> typing.Optional[str]:
         return None
 
 
+def _parse_external_hostname(charm: ops.CharmBase) -> typing.Optional[str]:
+    """Parse external-hostname config into a hostname string.
+
+    Returns the hostname if set and non-empty after stripping, None otherwise.
+    """
+    external_hostname = typing.cast(str, charm.config.get("external-hostname") or "")
+    external_hostname = external_hostname.strip()
+    return external_hostname if external_hostname else None
+
+
 def _parse_jcasc_repository(charm: ops.CharmBase) -> typing.Optional[str]:
     """Parse jcasc-repository config into a URL string.
 
@@ -368,9 +379,9 @@ class ProxyConfig(BaseModel):
         no_proxy: Comma separated list of hostnames to bypass proxy.
     """
 
-    http_proxy: typing.Optional[HttpUrl]
-    https_proxy: typing.Optional[HttpUrl]
-    no_proxy: typing.Optional[str]
+    http_proxy: typing.Optional[HttpUrl] = None
+    https_proxy: typing.Optional[HttpUrl] = None
+    no_proxy: typing.Optional[str] = None
 
     @classmethod
     def from_env(cls) -> typing.Optional["ProxyConfig"]:
@@ -407,6 +418,7 @@ class State:
         jcasc_repository_token: (username, token) tuple for private repos, or None.
         jcasc_repository_config_path: Path within repository containing JCasC YAML files.
         system_properties: Additional JVM system properties as -D flags.
+        external_hostname: Public hostname for HAProxy-route based routing, or None.
 
     """
 
@@ -422,6 +434,7 @@ class State:
     jcasc_environment_secrets: typing.Optional[typing.Dict[str, str]] = None
     system_properties: typing.List[str] = dataclasses.field(default_factory=list)
     admin_password: typing.Optional[str] = None
+    external_hostname: typing.Optional[str] = None
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -460,6 +473,7 @@ class State:
         jcasc_repository_config_path = _parse_jcasc_repository_config_path(charm)
         jcasc_environment_secrets = _parse_jcasc_environment_secrets(charm)
         admin_password = _get_admin_password(charm)
+        external_hostname = _parse_external_hostname(charm)
 
         return cls(
             restart_time_range=restart_time_range,
@@ -474,4 +488,5 @@ class State:
             jcasc_environment_secrets=jcasc_environment_secrets,
             system_properties=system_properties,
             admin_password=admin_password,
+            external_hostname=external_hostname,
         )

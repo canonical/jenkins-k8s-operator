@@ -8,7 +8,6 @@
 
 import hashlib
 import typing
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import ops
@@ -112,13 +111,11 @@ def test_build_jcasc_config_injects_proxy_settings():
     act: when build_jcasc_config is called.
     assert: proxy host/port are injected into jenkins section.
     """
-    proxy = typing.cast(
-        state.ProxyConfig,
-        SimpleNamespace(
-            http_proxy="http://proxy.example.com:3128",
-            https_proxy=None,
-            no_proxy=None,
-        ),
+    # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
+    proxy = state.ProxyConfig(
+        http_proxy="http://proxy.example.com:3128",  # type: ignore
+        https_proxy=None,
+        no_proxy=None,
     )
 
     result = jenkins.build_jcasc_config(
@@ -136,13 +133,11 @@ def test_build_jcasc_config_injects_proxy_name_without_port():
     act: when build_jcasc_config is called.
     assert: only proxy host name is injected.
     """
-    proxy = typing.cast(
-        state.ProxyConfig,
-        SimpleNamespace(
-            http_proxy="http://proxy-no-port.example.com",
-            https_proxy=None,
-            no_proxy=None,
-        ),
+    # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
+    proxy = state.ProxyConfig(
+        http_proxy="http://proxy-no-port.example.com",  # type: ignore
+        https_proxy=None,
+        no_proxy=None,
     )
 
     result = jenkins.build_jcasc_config(

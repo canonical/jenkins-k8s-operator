@@ -20,8 +20,9 @@ dependencies = [
   "jenkinsapi==0.3.19",
   "jsonschema==4.26.0",
   "ops==3.8.0",
-  "pydantic==1.10.26",
+  "pydantic==2.13.4",
   "requests==2.34.2",
+  "validators==0.35.0",
 ]
 
 [dependency-groups]
@@ -74,6 +75,7 @@ integration = [
   "pytest-playwright==0.7.2",
   "pytest-rerunfailures==15.1",
   "python-keycloak==7.1.1",
+  "requests-toolbelt>=1.0.0",
   "tenacity==9.1.4",
 ]
 static = [

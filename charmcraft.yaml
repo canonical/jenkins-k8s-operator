@@ -83,6 +83,10 @@ requires:
     interface: ingress
     optional: true
     limit: 1
+  haproxy-route:
+    interface: haproxy-route
+    optional: true
+    limit: 1
   logging:
     interface: loki_push_api
 provides:
@@ -178,6 +182,17 @@ config:
         reference other environment variables using ${VAR_NAME} syntax in JCasC
         configuration files. Secret rotations automatically trigger charm
         reconciliation to apply updated values.
+    external-hostname:
+      type: string
+      default: ""
+      description: >
+        The public hostname at which Jenkins is served through an HAProxy
+        reverse proxy via the haproxy-route relation (for example
+        jenkins.example.com). HAProxy performs hostname-based routing on this
+        value, and it is the join key for edge OIDC authentication via HAProxy
+        SPOE (the haproxy-spoe-auth charm builds the OIDC redirect URI from the
+        same hostname). Leave unset to disable haproxy-route publication; the
+        traefik ingress relation is unaffected.
 
 actions:
   get-admin-password:
@@ -200,3 +215,5 @@ charm-libs:
     version: "0"
   - lib: oauth2-proxy-k8s.auth_proxy
     version: "0"
+  - lib: haproxy.haproxy_route
+    version: "2"

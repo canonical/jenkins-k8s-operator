@@ -301,6 +301,7 @@ async def machine_controller_fixture() -> AsyncGenerator[Controller, None]:
 
 @pytest_asyncio.fixture(scope="module", name="machine_model")
 async def machine_model_fixture(
+    request: pytest.FixtureRequest,
     machine_controller: Controller,
 ) -> AsyncGenerator[Model, None]:
     """The machine model for jenkins agent machine charm."""
@@ -308,9 +309,10 @@ async def machine_model_fixture(
     model = await machine_controller.add_model(machine_model_name)
     await model.connect(f"localhost:admin/{model.name}")
     yield model
-    await machine_controller.destroy_models(
-        model.name, destroy_storage=True, force=True, max_wait=10 * 60
-    )
+    if not request.config.option.keep_models:
+        await machine_controller.destroy_models(
+            model.name, destroy_storage=True, force=True, max_wait=10 * 60
+        )
     await model.disconnect()
 
 

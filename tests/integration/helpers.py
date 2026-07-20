@@ -97,10 +97,13 @@ async def get_model_unit_addresses(model: Model, app_name: str) -> list[str]:
     # mypy cannot infer the type UnitStatus but thinks its the base class type "Type".
     unit_status_map: dict[typing.Any, UnitStatus | None] = application_status.units  # type: ignore
     units_statuses: list[UnitStatus | None] = list(unit_status_map.values())
+    # Machine (IAAS) model units populate ``public_address`` rather than ``address``,
+    # which is only set for k8s (CAAS) units. Fall back to ``public_address`` so this
+    # helper also works against machine-model applications (e.g. haproxy).
     return [
-        str(unit_status.address)
+        str(unit_status.address or unit_status.public_address)
         for unit_status in units_statuses
-        if unit_status and unit_status.address
+        if unit_status and (unit_status.address or unit_status.public_address)
     ]
 
 

@@ -269,7 +269,7 @@ def test_get_groovy_proxy_args_uses_https_proxy_first(proxy_config):
 
     assert args[0] == f"'{proxy_config.https_proxy.host}'"
     assert args[1] == f"{proxy_config.https_proxy.port}"
-    assert args[2] == f"'{proxy_config.https_proxy.user}'"
+    assert args[2] == f"'{proxy_config.https_proxy.username}'"
     assert args[3] == f"'{proxy_config.https_proxy.password}'"
     assert args[4] == f"'{proxy_config.no_proxy}'"
 
