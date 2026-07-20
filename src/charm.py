@@ -428,7 +428,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
         if state.external_hostname is None:
             if self.unit.is_leader():
-                relation.data[self.app].update({})
+                relation.data[self.app].clear()
             return
         self._haproxy_route.provide_haproxy_route_requirements(
             service=self.app.name,
