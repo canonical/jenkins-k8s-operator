@@ -451,9 +451,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         ):
             return
 
+        # An empty (unset) allowed-plugins configuration disables allowlist cleanup,
+        # permitting any plugin to be installed. Skip removal to avoid uninstalling
+        # user-installed plugins.
+        if state.plugins is None:
+            return
+
         try:
             admin_client.remove_unlisted_plugins(
-                plugins=itertools.chain(state.plugins or [], REQUIRED_PLUGINS),
+                plugins=itertools.chain(state.plugins, REQUIRED_PLUGINS),
                 container=container,
             )
         except (jenkins.JenkinsPluginError, jenkins.JenkinsError) as exc:

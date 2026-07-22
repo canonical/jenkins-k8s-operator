@@ -80,6 +80,24 @@ def test__reconcile_plugins_calls_remove_unlisted_plugins(
     assert call_kwargs["container"] is harness_container.container
 
 
+def test__reconcile_plugins_skips_when_no_allowlist(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given an unset (empty) allowed-plugins config so state.plugins is None.
+    act: when _reconcile_plugins is called.
+    assert: remove_unlisted_plugins is not called, leaving installed plugins intact.
+    """
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    admin_client = MagicMock(spec=jenkins.Jenkins)
+    charm_state = _make_state(plugins=None)
+
+    charm._reconcile_plugins(charm_state, admin_client, harness_container.container)
+
+    admin_client.remove_unlisted_plugins.assert_not_called()
+
+
 def test__reconcile_plugins_skips_outside_restart_window(
     harness_container: HarnessWithContainer,
     monkeypatch: pytest.MonkeyPatch,
