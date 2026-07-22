@@ -451,9 +451,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         ):
             return
 
+        if state.plugins is None:
+            return
+
         try:
             admin_client.remove_unlisted_plugins(
-                plugins=itertools.chain(state.plugins or [], REQUIRED_PLUGINS),
+                plugins=itertools.chain(state.plugins, REQUIRED_PLUGINS),
                 container=container,
             )
         except (jenkins.JenkinsPluginError, jenkins.JenkinsError) as exc:
