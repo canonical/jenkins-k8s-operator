@@ -451,6 +451,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         ):
             return
 
+        if not state.plugins:
+            return
+
         try:
             admin_client.remove_unlisted_plugins(
                 plugins=itertools.chain(state.plugins or [], REQUIRED_PLUGINS),
