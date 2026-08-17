@@ -91,6 +91,7 @@ class AgentMeta(BaseModel):
     executors: str = Field(..., min_length=1)
     labels: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
+    remote_fs: str = Field(default="/var/lib/jenkins/", min_length=1)
 
     @field_validator("executors")
     @classmethod
@@ -122,7 +123,12 @@ class AgentMeta(BaseModel):
         name = relation_data.get("name")
         if not num_executors or not labels or not name:
             return None
-        return cls(executors=num_executors, labels=labels, name=name)
+        return cls(
+            executors=num_executors,
+            labels=labels,
+            name=name,
+            remote_fs=relation_data.get("remote_fs") or "/var/lib/jenkins/",
+        )
 
 
 def _get_agent_meta_map_from_relation(
