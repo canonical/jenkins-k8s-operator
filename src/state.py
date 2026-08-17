@@ -25,6 +25,7 @@ INGRESS_RELATION_NAME = "ingress"
 AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
 HAPROXY_ROUTE_RELATION_NAME = "haproxy-route"
 ENV_VAR_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+REMOTE_FS_PATTERN = re.compile(r"^/[A-Za-z0-9._/-]+$")
 
 
 class CharmStateBaseError(Exception):
@@ -92,6 +93,14 @@ class AgentMeta(BaseModel):
     labels: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
     remote_fs: str = Field(default="/var/lib/jenkins/", min_length=1)
+
+    @field_validator("remote_fs")
+    @classmethod
+    def valid_remote_fs(cls, value: str) -> str:
+        """Validate the agent workspace root before sending it to Jenkins."""
+        if not REMOTE_FS_PATTERN.fullmatch(value) or value == "/" or ".." in value.split("/"):
+            raise ValueError("remote_fs must be a safe absolute path")
+        return value
 
     @field_validator("executors")
     @classmethod

@@ -715,3 +715,18 @@ def test_jcasc_environment_secrets_invalid_env_var_names_blocks(
 
     with pytest.raises(state.CharmConfigInvalidError, match="invalid environment variable names"):
         state.State.from_charm(mock_charm)
+
+
+@pytest.mark.parametrize(
+    "remote_fs",
+    ["relative/path", "/", "/var/lib/../etc/jenkins", "/var/lib/jenkins\n"],
+)
+def test_agent_meta_rejects_unsafe_remote_fs(remote_fs: str):
+    """Reject unsafe workspace roots from relation metadata."""
+    with pytest.raises(state.ValidationError, match="remote_fs"):
+        state.AgentMeta(
+            executors="1",
+            labels="linux",
+            name="agent-0",
+            remote_fs=remote_fs,
+        )
