@@ -476,7 +476,8 @@ class Jenkins:
             JenkinsError: if an error occurred updating the node configuration.
         """
         try:
-            if node.get_config_element("remoteFS") != remote_fs:
+            current_remote_fs = node.get_config_element("remoteFS") or ""
+            if current_remote_fs.rstrip("/") != remote_fs.rstrip("/"):
                 node.set_config_element("remoteFS", remote_fs)
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             logger.error("Failed to update agent node remote filesystem, %s", exc)

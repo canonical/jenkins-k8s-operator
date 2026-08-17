@@ -171,9 +171,7 @@ def test_get_node_config_builds_websocket_enabled_node_config(
     assert node_kwargs["poll"] is False
 
 
-def test_get_node_config_uses_agent_remote_fs(
-    container: ops.Container, mock_client: MagicMock
-):
+def test_get_node_config_uses_agent_remote_fs(container: ops.Container, mock_client: MagicMock):
     """_get_node_config uses the remote filesystem from relation metadata."""
     agent_meta = state.AgentMeta(
         executors="3", labels="x86_64", name="agent_node_0", remote_fs="/workspace/jenkins/"
@@ -236,3 +234,17 @@ def test_remove_agent_node_raises_on_api_error(container: ops.Container, mock_cl
         pytest.raises(jenkins.JenkinsError),
     ):
         _jenkins_instance(container).remove_agent_node("jenkins-agent-0")
+
+
+def test_update_agent_node_ignores_trailing_slash_difference(
+    container: ops.Container, mock_client: MagicMock
+):
+    """Equivalent remoteFS paths with different trailing slashes do not churn."""
+    node = MagicMock()
+    node.name = "agent_node_0"
+    node.get_config_element.return_value = "/workspace/jenkins/"
+
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
+        _jenkins_instance(container).update_agent_node(node, "/workspace/jenkins")
+
+    node.set_config_element.assert_not_called()
