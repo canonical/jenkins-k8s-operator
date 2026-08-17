@@ -60,8 +60,8 @@ class FakeJenkinsService:
         self.agents_secret_map[agent_meta.name] = secrets.token_hex(16)
         self.agents_remote_fs[agent_meta.name] = agent_meta.remote_fs
 
-    def update_agent_node(self, node: SimpleNamespace, remote_fs: str) -> None:
-        self.agents_remote_fs[node.name] = remote_fs
+    def reconcile_agent_node(self, node: SimpleNamespace, agent_meta: AgentMeta) -> None:
+        self.agents_remote_fs[node.name] = agent_meta.remote_fs
 
     def get_node_secret(self, node_name: str) -> str | None:
         return self.agents_secret_map.get(node_name)

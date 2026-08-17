@@ -586,7 +586,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 continue
             agent_meta = agent_meta_by_name[node.name]
             try:
-                api_client.update_agent_node(node=node, remote_fs=agent_meta.remote_fs)
+                api_client.reconcile_agent_node(node=node, agent_meta=agent_meta)
             except jenkins.JenkinsError:
                 logger.exception("Failed to update agent node: %s", agent_meta)
                 raise
