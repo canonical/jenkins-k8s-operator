@@ -63,9 +63,9 @@ async def test_jenkins_k8s_agent_relation(
     assert jenkins_client.get_node(jenkins_k8s_agents.name).get_config_element("remoteFS") == (
         "/var/lib/jenkins/"
     )
-    assert jenkins_client.get_node(extra_jenkins_k8s_agents.name).get_config_element("remoteFS") == (
-        "/var/lib/jenkins/"
-    )
+    assert jenkins_client.get_node(extra_jenkins_k8s_agents.name).get_config_element(
+        "remoteFS"
+    ) == ("/var/lib/jenkins/")
 
     # 2. Remove the relation
     await application.remove_relation(
