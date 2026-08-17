@@ -577,9 +577,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             JenkinsError: if there was an error updating an agent node.
         """
         agent_meta_by_name = {
-            agent.name: agent
-            for agents in agent_relation.values()
-            for agent in agents
+            agent.name: agent for agents in agent_relation.values() for agent in agents
         }
         for node in agent_nodes:
             if node.name not in agent_meta_by_name:
