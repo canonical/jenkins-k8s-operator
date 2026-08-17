@@ -433,7 +433,7 @@ class Jenkins:
             node_dict={
                 "num_executors": int(agent_meta.executors),
                 "node_description": agent_meta.name,
-                "remote_fs": "/var/lib/jenkins/",
+                "remote_fs": agent_meta.remote_fs,
                 "labels": agent_meta.labels,
                 "exclusive": False,
             },
@@ -464,6 +464,23 @@ class Jenkins:
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             logger.error("Failed to add agent node, %s", exc)
             raise JenkinsError("Failed to add agent node.") from exc
+
+    def update_agent_node(self, node: Node, remote_fs: str) -> None:
+        """Update an agent node's remote filesystem when it differs.
+
+        Args:
+            node: The existing Jenkins agent node.
+            remote_fs: The desired remote filesystem path.
+
+        Raises:
+            JenkinsError: if an error occurred updating the node configuration.
+        """
+        try:
+            if node.get_config_element("remoteFS") != remote_fs:
+                node.set_config_element("remoteFS", remote_fs)
+        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+            logger.error("Failed to update agent node remote filesystem, %s", exc)
+            raise JenkinsError("Failed to update agent node remote filesystem.") from exc
 
     def list_agent_nodes(self) -> list[jenkinsapi.node.Node]:
         """Get agent nodes from Jenkins.

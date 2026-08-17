@@ -334,13 +334,28 @@ def test_agent_meta_from_relation_data_complete():
     """
     arrange: given relation data with all required fields.
     act: when from_agent_relation is called.
-    assert: AgentMeta is returned.
+    assert: AgentMeta is returned with the default remote filesystem.
     """
     result = state.AgentMeta.from_agent_relation(
         {"executors": "1", "labels": "linux", "name": "agent-0"}
     )
     assert result is not None
     assert result.name == "agent-0"
+    assert result.remote_fs == "/var/lib/jenkins/"
+
+
+def test_agent_meta_from_relation_data_remote_fs():
+    """An explicitly supplied remote filesystem is propagated to AgentMeta."""
+    result = state.AgentMeta.from_agent_relation(
+        {
+            "executors": "1",
+            "labels": "linux",
+            "name": "agent-0",
+            "remote_fs": "/workspace/jenkins/",
+        }
+    )
+    assert result is not None
+    assert result.remote_fs == "/workspace/jenkins/"
 
 
 def test_get_relation_state_invalid_agent_data_raises_relation_error():

@@ -171,6 +171,54 @@ def test_get_node_config_builds_websocket_enabled_node_config(
     assert node_kwargs["poll"] is False
 
 
+def test_get_node_config_uses_agent_remote_fs(
+    container: ops.Container, mock_client: MagicMock
+):
+    """_get_node_config uses the remote filesystem from relation metadata."""
+    agent_meta = state.AgentMeta(
+        executors="3", labels="x86_64", name="agent_node_0", remote_fs="/workspace/jenkins/"
+    )
+    fake_node = MagicMock()
+    fake_node.get_node_attributes.return_value = {
+        "json": json.dumps({"launcher": {"stapler-class": "hudson.slaves.JNLPLauncher"}})
+    }
+
+    with (
+        patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
+        patch.object(jenkins, "Node", return_value=fake_node) as node_ctor,
+    ):
+        _jenkins_instance(container)._get_node_config(agent_meta)
+
+    assert node_ctor.call_args.kwargs["node_dict"]["remote_fs"] == "/workspace/jenkins/"
+
+
+def test_update_agent_node_changes_remote_fs(container: ops.Container, mock_client: MagicMock):
+    """update_agent_node changes an existing node's remoteFS when it differs."""
+    node = MagicMock()
+    node.name = "agent_node_0"
+    node.get_config_element.return_value = "/var/lib/jenkins/"
+
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
+        _jenkins_instance(container).update_agent_node(node, "/workspace/jenkins/")
+
+    node.get_config_element.assert_called_once_with("remoteFS")
+    node.set_config_element.assert_called_once_with("remoteFS", "/workspace/jenkins/")
+
+
+def test_update_agent_node_does_not_change_matching_remote_fs(
+    container: ops.Container, mock_client: MagicMock
+):
+    """update_agent_node leaves a node unchanged when remoteFS already matches."""
+    node = MagicMock()
+    node.name = "agent_node_0"
+    node.get_config_element.return_value = "/workspace/jenkins/"
+
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
+        _jenkins_instance(container).update_agent_node(node, "/workspace/jenkins/")
+
+    node.set_config_element.assert_not_called()
+
+
 def test_remove_agent_node_success(container: ops.Container, mock_client: MagicMock):
     """remove_agent_node removes the node on success."""
     with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
