@@ -544,6 +544,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             unregistered_agents = [agent for agent in agents if agent.name not in agent_node_names]
             for unregistered_agent in unregistered_agents:
                 try:
+                    # AgentMeta includes remote_fs, which the Jenkins API wrapper
+                    # applies to the newly created controller-side node.
                     api_client.add_agent_node(agent_meta=unregistered_agent)
                 except jenkins.JenkinsError:
                     logger.exception("Failed to register agent node: %s", unregistered_agent)
