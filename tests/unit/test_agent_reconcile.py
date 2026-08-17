@@ -115,6 +115,24 @@ def test_reconcile_agents(
             assert f"{agent_name}_secret" in rel_data
 
 
+def test_reconcile_agents_adds_node_with_relation_remote_fs():
+    """New nodes receive the remote filesystem from relation metadata."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = _state_with_agents(["0"], remote_fs={"0": "/workspace/jenkins/"})
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        fake_client = FakeJenkinsService(initial_agents=[])
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+
+        mgr.charm._reconcile_agents(state=charm_state, client=fake_client)  # type: ignore[arg-type]
+
+    assert fake_client.agents_remote_fs["0"] == "/workspace/jenkins/"
+
+
 def test_reconcile_agents_updates_existing_node_remote_fs():
     """_reconcile_agents updates an existing node when relation remote_fs changes."""
     ctx = testing.Context(JenkinsK8sOperatorCharm)
