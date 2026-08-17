@@ -190,29 +190,35 @@ def test_get_node_config_uses_agent_remote_fs(container: ops.Container, mock_cli
     assert node_ctor.call_args.kwargs["node_dict"]["remote_fs"] == "/workspace/jenkins/"
 
 
-def test_update_agent_node_changes_remote_fs(container: ops.Container, mock_client: MagicMock):
-    """update_agent_node changes an existing node's remoteFS when it differs."""
+def test_reconcile_agent_node_changes_remote_fs(container: ops.Container, mock_client: MagicMock):
+    """reconcile_agent_node changes an existing node's remoteFS when it differs."""
     node = MagicMock()
     node.name = "agent_node_0"
     node.get_config_element.return_value = "/var/lib/jenkins/"
 
+    agent_meta = state.AgentMeta(
+        executors="1", labels="machine", name="agent_node_0", remote_fs="/workspace/jenkins/"
+    )
     with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
-        _jenkins_instance(container).update_agent_node(node, "/workspace/jenkins/")
+        _jenkins_instance(container).reconcile_agent_node(node, agent_meta)
 
     node.get_config_element.assert_called_once_with("remoteFS")
     node.set_config_element.assert_called_once_with("remoteFS", "/workspace/jenkins/")
 
 
-def test_update_agent_node_does_not_change_matching_remote_fs(
+def test_reconcile_agent_node_does_not_change_matching_remote_fs(
     container: ops.Container, mock_client: MagicMock
 ):
-    """update_agent_node leaves a node unchanged when remoteFS already matches."""
+    """reconcile_agent_node leaves a node unchanged when remoteFS already matches."""
     node = MagicMock()
     node.name = "agent_node_0"
     node.get_config_element.return_value = "/workspace/jenkins/"
 
+    agent_meta = state.AgentMeta(
+        executors="1", labels="machine", name="agent_node_0", remote_fs="/workspace/jenkins/"
+    )
     with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
-        _jenkins_instance(container).update_agent_node(node, "/workspace/jenkins/")
+        _jenkins_instance(container).reconcile_agent_node(node, agent_meta)
 
     node.set_config_element.assert_not_called()
 
@@ -236,7 +242,7 @@ def test_remove_agent_node_raises_on_api_error(container: ops.Container, mock_cl
         _jenkins_instance(container).remove_agent_node("jenkins-agent-0")
 
 
-def test_update_agent_node_ignores_trailing_slash_difference(
+def test_reconcile_agent_node_ignores_trailing_slash_difference(
     container: ops.Container, mock_client: MagicMock
 ):
     """Equivalent remoteFS paths with different trailing slashes do not churn."""
@@ -244,7 +250,10 @@ def test_update_agent_node_ignores_trailing_slash_difference(
     node.name = "agent_node_0"
     node.get_config_element.return_value = "/workspace/jenkins/"
 
+    agent_meta = state.AgentMeta(
+        executors="1", labels="machine", name="agent_node_0", remote_fs="/workspace/jenkins"
+    )
     with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
-        _jenkins_instance(container).update_agent_node(node, "/workspace/jenkins")
+        _jenkins_instance(container).reconcile_agent_node(node, agent_meta)
 
     node.set_config_element.assert_not_called()

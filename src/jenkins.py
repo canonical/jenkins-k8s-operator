@@ -465,23 +465,28 @@ class Jenkins:
             logger.error("Failed to add agent node, %s", exc)
             raise JenkinsError("Failed to add agent node.") from exc
 
-    def update_agent_node(self, node: Node, remote_fs: str) -> None:
-        """Update an agent node's remote filesystem when it differs.
+    def reconcile_agent_node(self, node: Node, agent_meta: state.AgentMeta) -> None:
+        """Reconcile an existing agent node with relation metadata.
+
+        The complete agent metadata is accepted here so additional mutable node
+        properties can be reconciled without introducing another narrowly scoped
+        update method. Currently the remote filesystem is the mutable property
+        owned by this relation.
 
         Args:
             node: The existing Jenkins agent node.
-            remote_fs: The desired remote filesystem path.
+            agent_meta: The desired agent metadata.
 
         Raises:
             JenkinsError: if an error occurred updating the node configuration.
         """
         try:
             current_remote_fs = node.get_config_element("remoteFS") or ""
-            if current_remote_fs.rstrip("/") != remote_fs.rstrip("/"):
-                node.set_config_element("remoteFS", remote_fs)
+            if current_remote_fs.rstrip("/") != agent_meta.remote_fs.rstrip("/"):
+                node.set_config_element("remoteFS", agent_meta.remote_fs)
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
-            logger.error("Failed to update agent node remote filesystem, %s", exc)
-            raise JenkinsError("Failed to update agent node remote filesystem.") from exc
+            logger.error("Failed to reconcile agent node configuration, %s", exc)
+            raise JenkinsError("Failed to reconcile agent node configuration.") from exc
 
     def list_agent_nodes(self) -> list[jenkinsapi.node.Node]:
         """Get agent nodes from Jenkins.
