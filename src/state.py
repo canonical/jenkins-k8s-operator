@@ -92,12 +92,14 @@ class AgentMeta(BaseModel):
     executors: str = Field(..., min_length=1)
     labels: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
-    remote_fs: str = Field(default="/var/lib/jenkins/", min_length=1)
+    remote_fs: typing.Optional[str] = Field(default=None, min_length=1)
 
     @field_validator("remote_fs")
     @classmethod
-    def valid_remote_fs(cls, value: str) -> str:
+    def valid_remote_fs(cls, value: typing.Optional[str]) -> typing.Optional[str]:
         """Validate the agent workspace root before sending it to Jenkins."""
+        if value is None:
+            return None
         if not REMOTE_FS_PATTERN.fullmatch(value) or value == "/" or ".." in value.split("/"):
             raise ValueError("remote_fs must be a safe absolute path")
         return value
@@ -136,7 +138,7 @@ class AgentMeta(BaseModel):
             executors=num_executors,
             labels=labels,
             name=name,
-            remote_fs=relation_data.get("remote_fs") or "/var/lib/jenkins/",
+            remote_fs=relation_data.get("remote_fs") or None,
         )
 
 

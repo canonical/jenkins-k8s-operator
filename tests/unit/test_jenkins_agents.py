@@ -164,7 +164,7 @@ def test_get_node_config_builds_websocket_enabled_node_config(
     assert node_kwargs["node_dict"] == {
         "num_executors": int(agent_meta.executors),
         "node_description": agent_meta.name,
-        "remote_fs": "/var/lib/jenkins/",
+        "remote_fs": "",
         "labels": agent_meta.labels,
         "exclusive": False,
     }
@@ -256,4 +256,20 @@ def test_reconcile_agent_node_ignores_trailing_slash_difference(
     with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
         _jenkins_instance(container).reconcile_agent_node(node, agent_meta)
 
+    node.set_config_element.assert_not_called()
+
+
+def test_reconcile_agent_node_preserves_ui_remote_fs_without_relation_value(
+    container: ops.Container, mock_client: MagicMock
+):
+    """An absent relation remote_fs must not overwrite controller configuration."""
+    node = MagicMock()
+    node.name = "agent_node_0"
+    node.get_config_element.return_value = "/ui/configured/workspace"
+    agent_meta = state.AgentMeta(executors="1", labels="machine", name="agent_node_0")
+
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
+        _jenkins_instance(container).reconcile_agent_node(node, agent_meta)
+
+    node.get_config_element.assert_not_called()
     node.set_config_element.assert_not_called()
