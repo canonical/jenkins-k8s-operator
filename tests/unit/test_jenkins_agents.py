@@ -7,6 +7,7 @@
 # pylint:disable=protected-access
 
 import json
+import xml.etree.ElementTree as ET
 from secrets import token_hex
 from unittest.mock import MagicMock, patch
 
@@ -164,7 +165,7 @@ def test_get_node_config_builds_websocket_enabled_node_config(
     assert node_kwargs["node_dict"] == {
         "num_executors": int(agent_meta.executors),
         "node_description": agent_meta.name,
-        "remote_fs": "",
+        "remote_fs": "/var/lib/jenkins",
         "labels": agent_meta.labels,
         "exclusive": False,
     }
@@ -174,7 +175,7 @@ def test_get_node_config_builds_websocket_enabled_node_config(
 def test_get_node_config_uses_agent_remote_fs(container: ops.Container, mock_client: MagicMock):
     """_get_node_config uses the remote filesystem from relation metadata."""
     agent_meta = state.AgentMeta(
-        executors="3", labels="x86_64", name="agent_node_0", remote_fs="/workspace/jenkins/"
+        executors="3", labels="x86_64", name="agent_node_0", remote_fs="/workspace/jenkins"
     )
     fake_node = MagicMock()
     fake_node.get_node_attributes.return_value = {
@@ -187,23 +188,28 @@ def test_get_node_config_uses_agent_remote_fs(container: ops.Container, mock_cli
     ):
         _jenkins_instance(container)._get_node_config(agent_meta)
 
-    assert node_ctor.call_args.kwargs["node_dict"]["remote_fs"] == "/workspace/jenkins/"
+    assert node_ctor.call_args.kwargs["node_dict"]["remote_fs"] == "/workspace/jenkins"
 
 
 def test_reconcile_agent_node_changes_remote_fs(container: ops.Container, mock_client: MagicMock):
     """reconcile_agent_node changes an existing node's remoteFS when it differs."""
     node = MagicMock()
     node.name = "agent_node_0"
-    node.get_config_element.return_value = "/var/lib/jenkins/"
+    node._get_config_element_tree.return_value = ET.fromstring(
+        "<node><remoteFS>/var/lib/jenkins</remoteFS></node>"
+    )
 
     agent_meta = state.AgentMeta(
-        executors="1", labels="machine", name="agent_node_0", remote_fs="/workspace/jenkins/"
+        executors="1", labels="machine", name="agent_node_0", remote_fs="/workspace/jenkins"
     )
     with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
         _jenkins_instance(container).reconcile_agent_node(node, agent_meta)
 
-    node.get_config_element.assert_called_once_with("remoteFS")
-    node.set_config_element.assert_called_once_with("remoteFS", "/workspace/jenkins/")
+    node._get_config_element_tree.assert_called_once_with()
+    node.upload_config.assert_called_once()
+    assert ET.fromstring(node.upload_config.call_args.args[0]).findtext("remoteFS") == (
+        "/workspace/jenkins"
+    )
 
 
 def test_reconcile_agent_node_does_not_change_matching_remote_fs(
@@ -212,15 +218,17 @@ def test_reconcile_agent_node_does_not_change_matching_remote_fs(
     """reconcile_agent_node leaves a node unchanged when remoteFS already matches."""
     node = MagicMock()
     node.name = "agent_node_0"
-    node.get_config_element.return_value = "/workspace/jenkins/"
+    node._get_config_element_tree.return_value = ET.fromstring(
+        "<node><remoteFS>/workspace/jenkins</remoteFS></node>"
+    )
 
     agent_meta = state.AgentMeta(
-        executors="1", labels="machine", name="agent_node_0", remote_fs="/workspace/jenkins/"
+        executors="1", labels="machine", name="agent_node_0", remote_fs="/workspace/jenkins"
     )
     with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
         _jenkins_instance(container).reconcile_agent_node(node, agent_meta)
 
-    node.set_config_element.assert_not_called()
+    node.upload_config.assert_not_called()
 
 
 def test_remove_agent_node_success(container: ops.Container, mock_client: MagicMock):
@@ -248,7 +256,9 @@ def test_reconcile_agent_node_ignores_trailing_slash_difference(
     """Equivalent remoteFS paths with different trailing slashes do not churn."""
     node = MagicMock()
     node.name = "agent_node_0"
-    node.get_config_element.return_value = "/workspace/jenkins/"
+    node._get_config_element_tree.return_value = ET.fromstring(
+        "<node><remoteFS>/workspace/jenkins</remoteFS></node>"
+    )
 
     agent_meta = state.AgentMeta(
         executors="1", labels="machine", name="agent_node_0", remote_fs="/workspace/jenkins"
@@ -256,7 +266,7 @@ def test_reconcile_agent_node_ignores_trailing_slash_difference(
     with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
         _jenkins_instance(container).reconcile_agent_node(node, agent_meta)
 
-    node.set_config_element.assert_not_called()
+    node.upload_config.assert_not_called()
 
 
 def test_reconcile_agent_node_preserves_ui_remote_fs_without_relation_value(
@@ -272,4 +282,4 @@ def test_reconcile_agent_node_preserves_ui_remote_fs_without_relation_value(
         _jenkins_instance(container).reconcile_agent_node(node, agent_meta)
 
     node.get_config_element.assert_not_called()
-    node.set_config_element.assert_not_called()
+    node.upload_config.assert_not_called()

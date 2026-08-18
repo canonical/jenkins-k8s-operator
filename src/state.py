@@ -100,9 +100,12 @@ class AgentMeta(BaseModel):
         """Validate the agent workspace root before sending it to Jenkins."""
         if value is None:
             return None
-        if not REMOTE_FS_PATTERN.fullmatch(value) or value == "/" or ".." in value.split("/"):
+        if not REMOTE_FS_PATTERN.fullmatch(value) or ".." in value.split("/"):
             raise ValueError("remote_fs must be a safe absolute path")
-        return value
+        normalized = "/" + "/".join(part for part in value.split("/") if part)
+        if normalized == "/":
+            raise ValueError("remote_fs must not be the filesystem root")
+        return normalized
 
     @field_validator("executors")
     @classmethod

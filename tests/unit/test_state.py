@@ -351,11 +351,11 @@ def test_agent_meta_from_relation_data_remote_fs():
             "executors": "1",
             "labels": "linux",
             "name": "agent-0",
-            "remote_fs": "/workspace/jenkins/",
+            "remote_fs": "/workspace/jenkins",
         }
     )
     assert result is not None
-    assert result.remote_fs == "/workspace/jenkins/"
+    assert result.remote_fs == "/workspace/jenkins"
 
 
 def test_get_relation_state_invalid_agent_data_raises_relation_error():
