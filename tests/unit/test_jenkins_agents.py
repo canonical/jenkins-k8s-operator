@@ -7,7 +7,7 @@
 # pylint:disable=protected-access
 
 import json
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405 - trusted test fixture XML
 from secrets import token_hex
 from unittest.mock import MagicMock, patch
 
@@ -195,7 +195,7 @@ def test_reconcile_agent_node_changes_remote_fs(container: ops.Container, mock_c
     """reconcile_agent_node changes an existing node's remoteFS when it differs."""
     node = MagicMock()
     node.name = "agent_node_0"
-    node._get_config_element_tree.return_value = ET.fromstring(
+    node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
         "<node><remoteFS>/var/lib/jenkins</remoteFS></node>"
     )
 
@@ -207,7 +207,7 @@ def test_reconcile_agent_node_changes_remote_fs(container: ops.Container, mock_c
 
     node._get_config_element_tree.assert_called_once_with()
     node.upload_config.assert_called_once()
-    assert ET.fromstring(node.upload_config.call_args.args[0]).findtext("remoteFS") == (
+    assert ET.fromstring(node.upload_config.call_args.args[0]).findtext("remoteFS") == (  # nosec B314 - trusted test fixture XML
         "/workspace/jenkins"
     )
 
@@ -218,7 +218,7 @@ def test_reconcile_agent_node_does_not_change_matching_remote_fs(
     """reconcile_agent_node leaves a node unchanged when remoteFS already matches."""
     node = MagicMock()
     node.name = "agent_node_0"
-    node._get_config_element_tree.return_value = ET.fromstring(
+    node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
         "<node><remoteFS>/workspace/jenkins</remoteFS></node>"
     )
 
@@ -256,7 +256,7 @@ def test_reconcile_agent_node_ignores_trailing_slash_difference(
     """Equivalent remoteFS paths with different trailing slashes do not churn."""
     node = MagicMock()
     node.name = "agent_node_0"
-    node._get_config_element_tree.return_value = ET.fromstring(
+    node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
         "<node><remoteFS>/workspace/jenkins</remoteFS></node>"
     )
 

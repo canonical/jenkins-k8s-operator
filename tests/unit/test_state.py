@@ -719,7 +719,7 @@ def test_jcasc_environment_secrets_invalid_env_var_names_blocks(
 
 @pytest.mark.parametrize(
     "remote_fs",
-    ["relative/path", "/", "/var/lib/../etc/jenkins", "/var/lib/jenkins\n"],
+    ["relative/path", "/", "//", "///", "/var/lib/../etc/jenkins", "/var/lib/jenkins\n"],
 )
 def test_agent_meta_rejects_unsafe_remote_fs(remote_fs: str):
     """Reject unsafe workspace roots from relation metadata."""
