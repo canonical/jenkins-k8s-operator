@@ -17,6 +17,7 @@ import secrets
 import textwrap
 import time
 import typing
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
@@ -433,7 +434,7 @@ class Jenkins:
             node_dict={
                 "num_executors": int(agent_meta.executors),
                 "node_description": agent_meta.name,
-                "remote_fs": agent_meta.remote_fs or "",
+                "remote_fs": agent_meta.remote_fs or "/var/lib/jenkins",
                 "labels": agent_meta.labels,
                 "exclusive": False,
             },
@@ -483,9 +484,14 @@ class Jenkins:
         if agent_meta.remote_fs is None:
             return
         try:
-            current_remote_fs = node.get_config_element("remoteFS") or ""
+            config_tree = node._get_config_element_tree()  # pylint: disable=protected-access
+            remote_fs_element = config_tree.find("remoteFS")
+            if remote_fs_element is None:
+                raise JenkinsError("Agent node configuration has no remoteFS element.")
+            current_remote_fs = remote_fs_element.text or ""
             if current_remote_fs.rstrip("/") != agent_meta.remote_fs.rstrip("/"):
-                node.set_config_element("remoteFS", agent_meta.remote_fs)
+                remote_fs_element.text = agent_meta.remote_fs
+                node.upload_config(ET.tostring(config_tree))
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             logger.error("Failed to reconcile agent node configuration, %s", exc)
             raise JenkinsError("Failed to reconcile agent node configuration.") from exc

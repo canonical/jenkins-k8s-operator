@@ -55,7 +55,7 @@ class FakeJenkinsService:
             agent: secrets.token_hex(16) for agent in initial_agents
         }
         self.agents_remote_fs: dict[str, str | None] = dict.fromkeys(
-            initial_agents, "/var/lib/jenkins/"
+            initial_agents, "/var/lib/jenkins"
         )
 
     def add_agent_node(self, agent_meta: AgentMeta) -> None:
@@ -120,7 +120,7 @@ def test_reconcile_agents(
 def test_reconcile_agents_adds_node_with_relation_remote_fs():
     """New nodes receive the remote filesystem from relation metadata."""
     ctx = testing.Context(JenkinsK8sOperatorCharm)
-    state = _state_with_agents(["0"], remote_fs={"0": "/workspace/jenkins/"})
+    state = _state_with_agents(["0"], remote_fs={"0": "/workspace/jenkins"})
 
     with (
         patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
@@ -132,13 +132,13 @@ def test_reconcile_agents_adds_node_with_relation_remote_fs():
 
         mgr.charm._reconcile_agents(state=charm_state, client=fake_client)  # type: ignore[arg-type]
 
-    assert fake_client.agents_remote_fs["0"] == "/workspace/jenkins/"
+    assert fake_client.agents_remote_fs["0"] == "/workspace/jenkins"
 
 
 def test_reconcile_agents_updates_existing_node_remote_fs():
     """_reconcile_agents updates an existing node when relation remote_fs changes."""
     ctx = testing.Context(JenkinsK8sOperatorCharm)
-    state = _state_with_agents(["0"], remote_fs={"0": "/workspace/jenkins/"})
+    state = _state_with_agents(["0"], remote_fs={"0": "/workspace/jenkins"})
 
     with (
         patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
@@ -150,7 +150,7 @@ def test_reconcile_agents_updates_existing_node_remote_fs():
 
         mgr.charm._reconcile_agents(state=charm_state, client=fake_client)  # type: ignore[arg-type]
 
-    assert fake_client.agents_remote_fs["0"] == "/workspace/jenkins/"
+    assert fake_client.agents_remote_fs["0"] == "/workspace/jenkins"
 
 
 @pytest.mark.parametrize(
