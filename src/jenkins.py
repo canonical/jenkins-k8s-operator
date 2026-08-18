@@ -433,7 +433,7 @@ class Jenkins:
             node_dict={
                 "num_executors": int(agent_meta.executors),
                 "node_description": agent_meta.name,
-                "remote_fs": agent_meta.remote_fs,
+                "remote_fs": agent_meta.remote_fs or "",
                 "labels": agent_meta.labels,
                 "exclusive": False,
             },
@@ -480,6 +480,8 @@ class Jenkins:
         Raises:
             JenkinsError: if an error occurred updating the node configuration.
         """
+        if agent_meta.remote_fs is None:
+            return
         try:
             current_remote_fs = node.get_config_element("remoteFS") or ""
             if current_remote_fs.rstrip("/") != agent_meta.remote_fs.rstrip("/"):

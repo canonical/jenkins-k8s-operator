@@ -334,14 +334,14 @@ def test_agent_meta_from_relation_data_complete():
     """
     arrange: given relation data with all required fields.
     act: when from_agent_relation is called.
-    assert: AgentMeta is returned with the default remote filesystem.
+    assert: AgentMeta is returned without a remote filesystem opinion.
     """
     result = state.AgentMeta.from_agent_relation(
         {"executors": "1", "labels": "linux", "name": "agent-0"}
     )
     assert result is not None
     assert result.name == "agent-0"
-    assert result.remote_fs == "/var/lib/jenkins/"
+    assert result.remote_fs is None
 
 
 def test_agent_meta_from_relation_data_remote_fs():

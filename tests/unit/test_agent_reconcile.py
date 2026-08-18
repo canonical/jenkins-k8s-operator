@@ -54,7 +54,9 @@ class FakeJenkinsService:
         self.agents_secret_map: dict[str, str] = {
             agent: secrets.token_hex(16) for agent in initial_agents
         }
-        self.agents_remote_fs: dict[str, str] = dict.fromkeys(initial_agents, "/var/lib/jenkins/")
+        self.agents_remote_fs: dict[str, str | None] = dict.fromkeys(
+            initial_agents, "/var/lib/jenkins/"
+        )
 
     def add_agent_node(self, agent_meta: AgentMeta) -> None:
         self.agents_secret_map[agent_meta.name] = secrets.token_hex(16)
