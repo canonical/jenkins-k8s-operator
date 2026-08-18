@@ -17,7 +17,7 @@ import secrets
 import textwrap
 import time
 import typing
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405 - only serializes Jenkins API XML
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
