@@ -3,13 +3,16 @@
 
 """Integration tests for jenkins-k8s-operator charm."""
 
+import logging
 import os
 import typing
 from pathlib import Path
 from secrets import token_hex
+from urllib.parse import quote
 
 import jenkinsapi
 import pytest
+import requests
 import yaml
 from juju.action import Action
 from juju.application import Application
@@ -21,6 +24,7 @@ from .types_ import UnitWebClient
 
 JENKINS_UID = "2000"
 JENKINS_GID = "2000"
+logger = logging.getLogger(__name__)
 
 
 async def test_jenkins_update_ui_disabled(
@@ -305,28 +309,62 @@ async def test_jcasc_reload_without_restart(
     assert new_message in exported_response.text
 
 
-def _get_current_branch() -> str:
-    """Get the current git branch name for GitHub raw URL references.
-
-    Falls back to 'main' if not in a git repo or on a detached HEAD.
-    """
-    # In GitHub Actions CI (pull_request event), GITHUB_HEAD_REF contains the source branch
-    github_head_ref = os.environ.get("GITHUB_HEAD_REF")
-    if github_head_ref:
+def _working_branch() -> str | None:
+    """Return the branch checked out by the test runner, when available."""
+    if github_head_ref := os.environ.get("GITHUB_HEAD_REF"):
         return github_head_ref
 
-    # Try reading .git/HEAD to determine the branch without subprocess
     try:
         git_dir = Path(__file__).parent.parent.parent / ".git"
-        if git_dir.exists() and (git_dir / "HEAD").exists():
-            with open(git_dir / "HEAD") as f:
-                head_content = f.read().strip()
-                if head_content.startswith("ref: refs/heads/"):
-                    return head_content.replace("ref: refs/heads/", "")
+        head = (git_dir / "HEAD").read_text().strip()
+        if head.startswith("ref: refs/heads/"):
+            return head.removeprefix("ref: refs/heads/")
     except OSError:
-        pass
+        return None
+    return None
 
-    # Fallback to 'main' if we can't determine the branch
+
+def _remote_branch_exists(repository: str, branch: str) -> bool:
+    """Return whether a branch exists in the configured JCasC repository."""
+    repository_path = repository.removeprefix("https://github.com/").removesuffix(".git")
+    branch_url = (
+        f"https://api.github.com/repos/{repository_path}/git/ref/heads/{quote(branch, safe='')}"
+    )
+    try:
+        response = requests.get(
+            branch_url,
+            headers={"Accept": "application/vnd.github+json"},
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        logger.warning("Unable to probe JCasC repository branch: branch=%s error=%s", branch, exc)
+        return False
+
+    logger.info(
+        "JCasC repository branch probe: repository=%s branch=%s available=%s status=%s",
+        repository,
+        branch,
+        response.status_code == 200,
+        response.status_code,
+    )
+    return response.status_code == 200
+
+
+def _get_current_branch(repository: str) -> str:
+    """Return the current branch if it exists in the configured repository.
+
+    Pull-request branches may be unavailable from the trusted repository. In that case, use
+    ``main`` so the JCasC fixture remains runnable.
+    """
+    branch = _working_branch()
+    if branch and _remote_branch_exists(repository, branch):
+        return branch
+
+    logger.info(
+        "Using JCasC repository fallback branch: repository=%s branch=main requested=%s",
+        repository,
+        branch or "none",
+    )
     return "main"
 
 
@@ -335,6 +373,7 @@ async def test_jcasc_repository_config_from_file(
     application: Application,
     web_address: str,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
+    test_jcasc_repository: str,
 ):
     """
     arrange: given a deployed Jenkins charm with jcasc-repository configured.
@@ -346,19 +385,24 @@ async def test_jcasc_repository_config_from_file(
     file:// git repository inside the charm container with fixture YAML files.
     """
     # Get the current git branch for fixture data reference
-    branch = _get_current_branch()
+    branch = _get_current_branch(test_jcasc_repository)
 
-    # Configure charm to use GitHub-hosted JCasC test data
-    # The jcasc-repository will clone the repo and check out the specified branch,
-    # then read YAML files from tests/integration/data/jcasc
-    await application.set_config(
-        {
-            "jcasc-config": "",
-            "jcasc-repository": "https://github.com/canonical/jenkins-k8s-operator.git",
-            "jcasc-repository-branch": branch,
-            "jcasc-repository-config-path": "tests/integration/data/jcasc",
-        }
+    # Configure charm to use GitHub-hosted JCasC test data. The selected branch is logged as
+    # non-secret diagnostic context and falls back to canonical main when the working branch is
+    # only present in a fork.
+    repository_config = {
+        "jcasc-config": "",
+        "jcasc-repository": test_jcasc_repository,
+        "jcasc-repository-branch": branch,
+        "jcasc-repository-config-path": "tests/integration/data/jcasc",
+    }
+    logger.info(
+        "Configuring JCasC repository: repository=%s branch=%s config_path=%s",
+        repository_config["jcasc-repository"],
+        repository_config["jcasc-repository-branch"],
+        repository_config["jcasc-repository-config-path"],
     )
+    await application.set_config(repository_config)
 
     model = ops_test.model
     assert model is not None

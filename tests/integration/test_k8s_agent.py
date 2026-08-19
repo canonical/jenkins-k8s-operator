@@ -57,9 +57,23 @@ async def test_jenkins_k8s_agent_relation(
         wait_for_active=True,
     )
 
+    # Agent relation metadata uses unit names with slashes replaced by hyphens.
+    jenkins_k8s_agent_node = jenkins_k8s_agents.units[0].name.replace("/", "-")
+    extra_jenkins_k8s_agent_node = extra_jenkins_k8s_agents.units[0].name.replace("/", "-")
+    node_names = sorted(jenkins_client.nodes.iterkeys())
+    logger.info(
+        "Jenkins agent nodes after relation: expected=%s actual=%s",
+        [jenkins_k8s_agent_node, extra_jenkins_k8s_agent_node],
+        node_names,
+    )
+
     # 1. Assert that the node is registered and is able to run jobs successfully.
-    assert_job_success(jenkins_client, jenkins_k8s_agents.name, "k8s")
-    assert_job_success(jenkins_client, extra_jenkins_k8s_agents.name, "k8s-extra")
+    assert_job_success(jenkins_client, jenkins_k8s_agent_node, "k8s")
+    assert_job_success(jenkins_client, extra_jenkins_k8s_agent_node, "k8s-extra")
+    assert jenkins_client.get_node(jenkins_k8s_agent_node).get_config_element("remoteFS") == ("")
+    assert jenkins_client.get_node(extra_jenkins_k8s_agent_node).get_config_element(
+        "remoteFS"
+    ) == ("/var/lib/jenkins/")
 
     # 2. Remove the relation
     await application.remove_relation(
@@ -73,5 +87,11 @@ async def test_jenkins_k8s_agent_relation(
     )
 
     # 2. Assert that the agent nodes are deregistered from Jenkins.
-    assert not any(jenkins_k8s_agents.name in key for key in jenkins_client.nodes.iterkeys())
-    assert not any(extra_jenkins_k8s_agents.name in key for key in jenkins_client.nodes.iterkeys())
+    node_names = sorted(jenkins_client.nodes.iterkeys())
+    logger.info(
+        "Jenkins agent nodes after relation removal: removed=%s remaining=%s",
+        [jenkins_k8s_agent_node, extra_jenkins_k8s_agent_node],
+        node_names,
+    )
+    assert jenkins_k8s_agent_node not in node_names
+    assert extra_jenkins_k8s_agent_node not in node_names
