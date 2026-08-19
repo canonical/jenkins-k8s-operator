@@ -330,10 +330,17 @@ def _remote_branch_exists(repository: str, branch: str) -> bool:
     branch_url = (
         f"https://api.github.com/repos/{repository_path}/git/ref/heads/{quote(branch, safe='')}"
     )
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "jenkins-k8s-operator-integration-tests",
+    }
+    if github_token := os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {github_token}"
+
     try:
         response = requests.get(
             branch_url,
-            headers={"Accept": "application/vnd.github+json"},
+            headers=headers,
             timeout=30,
         )
     except requests.RequestException as exc:
