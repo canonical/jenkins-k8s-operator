@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
 DATA_DIR = Path(__file__).parent / "data"
+DEFAULT_TEST_JCASC_REPOSITORY = "https://github.com/canonical/jenkins-k8s-operator.git"
 
 
 async def charm_exec(ops_test: OpsTest, unit_name: str, cmd: str) -> None:
@@ -64,6 +65,12 @@ def model_fixture(ops_test: OpsTest) -> Model:
     """The testing model."""
     assert ops_test.model
     return ops_test.model
+
+
+@pytest.fixture(scope="module", name="test_jcasc_repository")
+def test_jcasc_repository_fixture() -> str:
+    """Return the trusted repository used by the JCasC integration test."""
+    return os.environ.get("TEST_JCASC_REPOSITORY", DEFAULT_TEST_JCASC_REPOSITORY)
 
 
 @pytest.fixture(scope="module", name="cloud")
