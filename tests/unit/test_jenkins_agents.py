@@ -196,7 +196,7 @@ def test_reconcile_agent_node_changes_remote_fs(container: ops.Container, mock_c
     node = MagicMock()
     node.name = "agent_node_0"
     node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
-        "<node><remoteFS>/var/lib/jenkins</remoteFS></node>"
+        "<node><numExecutors>2</numExecutors><label>old</label><remoteFS>/var/lib/jenkins</remoteFS></node>"
     )
 
     agent_meta = state.AgentMeta(
@@ -207,9 +207,10 @@ def test_reconcile_agent_node_changes_remote_fs(container: ops.Container, mock_c
 
     node._get_config_element_tree.assert_called_once_with()
     node.upload_config.assert_called_once()
-    assert ET.fromstring(node.upload_config.call_args.args[0]).findtext("remoteFS") == (  # nosec B314 - trusted test fixture XML
-        "/workspace/jenkins"
-    )
+    updated = ET.fromstring(node.upload_config.call_args.args[0])  # nosec B314 - trusted test fixture XML
+    assert updated.findtext("numExecutors") == "1"
+    assert updated.findtext("label") == "machine"
+    assert updated.findtext("remoteFS") == "/workspace/jenkins"
 
 
 def test_reconcile_agent_node_does_not_change_matching_remote_fs(
@@ -219,7 +220,7 @@ def test_reconcile_agent_node_does_not_change_matching_remote_fs(
     node = MagicMock()
     node.name = "agent_node_0"
     node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
-        "<node><remoteFS>/workspace/jenkins</remoteFS></node>"
+        "<node><numExecutors>1</numExecutors><label>machine</label><remoteFS>/workspace/jenkins</remoteFS></node>"
     )
 
     agent_meta = state.AgentMeta(
@@ -257,7 +258,7 @@ def test_reconcile_agent_node_ignores_trailing_slash_difference(
     node = MagicMock()
     node.name = "agent_node_0"
     node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
-        "<node><remoteFS>/workspace/jenkins</remoteFS></node>"
+        "<node><numExecutors>1</numExecutors><label>machine</label><remoteFS>/workspace/jenkins</remoteFS></node>"
     )
 
     agent_meta = state.AgentMeta(
@@ -275,11 +276,13 @@ def test_reconcile_agent_node_preserves_ui_remote_fs_without_relation_value(
     """An absent relation remote_fs must not overwrite controller configuration."""
     node = MagicMock()
     node.name = "agent_node_0"
-    node.get_config_element.return_value = "/ui/configured/workspace"
+    node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
+        "<node><numExecutors>1</numExecutors><label>machine</label><remoteFS>/ui/configured/workspace</remoteFS></node>"
+    )
     agent_meta = state.AgentMeta(executors="1", labels="machine", name="agent_node_0")
 
     with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
         _jenkins_instance(container).reconcile_agent_node(node, agent_meta)
 
-    node.get_config_element.assert_not_called()
+    node._get_config_element_tree.assert_called_once_with()
     node.upload_config.assert_not_called()
