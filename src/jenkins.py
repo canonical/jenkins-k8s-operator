@@ -469,10 +469,10 @@ class Jenkins:
     def reconcile_agent_node(self, node: Node, agent_meta: state.AgentMeta) -> None:
         """Reconcile an existing agent node with relation metadata.
 
-        The complete agent metadata is accepted here so additional mutable node
-        properties can be reconciled without introducing another narrowly scoped
-        update method. Currently the remote filesystem is the mutable property
-        owned by this relation.
+        The complete agent metadata is accepted here so all node properties owned
+        by this relation can be reconciled in one configuration update. The node
+        name is the identity; executors and labels are always managed, while the
+        remote filesystem is managed only when explicitly supplied.
 
         Args:
             node: The existing Jenkins agent node.
@@ -481,16 +481,31 @@ class Jenkins:
         Raises:
             JenkinsError: if an error occurred updating the node configuration.
         """
-        if agent_meta.remote_fs is None:
-            return
         try:
             config_tree = node._get_config_element_tree()  # pylint: disable=protected-access
-            remote_fs_element = config_tree.find("remoteFS")
-            if remote_fs_element is None:
-                raise JenkinsError("Agent node configuration has no remoteFS element.")
-            current_remote_fs = remote_fs_element.text or ""
-            if current_remote_fs.rstrip("/") != agent_meta.remote_fs.rstrip("/"):
-                remote_fs_element.text = agent_meta.remote_fs
+            desired_elements = {
+                "numExecutors": str(agent_meta.executors),
+                "label": agent_meta.labels,
+            }
+            if agent_meta.remote_fs is not None:
+                desired_elements["remoteFS"] = agent_meta.remote_fs
+
+            changed = False
+            for element_name, desired_value in desired_elements.items():
+                element = config_tree.find(element_name)
+                if element is None:
+                    element = ET.SubElement(config_tree, element_name)
+                    current_value = ""
+                else:
+                    current_value = element.text or ""
+                if element_name == "remoteFS":
+                    values_match = current_value.rstrip("/") == desired_value.rstrip("/")
+                else:
+                    values_match = current_value == desired_value
+                if not values_match:
+                    element.text = desired_value
+                    changed = True
+            if changed:
                 node.upload_config(ET.tostring(config_tree))
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             logger.error("Failed to reconcile agent node configuration, %s", exc)
