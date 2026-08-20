@@ -1,5 +1,5 @@
 cosl==1.9.1
-jenkinsapi==0.3.19
+jenkinsapi==0.3.23
 jsonschema==4.26.0
 ops==3.8.0
 pydantic==2.13.4
