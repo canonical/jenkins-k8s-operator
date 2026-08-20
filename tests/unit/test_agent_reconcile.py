@@ -26,10 +26,18 @@ def _agent_relation(remote_units_data: dict[int, dict[str, str]]) -> testing.Rel
     )
 
 
-def _state_with_agents(agent_names: list[str]) -> testing.State:
+def _state_with_agents(
+    agent_names: list[str], remote_fs: dict[str, str] | None = None
+) -> testing.State:
     """Create Scenario state with connected Jenkins container and agent relation."""
+    remote_fs = remote_fs or {}
     remote_units_data = {
-        idx: {"executors": "1", "labels": "testing", "name": name}
+        idx: {
+            "executors": "1",
+            "labels": "testing",
+            "name": name,
+            **({"remote_fs": remote_fs[name]} if name in remote_fs else {}),
+        }
         for idx, name in enumerate(agent_names)
     }
     return testing.State(
@@ -46,15 +54,23 @@ class FakeJenkinsService:
         self.agents_secret_map: dict[str, str] = {
             agent: secrets.token_hex(16) for agent in initial_agents
         }
+        self.agents_remote_fs: dict[str, str | None] = dict.fromkeys(
+            initial_agents, "/var/lib/jenkins"
+        )
 
     def add_agent_node(self, agent_meta: AgentMeta) -> None:
         self.agents_secret_map[agent_meta.name] = secrets.token_hex(16)
+        self.agents_remote_fs[agent_meta.name] = agent_meta.remote_fs
+
+    def reconcile_agent_node(self, node: SimpleNamespace, agent_meta: AgentMeta) -> None:
+        self.agents_remote_fs[node.name] = agent_meta.remote_fs
 
     def get_node_secret(self, node_name: str) -> str | None:
         return self.agents_secret_map.get(node_name)
 
     def remove_agent_node(self, agent_name: str) -> None:
         self.agents_secret_map.pop(agent_name)
+        self.agents_remote_fs.pop(agent_name)
 
     def list_agent_nodes(self) -> list[SimpleNamespace]:
         return [SimpleNamespace(name=name) for name in self.agents_secret_map]
@@ -99,6 +115,42 @@ def test_reconcile_agents(
         assert "url" in rel_data
         for agent_name in expected_agents:
             assert f"{agent_name}_secret" in rel_data
+
+
+def test_reconcile_agents_adds_node_with_relation_remote_fs():
+    """New nodes receive the remote filesystem from relation metadata."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = _state_with_agents(["0"], remote_fs={"0": "/workspace/jenkins"})
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        fake_client = FakeJenkinsService(initial_agents=[])
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+
+        mgr.charm._reconcile_agents(state=charm_state, client=fake_client)  # type: ignore[arg-type]
+
+    assert fake_client.agents_remote_fs["0"] == "/workspace/jenkins"
+
+
+def test_reconcile_agents_updates_existing_node_remote_fs():
+    """_reconcile_agents updates an existing node when relation remote_fs changes."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = _state_with_agents(["0"], remote_fs={"0": "/workspace/jenkins"})
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        fake_client = FakeJenkinsService(initial_agents=["0"])
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+
+        mgr.charm._reconcile_agents(state=charm_state, client=fake_client)  # type: ignore[arg-type]
+
+    assert fake_client.agents_remote_fs["0"] == "/workspace/jenkins"
 
 
 @pytest.mark.parametrize(
