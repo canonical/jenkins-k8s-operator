@@ -235,6 +235,15 @@ def _parse_system_properties(charm: ops.CharmBase) -> list[str]:
     return system_properties
 
 
+def _parse_external_agent_nodes(charm: ops.CharmBase) -> frozenset[str]:
+    """Parse names of Jenkins nodes managed outside Juju."""
+    raw_nodes = typing.cast(str, charm.config.get("external-agent-nodes") or "")
+    names = [name.strip() for name in raw_nodes.split(",") if name.strip()]
+    if len(names) != len(set(names)):
+        raise CharmConfigInvalidError("external-agent-nodes contains duplicate node names.")
+    return frozenset(names)
+
+
 def _validate_deployment_relations(charm: ops.CharmBase) -> None:
     """Validate supported deployment topology and required integrations."""
     if charm.app.planned_units() > 1:
@@ -439,6 +448,7 @@ class State:
         jcasc_repository_config_path: Path within repository containing JCasC YAML files.
         system_properties: Additional JVM system properties as -D flags.
         external_hostname: Public hostname for HAProxy-route based routing, or None.
+        external_agent_nodes: Names of Jenkins nodes managed outside Juju.
 
     """
 
@@ -455,6 +465,7 @@ class State:
     system_properties: typing.List[str] = dataclasses.field(default_factory=list)
     admin_password: typing.Optional[str] = None
     external_hostname: typing.Optional[str] = None
+    external_agent_nodes: frozenset[str] = frozenset()
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -494,6 +505,7 @@ class State:
         jcasc_environment_secrets = _parse_jcasc_environment_secrets(charm)
         admin_password = _get_admin_password(charm)
         external_hostname = _parse_external_hostname(charm)
+        external_agent_nodes = _parse_external_agent_nodes(charm)
 
         return cls(
             restart_time_range=restart_time_range,
@@ -509,4 +521,5 @@ class State:
             system_properties=system_properties,
             admin_password=admin_password,
             external_hostname=external_hostname,
+            external_agent_nodes=external_agent_nodes,
         )

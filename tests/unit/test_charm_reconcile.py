@@ -467,3 +467,35 @@ def test_reconcile_pre_startup_configurations_runs_required_steps(
     )
     install_logging_mock.assert_called_once_with(harness_container.container)
     reconcile_jcasc_mock.assert_called_once_with(harness_container.container, charm_state)
+
+
+def test_reconcile_departed_event_cleans_up_after_agent_reconcile(
+    harness_container: HarnessWithContainer,
+):
+    """Departing relation cleanup runs after the normal agent reconciliation."""
+    harness = harness_container.harness
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    event = MagicMock(spec=ops.RelationDepartedEvent)
+
+    with (
+        patch.object(jenkins_charm, "_reconcile_storage"),
+        patch.object(
+            jenkins_charm, "_reconcile_pre_startup_configurations", return_value="hash123"
+        ),
+        patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins_charm, "_reconcile_api_token"),
+        patch.object(jenkins_charm, "_reconcile_agents") as reconcile_agents,
+        patch.object(jenkins_charm, "_reconcile_departed_agents") as reconcile_departed,
+        patch.object(jenkins_charm, "_reconcile_agent_discovery"),
+        patch.object(jenkins_charm, "_reconcile_auth_proxy"),
+        patch.object(jenkins_charm, "_reconcile_haproxy_route"),
+        patch.object(jenkins_charm, "_reconcile_plugins"),
+        patch.object(harness_container.container, "add_layer"),
+        patch.object(harness_container.container, "replan"),
+    ):
+        jenkins_charm._reconcile(event)
+
+    reconcile_agents.assert_called_once()
+    reconcile_departed.assert_called_once()

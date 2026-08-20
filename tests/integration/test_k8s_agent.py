@@ -97,3 +97,45 @@ async def test_jenkins_k8s_agent_relation(
     )
     assert jenkins_k8s_agent_node not in node_names
     assert extra_jenkins_k8s_agent_node not in node_names
+
+
+async def test_manually_managed_node_survives_agent_relation(
+    model: Model,
+    application: Application,
+    jenkins_k8s_agents: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+):
+    """Preserve a manually created node through agent relation reconciliation."""
+    node_name = "manual-external-agent"
+    jenkins_client.create_node(
+        name=node_name,
+        num_executors=1,
+        node_description="Created outside Juju",
+        remote_fs="/var/lib/jenkins",
+        labels="external",
+    )
+
+    try:
+        await application.set_config({"external-agent-nodes": node_name})
+        await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+
+        await application.relate(state.AGENT_RELATION, jenkins_k8s_agents.name)
+        await model.wait_for_idle(
+            apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
+        )
+
+        assert jenkins_client.get_node(node_name).get_config_element("description") == (
+            "Created outside Juju"
+        )
+
+        await application.remove_relation(
+            state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
+        )
+        await model.wait_for_idle(
+            apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
+        )
+        assert any(node_name == key for key in jenkins_client.nodes.iterkeys())
+    finally:
+        await application.reset_config(["external-agent-nodes"])
+        if any(node_name == key for key in jenkins_client.nodes.iterkeys()):
+            jenkins_client.delete_node(node_name)
