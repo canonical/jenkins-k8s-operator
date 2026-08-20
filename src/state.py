@@ -25,6 +25,7 @@ INGRESS_RELATION_NAME = "ingress"
 AGENT_DISCOVERY_INGRESS_RELATION_NAME = "agent-discovery-ingress"
 HAPROXY_ROUTE_RELATION_NAME = "haproxy-route"
 ENV_VAR_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+REMOTE_FS_PATTERN = re.compile(r"^/[A-Za-z0-9._/-]+$")
 
 
 class CharmStateBaseError(Exception):
@@ -91,6 +92,20 @@ class AgentMeta(BaseModel):
     executors: str = Field(..., min_length=1)
     labels: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
+    remote_fs: typing.Optional[str] = Field(default=None, min_length=1)
+
+    @field_validator("remote_fs")
+    @classmethod
+    def valid_remote_fs(cls, value: typing.Optional[str]) -> typing.Optional[str]:
+        """Validate the agent workspace root before sending it to Jenkins."""
+        if value is None:
+            return None
+        if not REMOTE_FS_PATTERN.fullmatch(value) or ".." in value.split("/"):
+            raise ValueError("remote_fs must be a safe absolute path")
+        normalized = "/" + "/".join(part for part in value.split("/") if part)
+        if normalized == "/":
+            raise ValueError("remote_fs must not be the filesystem root")
+        return normalized
 
     @field_validator("executors")
     @classmethod
@@ -122,7 +137,12 @@ class AgentMeta(BaseModel):
         name = relation_data.get("name")
         if not num_executors or not labels or not name:
             return None
-        return cls(executors=num_executors, labels=labels, name=name)
+        return cls(
+            executors=num_executors,
+            labels=labels,
+            name=name,
+            remote_fs=relation_data.get("remote_fs") or None,
+        )
 
 
 def _get_agent_meta_map_from_relation(

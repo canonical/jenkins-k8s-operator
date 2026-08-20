@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+## 2026-08-17
+
+- Use optional agent `remote_fs` relation metadata when registering Jenkins nodes; absent
+  metadata leaves existing controller-side remote roots untouched and creates new nodes with an
+  empty remote root.
+- Reconcile existing Jenkins node remote filesystem settings when agent
+  relation metadata changes.
+
 ## 2026-07-23
 
 - Fix plugin reconciliation to skip plugin removal when `plugins` is unset or empty.

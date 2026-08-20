@@ -374,6 +374,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             agent_node_names=agent_node_names,
             api_client=client,
         )
+        self._update_agent_nodes_from_relation(
+            agent_relation=state.agent_relation_meta,
+            agent_nodes=agent_nodes,
+            api_client=client,
+        )
         self._remove_agent_nodes_not_in_relation(
             agent_relation=state.agent_relation_meta,
             agent_node_names=agent_node_names,
@@ -539,6 +544,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             unregistered_agents = [agent for agent in agents if agent.name not in agent_node_names]
             for unregistered_agent in unregistered_agents:
                 try:
+                    # AgentMeta includes remote_fs, which the Jenkins API wrapper
+                    # applies to the newly created controller-side node.
                     api_client.add_agent_node(agent_meta=unregistered_agent)
                 except jenkins.JenkinsError:
                     logger.exception("Failed to register agent node: %s", unregistered_agent)
@@ -554,6 +561,35 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     logger.exception("Failed to get secret for registered node: %s", meta)
                     raise
             relation.data[self.model.unit].update(agent_relation_data)
+
+    def _update_agent_nodes_from_relation(
+        self,
+        agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
+        agent_nodes: list[typing.Any],
+        api_client: jenkins.Jenkins,
+    ) -> None:
+        """Update existing Jenkins agent nodes to match relation remote filesystems.
+
+        Args:
+            agent_relation: Mapping of agent relation to agent metadata.
+            agent_nodes: The agents currently registered on Jenkins.
+            api_client: The Jenkins API client.
+
+        Raises:
+            JenkinsError: if there was an error updating an agent node.
+        """
+        agent_meta_by_name = {
+            agent.name: agent for agents in agent_relation.values() for agent in agents
+        }
+        for node in agent_nodes:
+            if node.name not in agent_meta_by_name:
+                continue
+            agent_meta = agent_meta_by_name[node.name]
+            try:
+                api_client.reconcile_agent_node(node=node, agent_meta=agent_meta)
+            except jenkins.JenkinsError:
+                logger.exception("Failed to update agent node: %s", agent_meta)
+                raise
 
     def _remove_agent_nodes_not_in_relation(
         self,

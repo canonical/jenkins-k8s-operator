@@ -14,6 +14,12 @@ Example agent integrate command:
 juju relate jenkins-k8s:agent jenkins-agent-k8s:agent
 ```
 
+The agent charm publishes `executors`, `labels`, and `name` in its unit relation data. It may
+optionally publish `remote_fs` to set the Jenkins agent's remote filesystem. If `remote_fs` is not
+published, a new node is created with an empty remote root and existing nodes retain their current
+controller-side Jenkins UI configuration. Explicit `remote_fs` changes are applied during
+reconciliation.
+
 To create a [cross model relation](https://documentation.ubuntu.com/juju/3.6/howto/manage-relations/#add-a-cross-model-relation) with
 a jenkins-agent (VM) charm, create an offer from the machine model.
 

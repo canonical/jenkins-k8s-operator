@@ -334,13 +334,28 @@ def test_agent_meta_from_relation_data_complete():
     """
     arrange: given relation data with all required fields.
     act: when from_agent_relation is called.
-    assert: AgentMeta is returned.
+    assert: AgentMeta is returned without a remote filesystem opinion.
     """
     result = state.AgentMeta.from_agent_relation(
         {"executors": "1", "labels": "linux", "name": "agent-0"}
     )
     assert result is not None
     assert result.name == "agent-0"
+    assert result.remote_fs is None
+
+
+def test_agent_meta_from_relation_data_remote_fs():
+    """An explicitly supplied remote filesystem is propagated to AgentMeta."""
+    result = state.AgentMeta.from_agent_relation(
+        {
+            "executors": "1",
+            "labels": "linux",
+            "name": "agent-0",
+            "remote_fs": "/workspace/jenkins",
+        }
+    )
+    assert result is not None
+    assert result.remote_fs == "/workspace/jenkins"
 
 
 def test_get_relation_state_invalid_agent_data_raises_relation_error():
@@ -700,3 +715,18 @@ def test_jcasc_environment_secrets_invalid_env_var_names_blocks(
 
     with pytest.raises(state.CharmConfigInvalidError, match="invalid environment variable names"):
         state.State.from_charm(mock_charm)
+
+
+@pytest.mark.parametrize(
+    "remote_fs",
+    ["relative/path", "/", "//", "///", "/var/lib/../etc/jenkins", "/var/lib/jenkins\n"],
+)
+def test_agent_meta_rejects_unsafe_remote_fs(remote_fs: str):
+    """Reject unsafe workspace roots from relation metadata."""
+    with pytest.raises(state.ValidationError, match="remote_fs"):
+        state.AgentMeta(
+            executors="1",
+            labels="linux",
+            name="agent-0",
+            remote_fs=remote_fs,
+        )
