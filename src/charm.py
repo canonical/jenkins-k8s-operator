@@ -255,6 +255,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._reconcile_api_token(admin_client=admin_client)
             logger.info("Reconciling agents")
             self._reconcile_agents(charm_state, client=admin_client)
+            if isinstance(event, (ops.RelationDepartedEvent, ops.RelationBrokenEvent)):
+                logger.info("Cleaning up departing agent nodes")
+                self._reconcile_departed_agents(event, charm_state, admin_client)
             logger.info("Reconciling agent discovery")
             self._reconcile_agent_discovery()
             logger.info("Reconciling auth proxy")
@@ -355,6 +358,30 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
         container.replan()
 
+    def _reconcile_departed_agents(
+        self, event: ops.EventBase, state: State, client: jenkins.Jenkins
+    ) -> None:
+        """Remove nodes described by a departing agent relation."""
+        relation = getattr(event, "relation", None)
+        if relation is None:
+            return
+
+        departing_unit = getattr(event, "departing_unit", None)
+        units = [departing_unit] if departing_unit is not None else relation.units
+        for unit in units:
+            agent = AgentMeta.from_agent_relation(relation.data[unit])
+            if agent is None:
+                continue
+            if agent.name in state.external_agent_nodes:
+                raise ReconcileBlockedError(
+                    f"Agent node is declared externally managed: {agent.name}"
+                )
+            try:
+                client.remove_agent_node(agent_name=agent.name)
+            except jenkins.JenkinsError:
+                logger.exception("Failed to remove departing agent node: %s", agent.name)
+                raise
+
     def _reconcile_agents(self, state: State, client: jenkins.Jenkins) -> None:
         """Reconcile Jenkins agent nodes to match relation state.
 
@@ -364,6 +391,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """
         if not state.agent_relation_meta:
             return
+
+        relation_agent_names = {
+            agent.name for agents in state.agent_relation_meta.values() for agent in agents
+        }
+        external_agent_nodes: frozenset[str] = getattr(state, "external_agent_nodes", frozenset())
+        name_collisions = relation_agent_names & external_agent_nodes
+        if name_collisions:
+            names = ", ".join(sorted(name_collisions))
+            raise ReconcileBlockedError(f"Agent node(s) are declared externally managed: {names}")
 
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
@@ -377,11 +413,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self._update_agent_nodes_from_relation(
             agent_relation=state.agent_relation_meta,
             agent_nodes=agent_nodes,
-            api_client=client,
-        )
-        self._remove_agent_nodes_not_in_relation(
-            agent_relation=state.agent_relation_meta,
-            agent_node_names=agent_node_names,
             api_client=client,
         )
 
@@ -589,33 +620,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 api_client.reconcile_agent_node(node=node, agent_meta=agent_meta)
             except jenkins.JenkinsError:
                 logger.exception("Failed to update agent node: %s", agent_meta)
-                raise
-
-    def _remove_agent_nodes_not_in_relation(
-        self,
-        agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
-        agent_node_names: list[str],
-        api_client: jenkins.Jenkins,
-    ) -> None:
-        """Remove agent nodes not found in relation data.
-
-        Args:
-            agent_relation: Mapping of agent relation to agent metadata.
-            agent_node_names: The agents registered on Jenkins server.
-            api_client: The Jenkins API client.
-
-        Raises:
-            JenkinsError: if there was an error while removing agent nodes from Jenkins.
-        """
-        all_agent_names_from_relation = {
-            agent.name for agents in agent_relation.values() for agent in agents
-        }
-        agents_not_in_relation = set(agent_node_names) - all_agent_names_from_relation
-        for agent_name in agents_not_in_relation:
-            try:
-                api_client.remove_agent_node(agent_name=agent_name)
-            except jenkins.JenkinsError:
-                logger.exception("Failed to remove registered node: %s", agent_name)
                 raise
 
     def _reconcile_pre_startup_configurations(

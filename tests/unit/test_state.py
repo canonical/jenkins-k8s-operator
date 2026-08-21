@@ -730,3 +730,34 @@ def test_agent_meta_rejects_unsafe_remote_fs(remote_fs: str):
             name="agent-0",
             remote_fs=remote_fs,
         )
+
+
+@pytest.mark.parametrize(
+    "config_value, expected",
+    [
+        pytest.param({}, frozenset(), id="unset"),
+        pytest.param({"external-agent-nodes": ""}, frozenset(), id="empty"),
+        pytest.param(
+            {"external-agent-nodes": " toronto-switch-backup, baremetal-0 "},
+            frozenset({"toronto-switch-backup", "baremetal-0"}),
+            id="comma-separated-names",
+        ),
+    ],
+)
+def test_external_agent_nodes_config_parses_names(
+    mock_charm: MagicMock, config_value: dict[str, str], expected: frozenset[str]
+):
+    """Parse the minimal comma-separated external agent node declaration."""
+    mock_charm.config = config_value
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.external_agent_nodes == expected
+
+
+def test_external_agent_nodes_config_rejects_duplicate_names(mock_charm: MagicMock):
+    """Reject duplicate names so the protection declaration is unambiguous."""
+    mock_charm.config = {"external-agent-nodes": "agent-0, agent-0"}
+
+    with pytest.raises(state.CharmConfigInvalidError, match="duplicate"):
+        state.State.from_charm(mock_charm)

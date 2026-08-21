@@ -5,6 +5,7 @@
 
 import inspect
 import secrets
+import typing
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +13,7 @@ import ops
 import pytest
 from ops import testing
 
+import charm
 import jenkins
 from charm import JenkinsK8sOperatorCharm
 from state import AgentMeta, State
@@ -27,7 +29,9 @@ def _agent_relation(remote_units_data: dict[int, dict[str, str]]) -> testing.Rel
 
 
 def _state_with_agents(
-    agent_names: list[str], remote_fs: dict[str, str] | None = None
+    agent_names: list[str],
+    remote_fs: dict[str, str] | None = None,
+    config: dict[str, str] | None = None,
 ) -> testing.State:
     """Create Scenario state with connected Jenkins container and agent relation."""
     remote_fs = remote_fs or {}
@@ -44,6 +48,7 @@ def _state_with_agents(
         containers=[testing.Container("jenkins", can_connect=True)],  # type: ignore[arg-type]
         storages={testing.Storage("jenkins-home")},
         relations=[_agent_relation(remote_units_data)],
+        config=config or {},
     )
 
 
@@ -83,7 +88,9 @@ class FakeJenkinsService:
         pytest.param([], ["0"], ["0"], id="one relation agent"),
         pytest.param([], ["0", "1"], ["0", "1"], id="two relation agents"),
         pytest.param(["0"], ["0"], ["0"], id="already registered"),
-        pytest.param(["3", "4"], ["0", "1"], ["0", "1"], id="replace stale agents"),
+        pytest.param(
+            ["3", "4"], ["0", "1"], ["0", "1", "3", "4"], id="preserve non-relation agents"
+        ),
     ],
 )
 def test_reconcile_agents(
@@ -91,7 +98,7 @@ def test_reconcile_agents(
     relation_agent_names: list[str],
     expected_agents: list[str],
 ):
-    """_reconcile_agents converges Jenkins nodes to relation state and writes relation data."""
+    """_reconcile_agents registers relation nodes without pruning external nodes."""
     ctx = testing.Context(JenkinsK8sOperatorCharm)
     state = _state_with_agents(relation_agent_names)
 
@@ -113,7 +120,7 @@ def test_reconcile_agents(
 
     if expected_agents:
         assert "url" in rel_data
-        for agent_name in expected_agents:
+        for agent_name in relation_agent_names:
             assert f"{agent_name}_secret" in rel_data
 
 
@@ -158,7 +165,6 @@ def test_reconcile_agents_updates_existing_node_remote_fs():
     [
         pytest.param("add", id="add_agent_node error"),
         pytest.param("secret", id="get_node_secret error"),
-        pytest.param("remove", id="remove_node error"),
     ],
 )
 def test_reconcile_agents_error(error_stage: str):
@@ -231,3 +237,98 @@ def test_reconcile_agents_returns_early_when_no_relation_meta():
 
         mock_client.list_agent_nodes.assert_not_called()
         assert not isinstance(mgr.charm.unit.status, ops.MaintenanceStatus)
+
+
+def test_reconcile_agents_rejects_external_agent_name_collision():
+    """Do not silently adopt a node declared as externally managed."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state_with_relation = _state_with_agents(
+        ["external-0"], config={"external-agent-nodes": "external-0"}
+    )
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state_with_relation) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+
+        with pytest.raises(charm.ReconcileBlockedError, match="externally managed"):
+            mgr.charm._reconcile_agents(state=charm_state, client=MagicMock(spec=jenkins.Jenkins))
+
+
+def test_reconcile_departed_agent_removes_departing_relation_node():
+    """Remove only the node described by a departing agent relation."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    relation_state = _state_with_agents(["0"])
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), relation_state) as mgr,
+    ):
+        unit = next(iter(mgr.charm.model.relations["agent"][0].units))
+        relation = mgr.charm.model.relations["agent"][0]
+        event = SimpleNamespace(departing_unit=unit, relation=relation)
+        client = MagicMock(spec=jenkins.Jenkins)
+        client.remove_agent_node.return_value = None
+        charm_state = State.from_charm(mgr.charm)
+
+        mgr.charm._reconcile_departed_agents(event, charm_state, client)
+
+        client.remove_agent_node.assert_called_once_with(agent_name="0")
+
+
+def test_reconcile_departed_agent_skips_incomplete_relation_data():
+    """Do not delete a node when the departing relation has no agent name."""
+    unit = object()
+    event = SimpleNamespace(
+        departing_unit=unit, relation=SimpleNamespace(data={unit: {}}, units=[unit])
+    )
+    client = MagicMock(spec=jenkins.Jenkins)
+    charm_state = MagicMock(external_agent_nodes=frozenset())
+
+    JenkinsK8sOperatorCharm._reconcile_departed_agents(
+        MagicMock(), typing.cast(ops.EventBase, event), charm_state, client
+    )
+
+    client.remove_agent_node.assert_not_called()
+
+
+def test_reconcile_departed_agent_rejects_protected_node():
+    """Do not delete a node declared as externally managed."""
+    unit = object()
+    event = SimpleNamespace(
+        departing_unit=unit,
+        relation=SimpleNamespace(
+            data={unit: {"executors": "1", "labels": "test", "name": "agent-0"}},
+            units=[unit],
+        ),
+    )
+    client = MagicMock(spec=jenkins.Jenkins)
+    charm_state = MagicMock(external_agent_nodes=frozenset({"agent-0"}))
+
+    with pytest.raises(charm.ReconcileBlockedError, match="externally managed"):
+        JenkinsK8sOperatorCharm._reconcile_departed_agents(
+            MagicMock(), typing.cast(ops.EventBase, event), charm_state, client
+        )
+
+    client.remove_agent_node.assert_not_called()
+
+
+def test_reconcile_departed_agent_propagates_delete_error():
+    """Propagate Jenkins deletion failures so Juju can retry the hook."""
+    unit = object()
+    event = SimpleNamespace(
+        departing_unit=unit,
+        relation=SimpleNamespace(
+            data={unit: {"executors": "1", "labels": "test", "name": "agent-0"}},
+            units=[unit],
+        ),
+    )
+    client = MagicMock(spec=jenkins.Jenkins)
+    client.remove_agent_node.side_effect = jenkins.JenkinsError("unavailable")
+    charm_state = MagicMock(external_agent_nodes=frozenset())
+
+    with pytest.raises(jenkins.JenkinsError, match="unavailable"):
+        JenkinsK8sOperatorCharm._reconcile_departed_agents(
+            MagicMock(), typing.cast(ops.EventBase, event), charm_state, client
+        )
