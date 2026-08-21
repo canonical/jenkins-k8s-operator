@@ -30,7 +30,7 @@ async def test_ingress_integration(
         model=model,
         application=application,
         other_application=traefik_application,
-        relation_name="ingress",
+        relation="ingress",
     )
     response = requests.get(
         f"http://{traefik_address}/{model.name}-{application.name}",
@@ -60,7 +60,7 @@ async def test_ingress_system_properties_flag_present(
         model=model,
         application=application,
         other_application=traefik_application,
-        relation_name="ingress",
+        relation="ingress",
     )
 
     # Apply the system property via charm config

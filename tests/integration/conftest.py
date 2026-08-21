@@ -297,23 +297,6 @@ async def extra_jenkins_k8s_agents_fixture(
     yield agent_app
 
 
-@pytest_asyncio.fixture(scope="function", name="external_agent_k8s")
-async def external_agent_k8s_fixture(
-    model: Model, app_suffix: str
-) -> AsyncGenerator[Application, None]:
-    """A fresh k8s agent application for external-node lifecycle tests."""
-    agent_app: Application = await model.deploy(
-        "jenkins-agent-k8s",
-        base="ubuntu@24.04",
-        config={"jenkins_agent_labels": "external"},
-        channel="latest/edge",
-        application_name=f"jenkins-agent-external-{app_suffix}",
-    )
-    await model.wait_for_idle(apps=[agent_app.name], status="blocked")
-    yield agent_app
-    await model.remove_application(agent_app.name, block_until_done=True)
-
-
 @pytest_asyncio.fixture(scope="module", name="machine_controller")
 async def machine_controller_fixture() -> AsyncGenerator[Controller, None]:
     """The lxd controller."""

@@ -372,7 +372,8 @@ async def ensure_relation(
     model: Model,
     application: Application,
     other_application: Application,
-    relation_name: str,
+    relation: str | tuple[str, str] | None = None,
+    renew: bool = False,
     apps: typing.Optional[typing.Iterable[str]] = None,
     wait_for_active: bool = True,
     timeout: int = 20 * 60,
@@ -384,27 +385,59 @@ async def ensure_relation(
         model: The Juju model.
         application: The primary application to relate from.
         other_application: The target application to relate to.
-        relation_name: The relation endpoint name (e.g., "ingress").
+        relation: One endpoint name shared by both applications, or a tuple of
+            ``(application_endpoint, other_application_endpoint)``. Defaults to ``agent``.
+        renew: Remove an existing relation and recreate it before waiting when true.
         apps: Optional explicit list of app names to wait on; defaults to both apps.
         wait_for_active: Whether to wait until applications are active.
         timeout: Max seconds to wait for idle.
         idle_period: Optional idle period to pass to wait_for_idle.
     """
-    # Relate only if not already related to avoid duplicate relations.
+    if relation is None:
+        application_endpoint = other_application_endpoint = "agent"
+    elif isinstance(relation, tuple):
+        application_endpoint, other_application_endpoint = relation
+    else:
+        application_endpoint = other_application_endpoint = relation
+
+    app_list = list(apps) if apps is not None else [application.name, other_application.name]
     status: FullStatus = await model.get_status()
     app_status: ApplicationStatus | None = status.applications.get(application.name)  # type: ignore[attr-defined]
     related_apps: typing.Iterable[str] = []
     if app_status and getattr(app_status, "relations", None):
         rels = typing.cast(dict[str, typing.Any], app_status.relations)
-        targets = rels.get(relation_name) or []
-        related_apps = [str(t) for t in targets]
+        targets = rels.get(application_endpoint) or []
+        related_apps = [str(target) for target in targets]
     already_related = any(
-        (ra == other_application.name) or ra.startswith(f"{other_application.name}:")
-        for ra in related_apps
+        (target == other_application.name) or target.startswith(f"{other_application.name}:")
+        for target in related_apps
     )
+
+    if renew and already_related:
+        await application.remove_relation(
+            application_endpoint, f"{other_application.name}:{other_application_endpoint}"
+        )
+        if idle_period is not None:
+            await model.wait_for_idle(
+                apps=app_list,
+                wait_for_active=False,
+                timeout=timeout,
+                idle_period=idle_period,
+            )
+        else:
+            await model.wait_for_idle(
+                apps=app_list,
+                wait_for_active=False,
+                timeout=timeout,
+            )
+        already_related = False
+
     if not already_related:
-        await application.relate(relation_name, other_application.name)
-    app_list = list(apps) if apps is not None else [application.name, other_application.name]
+        await model.integrate(
+            f"{application.name}:{application_endpoint}",
+            f"{other_application.name}:{other_application_endpoint}",
+        )
+
     if idle_period is not None:
         await model.wait_for_idle(
             apps=app_list,
@@ -413,7 +446,11 @@ async def ensure_relation(
             idle_period=idle_period,
         )
     else:
-        await model.wait_for_idle(apps=app_list, wait_for_active=wait_for_active, timeout=timeout)
+        await model.wait_for_idle(
+            apps=app_list,
+            wait_for_active=wait_for_active,
+            timeout=timeout,
+        )
 
 
 class AuthMethod(Enum):
