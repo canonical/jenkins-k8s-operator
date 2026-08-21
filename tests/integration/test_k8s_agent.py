@@ -102,7 +102,7 @@ async def test_jenkins_k8s_agent_relation(
 async def test_manually_managed_node_survives_agent_relation(
     model: Model,
     application: Application,
-    jenkins_k8s_agents: Application,
+    external_agent_k8s: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ):
     """Preserve a manually created node through agent relation reconciliation."""
@@ -119,9 +119,9 @@ async def test_manually_managed_node_survives_agent_relation(
         await application.set_config({"external-agent-nodes": node_name})
         await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
-        await application.relate(state.AGENT_RELATION, jenkins_k8s_agents.name)
+        await application.relate(state.AGENT_RELATION, external_agent_k8s.name)
         await model.wait_for_idle(
-            apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
+            apps=[application.name, external_agent_k8s.name], wait_for_active=True
         )
 
         assert jenkins_client.get_node(node_name).get_config_element("description") == (
@@ -129,10 +129,10 @@ async def test_manually_managed_node_survives_agent_relation(
         )
 
         await application.remove_relation(
-            state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
+            state.AGENT_RELATION, f"{external_agent_k8s.name}:{state.AGENT_RELATION}"
         )
         await model.wait_for_idle(
-            apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
+            apps=[application.name, external_agent_k8s.name], wait_for_active=True
         )
         assert any(node_name == key for key in jenkins_client.nodes.iterkeys())
     finally:
