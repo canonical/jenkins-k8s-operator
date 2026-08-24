@@ -372,7 +372,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         departing_unit = event.departing_unit
         if departing_unit is None:
             return
-        relation_data = event.relation.data.get(departing_unit, {})
+        relation_data: typing.Mapping[str, str] = event.relation.data.get(departing_unit, {})
         agent_name = relation_data.get("name")
         if not isinstance(agent_name, str) or not agent_name:
             return
@@ -428,7 +428,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if departing_unit is None:
             return
 
-        relation_data = event.relation.data.get(departing_unit, {})
+        relation_data: typing.Mapping[str, str] = event.relation.data.get(departing_unit, {})
         agent_name = relation_data.get("name")
         if not isinstance(agent_name, str) or not agent_name:
             return
