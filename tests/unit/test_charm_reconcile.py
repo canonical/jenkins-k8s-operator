@@ -487,7 +487,6 @@ def test_reconcile_departed_event_cleans_up_after_agent_reconcile(
         patch.object(jenkins.Jenkins, "wait_ready"),
         patch.object(jenkins_charm, "_reconcile_api_token"),
         patch.object(jenkins_charm, "_reconcile_agents") as reconcile_agents,
-        patch.object(jenkins_charm, "_reconcile_departed_agents") as reconcile_departed,
         patch.object(jenkins_charm, "_reconcile_agent_discovery"),
         patch.object(jenkins_charm, "_reconcile_auth_proxy"),
         patch.object(jenkins_charm, "_reconcile_haproxy_route"),
@@ -498,4 +497,4 @@ def test_reconcile_departed_event_cleans_up_after_agent_reconcile(
         jenkins_charm._reconcile(event)
 
     reconcile_agents.assert_called_once()
-    reconcile_departed.assert_called_once()
+    assert reconcile_agents.call_args.kwargs["event"] is event

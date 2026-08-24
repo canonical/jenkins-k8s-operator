@@ -197,12 +197,12 @@ def test_reconcile_agents_error(error_stage: str):
             mgr.charm._reconcile_agents(state=charm_state, client=mock_client)
 
 
-def test_reconcile_agents_accepts_state_parameter():
-    """_reconcile_agents must accept state and client parameters (no event arg)."""
+def test_reconcile_agents_accepts_event_parameter():
+    """_reconcile_agents accepts an optional event for departure cleanup."""
     sig = inspect.signature(JenkinsK8sOperatorCharm._reconcile_agents)
     assert "state" in sig.parameters
     assert "client" in sig.parameters
-    assert "event" not in sig.parameters
+    assert "event" in sig.parameters
 
 
 def test_reconcile_agents_sets_maintenance_status():
@@ -332,3 +332,22 @@ def test_reconcile_departed_agent_propagates_delete_error():
         JenkinsK8sOperatorCharm._reconcile_departed_agents(
             MagicMock(), typing.cast(ops.EventBase, event), charm_state, client
         )
+
+
+def test_reconcile_agents_routes_departure_cleanup_through_event():
+    """Agent reconciliation invokes departure cleanup only for departed events."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    relation_state = _state_with_agents(["0"])
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), relation_state) as mgr,
+        patch.object(mgr.charm, "_reconcile_departed_agents") as cleanup,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        event = MagicMock(spec=ops.RelationDepartedEvent)
+        client = MagicMock(spec=jenkins.Jenkins)
+        client.get_node_secret.return_value = "secret"
+        mgr.charm._reconcile_agents(state=charm_state, client=client, event=event)
+
+    cleanup.assert_called_once_with(event, charm_state, client)
