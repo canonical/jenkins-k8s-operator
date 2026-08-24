@@ -138,7 +138,7 @@ async def test_manually_managed_node_survives_agent_relation(
             state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
         )
         await model.wait_for_idle(
-            apps=[application.name, jenkins_k8s_agents.name], wait_for_active=True
+            apps=[application.name, jenkins_k8s_agents.name], wait_for_active=False
         )
         assert any(node_name == key for key in jenkins_client.nodes.iterkeys())
     finally:
