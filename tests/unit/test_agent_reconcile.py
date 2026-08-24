@@ -287,7 +287,7 @@ def test_reconcile_departed_agent_skips_incomplete_relation_data():
     charm_state = MagicMock(external_agent_nodes=frozenset())
 
     JenkinsK8sOperatorCharm._reconcile_departed_agents(
-        MagicMock(), typing.cast(ops.EventBase, event), charm_state, client
+        MagicMock(), typing.cast(ops.RelationDepartedEvent, event), charm_state, client
     )
 
     client.remove_agent_node.assert_not_called()
@@ -308,7 +308,7 @@ def test_reconcile_departed_agent_rejects_protected_node():
 
     with pytest.raises(charm.ReconcileBlockedError, match="externally managed"):
         JenkinsK8sOperatorCharm._reconcile_departed_agents(
-            MagicMock(), typing.cast(ops.EventBase, event), charm_state, client
+            MagicMock(), typing.cast(ops.RelationDepartedEvent, event), charm_state, client
         )
 
     client.remove_agent_node.assert_not_called()
@@ -330,7 +330,7 @@ def test_reconcile_departed_agent_propagates_delete_error():
 
     with pytest.raises(jenkins.JenkinsError, match="unavailable"):
         JenkinsK8sOperatorCharm._reconcile_departed_agents(
-            MagicMock(), typing.cast(ops.EventBase, event), charm_state, client
+            MagicMock(), typing.cast(ops.RelationDepartedEvent, event), charm_state, client
         )
 
 

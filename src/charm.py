@@ -356,28 +356,23 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container.replan()
 
     def _reconcile_departed_agents(
-        self, event: ops.EventBase, state: State, client: jenkins.Jenkins
+        self, event: ops.RelationDepartedEvent, state: State, client: jenkins.Jenkins
     ) -> None:
-        """Remove nodes described by a departing agent relation."""
-        relation = getattr(event, "relation", None)
-        if relation is None:
+        """Remove the node described by a departing agent relation."""
+        departing_unit = event.departing_unit
+        if departing_unit is None:
             return
 
-        departing_unit = getattr(event, "departing_unit", None)
-        units = [departing_unit] if departing_unit is not None else relation.units
-        for unit in units:
-            agent = AgentMeta.from_agent_relation(relation.data[unit])
-            if agent is None:
-                continue
-            if agent.name in state.external_agent_nodes:
-                raise ReconcileBlockedError(
-                    f"Agent node is declared externally managed: {agent.name}"
-                )
-            try:
-                client.remove_agent_node(agent_name=agent.name)
-            except jenkins.JenkinsError:
-                logger.exception("Failed to remove departing agent node: %s", agent.name)
-                raise
+        agent = AgentMeta.from_agent_relation(event.relation.data[departing_unit])
+        if agent is None:
+            return
+        if agent.name in state.external_agent_nodes:
+            raise ReconcileBlockedError(f"Agent node is declared externally managed: {agent.name}")
+        try:
+            client.remove_agent_node(agent_name=agent.name)
+        except jenkins.JenkinsError:
+            logger.exception("Failed to remove departing agent node: %s", agent.name)
+            raise
 
     def _reconcile_agents(
         self, state: State, client: jenkins.Jenkins, event: ops.EventBase | None = None
