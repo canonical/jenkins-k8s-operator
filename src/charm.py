@@ -393,9 +393,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             relation_agent_names = {
                 agent.name for agents in state.agent_relation_meta.values() for agent in agents
             }
-            external_agent_nodes: frozenset[str] = getattr(
-                state, "external_agent_nodes", frozenset()
-            )
+            external_agent_nodes = state.external_agent_nodes
             name_collisions = relation_agent_names & external_agent_nodes
             if name_collisions:
                 names = ", ".join(sorted(name_collisions))
