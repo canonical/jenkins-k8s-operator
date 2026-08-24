@@ -313,14 +313,6 @@ def test_reconcile_departed_agent_skips_incomplete_relation_data():
 
 def test_reconcile_departed_agent_rejects_protected_node():
     """Do not delete a node declared as externally managed."""
-    unit = object()
-    event = SimpleNamespace(
-        departing_unit=unit,
-        relation=SimpleNamespace(
-            data={unit: {"executors": "1", "labels": "test", "name": "agent-0"}},
-            units=[unit],
-        ),
-    )
     client = MagicMock(spec=jenkins.Jenkins)
     charm_state = MagicMock(external_agent_nodes=frozenset({"agent-0"}), agent_relation_meta=None)
 
@@ -332,14 +324,6 @@ def test_reconcile_departed_agent_rejects_protected_node():
 
 def test_reconcile_departed_agent_preserves_node_claimed_by_active_relation():
     """Do not delete a node still referenced by another active relation."""
-    unit = object()
-    event = SimpleNamespace(
-        departing_unit=unit,
-        relation=SimpleNamespace(
-            data={unit: {"executors": "1", "labels": "test", "name": "agent-0"}},
-            units=[unit],
-        ),
-    )
     client = MagicMock(spec=jenkins.Jenkins)
     charm_state = MagicMock(
         external_agent_nodes=frozenset(),
@@ -357,14 +341,6 @@ def test_reconcile_departed_agent_preserves_node_claimed_by_active_relation():
 
 def test_reconcile_departed_agent_propagates_delete_error():
     """Propagate Jenkins deletion failures so Juju can retry the hook."""
-    unit = object()
-    event = SimpleNamespace(
-        departing_unit=unit,
-        relation=SimpleNamespace(
-            data={unit: {"executors": "1", "labels": "test", "name": "agent-0"}},
-            units=[unit],
-        ),
-    )
     client = MagicMock(spec=jenkins.Jenkins)
     client.remove_agent_node.side_effect = jenkins.JenkinsError("unavailable")
     charm_state = MagicMock(external_agent_nodes=frozenset(), agent_relation_meta=None)
