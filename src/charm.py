@@ -74,6 +74,8 @@ class ReconcileBlockedError(Exception):
 class JenkinsK8sOperatorCharm(ops.CharmBase):
     """Charmed Jenkins."""
 
+    _stored = ops.StoredState()
+
     def __init__(self, *args: typing.Any):
         """Initialize the charm and register event handlers.
 
@@ -84,6 +86,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             RuntimeError: if invalid state value was encountered from relation.
         """
         super().__init__(*args)
+
+        self._stored.set_default(pending_departed_agent_nodes=[])
 
         self.storage = storage.Reconciler(charm=self)
         # Ingress dedicated to agent discovery
@@ -218,6 +222,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The triggering Juju event (unused, present for observe callback compatibility).
 
         """
+        self._queue_departed_agent(event)
+
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
         if not check_result.success:
@@ -355,24 +361,84 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
         container.replan()
 
+    def _queue_departed_agent(self, event: ops.EventBase) -> None:
+        """Remember an agent node from a departure until Jenkins can process it."""
+        if (
+            not isinstance(event, ops.RelationDepartedEvent)
+            or event.relation.name != AGENT_RELATION
+        ):
+            return
+
+        departing_unit = event.departing_unit
+        if departing_unit is None:
+            return
+        relation_data = event.relation.data.get(departing_unit, {})
+        agent_name = relation_data.get("name")
+        if not isinstance(agent_name, str) or not agent_name:
+            return
+
+        pending = typing.cast(list[str], self._stored.pending_departed_agent_nodes)
+        if agent_name not in pending:
+            pending.append(agent_name)
+            self._stored.pending_departed_agent_nodes = pending
+
+    def _discard_pending_departed_agent(self, agent_name: str) -> None:
+        """Forget a departed node after its cleanup is complete or unnecessary."""
+        pending = typing.cast(list[str], self._stored.pending_departed_agent_nodes)
+        if agent_name not in pending:
+            return
+        pending.remove(agent_name)
+        self._stored.pending_departed_agent_nodes = pending
+
+    def _remove_departed_agent(
+        self, agent_name: str, state: State, client: jenkins.Jenkins
+    ) -> None:
+        """Remove a departed node unless it is protected or still in use."""
+        if agent_name in state.external_agent_nodes:
+            raise ReconcileBlockedError(f"Agent node is declared externally managed: {agent_name}")
+
+        active_agent_names = {
+            agent.name for agents in (state.agent_relation_meta or {}).values() for agent in agents
+        }
+        if agent_name in active_agent_names:
+            logger.warning(
+                "Keeping agent node still claimed by an active relation: %s", agent_name
+            )
+            self._discard_pending_departed_agent(agent_name)
+            return
+
+        try:
+            client.remove_agent_node(agent_name=agent_name)
+        except jenkins.JenkinsError:
+            logger.exception("Failed to remove departing agent node: %s", agent_name)
+            raise
+        self._discard_pending_departed_agent(agent_name)
+
     def _reconcile_departed_agents(
         self, event: ops.RelationDepartedEvent, state: State, client: jenkins.Jenkins
     ) -> None:
-        """Remove the node described by a departing agent relation."""
+        """Remove the node described by a departing agent relation.
+
+        Args:
+            event: The departing agent relation event.
+            state: The current charm state.
+            client: The Jenkins API client.
+        """
         departing_unit = event.departing_unit
         if departing_unit is None:
             return
 
-        agent = AgentMeta.from_agent_relation(event.relation.data[departing_unit])
-        if agent is None:
+        relation_data = event.relation.data.get(departing_unit, {})
+        agent_name = relation_data.get("name")
+        if not isinstance(agent_name, str) or not agent_name:
             return
-        if agent.name in state.external_agent_nodes:
-            raise ReconcileBlockedError(f"Agent node is declared externally managed: {agent.name}")
-        try:
-            client.remove_agent_node(agent_name=agent.name)
-        except jenkins.JenkinsError:
-            logger.exception("Failed to remove departing agent node: %s", agent.name)
-            raise
+        self._remove_departed_agent(agent_name, state, client)
+
+    def _reconcile_pending_departed_agents(self, state: State, client: jenkins.Jenkins) -> None:
+        """Retry cleanup for departed agent nodes remembered from earlier events."""
+        pending = list(typing.cast(list[str], self._stored.pending_departed_agent_nodes))
+        for agent_name in pending:
+            self._remove_departed_agent(agent_name, state, client)
 
     def _reconcile_agents(
         self, state: State, client: jenkins.Jenkins, event: ops.EventBase | None = None
@@ -384,6 +450,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             client: Jenkins API client.
             event: The event that triggered reconciliation, if available.
         """
+        if isinstance(event, ops.RelationDepartedEvent) and event.relation.name == AGENT_RELATION:
+            self._reconcile_departed_agents(event, state, client)
+        self._reconcile_pending_departed_agents(state, client)
+
         if state.agent_relation_meta:
             relation_agent_names = {
                 agent.name for agents in state.agent_relation_meta.values() for agent in agents
@@ -410,9 +480,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 agent_nodes=agent_nodes,
                 api_client=client,
             )
-
-        if isinstance(event, ops.RelationDepartedEvent):
-            self._reconcile_departed_agents(event, state, client)
 
     def _reconcile_agent_discovery(self) -> None:
         """Update the agent discovery URL in all connected agent relations."""

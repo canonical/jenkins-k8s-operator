@@ -8,6 +8,7 @@
 
 import typing
 from secrets import token_hex
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import ops
@@ -130,6 +131,25 @@ def test__on_config_changed_relation_data_invalid_raises(
 
         with pytest.raises(RuntimeError):
             jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
+
+
+def test_reconcile_queues_departed_agent_when_precondition_is_not_ready(
+    harness_container: HarnessWithContainer,
+):
+    """Remember an agent departure before returning for an unavailable container."""
+    harness = harness_container.harness
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    unit = object()
+    event = MagicMock(spec=ops.RelationDepartedEvent)
+    event.relation = SimpleNamespace(name=state.AGENT_RELATION, data={unit: {"name": "agent-0"}})
+    event.departing_unit = unit
+
+    with patch("precondition.check") as check_mock:
+        check_mock.return_value = precondition._CheckResult(success=False, reason="not ready")
+        jenkins_charm._reconcile(event)
+
+    assert jenkins_charm._stored.pending_departed_agent_nodes == ["agent-0"]
 
 
 def test__on_config_changed_precondition_waits_and_defers(
@@ -472,11 +492,13 @@ def test_reconcile_pre_startup_configurations_runs_required_steps(
 def test_reconcile_departed_event_cleans_up_after_agent_reconcile(
     harness_container: HarnessWithContainer,
 ):
-    """Departing relation cleanup runs after the normal agent reconciliation."""
+    """The departing event is passed to agent reconciliation."""
     harness = harness_container.harness
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     event = MagicMock(spec=ops.RelationDepartedEvent)
+    event.relation = SimpleNamespace(name=state.AGENT_RELATION, data={})
+    event.departing_unit = None
 
     with (
         patch.object(jenkins_charm, "_reconcile_storage"),

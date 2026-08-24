@@ -539,6 +539,8 @@ class Jenkins:
         client = self._get_api_client()
         try:
             client.delete_node(nodename=agent_name)
+        except jenkinsapi.custom_exceptions.UnknownNode:
+            logger.info("Agent node %s is already absent", agent_name)
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             logger.error("Failed to delete agent node, %s", exc)
             raise JenkinsError("Failed to delete agent node.") from exc

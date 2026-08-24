@@ -168,7 +168,7 @@ def test_reconcile_agents_updates_existing_node_remote_fs():
     ],
 )
 def test_reconcile_agents_error(error_stage: str):
-    """_reconcile_agents propagates JenkinsError from add/secret/remove stages."""
+    """_reconcile_agents propagates JenkinsError from add and secret stages."""
     ctx = testing.Context(JenkinsK8sOperatorCharm)
     state = _state_with_agents(["0", "1"])
 
@@ -186,13 +186,6 @@ def test_reconcile_agents_error(error_stage: str):
         elif error_stage == "secret":
             mock_client.list_agent_nodes.return_value = []
             mock_client.get_node_secret.side_effect = jenkins.JenkinsError()
-        else:
-            stale_node = MagicMock()
-            stale_node.name = "stale-agent"
-            mock_client.list_agent_nodes.return_value = [stale_node]
-            mock_client.get_node_secret.return_value = "dummy-secret"
-            mock_client.remove_agent_node.side_effect = jenkins.JenkinsError()
-
         with pytest.raises(jenkins.JenkinsError):
             mgr.charm._reconcile_agents(state=charm_state, client=mock_client)
 
@@ -259,14 +252,14 @@ def test_reconcile_agents_rejects_external_agent_name_collision():
 def test_reconcile_departed_agent_removes_departing_relation_node():
     """Remove only the node described by a departing agent relation."""
     ctx = testing.Context(JenkinsK8sOperatorCharm)
-    relation_state = _state_with_agents(["0"])
+    relation_state = _state_with_agents([])
 
     with (
         patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
         ctx(ctx.on.config_changed(), relation_state) as mgr,
     ):
-        unit = next(iter(mgr.charm.model.relations["agent"][0].units))
-        relation = mgr.charm.model.relations["agent"][0]
+        unit = object()
+        relation = SimpleNamespace(data={unit: {"executors": "1", "labels": "test", "name": "0"}})
         event = SimpleNamespace(departing_unit=unit, relation=relation)
         client = MagicMock(spec=jenkins.Jenkins)
         client.remove_agent_node.return_value = None
@@ -275,6 +268,31 @@ def test_reconcile_departed_agent_removes_departing_relation_node():
         mgr.charm._reconcile_departed_agents(event, charm_state, client)
 
         client.remove_agent_node.assert_called_once_with(agent_name="0")
+
+
+def test_reconcile_departed_agent_removes_node_with_invalid_other_metadata():
+    """A valid node name is enough to clean up a departed agent node."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    relation_state = _state_with_agents([])
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), relation_state) as mgr,
+    ):
+        unit = object()
+        event = SimpleNamespace(
+            departing_unit=unit,
+            relation=SimpleNamespace(
+                data={unit: {"executors": "invalid", "labels": "", "name": "agent-0"}}
+            ),
+        )
+        client = MagicMock(spec=jenkins.Jenkins)
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+
+        mgr.charm._reconcile_departed_agents(event, charm_state, client)
+
+    client.remove_agent_node.assert_called_once_with(agent_name="agent-0")
 
 
 def test_reconcile_departed_agent_skips_incomplete_relation_data():
@@ -304,12 +322,35 @@ def test_reconcile_departed_agent_rejects_protected_node():
         ),
     )
     client = MagicMock(spec=jenkins.Jenkins)
-    charm_state = MagicMock(external_agent_nodes=frozenset({"agent-0"}))
+    charm_state = MagicMock(external_agent_nodes=frozenset({"agent-0"}), agent_relation_meta=None)
 
     with pytest.raises(charm.ReconcileBlockedError, match="externally managed"):
-        JenkinsK8sOperatorCharm._reconcile_departed_agents(
-            MagicMock(), typing.cast(ops.RelationDepartedEvent, event), charm_state, client
-        )
+        JenkinsK8sOperatorCharm._remove_departed_agent(MagicMock(), "agent-0", charm_state, client)
+
+    client.remove_agent_node.assert_not_called()
+
+
+def test_reconcile_departed_agent_preserves_node_claimed_by_active_relation():
+    """Do not delete a node still referenced by another active relation."""
+    unit = object()
+    event = SimpleNamespace(
+        departing_unit=unit,
+        relation=SimpleNamespace(
+            data={unit: {"executors": "1", "labels": "test", "name": "agent-0"}},
+            units=[unit],
+        ),
+    )
+    client = MagicMock(spec=jenkins.Jenkins)
+    charm_state = MagicMock(
+        external_agent_nodes=frozenset(),
+        agent_relation_meta={
+            MagicMock(): [AgentMeta(executors="1", labels="test", name="agent-0")]
+        },
+    )
+    charm_instance = MagicMock()
+    charm_instance._stored.pending_departed_agent_nodes = []
+
+    JenkinsK8sOperatorCharm._remove_departed_agent(charm_instance, "agent-0", charm_state, client)
 
     client.remove_agent_node.assert_not_called()
 
@@ -326,12 +367,52 @@ def test_reconcile_departed_agent_propagates_delete_error():
     )
     client = MagicMock(spec=jenkins.Jenkins)
     client.remove_agent_node.side_effect = jenkins.JenkinsError("unavailable")
-    charm_state = MagicMock(external_agent_nodes=frozenset())
+    charm_state = MagicMock(external_agent_nodes=frozenset(), agent_relation_meta=None)
 
     with pytest.raises(jenkins.JenkinsError, match="unavailable"):
-        JenkinsK8sOperatorCharm._reconcile_departed_agents(
-            MagicMock(), typing.cast(ops.RelationDepartedEvent, event), charm_state, client
+        JenkinsK8sOperatorCharm._remove_departed_agent(MagicMock(), "agent-0", charm_state, client)
+
+
+def test_reconcile_agents_ignores_non_agent_departure_event():
+    """Do not run agent cleanup for departures on another endpoint."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    relation_state = _state_with_agents([])
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), relation_state) as mgr,
+        patch.object(mgr.charm, "_reconcile_departed_agents") as cleanup,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        event = MagicMock(spec=ops.RelationDepartedEvent)
+        event.relation = SimpleNamespace(name="auth-proxy", data={})
+        event.departing_unit = None
+        mgr.charm._reconcile_agents(
+            state=charm_state, client=MagicMock(spec=jenkins.Jenkins), event=event
         )
+
+    cleanup.assert_not_called()
+
+
+def test_reconcile_pending_departed_agents_retries_cleanup():
+    """Retry a queued departure during a later reconciliation."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    relation_state = _state_with_agents([])
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), relation_state) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        mgr.charm._stored.pending_departed_agent_nodes = ["agent-0"]
+        client = MagicMock(spec=jenkins.Jenkins)
+
+        mgr.charm._reconcile_pending_departed_agents(charm_state, client)
+
+    client.remove_agent_node.assert_called_once_with(agent_name="agent-0")
+    assert mgr.charm._stored.pending_departed_agent_nodes == []
 
 
 def test_reconcile_agents_routes_departure_cleanup_through_event():
@@ -346,8 +427,66 @@ def test_reconcile_agents_routes_departure_cleanup_through_event():
     ):
         charm_state = State.from_charm(mgr.charm)
         event = MagicMock(spec=ops.RelationDepartedEvent)
+        event.relation = SimpleNamespace(name="agent")
         client = MagicMock(spec=jenkins.Jenkins)
         client.get_node_secret.return_value = "secret"
         mgr.charm._reconcile_agents(state=charm_state, client=client, event=event)
 
     cleanup.assert_called_once_with(event, charm_state, client)
+
+
+def test_queue_departed_agent_remembers_node_until_reconciliation():
+    """Remember a departing node when cleanup cannot run immediately."""
+    charm_instance = MagicMock()
+    charm_instance._stored.pending_departed_agent_nodes = []
+    unit = object()
+    event = MagicMock(spec=ops.RelationDepartedEvent)
+    event.relation = SimpleNamespace(name="agent", data={unit: {"name": "agent-0"}})
+    event.departing_unit = unit
+    event.relation.data = {unit: {"name": "agent-0"}}
+
+    JenkinsK8sOperatorCharm._queue_departed_agent(charm_instance, event)
+
+    assert charm_instance._stored.pending_departed_agent_nodes == ["agent-0"]
+
+
+def test_queue_departed_agent_ignores_missing_name():
+    """Do not queue a departure when the relation data has no node name."""
+    charm_instance = MagicMock()
+    charm_instance._stored.pending_departed_agent_nodes = []
+    unit = object()
+    event = MagicMock(spec=ops.RelationDepartedEvent)
+    event.relation = SimpleNamespace(name="agent", data={unit: {}})
+    event.departing_unit = unit
+
+    JenkinsK8sOperatorCharm._queue_departed_agent(charm_instance, event)
+
+    assert charm_instance._stored.pending_departed_agent_nodes == []
+
+
+def test_queue_departed_agent_deduplicates_node_names():
+    """Do not queue the same departure more than once."""
+    charm_instance = MagicMock()
+    charm_instance._stored.pending_departed_agent_nodes = []
+    unit = object()
+    event = MagicMock(spec=ops.RelationDepartedEvent)
+    event.relation = SimpleNamespace(name="agent", data={unit: {"name": "agent-0"}})
+    event.departing_unit = unit
+
+    JenkinsK8sOperatorCharm._queue_departed_agent(charm_instance, event)
+    JenkinsK8sOperatorCharm._queue_departed_agent(charm_instance, event)
+
+    assert charm_instance._stored.pending_departed_agent_nodes == ["agent-0"]
+
+
+def test_reconcile_departed_agent_ignores_missing_departing_unit():
+    """Do not clean up when the event has no departing unit."""
+    event = SimpleNamespace(departing_unit=None, relation=SimpleNamespace(data={}))
+    client = MagicMock(spec=jenkins.Jenkins)
+    charm_state = MagicMock(external_agent_nodes=frozenset(), agent_relation_meta=None)
+
+    JenkinsK8sOperatorCharm._reconcile_departed_agents(
+        MagicMock(), typing.cast(ops.RelationDepartedEvent, event), charm_state, client
+    )
+
+    client.remove_agent_node.assert_not_called()
