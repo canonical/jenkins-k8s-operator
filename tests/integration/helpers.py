@@ -408,10 +408,14 @@ async def ensure_relation(
         rels = typing.cast(dict[str, typing.Any], app_status.relations)
         targets = rels.get(application_endpoint) or []
         related_apps = [str(target) for target in targets]
-    already_related = any(
-        (target == other_application.name) or target.startswith(f"{other_application.name}:")
-        for target in related_apps
-    )
+    expected_target = f"{other_application.name}:{other_application_endpoint}"
+    if isinstance(relation, tuple):
+        already_related = any(target == expected_target for target in related_apps)
+    else:
+        already_related = any(
+            target == other_application.name or target == expected_target
+            for target in related_apps
+        )
 
     if renew and already_related:
         await application.remove_relation(
