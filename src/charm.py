@@ -387,6 +387,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             state: The current charm state.
             client: Jenkins API client.
+            event: The event that triggered reconciliation, if available.
         """
         if state.agent_relation_meta:
             relation_agent_names = {
