@@ -489,10 +489,10 @@ def test_reconcile_pre_startup_configurations_runs_required_steps(
     reconcile_jcasc_mock.assert_called_once_with(harness_container.container, charm_state)
 
 
-def test_reconcile_departed_event_cleans_up_after_agent_reconcile(
+def test_reconcile_passes_departed_event_to_agent_reconciliation(
     harness_container: HarnessWithContainer,
 ):
-    """The departing event is passed to agent reconciliation."""
+    """Pass the departing event to agent reconciliation."""
     harness = harness_container.harness
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
