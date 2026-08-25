@@ -355,48 +355,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
         container.replan()
 
-    def _remove_departed_agent(
-        self, agent_name: str, state: State, client: jenkins.Jenkins
-    ) -> None:
-        """Remove a departed node unless it is protected or still in use."""
-        if agent_name in state.external_agent_nodes:
-            raise ReconcileBlockedError(f"Agent node is declared externally managed: {agent_name}")
-
-        active_agent_names = {
-            agent.name for agents in (state.agent_relation_meta or {}).values() for agent in agents
-        }
-        if agent_name in active_agent_names:
-            logger.warning(
-                "Keeping agent node still claimed by an active relation: %s", agent_name
-            )
-            return
-
-        try:
-            client.remove_agent_node(agent_name=agent_name)
-        except jenkins.JenkinsError:
-            logger.exception("Failed to remove departing agent node: %s", agent_name)
-            raise
-
-    def _reconcile_departed_agents(
-        self, event: ops.RelationDepartedEvent, state: State, client: jenkins.Jenkins
-    ) -> None:
-        """Remove the node described by a departing agent relation.
-
-        Args:
-            event: The departing agent relation event.
-            state: The current charm state.
-            client: The Jenkins API client.
-        """
-        departing_unit = event.departing_unit
-        if departing_unit is None:
-            return
-
-        relation_data: typing.Mapping[str, str] = event.relation.data.get(departing_unit, {})
-        agent_name = relation_data.get("name")
-        if not isinstance(agent_name, str) or not agent_name:
-            return
-        self._remove_departed_agent(agent_name, state, client)
-
     def _reconcile_agents(
         self, state: State, client: jenkins.Jenkins, event: ops.EventBase | None = None
     ) -> None:
@@ -407,17 +365,40 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             client: Jenkins API client.
             event: The event that triggered reconciliation, if available.
         """
-        if isinstance(event, ops.RelationDepartedEvent) and event.relation.name == AGENT_RELATION:
-            self._reconcile_departed_agents(event, state, client)
-
         agent_relation = state.agent_relation_meta or {}
         relation_agent_names = {
             agent.name for agents in agent_relation.values() for agent in agents
         }
         external_agent_nodes = state.external_agent_nodes
-        name_collisions = relation_agent_names & external_agent_nodes
-        if name_collisions:
-            names = ", ".join(sorted(name_collisions))
+
+        if isinstance(event, ops.RelationDepartedEvent) and event.relation.name == AGENT_RELATION:
+            departing_unit = event.departing_unit
+            if departing_unit is not None:
+                relation_data: typing.Mapping[str, str] = event.relation.data.get(
+                    departing_unit, {}
+                )
+                departing_agent_name = relation_data.get("name")
+                if isinstance(departing_agent_name, str) and departing_agent_name:
+                    if departing_agent_name in external_agent_nodes:
+                        raise ReconcileBlockedError(
+                            f"Agent node is declared externally managed: {departing_agent_name}"
+                        )
+                    if departing_agent_name in relation_agent_names:
+                        logger.warning(
+                            "Keeping agent node still claimed by an active relation: %s",
+                            departing_agent_name,
+                        )
+                    else:
+                        try:
+                            client.remove_agent_node(agent_name=departing_agent_name)
+                        except jenkins.JenkinsError:
+                            logger.exception(
+                                "Failed to remove departing agent node: %s", departing_agent_name
+                            )
+                            raise
+
+        if relation_agent_names & external_agent_nodes:
+            names = ", ".join(sorted(relation_agent_names & external_agent_nodes))
             raise ReconcileBlockedError(f"Agent node(s) are declared externally managed: {names}")
 
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
@@ -436,40 +417,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 api_client=client,
             )
 
-        self._remove_agent_nodes_not_in_relation(
-            agent_relation=agent_relation,
-            agent_node_names=agent_node_names,
-            external_agent_nodes=external_agent_nodes,
-            api_client=client,
-        )
-
-    def _remove_agent_nodes_not_in_relation(
-        self,
-        agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
-        agent_node_names: list[str],
-        external_agent_nodes: frozenset[str],
-        api_client: jenkins.Jenkins,
-    ) -> None:
-        """Remove unprotected agent nodes not found in relation data.
-
-        Args:
-            agent_relation: Mapping of agent relation to agent metadata.
-            agent_node_names: The agents registered on Jenkins server.
-            external_agent_nodes: Nodes managed outside Juju and protected from deletion.
-            api_client: The Jenkins API client.
-
-        Raises:
-            JenkinsError: if there was an error while removing agent nodes from Jenkins.
-        """
-        relation_agent_names = {
-            agent.name for agents in agent_relation.values() for agent in agents
-        }
         agents_not_in_relation = (
             set(agent_node_names) - relation_agent_names - external_agent_nodes
         )
         for agent_name in agents_not_in_relation:
             try:
-                api_client.remove_agent_node(agent_name=agent_name)
+                client.remove_agent_node(agent_name=agent_name)
             except jenkins.JenkinsError:
                 logger.exception("Failed to remove registered node: %s", agent_name)
                 raise
