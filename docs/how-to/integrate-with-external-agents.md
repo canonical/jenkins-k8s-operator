@@ -35,5 +35,7 @@ This configuration is an ownership declaration only. The charm does not create, 
 delete the listed nodes. Labels, executors, launch settings, workspace paths, and credentials
 remain managed by the external system.
 
-Relation-managed agent nodes are cleaned up only when their relation departs. The charm does not
-delete arbitrary Jenkins nodes merely because they are absent from the current Juju relations.
+Relation-managed agent nodes are cleaned up when their relation departs. During reconciliation,
+any Jenkins node that is not present in a current agent relation is also removed unless its name is
+listed in `external-agent-nodes`. Ensure every externally managed node is listed before enabling
+this configuration, otherwise it will be treated as unmanaged and removed.
