@@ -6,12 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
-## 2026-08-18
+## 2026-08-25
 
 - Preserve manually managed Jenkins nodes during agent relation reconciliation.
 - Add `external-agent-nodes` configuration to declare externally managed node names and reject
   relation name collisions.
 - Clean up relation-managed nodes from departing relation data without deleting arbitrary nodes.
+
+## 2026-08-24
+
+- Use Jenkins' unauthenticated login endpoint for the Pebble readiness check so deployments
+  with anonymous access disabled are reported ready once Jenkins is serving requests.
 
 ## 2026-08-17
 
