@@ -254,7 +254,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             logger.info("Reconciling API Token")
             self._reconcile_api_token(admin_client=admin_client)
             logger.info("Reconciling agents")
-            self._reconcile_agents(charm_state, client=admin_client, event=event)
+            self._reconcile_agents(charm_state, client=admin_client)
             logger.info("Reconciling agent discovery")
             self._reconcile_agent_discovery()
             logger.info("Reconciling auth proxy")
@@ -355,76 +355,74 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
         container.replan()
 
-    def _reconcile_agents(
-        self, state: State, client: jenkins.Jenkins, event: ops.EventBase | None = None
-    ) -> None:
+    def _reconcile_agents(self, state: State, client: jenkins.Jenkins) -> None:
         """Reconcile Jenkins agent nodes to match relation state.
 
         Args:
             state: The current charm state.
             client: Jenkins API client.
-            event: The event that triggered reconciliation, if available.
         """
-        agent_relation = state.agent_relation_meta or {}
         relation_agent_names = {
-            agent.name for agents in agent_relation.values() for agent in agents
+            agent.name for agents in (state.agent_relation_meta or {}).values() for agent in agents
         }
         external_agent_nodes = state.external_agent_nodes
-
-        if isinstance(event, ops.RelationDepartedEvent) and event.relation.name == AGENT_RELATION:
-            departing_unit = event.departing_unit
-            if departing_unit is not None:
-                relation_data: typing.Mapping[str, str] = event.relation.data.get(
-                    departing_unit, {}
-                )
-                departing_agent_name = relation_data.get("name")
-                if isinstance(departing_agent_name, str) and departing_agent_name:
-                    if departing_agent_name in external_agent_nodes:
-                        raise ReconcileBlockedError(
-                            f"Agent node is declared externally managed: {departing_agent_name}"
-                        )
-                    if departing_agent_name in relation_agent_names:
-                        logger.warning(
-                            "Keeping agent node still claimed by an active relation: %s",
-                            departing_agent_name,
-                        )
-                    else:
-                        try:
-                            client.remove_agent_node(agent_name=departing_agent_name)
-                        except jenkins.JenkinsError:
-                            logger.exception(
-                                "Failed to remove departing agent node: %s", departing_agent_name
-                            )
-                            raise
-
-        if relation_agent_names & external_agent_nodes:
-            names = ", ".join(sorted(relation_agent_names & external_agent_nodes))
-            raise ReconcileBlockedError(f"Agent node(s) are declared externally managed: {names}")
+        name_collisions = relation_agent_names & external_agent_nodes
+        if name_collisions:
+            names = ", ".join(sorted(name_collisions))
+            message = (
+                f"Duplicate agent node names found: {names}. Remove these names from "
+                "external-agent-nodes or rename the relation-managed agents."
+            )
+            logger.error(message)
+            raise ReconcileBlockedError(message)
 
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
         agent_node_names = [node.name for node in agent_nodes]
 
-        if agent_relation:
+        if state.agent_relation_meta:
             self._add_agent_nodes_from_relation(
-                agent_relation=agent_relation,
+                agent_relation=state.agent_relation_meta,
                 agent_node_names=agent_node_names,
                 api_client=client,
             )
             self._update_agent_nodes_from_relation(
-                agent_relation=agent_relation,
+                agent_relation=state.agent_relation_meta,
                 agent_nodes=agent_nodes,
                 api_client=client,
             )
 
-        agents_not_in_relation = (
-            set(agent_node_names) - relation_agent_names - external_agent_nodes
+        self._remove_unmanaged_agents(
+            agent_node_names=agent_node_names,
+            relation_agent_names=relation_agent_names,
+            external_agent_nodes=external_agent_nodes,
+            api_client=client,
         )
-        for agent_name in agents_not_in_relation:
+
+    def _remove_unmanaged_agents(
+        self,
+        agent_node_names: list[str],
+        relation_agent_names: set[str],
+        external_agent_nodes: frozenset[str],
+        api_client: jenkins.Jenkins,
+    ) -> None:
+        """Remove agents not in a relation or the external agent definitions.
+
+        Args:
+            agent_node_names: The agents registered on the Jenkins server.
+            relation_agent_names: Names of agents from current relation data.
+            external_agent_nodes: Nodes managed outside Juju and protected from deletion.
+            api_client: The Jenkins API client.
+
+        Raises:
+            JenkinsError: if there was an error while removing agent nodes from Jenkins.
+        """
+        unmanaged_agents = set(agent_node_names) - relation_agent_names - external_agent_nodes
+        for agent_name in unmanaged_agents:
             try:
-                client.remove_agent_node(agent_name=agent_name)
+                api_client.remove_agent_node(agent_name=agent_name)
             except jenkins.JenkinsError:
-                logger.exception("Failed to remove registered node: %s", agent_name)
+                logger.exception("Failed to remove unmanaged agent node: %s", agent_name)
                 raise
 
     def _reconcile_agent_discovery(self) -> None:

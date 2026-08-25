@@ -8,7 +8,6 @@
 
 import typing
 from secrets import token_hex
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import ops
@@ -470,16 +469,11 @@ def test_reconcile_pre_startup_configurations_runs_required_steps(
     reconcile_jcasc_mock.assert_called_once_with(harness_container.container, charm_state)
 
 
-def test_reconcile_passes_departed_event_to_agent_reconciliation(
-    harness_container: HarnessWithContainer,
-):
-    """Pass the departing event to agent reconciliation."""
+def test_reconcile_calls_agent_reconciliation(harness_container: HarnessWithContainer):
+    """Run agent reconciliation as part of the common reconcile flow."""
     harness = harness_container.harness
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
-    event = MagicMock(spec=ops.RelationDepartedEvent)
-    event.relation = SimpleNamespace(name=state.AGENT_RELATION, data={})
-    event.departing_unit = None
 
     with (
         patch.object(jenkins_charm, "_reconcile_storage"),
@@ -497,7 +491,7 @@ def test_reconcile_passes_departed_event_to_agent_reconciliation(
         patch.object(harness_container.container, "add_layer"),
         patch.object(harness_container.container, "replan"),
     ):
-        jenkins_charm._reconcile(event)
+        jenkins_charm._reconcile(MagicMock(spec=ops.RelationDepartedEvent))
 
     reconcile_agents.assert_called_once()
-    assert reconcile_agents.call_args.kwargs["event"] is event
+    assert "event" not in reconcile_agents.call_args.kwargs
