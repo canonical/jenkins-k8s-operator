@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
-## August 24, 2026
+## 2026-08-24
 
 - Use Jenkins' unauthenticated login endpoint for the Pebble readiness check so deployments
   with anonymous access disabled are reported ready once Jenkins is serving requests.
