@@ -16,7 +16,13 @@ import requests
 import yaml
 from jenkinsapi.custom_exceptions import JenkinsAPIException
 
-from .helpers import exec_in_container, gen_test_job_xml, install_plugins, wait_for
+from .helpers import (
+    dispatch_update_status,
+    exec_in_container,
+    gen_test_job_xml,
+    install_plugins,
+    wait_for,
+)
 from .types_ import JujuApplication, UnitWebClient
 
 JENKINS_UID = "2000"
@@ -45,12 +51,7 @@ def test_jenkins_automatic_update_out_of_range(
     """Verify maintenance does not run outside the configured restart window."""
     extra_plugin = "oic-auth"
     install_plugins(unit_web_client, (extra_plugin,))
-    charm_dispatch = f"/var/lib/juju/agents/unit-{unit.replace('/', '-')}"
-    command = (
-        f"{' '.join(libfaketime_env)} {' '.join(update_status_env)} "
-        f"{charm_dispatch}/charm/dispatch"
-    )
-    exec_in_container(model, unit, "charm", command)
+    dispatch_update_status(model, unit, (*libfaketime_env, *update_status_env))
     assert unit_web_client.client.has_plugin(extra_plugin), (
         "additionally installed plugin cleaned up."
     )

@@ -23,6 +23,7 @@ from .constants import (
     REMOVED_PLUGINS,
 )
 from .helpers import (
+    dispatch_update_status,
     exec_in_container,
     gen_git_test_job_xml,
     gen_test_job_xml,
@@ -81,13 +82,7 @@ def test_plugins_remove_delay(
         return "tmp" in stdout
 
     wait_for(has_temp_files)
-    exec_in_container(
-        model,
-        unit_web_client.unit,
-        "charm",
-        f"{' '.join(update_status_env)} "
-        f"/var/lib/juju/agents/unit-{unit_web_client.unit.replace('/', '-')}/charm/dispatch",
-    )
+    dispatch_update_status(model, unit_web_client.unit, update_status_env)
 
     def has_delay_log():
         """Check if juju log contains plugin cleanup delayed log.
@@ -123,13 +118,7 @@ def test_jenkins_plugins_config(
     """
     install_plugins(unit_web_client, INSTALLED_PLUGINS)
 
-    exec_in_container(
-        model,
-        unit_web_client.unit,
-        "charm",
-        f"{' '.join(update_status_env)} "
-        f"/var/lib/juju/agents/unit-{unit_web_client.unit.replace('/', '-')}/charm/dispatch",
-    )
+    dispatch_update_status(model, unit_web_client.unit, update_status_env)
     res = unit_web_client.client.requester.get_url(unit_web_client.web)
     page_content = str(res.content, encoding="utf-8")
 

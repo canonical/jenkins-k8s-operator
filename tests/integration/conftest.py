@@ -385,7 +385,6 @@ def update_status_env_fixture(
 ) -> Iterable[str]:
     """Return environment assignments for running the update-status dispatch."""
     return (
-        f'PATH="/var/lib/juju/tools/unit-{unit.replace("/", "-")}:$PATH"',
         "JUJU_DISPATCH_PATH=hooks/update-status",
         f"JUJU_MODEL_NAME={short_model_name(model)}",
         f"JUJU_UNIT_NAME={unit}",

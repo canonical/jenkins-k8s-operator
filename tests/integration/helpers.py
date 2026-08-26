@@ -94,6 +94,18 @@ def exec_in_container(
     return model.ssh(unit, command, container=container)
 
 
+def dispatch_update_status(
+    model: jubilant.Juju,
+    unit: str,
+    environment: Iterable[str],
+) -> str:
+    """Run update-status through the unit agent's command context."""
+    agent_tools = f"/var/lib/juju/tools/unit-{unit.replace('/', '-')}"
+    environment_assignments = " ".join(environment)
+    command = f"{agent_tools}/juju-exec {unit} '{environment_assignments} ./dispatch'"
+    return exec_in_container(model, unit, "charm", command)
+
+
 def short_model_name(model: jubilant.Juju) -> str:
     """Return a model's short name from a Jubilant model specification."""
     model_name = model.model
