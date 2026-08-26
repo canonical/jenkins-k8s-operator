@@ -6,6 +6,7 @@
 import functools
 import json
 import logging
+import os
 
 import jenkinsapi.custom_exceptions
 import jenkinsapi.plugin
@@ -22,6 +23,7 @@ from .helpers import (
     gen_test_pipeline_with_custom_script_xml,
     install_plugins,
     kubernetes_test_pipeline_script,
+    pod_reachable_kube_config,
     wait_for,
 )
 from .types_ import KeycloakOIDCMetadata, UnitWebClient
@@ -238,9 +240,14 @@ def test_kubernetes_plugin(
 
     logger.info("Jenkins version pre-build: %s", unit_web_client.client.version)
 
-    credentials_id = wait_for(
-        functools.partial(create_secret_file_credentials, unit_web_client, kube_config)
-    )
+    jenkins_kube_config = pod_reachable_kube_config(kube_config, kube_core_client)
+    try:
+        credentials_id = wait_for(
+            functools.partial(create_secret_file_credentials, unit_web_client, jenkins_kube_config)
+        )
+    finally:
+        if jenkins_kube_config != kube_config:
+            os.unlink(jenkins_kube_config)
     assert credentials_id, "Failed to create credentials id"
     kubernetes_cloud_name = wait_for(
         functools.partial(create_kubernetes_cloud, unit_web_client, credentials_id)
