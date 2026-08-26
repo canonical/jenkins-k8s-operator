@@ -240,6 +240,14 @@ def test_remove_agent_node_success(container: ops.Container, mock_client: MagicM
     mock_client.delete_node.assert_called_once_with(nodename="jenkins-agent-0")
 
 
+def test_remove_agent_node_ignores_missing_node(container: ops.Container, mock_client: MagicMock):
+    """Removing an already absent node is idempotent."""
+    mock_client.delete_node.side_effect = jenkinsapi.custom_exceptions.UnknownNode()
+
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
+        _jenkins_instance(container).remove_agent_node("jenkins-agent-0")
+
+
 def test_remove_agent_node_raises_on_api_error(container: ops.Container, mock_client: MagicMock):
     """remove_agent_node raises JenkinsError on API failure."""
     mock_client.delete_node.side_effect = jenkinsapi.custom_exceptions.JenkinsAPIException

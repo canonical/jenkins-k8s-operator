@@ -39,6 +39,7 @@ module "jenkins-k8s" {
   #   allowed_plugins   = "git,kubernetes,ldap"
   #   system_properties = "jenkins.model.Jenkins.crumbIssuerProxyCompatibility=true"
   #   jcasc_repository  = "https://github.com/my-org/my-jcasc"
+  #   external_agent_nodes = "external-agent-0,external-agent-1"
   # }
 }
 ```
@@ -57,6 +58,7 @@ charm configuration options in `charmcraft.yaml`:
 | `jcasc_repository_config_path` | `jcasc-repository-config-path` |
 | `jcasc_repository_branch`      | `jcasc-repository-branch`      |
 | `jcasc_environment_secrets`    | `jcasc-environment-secrets`    |
+| `external_agent_nodes`         | `external-agent-nodes`         |
 
 The `jcasc_repository_token` and `jcasc_environment_secrets` options take a Juju
 user-secret URI. See

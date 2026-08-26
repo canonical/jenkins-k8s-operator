@@ -467,3 +467,31 @@ def test_reconcile_pre_startup_configurations_runs_required_steps(
     )
     install_logging_mock.assert_called_once_with(harness_container.container)
     reconcile_jcasc_mock.assert_called_once_with(harness_container.container, charm_state)
+
+
+def test_reconcile_calls_agent_reconciliation(harness_container: HarnessWithContainer):
+    """Run agent reconciliation as part of the common reconcile flow."""
+    harness = harness_container.harness
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    with (
+        patch.object(jenkins_charm, "_reconcile_storage"),
+        patch.object(
+            jenkins_charm, "_reconcile_pre_startup_configurations", return_value="hash123"
+        ),
+        patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins_charm, "_reconcile_api_token"),
+        patch.object(jenkins_charm, "_reconcile_agents") as reconcile_agents,
+        patch.object(jenkins_charm, "_reconcile_agent_discovery"),
+        patch.object(jenkins_charm, "_reconcile_auth_proxy"),
+        patch.object(jenkins_charm, "_reconcile_haproxy_route"),
+        patch.object(jenkins_charm, "_reconcile_plugins"),
+        patch.object(harness_container.container, "add_layer"),
+        patch.object(harness_container.container, "replan"),
+    ):
+        jenkins_charm._reconcile(MagicMock(spec=ops.RelationDepartedEvent))
+
+    reconcile_agents.assert_called_once()
+    assert "event" not in reconcile_agents.call_args.kwargs

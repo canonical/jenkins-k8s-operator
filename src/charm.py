@@ -362,28 +362,68 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             state: The current charm state.
             client: Jenkins API client.
         """
-        if not state.agent_relation_meta:
-            return
+        relation_agent_names = {
+            agent.name for agents in (state.agent_relation_meta or {}).values() for agent in agents
+        }
+        external_agent_nodes = state.external_agent_nodes
+        name_collisions = relation_agent_names & external_agent_nodes
+        if name_collisions:
+            names = ", ".join(sorted(name_collisions))
+            message = (
+                f"Duplicate agent node names found: {names}. Remove these names from "
+                "external-agent-nodes or rename the relation-managed agents."
+            )
+            logger.error(message)
+            raise ReconcileBlockedError(message)
 
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
         agent_node_names = [node.name for node in agent_nodes]
 
-        self._add_agent_nodes_from_relation(
-            agent_relation=state.agent_relation_meta,
+        if state.agent_relation_meta:
+            self._add_agent_nodes_from_relation(
+                agent_relation=state.agent_relation_meta,
+                agent_node_names=agent_node_names,
+                api_client=client,
+            )
+            self._update_agent_nodes_from_relation(
+                agent_relation=state.agent_relation_meta,
+                agent_nodes=agent_nodes,
+                api_client=client,
+            )
+
+        self._remove_unmanaged_agents(
             agent_node_names=agent_node_names,
+            relation_agent_names=relation_agent_names,
+            external_agent_nodes=external_agent_nodes,
             api_client=client,
         )
-        self._update_agent_nodes_from_relation(
-            agent_relation=state.agent_relation_meta,
-            agent_nodes=agent_nodes,
-            api_client=client,
-        )
-        self._remove_agent_nodes_not_in_relation(
-            agent_relation=state.agent_relation_meta,
-            agent_node_names=agent_node_names,
-            api_client=client,
-        )
+
+    def _remove_unmanaged_agents(
+        self,
+        agent_node_names: list[str],
+        relation_agent_names: set[str],
+        external_agent_nodes: frozenset[str],
+        api_client: jenkins.Jenkins,
+    ) -> None:
+        """Remove agents not in a relation or the external agent definitions.
+
+        Args:
+            agent_node_names: The agents registered on the Jenkins server.
+            relation_agent_names: Names of agents from current relation data.
+            external_agent_nodes: Nodes managed outside Juju and protected from deletion.
+            api_client: The Jenkins API client.
+
+        Raises:
+            JenkinsError: if there was an error while removing agent nodes from Jenkins.
+        """
+        unmanaged_agents = set(agent_node_names) - relation_agent_names - external_agent_nodes
+        for agent_name in unmanaged_agents:
+            try:
+                api_client.remove_agent_node(agent_name=agent_name)
+            except jenkins.JenkinsError:
+                logger.exception("Failed to remove unmanaged agent node: %s", agent_name)
+                raise
 
     def _reconcile_agent_discovery(self) -> None:
         """Update the agent discovery URL in all connected agent relations."""
@@ -589,33 +629,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 api_client.reconcile_agent_node(node=node, agent_meta=agent_meta)
             except jenkins.JenkinsError:
                 logger.exception("Failed to update agent node: %s", agent_meta)
-                raise
-
-    def _remove_agent_nodes_not_in_relation(
-        self,
-        agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
-        agent_node_names: list[str],
-        api_client: jenkins.Jenkins,
-    ) -> None:
-        """Remove agent nodes not found in relation data.
-
-        Args:
-            agent_relation: Mapping of agent relation to agent metadata.
-            agent_node_names: The agents registered on Jenkins server.
-            api_client: The Jenkins API client.
-
-        Raises:
-            JenkinsError: if there was an error while removing agent nodes from Jenkins.
-        """
-        all_agent_names_from_relation = {
-            agent.name for agents in agent_relation.values() for agent in agents
-        }
-        agents_not_in_relation = set(agent_node_names) - all_agent_names_from_relation
-        for agent_name in agents_not_in_relation:
-            try:
-                api_client.remove_agent_node(agent_name=agent_name)
-            except jenkins.JenkinsError:
-                logger.exception("Failed to remove registered node: %s", agent_name)
                 raise
 
     def _reconcile_pre_startup_configurations(

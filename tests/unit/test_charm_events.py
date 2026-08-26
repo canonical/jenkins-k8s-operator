@@ -8,6 +8,7 @@
 
 import secrets
 import typing
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import ops
@@ -100,7 +101,11 @@ def test__agent_relation_handlers_reconcile_agents(
         patch.object(jenkins_charm, "_reconcile_auth_proxy"),
         patch.object(jenkins_charm, "_reconcile_plugins"),
     ):
-        jenkins_charm._reconcile(MagicMock(spec=event_type))
+        event = MagicMock(spec=event_type)
+        if event_type is ops.RelationDepartedEvent:
+            event.relation = SimpleNamespace(name="agent", data={})
+            event.departing_unit = None
+        jenkins_charm._reconcile(event)
 
     reconcile_agents_mock.assert_called_once()
 
@@ -208,7 +213,11 @@ def test__auth_proxy_relation_handlers_delegate(
         patch.object(jenkins_charm, "_reconcile_auth_proxy") as reconcile_auth_proxy_mock,
         patch.object(jenkins_charm, "_reconcile_plugins"),
     ):
-        jenkins_charm._reconcile(MagicMock(spec=event_type))
+        event = MagicMock(spec=event_type)
+        if event_type is ops.RelationDepartedEvent:
+            event.relation = SimpleNamespace(name="auth-proxy", data={})
+            event.departing_unit = None
+        jenkins_charm._reconcile(event)
 
     reconcile_auth_proxy_mock.assert_called_once()
 

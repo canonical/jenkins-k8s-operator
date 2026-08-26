@@ -33,6 +33,7 @@ variable "jenkins_k8s" {
       jcasc_repository_config_path = optional(string)
       jcasc_repository_branch      = optional(string)
       jcasc_environment_secrets    = optional(string)
+      external_agent_nodes         = optional(string)
     }), {})
     constraints = optional(string, "")
     revision    = optional(number)

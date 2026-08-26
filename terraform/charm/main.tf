@@ -16,6 +16,7 @@ locals {
       "jcasc-repository-config-path" = var.config.jcasc_repository_config_path
       "jcasc-repository-branch"      = var.config.jcasc_repository_branch
       "jcasc-environment-secrets"    = var.config.jcasc_environment_secrets
+      "external-agent-nodes"         = var.config.external_agent_nodes
     } : key => value if value != null
   }
 }
