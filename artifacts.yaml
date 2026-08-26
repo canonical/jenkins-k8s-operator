@@ -1,0 +1,11 @@
+version: 1
+rocks:
+  - name: jenkins
+    rockcraft-yaml: jenkins_rock/rockcraft.yaml
+charms:
+  - name: jenkins-k8s
+    charmcraft-yaml: charmcraft.yaml
+    resources:
+      jenkins-image:
+        type: oci-image
+        rock: jenkins
