@@ -3,7 +3,10 @@
 
 """Integration tests for the jenkins-k8s haproxy-route relation."""
 
+import functools
 import json
+import socket
+import ssl
 
 import jubilant
 import pytest
@@ -11,7 +14,7 @@ import requests
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
 from .constants import LXD_CONTROLLER_NAME
-from .helpers import get_model_unit_addresses, short_model_name
+from .helpers import get_model_unit_addresses, short_model_name, wait_for
 from .types_ import JujuApplication, KeycloakOIDCMetadata
 
 EXTERNAL_HOSTNAME = "jenkins.internal"
@@ -154,11 +157,36 @@ def haproxy_spoe_auth_fixture(
     return _application_ref(machine_model, name)
 
 
+def _certificate_has_hostname(
+    haproxy_ip: str,
+    hostname: str,
+    ca_cert_path: str,
+) -> bool:
+    """Return whether HAProxy currently serves a trusted certificate for *hostname*."""
+    context = ssl.create_default_context(cafile=ca_cert_path)
+    context.check_hostname = False
+    try:
+        with (
+            socket.create_connection((haproxy_ip, 443), timeout=30) as socket_connection,
+            context.wrap_socket(socket_connection, server_hostname=hostname) as tls_connection,
+        ):
+            certificate = tls_connection.getpeercert()
+    except (OSError, ssl.SSLError):
+        return False
+
+    if not certificate:
+        return False
+    subject_alt_names = certificate.get("subjectAltName")
+    return isinstance(subject_alt_names, tuple) and ("DNS", hostname) in subject_alt_names
+
+
 @pytest.fixture(scope="module", name="haproxy_with_spoe")
 def haproxy_with_spoe_fixture(
     machine_model: jubilant.Juju,
     haproxy: JujuApplication,
     haproxy_spoe_auth: JujuApplication,
+    self_signed_certificates: JujuApplication,
+    ca_cert_path: str,
 ) -> JujuApplication:
     """Wire the HAProxy, SPOE, OAuth, and Keycloak authentication chain."""
     machine_model.config(
@@ -169,10 +197,34 @@ def haproxy_with_spoe_fixture(
         f"{haproxy.name}:spoe-auth",
         f"{haproxy_spoe_auth.name}:spoe-auth",
     )
+    # Re-request the certificate after changing the HAProxy hostname. The
+    # certificate relation is otherwise allowed to retain the old SAN.
+    machine_model.remove_relation(
+        f"{haproxy.name}:certificates",
+        f"{self_signed_certificates.name}:certificates",
+    )
+    machine_model.integrate(
+        f"{haproxy.name}:certificates",
+        f"{self_signed_certificates.name}:certificates",
+    )
     machine_model.wait(
-        lambda status: jubilant.all_active(status, haproxy.name, haproxy_spoe_auth.name),
+        lambda status: jubilant.all_active(
+            status, haproxy.name, haproxy_spoe_auth.name, self_signed_certificates.name
+        ),
         error=jubilant.any_error,
         timeout=20 * 60,
+    )
+
+    haproxy_ip = get_model_unit_addresses(machine_model, haproxy.name)[0]
+    wait_for(
+        functools.partial(
+            _certificate_has_hostname,
+            haproxy_ip,
+            SPOE_EXTERNAL_HOSTNAME,
+            ca_cert_path,
+        ),
+        timeout=10 * 60,
+        check_interval=10,
     )
     return haproxy
 
