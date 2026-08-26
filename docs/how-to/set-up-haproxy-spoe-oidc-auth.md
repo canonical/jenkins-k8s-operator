@@ -9,9 +9,10 @@ headers are passed to Jenkins — this is edge access control only.
 
     jenkins-k8s ──haproxy-route──> haproxy ──spoe-auth──> haproxy-spoe-auth ──oauth──> <OIDC provider>
 
-The traefik `ingress` and `agent-discovery-ingress` relations are unaffected.
-Agent connections must NOT go through SPOE (agents cannot perform browser OIDC);
-keep agents on traefik or direct discovery.
+For machine agents, configure a separate HAProxy hostname so agent traffic does
+not go through SPOE (agents cannot perform browser OIDC). The Jenkins charm
+publishes this hostname as an additional route and uses it for agent discovery.
+The server hostname remains protected by SPOE.
 
 ## Prerequisites
 
@@ -23,11 +24,17 @@ keep agents on traefik or direct discovery.
 
 ## Steps
 
-1. Configure `external-hostname` on Jenkins to the public hostname (e.g.
-   `jenkins.example.com`) and relate Jenkins to HAProxy:
+1. Configure `external-hostname` on Jenkins to the protected server hostname
+   (e.g. `jenkins.example.com`). Configure `agent-external-hostname` to a
+   separate, unprotected hostname (e.g. `jenkins-agent.example.com`) and relate
+   Jenkins to HAProxy:
 
-       juju config jenkins-k8s external-hostname=jenkins.example.com
+       juju config jenkins-k8s \
+         external-hostname=jenkins.example.com \
+         agent-external-hostname=jenkins-agent.example.com
        juju integrate jenkins-k8s:haproxy-route haproxy
+
+   Ensure both hostnames resolve to HAProxy and are covered by its certificate.
 
 2. Register an OIDC client at your provider for that hostname. Set the redirect
    URI to the value expected by `haproxy-spoe-auth` for `jenkins.example.com`
@@ -59,8 +66,10 @@ keep agents on traefik or direct discovery.
 
 ## Notes
 
-- The `hostname` value is the join key: it must be identical across Jenkins'
-  `external-hostname` config, the `haproxy-spoe-auth` `hostname` config, and the
-  OIDC client's registered redirect URI.
+- The protected `hostname` value is the join key: it must be identical across
+  Jenkins' `external-hostname` config, the `haproxy-spoe-auth` `hostname` config,
+  and the OIDC client's registered redirect URI.
+- `agent-external-hostname` must not be configured on `haproxy-spoe-auth`; it is
+  deliberately an unauthenticated route for Jenkins remoting traffic.
 - Any credentials shown here are placeholders; substitute your own and keep
   secrets out of version control.

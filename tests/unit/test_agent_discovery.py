@@ -235,6 +235,35 @@ def test_agent_discovery_url_prefers_haproxy_over_ingress():
         assert mgr.charm._agent_discovery_url == "https://jenkins.example.com"
 
 
+def test_agent_discovery_url_uses_agent_haproxy_hostname():
+    """Agent discovery selects the additional unprotected HAProxy hostname."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = testing.State(
+        config={
+            "external-hostname": "jenkins.example.com",
+            "agent-external-hostname": "jenkins-agent.example.com",
+        },
+        containers=[testing.Container(name=JENKINS_SERVICE_NAME, can_connect=True)],  # type: ignore[arg-type]
+        relations=[
+            testing.Relation(
+                endpoint=HAPROXY_ROUTE_RELATION_NAME,
+                interface=HAPROXY_ROUTE_RELATION_NAME,
+                remote_app_data={
+                    "endpoints": json.dumps(
+                        [
+                            "https://jenkins.example.com/",
+                            "https://jenkins-agent.example.com/",
+                        ]
+                    )
+                },
+            )
+        ],
+    )
+
+    with ctx(ctx.on.config_changed(), state) as mgr:
+        assert mgr.charm._agent_discovery_url == "https://jenkins-agent.example.com"
+
+
 def test_agent_discovery_url_waits_for_haproxy_provider_endpoint():
     """Direct mode must not publish a pod address before HAProxy is ready."""
     ctx = testing.Context(JenkinsK8sOperatorCharm)

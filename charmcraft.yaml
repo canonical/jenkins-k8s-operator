@@ -194,6 +194,16 @@ config:
         same hostname). Leave unset to disable haproxy-route publication; the
         traefik ingress relation is unaffected.
 
+    agent-external-hostname:
+      type: string
+      default: ""
+      description: >
+        Optional additional HAProxy hostname for Jenkins machine agents. When
+        set, the hostname is published as an additional haproxy-route hostname
+        and the agent relation receives this endpoint instead of the server
+        endpoint. Use a separate hostname when the server hostname is protected
+        by HAProxy SPOE authentication. Requires external-hostname.
+
 actions:
   get-admin-password:
     description: |

@@ -3,18 +3,22 @@
 
 """Integration tests for the jenkins-k8s haproxy-route relation."""
 
+import json
+
 import pytest
 import pytest_asyncio
 import requests
 from juju.application import Application
 from juju.model import Model
+from pytest_operator.plugin import OpsTest
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
-from .helpers import get_model_unit_addresses
+from .helpers import ensure_relation, get_model_unit_addresses
 from .types_ import KeycloakOIDCMetadata
 
 EXTERNAL_HOSTNAME = "jenkins.internal"
 SPOE_EXTERNAL_HOSTNAME = "jenkins-spoe.internal"
+AGENT_EXTERNAL_HOSTNAME = "jenkins-agent.internal"
 HAPROXY_ROUTE_RELATION = "haproxy-route"
 SELF_SIGNED_CERTIFICATES_APP_NAME = "self-signed-certificates"
 
@@ -282,3 +286,84 @@ async def test_haproxy_spoe_redirects_to_oidc(
     assert keycloak_oidc_meta.realm in location or "openid-connect/auth" in location, (
         f"Expected redirect to Keycloak OIDC, got Location: {location}"
     )
+
+
+@pytest.mark.abort_on_fail
+async def test_haproxy_spoe_server_and_unprotected_agent_route(
+    ops_test: OpsTest,
+    model: Model,
+    application: Application,
+    haproxy_with_spoe: Application,
+    jenkins_machine_agents: Application,
+    machine_model: Model,
+    ca_cert_path: str,
+):
+    """SPOE protects the server hostname while the agent hostname stays public."""
+    await application.set_config(
+        {
+            "external-hostname": SPOE_EXTERNAL_HOSTNAME,
+            "agent-external-hostname": AGENT_EXTERNAL_HOSTNAME,
+        }
+    )
+    await ensure_relation(
+        model=model,
+        application=application,
+        other_application=haproxy_with_spoe,
+        relation_name=HAPROXY_ROUTE_RELATION,
+        apps=[application.name, haproxy_with_spoe.name],
+    )
+    await ensure_relation(
+        model=model,
+        application=application,
+        other_application=jenkins_machine_agents,
+        relation_name="agent",
+        apps=[application.name],
+    )
+    # Do not require the machine-agent charm to become active here: these test
+    # hostnames are intentionally synthetic, so the agent service cannot resolve
+    # them without deployment DNS. The relation URL and the HAProxy request below
+    # verify discovery and unauthenticated remoting access independently.
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
+
+    haproxy_ip = (await get_model_unit_addresses(machine_model, haproxy_with_spoe.name))[0]
+    session = requests.Session()
+    session.mount("https://", HostHeaderSSLAdapter())
+
+    server_response = session.get(
+        f"https://{haproxy_ip}",
+        headers={"Host": SPOE_EXTERNAL_HOSTNAME},
+        timeout=30,
+        allow_redirects=False,
+        verify=ca_cert_path,
+    )
+    assert server_response.status_code == 302, (
+        f"Expected SPOE redirect for server hostname, got "
+        f"{server_response.status_code}: {server_response.text[:200]}"
+    )
+
+    agent_response = session.get(
+        f"https://{haproxy_ip}/jnlpJars/agent.jar",
+        headers={"Host": AGENT_EXTERNAL_HOSTNAME},
+        timeout=30,
+        allow_redirects=False,
+        verify=ca_cert_path,
+    )
+    assert agent_response.status_code == 200, (
+        f"Expected unauthenticated agent JAR access, got "
+        f"{agent_response.status_code}: {agent_response.text[:200]}"
+    )
+    assert agent_response.content
+
+    # Verify the URL published to every machine agent is the unprotected HAProxy
+    # hostname, rather than the protected server hostname or a pod IP.
+    for unit in jenkins_machine_agents.units:
+        return_code, stdout, stderr = await ops_test.juju(
+            "show-unit", "-m", machine_model.name, unit.name, "--format=json"
+        )
+        assert return_code == 0, f"Failed to inspect {unit.name}: {stderr}"
+        unit_info = json.loads(stdout)[unit.name]
+        relation_info = next(
+            relation for relation in unit_info["relation-info"] if relation["endpoint"] == "agent"
+        )
+        server_unit_data = next(iter(relation_info["related-units"].values()))["data"]
+        assert server_unit_data["url"] == f"https://{AGENT_EXTERNAL_HOSTNAME}"

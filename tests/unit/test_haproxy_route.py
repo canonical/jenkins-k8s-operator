@@ -10,7 +10,7 @@ from ops.testing import Harness
 
 import jenkins
 from charm import JenkinsK8sOperatorCharm
-from state import State
+from state import CharmConfigInvalidError, State
 
 
 @pytest.mark.parametrize(
@@ -75,6 +75,7 @@ def test_reconcile_haproxy_route_publishes_when_hostname_and_relation_present(
         service=harness.charm.app.name,
         ports=[jenkins.WEB_PORT],
         hostname="jenkins.example.com",
+        additional_hostnames=None,
     )
 
 
@@ -140,3 +141,54 @@ def test_reconcile_haproxy_route_noop_without_relation(monkeypatch: pytest.Monke
     harness.charm._reconcile_haproxy_route(State.from_charm(harness.charm))
 
     provide_mock.assert_not_called()
+
+
+def test_agent_external_hostname_is_parsed():
+    """The optional agent hostname is retained in charm state."""
+    harness = Harness(JenkinsK8sOperatorCharm)
+    harness.update_config(
+        {
+            "external-hostname": "jenkins.example.com",
+            "agent-external-hostname": "jenkins-agent.example.com",
+        }
+    )
+    harness.begin()
+
+    state = State.from_charm(harness.charm)
+
+    assert state.agent_external_hostname == "jenkins-agent.example.com"
+
+
+def test_agent_external_hostname_requires_external_hostname():
+    """An agent hostname without a server hostname is invalid configuration."""
+    harness = Harness(JenkinsK8sOperatorCharm)
+    harness.update_config({"agent-external-hostname": "jenkins-agent.example.com"})
+    harness.begin()
+
+    with pytest.raises(CharmConfigInvalidError, match="requires external-hostname"):
+        State.from_charm(harness.charm)
+
+
+def test_reconcile_haproxy_route_publishes_agent_hostname():
+    """The agent hostname is published as an additional HAProxy route hostname."""
+    harness = Harness(JenkinsK8sOperatorCharm)
+    harness.update_config(
+        {
+            "external-hostname": "jenkins.example.com",
+            "agent-external-hostname": "jenkins-agent.example.com",
+        }
+    )
+    harness.add_relation("haproxy-route", "haproxy")
+    harness.begin()
+
+    provide_mock = MagicMock()
+    harness.charm._haproxy_route.provide_haproxy_route_requirements = provide_mock
+
+    harness.charm._reconcile_haproxy_route(State.from_charm(harness.charm))
+
+    provide_mock.assert_called_once_with(
+        service=harness.charm.app.name,
+        ports=[jenkins.WEB_PORT],
+        hostname="jenkins.example.com",
+        additional_hostnames=["jenkins-agent.example.com"],
+    )

@@ -294,6 +294,13 @@ def _parse_external_hostname(charm: ops.CharmBase) -> typing.Optional[str]:
     return external_hostname if external_hostname else None
 
 
+def _parse_agent_external_hostname(charm: ops.CharmBase) -> typing.Optional[str]:
+    """Parse the optional agent-external-hostname config."""
+    agent_external_hostname = typing.cast(str, charm.config.get("agent-external-hostname") or "")
+    agent_external_hostname = agent_external_hostname.strip()
+    return agent_external_hostname if agent_external_hostname else None
+
+
 def _parse_jcasc_repository(charm: ops.CharmBase) -> typing.Optional[str]:
     """Parse jcasc-repository config into a URL string.
 
@@ -439,6 +446,7 @@ class State:
         jcasc_repository_config_path: Path within repository containing JCasC YAML files.
         system_properties: Additional JVM system properties as -D flags.
         external_hostname: Public hostname for HAProxy-route based routing, or None.
+        agent_external_hostname: Optional additional HAProxy hostname for agents, or None.
 
     """
 
@@ -455,6 +463,7 @@ class State:
     system_properties: typing.List[str] = dataclasses.field(default_factory=list)
     admin_password: typing.Optional[str] = None
     external_hostname: typing.Optional[str] = None
+    agent_external_hostname: typing.Optional[str] = None
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -494,6 +503,11 @@ class State:
         jcasc_environment_secrets = _parse_jcasc_environment_secrets(charm)
         admin_password = _get_admin_password(charm)
         external_hostname = _parse_external_hostname(charm)
+        agent_external_hostname = _parse_agent_external_hostname(charm)
+        if agent_external_hostname and not external_hostname:
+            raise CharmConfigInvalidError(
+                "agent-external-hostname requires external-hostname to be configured."
+            )
 
         return cls(
             restart_time_range=restart_time_range,
@@ -509,4 +523,5 @@ class State:
             system_properties=system_properties,
             admin_password=admin_password,
             external_hostname=external_hostname,
+            agent_external_hostname=agent_external_hostname,
         )

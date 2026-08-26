@@ -470,10 +470,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             if self.unit.is_leader():
                 relation.data[self.app].clear()
             return
+        additional_hostnames = (
+            [state.agent_external_hostname] if state.agent_external_hostname else None
+        )
         self._haproxy_route.provide_haproxy_route_requirements(
             service=self.app.name,
             ports=[jenkins.WEB_PORT],
             hostname=state.external_hostname,
+            additional_hostnames=additional_hostnames,
         )
 
     def _reconcile_plugins(
@@ -513,6 +517,23 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """
         return self._get_ingress_path()
 
+    def _get_haproxy_agent_endpoint(self, endpoints: typing.Sequence[typing.Any]) -> str:
+        """Select the HAProxy endpoint used by agents."""
+        agent_hostname = (
+            typing.cast(str, self.config.get("agent-external-hostname") or "")
+            .strip()
+            .lower()
+            .rstrip(".")
+        )
+        if not agent_hostname:
+            return str(endpoints[0]).rstrip("/")
+
+        for endpoint in endpoints:
+            endpoint_hostname = (urlparse(str(endpoint)).hostname or "").lower().rstrip(".")
+            if endpoint_hostname == agent_hostname:
+                return str(endpoint).rstrip("/")
+        raise ReconcileWaitingError("Waiting for HAProxy to publish the agent endpoint.")
+
     @property
     def _agent_discovery_url(self) -> str:
         """Return the endpoint that agents use to reach Jenkins.
@@ -544,7 +565,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             if haproxy_relation is None:
                 raise ReconcileWaitingError("Waiting for the HAProxy route relation for agents.")
             if endpoints := self._haproxy_route.get_proxied_endpoints():
-                return str(endpoints[0]).rstrip("/")
+                return self._get_haproxy_agent_endpoint(endpoints)
             raise ReconcileWaitingError(
                 "Waiting for HAProxy to publish the Jenkins endpoint for agents."
             )
