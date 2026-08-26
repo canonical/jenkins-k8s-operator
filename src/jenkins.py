@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 WEB_PORT = 8080
 JENKINS_PLUGIN_MANAGER_VERSION = "2.13.2"
 LOGIN_PATH = "/login?from=%2F"
+JENKINS_HEALTH_CHECK_PATH = "/login"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 JENKINS_HOME_PATH = Path("/var/lib/jenkins")
 # Path to initial Jenkins password file

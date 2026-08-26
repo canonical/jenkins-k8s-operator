@@ -13,7 +13,8 @@ Machine agents must not go through SPOE because they cannot perform browser
 OIDC. Keep agents on the dedicated `agent-discovery-ingress` relation. For the
 PS7 topology, connect that relation to `ingress-configurator`, then connect
 `ingress-configurator:gateway-route` to `gateway-api-integrator`. The server
-hostname and agent hostname must be distinct.
+hostname and agent hostname must be distinct. Removing `agent-discovery-ingress`
+restores the legacy fallback path; keep it related while Gateway API is being repaired.
 
 ## Prerequisites
 

@@ -230,6 +230,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The triggering Juju event (unused, present for observe callback compatibility).
 
+        The unit enters WaitingStatus when the dedicated agent-discovery-ingress
+        relation exists but has not published an endpoint yet.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
@@ -385,6 +387,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             state: The current charm state.
             client: Jenkins API client.
+
+        Raises:
+            ReconcileWaitingError: if agent-discovery-ingress has no URL yet.
         """
         relation_agent_names = {
             agent.name for agents in (state.agent_relation_meta or {}).values() for agent in agents
@@ -480,7 +485,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 raise
 
     def _reconcile_agent_discovery(self) -> None:
-        """Update the agent discovery URL in all connected agent relations."""
+        """Update the agent discovery URL in all connected agent relations.
+
+        Raises:
+            ReconcileWaitingError: if agent-discovery-ingress has no URL yet.
+        """
         relations = self.model.relations[AGENT_RELATION]
         if not relations:
             return
@@ -538,6 +547,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             service=self.app.name,
             ports=[jenkins.WEB_PORT],
             hostname=state.external_hostname,
+            check_path=jenkins.JENKINS_HEALTH_CHECK_PATH,
         )
 
     def _reconcile_plugins(
@@ -581,18 +591,22 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
     def _agent_discovery_url(self) -> str:
         """Return the external hostname to be passed to agents via the integration.
 
-        If there is no ingress, use the pod IP as hostname. The pod IP is preferred
-        over the pod name or a K8s service because those rely on the cluster's DNS
-        service, while the IP address is sometimes routable from the outside.
+        If the dedicated ingress relation exists but has no URL yet, reconciliation
+        waits instead of publishing a pod address. If no ingress is intended, the
+        pod IP is preferred over a pod name or K8s service because those rely on
+        cluster DNS.
+
+        Raises:
+            ReconcileWaitingError: if the dedicated ingress relation has no URL yet.
 
         Returns:
-            The charm's agent discovery url.
+            The charm's agent discovery URL.
         """
         if self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is not None:
             if ingress_url := self.agent_discovery_ingress.url:
                 return ingress_url.rstrip("/")
             raise ReconcileWaitingError(
-                "Waiting for the dedicated agent ingress endpoint to become available."
+                "Waiting for agent-discovery-ingress relation data to become available."
             )
         if ingress_url := self.server_ingress.url:
             logger.warning(
@@ -619,16 +633,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
     @property
     def _agent_status_message(self) -> str:
-        """Return guidance for configuring a dedicated agent ingress endpoint."""
+        """Return guidance when machine agents lack dedicated ingress."""
         if (
-            self.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
-            and not self.agent_discovery_ingress.url
+            self.model.relations[AGENT_RELATION]
+            and self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is None
         ):
-            return f"Configure {AGENT_DISCOVERY_INGRESS_RELATION_NAME} for machine agents"
-        if self.server_ingress.url and not self.agent_discovery_ingress.url:
-            return (
-                f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
-            )
+            if self.model.get_relation(HAPROXY_ROUTE_RELATION_NAME):
+                return f"Configure {AGENT_DISCOVERY_INGRESS_RELATION_NAME} for machine agents"
+            if self.server_ingress.url:
+                return f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
         return ""
 
     def _add_agent_nodes_from_relation(

@@ -85,7 +85,7 @@ def test_agent_discovery_waits_for_ingress_configurator():
 
     with (
         ctx(ctx.on.config_changed(), state) as mgr,
-        pytest.raises(ReconcileWaitingError, match="dedicated agent ingress"),
+        pytest.raises(ReconcileWaitingError, match="agent-discovery-ingress"),
     ):
         _ = mgr.charm._agent_discovery_url
 
@@ -116,6 +116,31 @@ def test_agent_discovery_url_priority(_mock_fqdn):
             assert mgr.charm._agent_discovery_url == expected_url
 
 
+def test_agent_status_message_for_haproxy_server_requires_agent_ingress():
+    """Direct HAProxy server routing guides related agents to dedicated ingress."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = testing.State(
+        config={"external-hostname": "jenkins.example.com"},
+        containers=[testing.Container(name=JENKINS_SERVICE_NAME, can_connect=True)],  # type: ignore[arg-type]
+        relations=[
+            testing.Relation(
+                endpoint="haproxy-route",
+                interface="haproxy-route",
+            ),
+            testing.Relation(
+                endpoint="agent",
+                interface="jenkins_agent_v0",
+                remote_units_data={0: {"executors": "1", "labels": "x", "name": "a1"}},
+            ),
+        ],
+    )
+
+    with ctx(ctx.on.config_changed(), state) as mgr:
+        assert mgr.charm._agent_status_message == (
+            "Configure agent-discovery-ingress for machine agents"
+        )
+
+
 @patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)
 def test_agent_status_message(_mock_fqdn):
     """Agent status message warns only when only public ingress is configured."""
@@ -125,9 +150,34 @@ def test_agent_status_message(_mock_fqdn):
         public_url="https://public-ingress.com",
         discovery_url="https://agent-discovery-ingress.com",
     )
-    public_only = _state_with_ingress(public_url="https://public-ingress.com", discovery_url=None)
+    public_only_ingress = _state_with_ingress(
+        public_url="https://public-ingress.com", discovery_url=None
+    )
+    public_only = testing.State(
+        containers=public_only_ingress.containers,
+        relations=[
+            *public_only_ingress.relations,
+            testing.Relation(
+                endpoint="agent",
+                interface="jenkins_agent_v0",
+                remote_units_data={0: {"executors": "1", "labels": "x", "name": "a1"}},
+            ),
+        ],
+    )
 
-    with ctx(ctx.on.config_changed(), both) as mgr:
+    both_with_agent = testing.State(
+        containers=both.containers,
+        relations=[
+            *both.relations,
+            testing.Relation(
+                endpoint="agent",
+                interface="jenkins_agent_v0",
+                remote_units_data={0: {"executors": "1", "labels": "x", "name": "a1"}},
+            ),
+        ],
+    )
+
+    with ctx(ctx.on.config_changed(), both_with_agent) as mgr:
         assert mgr.charm._agent_status_message == ""
 
     with ctx(ctx.on.config_changed(), public_only) as mgr:
@@ -158,11 +208,12 @@ def test_reconcile_agent_discovery_waits_without_publishing_pod_url():
     with (
         patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
         ctx(ctx.on.config_changed(), state) as mgr,
-        pytest.raises(ReconcileWaitingError),
     ):
-        mgr.charm._reconcile_agent_discovery()
         agent_relation = mgr.charm.model.relations["agent"][0]
-        assert "url" not in agent_relation.data[mgr.charm.unit]
+        with pytest.raises(ReconcileWaitingError):
+            mgr.charm._reconcile_agent_discovery()
+
+    assert "url" not in agent_relation.data[mgr.charm.unit]
 
 
 @patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)

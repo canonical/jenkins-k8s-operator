@@ -225,6 +225,8 @@ def test__on_config_changed_success_replans_and_restarts(
         replan_mock.assert_called_once()
         reconcile_storage_mock.assert_called_once_with(harness_container.container)
 
+    assert reconcile_order == ["route", "ready", "agent-url"]
+
 
 def test_reconcile_waiting_for_agent_ingress_continues_other_reconcile(
     harness_container: HarnessWithContainer,

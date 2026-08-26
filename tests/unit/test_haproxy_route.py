@@ -75,6 +75,7 @@ def test_reconcile_haproxy_route_publishes_when_hostname_and_relation_present(
         service=harness.charm.app.name,
         ports=[jenkins.WEB_PORT],
         hostname="jenkins.example.com",
+        check_path="/login",
     )
 
 
@@ -103,14 +104,20 @@ def test_reconcile_haproxy_route_retracts_when_hostname_cleared():
 
 
 def test_reconcile_haproxy_route_retracts_only_on_leader():
-    """A non-leader does not write application relation data during retraction."""
+    """A non-leader does not clear published application relation data."""
     harness = Harness(JenkinsK8sOperatorCharm)
     relation_id = harness.add_relation("haproxy-route", "haproxy")
+    harness.set_leader(True)
     harness.begin()
 
+    harness.charm._reconcile_haproxy_route(MagicMock(external_hostname="jenkins.example.com"))
+    published_data = harness.get_relation_data(relation_id, harness.charm.app)
+    assert published_data
+
+    harness.set_leader(False)
     harness.charm._reconcile_haproxy_route(MagicMock(external_hostname=None))
 
-    assert harness.get_relation_data(relation_id, harness.charm.app) == {}
+    assert harness.get_relation_data(relation_id, harness.charm.app) == published_data
 
 
 def test_reconcile_haproxy_route_noop_without_hostname(monkeypatch: pytest.MonkeyPatch):

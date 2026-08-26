@@ -278,6 +278,24 @@ def test_agent_discovery_ingress_allows_direct_haproxy_server(
     assert charm_state.external_hostname == "jenkins.example.com"
 
 
+def test_agent_discovery_and_server_ingress_can_coexist_with_haproxy(
+    mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
+    """Legacy server ingress may coexist with the HAProxy migration route."""
+    relations = {
+        state.AGENT_DISCOVERY_INGRESS_RELATION_NAME: MagicMock(),
+        state.INGRESS_RELATION_NAME: MagicMock(),
+        state.HAPROXY_ROUTE_RELATION_NAME: MagicMock(),
+    }
+    monkeypatch.setattr(mock_charm.model, "get_relation", relations.get)
+    mock_charm.model.relations = {state.AGENT_RELATION: []}
+    mock_charm.config = {"external-hostname": "jenkins.example.com"}
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.external_hostname == "jenkins.example.com"
+
+
 def test_haproxy_route_requires_external_hostname(
     mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch
 ):
