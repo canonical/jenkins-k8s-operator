@@ -7,6 +7,7 @@ import base64
 import json
 from pathlib import Path
 
+import jenkinsapi.jenkins
 import pytest
 import pytest_asyncio
 import requests
@@ -15,7 +16,7 @@ from juju.model import Model
 from pytest_operator.plugin import OpsTest
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
-from .helpers import assert_job_success, get_model_unit_addresses
+from .helpers import assert_job_success, ensure_relation, get_model_unit_addresses
 from .types_ import KeycloakOIDCMetadata
 
 EXTERNAL_HOSTNAME = "jenkins.internal"
@@ -290,56 +291,40 @@ async def test_haproxy_spoe_redirects_to_oidc(
     )
 
 
-@pytest.mark.abort_on_fail
-async def test_haproxy_spoe_server_and_unprotected_agent_route(
-    ops_test: OpsTest,
+async def _ensure_haproxy_route(
     model: Model,
     application: Application,
-    jenkins_client,
-    haproxy_with_spoe: Application,
-    jenkins_machine_agents: Application,
+    haproxy: Application,
     machine_model: Model,
-    ca_cert_path: str,
-):
-    """SPOE protects the server hostname while the agent hostname stays public."""
-    await application.set_config(
-        {
-            "external-hostname": SPOE_EXTERNAL_HOSTNAME,
-            "agent-external-hostname": AGENT_EXTERNAL_HOSTNAME,
-        }
+) -> str:
+    """Relate Jenkins to HAProxy and return the HAProxy unit address."""
+    await ensure_relation(
+        model=model,
+        application=application,
+        other_application=haproxy,
+        relation_name=HAPROXY_ROUTE_RELATION,
+        apps=[application.name],
     )
-    related_endpoints = {
-        endpoint.name
-        for relation in application.relations
-        for endpoint in relation.endpoints
-        if endpoint.application_name == application.name
-    }
-    if HAPROXY_ROUTE_RELATION not in related_endpoints:
-        await model.integrate(
-            f"{application.name}:{HAPROXY_ROUTE_RELATION}",
-            f"localhost:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
-        )
-    await machine_model.wait_for_idle(
-        apps=[haproxy_with_spoe.name], wait_for_active=True, timeout=20 * 60
-    )
-    # The test hostnames are intentionally synthetic. Wait for the Jenkins side
-    # to publish route data, then use --resolve from each agent unit so the
-    # request exercises the agent network path without requiring deployment DNS.
+    await machine_model.wait_for_idle(apps=[haproxy.name], wait_for_active=True, timeout=20 * 60)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
+    return (await get_model_unit_addresses(machine_model, haproxy.name))[0]
 
-    haproxy_ip = (await get_model_unit_addresses(machine_model, haproxy_with_spoe.name))[0]
 
-    # The test names are synthetic. Install the test CA and map the agent name
-    # on each machine unit so the real agent service can use its published URL.
+async def _prepare_agent_units(
+    agent_application: Application,
+    haproxy_ip: str,
+    ca_cert_path: str,
+) -> None:
+    """Install test TLS trust and resolve the synthetic agent hostname."""
     ca_certificate = base64.b64encode(Path(ca_cert_path).read_bytes()).decode()
-    for unit in jenkins_machine_agents.units:
+    for unit in agent_application.units:
         action = await unit.run(
             command=(
                 "echo "
                 f"{ca_certificate}"
                 " | base64 -d | sudo tee /usr/local/share/ca-certificates/jenkins-test.crt "
                 ">/dev/null && sudo update-ca-certificates && "
-                f"printf '%s\n' '{haproxy_ip} {AGENT_EXTERNAL_HOSTNAME}' "
+                f"printf '%s\\n' '{haproxy_ip} {AGENT_EXTERNAL_HOSTNAME}' "
                 "| sudo tee -a /etc/hosts >/dev/null"
             ),
             timeout=60,
@@ -350,49 +335,83 @@ async def test_haproxy_spoe_server_and_unprotected_agent_route(
             f"Agent setup failed on {unit.name}: {action.data}"
         )
 
-    if "agent" not in related_endpoints:
-        await model.integrate(
-            f"{application.name}:agent",
-            f"localhost:admin/{machine_model.name}.agent",
-        )
+
+async def _ensure_agent_relation(
+    model: Model,
+    application: Application,
+    agent_application: Application,
+    machine_model: Model,
+) -> None:
+    """Relate the prepared machine agents to Jenkins through their offer."""
+    await ensure_relation(
+        model=model,
+        application=application,
+        other_application=agent_application,
+        relation_name="agent",
+        apps=[application.name],
+    )
     await machine_model.wait_for_idle(
-        apps=[jenkins_machine_agents.name], wait_for_active=True, timeout=20 * 60
+        apps=[agent_application.name], wait_for_active=True, timeout=20 * 60
     )
 
+
+def _new_haproxy_tls_session() -> requests.Session:
+    """Create a TLS session that validates certificates by the Host header."""
     session = requests.Session()
     session.mount("https://", HostHeaderSSLAdapter())
+    return session
 
-    server_response = session.get(
+
+def _assert_server_route_is_authenticated(
+    session: requests.Session,
+    haproxy_ip: str,
+    ca_cert_path: str,
+) -> None:
+    """Assert that the protected server hostname redirects to OIDC."""
+    response = session.get(
         f"https://{haproxy_ip}",
         headers={"Host": SPOE_EXTERNAL_HOSTNAME},
         timeout=30,
         allow_redirects=False,
         verify=ca_cert_path,
     )
-    assert server_response.status_code == 302, (
+    assert response.status_code == 302, (
         f"Expected SPOE redirect for server hostname, got "
-        f"{server_response.status_code}: {server_response.text[:200]}"
+        f"{response.status_code}: {response.text[:200]}"
     )
 
-    agent_response = session.get(
+
+def _assert_agent_route_is_unauthenticated(
+    session: requests.Session,
+    haproxy_ip: str,
+    ca_cert_path: str,
+) -> None:
+    """Assert that the agent hostname serves the JNLP JAR without SPOE."""
+    response = session.get(
         f"https://{haproxy_ip}/jnlpJars/agent.jar",
         headers={"Host": AGENT_EXTERNAL_HOSTNAME},
         timeout=30,
         allow_redirects=False,
         verify=ca_cert_path,
     )
-    assert agent_response.status_code == 200, (
+    assert response.status_code == 200, (
         f"Expected unauthenticated agent JAR access, got "
-        f"{agent_response.status_code}: {agent_response.text[:200]}"
+        f"{response.status_code}: {response.text[:200]}"
     )
-    assert agent_response.content
+    assert response.content
 
-    # Verify the URL published to every machine agent is the unprotected HAProxy
-    # hostname, rather than the protected server hostname or a pod IP.
-    for unit in jenkins_machine_agents.units:
+
+async def _assert_agents_use_haproxy_route(
+    ops_test: OpsTest,
+    agent_application: Application,
+    machine_model: Model,
+    haproxy_ip: str,
+) -> None:
+    """Verify agent URL publication, JAR access, and WebSocket remoting."""
+    for unit in agent_application.units:
         action = await unit.run(
             command=(
-                "curl --fail --silent --show-error --noproxy '*' --insecure "
+                "curl --fail --silent --show-error --noproxy '*' "
                 f"--resolve {AGENT_EXTERNAL_HOSTNAME}:443:{haproxy_ip} "
                 f"https://{AGENT_EXTERNAL_HOSTNAME}/jnlpJars/agent.jar --output /dev/null"
             ),
@@ -432,4 +451,33 @@ async def test_haproxy_spoe_server_and_unprotected_agent_route(
         server_unit_data = next(iter(relation_info["related-units"].values()))["data"]
         assert server_unit_data["url"] == f"https://{AGENT_EXTERNAL_HOSTNAME}"
 
+
+@pytest.mark.abort_on_fail
+async def test_haproxy_spoe_server_and_unprotected_agent_route(
+    ops_test: OpsTest,
+    model: Model,
+    application: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    haproxy_with_spoe: Application,
+    jenkins_machine_agents: Application,
+    machine_model: Model,
+    ca_cert_path: str,
+):
+    """SPOE protects the server hostname while the agent hostname stays public."""
+    await application.set_config(
+        {
+            "external-hostname": SPOE_EXTERNAL_HOSTNAME,
+            "agent-external-hostname": AGENT_EXTERNAL_HOSTNAME,
+        }
+    )
+    haproxy_ip = await _ensure_haproxy_route(model, application, haproxy_with_spoe, machine_model)
+    await _prepare_agent_units(jenkins_machine_agents, haproxy_ip, ca_cert_path)
+    await _ensure_agent_relation(model, application, jenkins_machine_agents, machine_model)
+
+    session = _new_haproxy_tls_session()
+    _assert_server_route_is_authenticated(session, haproxy_ip, ca_cert_path)
+    _assert_agent_route_is_unauthenticated(session, haproxy_ip, ca_cert_path)
+    await _assert_agents_use_haproxy_route(
+        ops_test, jenkins_machine_agents, machine_model, haproxy_ip
+    )
     assert_job_success(jenkins_client, jenkins_machine_agents.name, "machine")

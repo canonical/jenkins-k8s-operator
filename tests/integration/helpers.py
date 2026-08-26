@@ -378,14 +378,15 @@ async def ensure_relation(
     timeout: int = 20 * 60,
     idle_period: typing.Optional[int] = None,
 ) -> None:
-    """Ensure a relation exists and the model becomes idle.
+    """Ensure a same- or cross-model relation exists and the model becomes idle.
 
     Args:
         model: The Juju model.
         application: The primary application to relate from.
         other_application: The target application to relate to.
         relation_name: The relation endpoint name (e.g., "ingress").
-        apps: Optional explicit list of app names to wait on; defaults to both apps.
+        apps: Optional explicit list of local app names to wait on; defaults to both apps
+            for same-model relations. Cross-model callers should provide this explicitly.
         wait_for_active: Whether to wait until applications are active.
         timeout: Max seconds to wait for idle.
         idle_period: Optional idle period to pass to wait_for_idle.
@@ -403,7 +404,13 @@ async def ensure_relation(
         for ra in related_apps
     )
     if not already_related:
-        await application.relate(relation_name, other_application.name)
+        if model.name == other_application.model.name:
+            await application.relate(relation_name, other_application.name)
+        else:
+            await model.integrate(
+                f"{application.name}:{relation_name}",
+                f"localhost:admin/{other_application.model.name}.{relation_name}",
+            )
     app_list = list(apps) if apps is not None else [application.name, other_application.name]
     if idle_period is not None:
         await model.wait_for_idle(
