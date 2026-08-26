@@ -13,6 +13,7 @@ import kubernetes
 import pytest
 import requests
 import urllib3.exceptions
+from jenkinsapi.custom_exceptions import JenkinsAPIException
 from jinja2 import Environment, FileSystemLoader
 from kubernetes.stream import stream
 
@@ -294,12 +295,20 @@ def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClient):
     test_name = "matrix-combinations-parameter-test"
     unit_web_client.client.create_job(test_name, job_xml)
 
-    test_page = str(
-        unit_web_client.client.requester.get_url(
-            f"{unit_web_client.client.baseurl}/job/{test_name}/"
-        ).content,
-        encoding="utf-8",
-    )
+    def configuration_matrix_page() -> str:
+        """Wait until Jenkins has finished restarting after plugin changes."""
+        try:
+            test_page = str(
+                unit_web_client.client.requester.get_url(
+                    f"{unit_web_client.client.baseurl}/job/{test_name}/"
+                ).content,
+                encoding="utf-8",
+            )
+        except (JenkinsAPIException, requests.RequestException):
+            return ""
+        return test_page if "Configuration Matrix" in test_page else ""
+
+    test_page = wait_for(configuration_matrix_page, timeout=10 * 60)
     assert "Configuration Matrix" in test_page, (
         f"Configuration matrix table not found, {test_page}"
     )
