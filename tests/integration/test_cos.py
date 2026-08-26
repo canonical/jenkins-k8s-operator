@@ -17,6 +17,23 @@ from .types_ import JujuApplication, UnitWebClient
 logger = logging.getLogger(__name__)
 
 
+def _prometheus_targets_exist(model: jubilant.Juju, application_name: str) -> bool:
+    """Return whether every Prometheus unit exposes active scrape targets."""
+    unit_ips = get_model_unit_addresses(model, application_name)
+    if not unit_ips:
+        return False
+
+    try:
+        return all(
+            requests.get(f"http://{ip}:9090/api/v1/targets", timeout=10).json()["data"][
+                "activeTargets"
+            ]
+            for ip in unit_ips
+        )
+    except (KeyError, TypeError, ValueError, requests.RequestException):
+        return False
+
+
 def test_prometheus_integration(
     model: jubilant.Juju,
     unit_web_client: UnitWebClient,
@@ -26,11 +43,10 @@ def test_prometheus_integration(
     response = requests.get(f"{unit_web_client.web}/prometheus", timeout=10)
     assert response.status_code == 200
 
-    unit_ips = get_model_unit_addresses(model, prometheus_related.name)
-    assert unit_ips, f"Unit IP address not found for {prometheus_related.name}"
-    for ip in unit_ips:
-        query_targets = requests.get(f"http://{ip}:9090/api/v1/targets", timeout=10).json()
-        assert len(query_targets["data"]["activeTargets"])
+    wait_for(
+        functools.partial(_prometheus_targets_exist, model, prometheus_related.name),
+        timeout=10 * 60,
+    )
 
 
 def log_files_exist(
