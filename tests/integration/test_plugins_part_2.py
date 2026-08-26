@@ -7,6 +7,7 @@ import functools
 import json
 import logging
 
+import jenkinsapi.custom_exceptions
 import jenkinsapi.plugin
 import kubernetes.client
 import kubernetes.config
@@ -251,9 +252,46 @@ def test_kubernetes_plugin(
     )
 
     queue_item = job.invoke()
-    queue_item.block_until_complete()
 
-    build: jenkinsapi.build.Build = queue_item.get_build()
+    def get_completed_build() -> jenkinsapi.build.Build | None:
+        try:
+            build = queue_item.get_build()
+        except jenkinsapi.custom_exceptions.NotBuiltYet:
+            return None
+        return build if not build.is_running() else None
+
+    try:
+        build: jenkinsapi.build.Build = wait_for(
+            get_completed_build,
+            timeout=10 * 60,
+            check_interval=5,
+        )
+    except TimeoutError as exc:
+        try:
+            running_build = queue_item.get_build()
+        except jenkinsapi.custom_exceptions.NotBuiltYet:
+            running_build = None
+        if running_build:
+            try:
+                logger.error(
+                    "Kubernetes plugin build console (last 10000 characters):\n%s",
+                    running_build.get_console()[-10000:],
+                )
+            except Exception as console_exc:  # pylint: disable=broad-except
+                logger.warning("Could not fetch Kubernetes plugin build console: %s", console_exc)
+        try:
+            system_log_resp = unit_web_client.client.requester.get_url(
+                f"{unit_web_client.web}/log/all"
+            )
+            logger.error(
+                "Jenkins system log (last 10000 characters):\n%s",
+                system_log_resp.text[-10000:],
+            )
+        except Exception as log_exc:  # pylint: disable=broad-except
+            logger.warning("Could not fetch Jenkins system log: %s", log_exc)
+        _log_k8s_agent_pods(kube_core_client)
+        raise TimeoutError("Kubernetes plugin build did not complete within 600 seconds") from exc
+
     build_status = build.get_status()
     log_stream = build.stream_logs()
     logs = "".join(log_stream)
