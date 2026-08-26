@@ -1,0 +1,28 @@
+project: jenkins-k8s-operator
+path: /home/ubuntu/proj
+kill-timeout: 60m
+warn-timeout: 1m
+backends:
+  integration-test:
+    type: integration-test
+    systems:
+    - ubuntu-24.04
+environment:
+  CONCIERGE: '$(HOST: echo "${CONCIERGE:-concierge-juju4.yaml}")'
+exclude:
+- .git
+- .tox
+- .venv
+- .*_cache
+
+x-pytest-args: &pytest-args
+  pytest-environment-template: |
+    SPREAD_JOB={{ env.get("SPREAD_JOB", "") }}
+
+integration-suites:
+  tests/integration-gateway/:
+    <<: *pytest-args
+    working-dir: ./
+    summary: Canonical Kubernetes Gateway API integration tests
+    backends:
+    - integration-test

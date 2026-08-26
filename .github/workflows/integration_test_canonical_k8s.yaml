@@ -1,0 +1,40 @@
+name: Canonical Kubernetes Gateway API integration
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration-tests:
+    uses: canonical/charm-ci/.github/workflows/integration-test.yml@main
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    with:
+      working-directory: .
+      test-timeout-minutes: 120
+
+  gateway-api-integration-gate:
+    name: Canonical Kubernetes Gateway API integration gate
+    if: always() && !cancelled()
+    needs: integration-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check integration test result
+        run: |
+          result="${{ needs.integration-tests.result }}"
+          if [[ "$result" != "success" ]]; then
+            echo "Canonical Kubernetes integration tests failed: $result"
+            exit 1
+          fi
