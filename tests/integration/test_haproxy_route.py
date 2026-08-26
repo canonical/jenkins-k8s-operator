@@ -200,6 +200,18 @@ def gateway_agent_ingress_fixture(
         error=jubilant.any_error,
         timeout=20 * 60,
     )
+    server_ingress_name = "jenkins-server-ingress"
+    model.deploy(
+        "traefik-k8s",
+        app=server_ingress_name,
+        channel="edge",
+        trust=True,
+        config={"routing_mode": "path"},
+    )
+    model.integrate(
+        f"{application.name}:ingress",
+        f"{server_ingress_name}:ingress",
+    )
     model.deploy(
         "ingress-configurator",
         app=ingress_name,
@@ -216,7 +228,9 @@ def gateway_agent_ingress_fixture(
         f"{ingress_name}:ingress",
     )
     model.wait(
-        lambda status: jubilant.all_active(status, gateway_name, ingress_name, application.name),
+        lambda status: jubilant.all_active(
+            status, gateway_name, server_ingress_name, ingress_name, application.name
+        ),
         error=jubilant.any_error,
         timeout=20 * 60,
     )
