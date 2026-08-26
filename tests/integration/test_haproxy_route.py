@@ -3,7 +3,9 @@
 
 """Integration tests for the jenkins-k8s haproxy-route relation."""
 
+import base64
 import json
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -13,7 +15,7 @@ from juju.model import Model
 from pytest_operator.plugin import OpsTest
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
-from .helpers import ensure_relation, get_model_unit_addresses
+from .helpers import assert_job_success, get_model_unit_addresses
 from .types_ import KeycloakOIDCMetadata
 
 EXTERNAL_HOSTNAME = "jenkins.internal"
@@ -293,6 +295,7 @@ async def test_haproxy_spoe_server_and_unprotected_agent_route(
     ops_test: OpsTest,
     model: Model,
     application: Application,
+    jenkins_client,
     haproxy_with_spoe: Application,
     jenkins_machine_agents: Application,
     machine_model: Model,
@@ -305,27 +308,57 @@ async def test_haproxy_spoe_server_and_unprotected_agent_route(
             "agent-external-hostname": AGENT_EXTERNAL_HOSTNAME,
         }
     )
-    await ensure_relation(
-        model=model,
-        application=application,
-        other_application=haproxy_with_spoe,
-        relation_name=HAPROXY_ROUTE_RELATION,
-        apps=[application.name, haproxy_with_spoe.name],
+    related_endpoints = {
+        endpoint.name
+        for relation in application.relations
+        for endpoint in relation.endpoints
+        if endpoint.application_name == application.name
+    }
+    if HAPROXY_ROUTE_RELATION not in related_endpoints:
+        await model.integrate(
+            f"{application.name}:{HAPROXY_ROUTE_RELATION}",
+            f"localhost:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
+        )
+    await machine_model.wait_for_idle(
+        apps=[haproxy_with_spoe.name], wait_for_active=True, timeout=20 * 60
     )
-    await ensure_relation(
-        model=model,
-        application=application,
-        other_application=jenkins_machine_agents,
-        relation_name="agent",
-        apps=[application.name],
-    )
-    # Do not require the machine-agent charm to become active here: these test
-    # hostnames are intentionally synthetic, so the agent service cannot resolve
-    # them without deployment DNS. The relation URL and the HAProxy request below
-    # verify discovery and unauthenticated remoting access independently.
+    # The test hostnames are intentionally synthetic. Wait for the Jenkins side
+    # to publish route data, then use --resolve from each agent unit so the
+    # request exercises the agent network path without requiring deployment DNS.
     await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
 
     haproxy_ip = (await get_model_unit_addresses(machine_model, haproxy_with_spoe.name))[0]
+
+    # The test names are synthetic. Install the test CA and map the agent name
+    # on each machine unit so the real agent service can use its published URL.
+    ca_certificate = base64.b64encode(Path(ca_cert_path).read_bytes()).decode()
+    for unit in jenkins_machine_agents.units:
+        action = await unit.run(
+            command=(
+                "echo "
+                f"{ca_certificate}"
+                " | base64 -d | sudo tee /usr/local/share/ca-certificates/jenkins-test.crt "
+                ">/dev/null && sudo update-ca-certificates && "
+                f"printf '%s\n' '{haproxy_ip} {AGENT_EXTERNAL_HOSTNAME}' "
+                "| sudo tee -a /etc/hosts >/dev/null"
+            ),
+            timeout=60,
+        )
+        await action.wait()
+        assert action.status == "completed", f"Agent setup failed on {unit.name}: {action.data}"
+        assert action.results.get("return-code") == 0, (
+            f"Agent setup failed on {unit.name}: {action.data}"
+        )
+
+    if "agent" not in related_endpoints:
+        await model.integrate(
+            f"{application.name}:agent",
+            f"localhost:admin/{machine_model.name}.agent",
+        )
+    await machine_model.wait_for_idle(
+        apps=[jenkins_machine_agents.name], wait_for_active=True, timeout=20 * 60
+    )
+
     session = requests.Session()
     session.mount("https://", HostHeaderSSLAdapter())
 
@@ -357,6 +390,37 @@ async def test_haproxy_spoe_server_and_unprotected_agent_route(
     # Verify the URL published to every machine agent is the unprotected HAProxy
     # hostname, rather than the protected server hostname or a pod IP.
     for unit in jenkins_machine_agents.units:
+        action = await unit.run(
+            command=(
+                "curl --fail --silent --show-error --noproxy '*' --insecure "
+                f"--resolve {AGENT_EXTERNAL_HOSTNAME}:443:{haproxy_ip} "
+                f"https://{AGENT_EXTERNAL_HOSTNAME}/jnlpJars/agent.jar --output /dev/null"
+            ),
+            timeout=60,
+        )
+        await action.wait()
+        assert action.status == "completed", (
+            f"Agent JAR request failed on {unit.name}: {action.data}"
+        )
+        assert action.results.get("return-code") == 0, (
+            f"Agent JAR request failed on {unit.name}: {action.data}"
+        )
+
+        log_action = await unit.run(
+            command="sudo journalctl -u jenkins-agent -n 200 --no-pager",
+            timeout=60,
+        )
+        await log_action.wait()
+        assert log_action.status == "completed", (
+            f"Failed to inspect agent logs on {unit.name}: {log_action.data}"
+        )
+        assert log_action.results.get("return-code") == 0, (
+            f"Failed to inspect agent logs on {unit.name}: {log_action.data}"
+        )
+        agent_logs = str(log_action.results.get("stdout", ""))
+        assert "WebSocket connection open" in agent_logs
+        assert "port:50000 is not reachable" not in agent_logs
+
         return_code, stdout, stderr = await ops_test.juju(
             "show-unit", "-m", machine_model.name, unit.name, "--format=json"
         )
@@ -367,3 +431,5 @@ async def test_haproxy_spoe_server_and_unprotected_agent_route(
         )
         server_unit_data = next(iter(relation_info["related-units"].values()))["data"]
         assert server_unit_data["url"] == f"https://{AGENT_EXTERNAL_HOSTNAME}"
+
+    assert_job_success(jenkins_client, jenkins_machine_agents.name, "machine")
