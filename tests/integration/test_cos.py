@@ -55,19 +55,35 @@ def log_files_exist(
     filenames: Iterable[str],
 ) -> bool:
     """Return whether Loki has the expected Jenkins log files."""
-    series = requests.get(f"http://{unit_address}:3100/loki/api/v1/series", timeout=10).json()
-    log_files = {
-        series_data["filename"] for series_data in series["data"] if "filename" in series_data
-    }
-    logger.info("Loki log files: %s", log_files)
-    if not all(filename in log_files for filename in filenames):
+    try:
+        series = requests.get(f"http://{unit_address}:3100/loki/api/v1/series", timeout=10).json()
+        log_files = {
+            series_data["filename"] for series_data in series["data"] if "filename" in series_data
+        }
+        logger.info("Loki log files: %s", log_files)
+        if not all(filename in log_files for filename in filenames):
+            return False
+        log_query = requests.get(
+            f"http://{unit_address}:3100/loki/api/v1/query",
+            timeout=10,
+            params={"query": f'{{juju_application="{application_name}"}}'},
+        ).json()
+        return len(log_query["data"]["result"]) != 0
+    except (KeyError, TypeError, ValueError, requests.RequestException):
         return False
-    log_query = requests.get(
-        f"http://{unit_address}:3100/loki/api/v1/query",
-        timeout=10,
-        params={"query": f'{{juju_application="{application_name}"}}'},
-    ).json()
-    return len(log_query["data"]["result"]) != 0
+
+
+def _loki_logs_exist(
+    model: jubilant.Juju,
+    application_name: str,
+    loki_application_name: str,
+    filenames: Iterable[str],
+) -> bool:
+    """Return whether current Loki units expose the expected Jenkins logs."""
+    unit_ips = get_model_unit_addresses(model, loki_application_name)
+    return bool(unit_ips) and all(
+        log_files_exist(ip, application_name, filenames) for ip in unit_ips
+    )
 
 
 def test_loki_integration(
@@ -77,18 +93,16 @@ def test_loki_integration(
     kube_core_client: CoreV1Api,
 ) -> None:
     """Verify Loki receives Jenkins logs."""
-    unit_ips = get_model_unit_addresses(model, loki_related.name)
-    assert unit_ips, f"Unit IP address not found for {loki_related.name}"
-    for ip in unit_ips:
-        wait_for(
-            functools.partial(
-                log_files_exist,
-                ip,
-                application.name,
-                ("/var/lib/jenkins/logs/jenkins.log",),
-            ),
-            timeout=10 * 60,
-        )
+    wait_for(
+        functools.partial(
+            _loki_logs_exist,
+            model,
+            application.name,
+            loki_related.name,
+            ("/var/lib/jenkins/logs/jenkins.log",),
+        ),
+        timeout=10 * 60,
+    )
 
     kube_log = kube_core_client.read_namespaced_pod_log(
         name=f"{application.name}-0",
