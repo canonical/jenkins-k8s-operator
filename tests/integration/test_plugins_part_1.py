@@ -85,7 +85,7 @@ def test_plugins_remove_delay(
         model,
         unit_web_client.unit,
         "charm",
-        f"{' '.join(update_status_env)} ./dispatch",
+        f"{' '.join(update_status_env)} /charm/dispatch",
     )
 
     def has_delay_log():
@@ -126,7 +126,7 @@ def test_jenkins_plugins_config(
         model,
         unit_web_client.unit,
         "charm",
-        f"{' '.join(update_status_env)} ./dispatch",
+        f"{' '.join(update_status_env)} /charm/dispatch",
     )
     res = unit_web_client.client.requester.get_url(unit_web_client.web)
     page_content = str(res.content, encoding="utf-8")

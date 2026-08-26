@@ -6,7 +6,7 @@
 import jubilant
 import requests
 
-from .helpers import ensure_relation, exec_in_container, short_model_name
+from .helpers import ensure_relation, exec_in_container, short_model_name, wait_for
 from .types_ import JujuApplication
 
 
@@ -23,11 +23,18 @@ def test_ingress_integration(
         other_application=traefik_application,
         relation="ingress",
     )
-    response = requests.get(
-        f"http://{traefik_address}/{short_model_name(model)}-{application.name}",
-        timeout=5,
-    )
-    assert "Authentication required" in str(response.content)
+
+    def ingress_is_ready() -> bool:
+        try:
+            response = requests.get(
+                f"http://{traefik_address}/{short_model_name(model)}-{application.name}",
+                timeout=5,
+            )
+        except requests.RequestException:
+            return False
+        return "Authentication required" in str(response.content)
+
+    wait_for(ingress_is_ready, timeout=10 * 60, check_interval=10)
 
 
 def test_ingress_system_properties_flag_present(
@@ -53,5 +60,11 @@ def test_ingress_system_properties_flag_present(
         timeout=20 * 60,
     )
 
-    stdout = exec_in_container(model, unit, "jenkins", "ps -aux | cat")
-    assert f"-D{prop}" in stdout
+    def java_process_has_property() -> bool:
+        try:
+            stdout = exec_in_container(model, unit, "jenkins", "ps -aux | cat")
+        except jubilant.CLIError:
+            return False
+        return f"-D{prop}" in stdout
+
+    wait_for(java_process_has_property, timeout=10 * 60, check_interval=10)

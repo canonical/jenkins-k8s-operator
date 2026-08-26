@@ -243,7 +243,8 @@ def _wait_for_apps(
     app_list = list(apps)
     if wait_for_active:
         model.wait(
-            lambda status: jubilant.all_active(status, *app_list),
+            lambda status: jubilant.all_active(status, *app_list)
+            and jubilant.all_agents_idle(status, *app_list),
             error=jubilant.any_error,
             timeout=timeout,
         )

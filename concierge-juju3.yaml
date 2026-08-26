@@ -23,6 +23,7 @@ providers:
         cidrs: "10.43.45.0/28"
       local-storage: {}
       network: {}
+      dns: {}
       gateway: {}
 
 host:

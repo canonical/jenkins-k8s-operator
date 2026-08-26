@@ -191,7 +191,10 @@ def gateway_agent_ingress_fixture(
         channel="1/stable",
         trust=True,
     )
-    model.config(gateway_name, {"gateway-class": GATEWAY_CLASS})
+    model.config(
+        gateway_name,
+        {"gateway-class": GATEWAY_CLASS, "enforce-https": False},
+    )
     model.wait(
         lambda status: jubilant.all_active(status, gateway_name),
         error=jubilant.any_error,

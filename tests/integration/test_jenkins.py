@@ -14,8 +14,9 @@ import jubilant
 import pytest
 import requests
 import yaml
+from jenkinsapi.custom_exceptions import JenkinsAPIException
 
-from .helpers import exec_in_container, gen_test_job_xml, install_plugins
+from .helpers import exec_in_container, gen_test_job_xml, install_plugins, wait_for
 from .types_ import JujuApplication, UnitWebClient
 
 JENKINS_UID = "2000"
@@ -44,7 +45,7 @@ def test_jenkins_automatic_update_out_of_range(
     """Verify maintenance does not run outside the configured restart window."""
     extra_plugin = "oic-auth"
     install_plugins(unit_web_client, (extra_plugin,))
-    command = f"{' '.join(libfaketime_env)} {' '.join(update_status_env)} ./dispatch"
+    command = f"{' '.join(libfaketime_env)} {' '.join(update_status_env)} /charm/dispatch"
     exec_in_container(model, unit, "charm", command)
     assert unit_web_client.client.has_plugin(extra_plugin), (
         "additionally installed plugin cleaned up."
@@ -88,6 +89,23 @@ def _wait_for_unit_count(model: jubilant.Juju, application: str, count: int) -> 
         error=jubilant.any_error,
         timeout=20 * 60,
     )
+
+
+def _wait_for_exported_config(
+    client: jenkinsapi.jenkins.Jenkins,
+    url: str,
+    *expected: str,
+) -> None:
+    """Wait until Jenkins exposes the expected JCasC after a reload."""
+
+    def ready() -> bool:
+        try:
+            response = client.requester.post_url(url)
+        except (requests.RequestException, JenkinsAPIException):
+            return False
+        return response.status_code == 200 and all(value in response.text for value in expected)
+
+    wait_for(ready, timeout=10 * 60, check_interval=10)
 
 
 def test_storage_mount(
@@ -176,10 +194,11 @@ def test_jcasc_custom_config_updates(
         error=jubilant.any_error,
         timeout=300,
     )
-    exported_response = jenkins_client.requester.post_url(
-        f"{web_address}/configuration-as-code/export"
+    _wait_for_exported_config(
+        jenkins_client,
+        f"{web_address}/configuration-as-code/export",
+        custom_message,
     )
-    assert custom_message in exported_response.text
 
 
 def test_jcasc_invalid_yaml_blocks(
@@ -226,10 +245,11 @@ def test_jcasc_reload_without_restart(
         error=jubilant.any_error,
         timeout=300,
     )
-    exported_response = jenkins_client.requester.post_url(
-        f"{web_address}/configuration-as-code/export"
+    _wait_for_exported_config(
+        jenkins_client,
+        f"{web_address}/configuration-as-code/export",
+        new_message,
     )
-    assert new_message in exported_response.text
 
 
 def _working_branch() -> str | None:
@@ -318,12 +338,13 @@ def test_jcasc_repository_config_from_file(
         timeout=20 * 60,
     )
 
-    response = jenkins_client.requester.post_url(f"{web_address}/configuration-as-code/export")
-    assert response.status_code == 200, "JCasC export endpoint should be accessible"
-    exported = response.text
-    assert "jenkins" in exported, "Exported JCasC should contain jenkins section"
-    assert "Jenkins Configuration as Code (JCasC) via Git Repository" in exported
-    assert "numExecutors: 2" in exported
-    assert "mode: NORMAL" in exported
-    assert "unclassified:" in exported
-    assert "location:" in exported
+    _wait_for_exported_config(
+        jenkins_client,
+        f"{web_address}/configuration-as-code/export",
+        "jenkins",
+        "Jenkins Configuration as Code (JCasC) via Git Repository",
+        "numExecutors: 2",
+        "mode: NORMAL",
+        "unclassified:",
+        "location:",
+    )
