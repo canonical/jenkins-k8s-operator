@@ -182,6 +182,8 @@ def _certificate_has_hostname(
 
 @pytest.fixture(scope="module", name="haproxy_with_spoe")
 def haproxy_with_spoe_fixture(
+    model: jubilant.Juju,
+    application: JujuApplication,
     machine_model: jubilant.Juju,
     haproxy: JujuApplication,
     haproxy_spoe_auth: JujuApplication,
@@ -189,6 +191,8 @@ def haproxy_with_spoe_fixture(
     ca_cert_path: str,
 ) -> JujuApplication:
     """Wire the HAProxy, SPOE, OAuth, and Keycloak authentication chain."""
+    # HAProxy proxy mode derives certificate SANs from Jenkins route data.
+    model.config(application.name, {"external-hostname": SPOE_EXTERNAL_HOSTNAME})
     machine_model.config(
         haproxy.name,
         {"external-hostname": SPOE_EXTERNAL_HOSTNAME},
