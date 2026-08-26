@@ -393,6 +393,31 @@ def _get_coredns_config_map(
     return config_map
 
 
+def _restart_coredns(kube_core_client: kubernetes.client.CoreV1Api) -> None:
+    """Restart CoreDNS and wait until its replacement pods are ready."""
+    selector = "app.kubernetes.io/name=coredns"
+    pods = kube_core_client.list_namespaced_pod(namespace="kube-system", label_selector=selector)
+    for pod in pods.items:
+        if pod.metadata and pod.metadata.name:
+            logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
+            kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+
+    def pods_are_ready() -> bool:
+        current_pods = kube_core_client.list_namespaced_pod(
+            namespace="kube-system", label_selector=selector
+        ).items
+        return bool(current_pods) and all(
+            pod.status
+            and pod.status.phase == "Running"
+            and pod.status.container_statuses
+            and all(container.ready for container in pod.status.container_statuses)
+            and not (pod.metadata and pod.metadata.deletion_timestamp)
+            for pod in current_pods
+        )
+
+    wait_for(pods_are_ready, timeout=5 * 60, check_interval=5)
+
+
 @pytest.fixture(scope="module", name="inject_dns")
 def inject_dns_fixture(
     kube_core_client: kubernetes.client.CoreV1Api,
@@ -416,13 +441,7 @@ def inject_dns_fixture(
         body={"data": {"Corefile": coredns_configmap_manifest["data"]["Corefile"]}},
     )
 
-    pods = kube_core_client.list_namespaced_pod(
-        namespace="kube-system", label_selector="app.kubernetes.io/name=coredns"
-    )
-    for pod in pods.items:
-        if pod.metadata and pod.metadata.name:
-            logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-            kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+    _restart_coredns(kube_core_client)
 
     yield
 
@@ -431,13 +450,7 @@ def inject_dns_fixture(
         namespace="kube-system",
         body={"data": {"Corefile": original_corefile}},
     )
-    pods = kube_core_client.list_namespaced_pod(
-        namespace="kube-system", label_selector="app.kubernetes.io/name=coredns"
-    )
-    for pod in pods.items:
-        if pod.metadata and pod.metadata.name:
-            logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-            kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+    _restart_coredns(kube_core_client)
 
 
 # The Playwright fixtures are kept module-scoped so both auth tests share
