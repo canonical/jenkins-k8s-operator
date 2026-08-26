@@ -1,69 +1,50 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Integration tests for jenkins-k8s-operator charm."""
+"""Integration tests for jenkins-k8s-operator charm Kubernetes agents."""
 
 import logging
 
 import jenkinsapi.jenkins
+import jubilant
 import requests
-from juju.application import Application
-from juju.model import Model
 
 import state
 
 from .helpers import assert_job_success, ensure_relation
+from .types_ import JujuApplication
 
 logger = logging.getLogger(__name__)
 
 
-async def test_jenkins_wizard_bypass(web_address: str):
-    """Verify Jenkins wizard is bypassed and login is shown.
-
-    arrange: given an active Jenkins charm's unit ip.
-    act: when web application is accessed
-    assert: wizard is bypassed and a login screen is shown.
-    """
+def test_jenkins_wizard_bypass(web_address: str) -> None:
+    """Verify the Jenkins setup wizard is bypassed."""
     response = requests.get(f"{web_address}/login", params={"from": "/"}, timeout=10)
-
-    # This should not appear since when Jenkins setup is complete, the wizard should have been
-    # bypassed.
     assert "Unlock Jenkins" not in str(response.content), "Jenkins setup wizard not bypassed."
     assert "Sign in to Jenkins" in str(response.content)
 
 
-async def test_jenkins_k8s_agent_relation(
-    model: Model,
-    application: Application,
-    jenkins_k8s_agents: Application,
-    extra_jenkins_k8s_agents: Application,
+def test_jenkins_k8s_agent_relation(
+    model: jubilant.Juju,
+    application: JujuApplication,
+    jenkins_k8s_agents: JujuApplication,
+    extra_jenkins_k8s_agents: JujuApplication,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
-):
-    """Verify k8s agent relation lifecycle and deregistration.
-
-    arrange: given jenkins-k8s-agent and jenkins server charms.
-    act:
-        1. when the server charm is related to the k8s agent charm.
-        2. when the relation is removed.
-    assert:
-        1. the relation succeeds and the k8s agent is able to run jobs successfully.
-        2. the k8s agent is deregistered from Jenkins.
-    """
-    # 1. Relate jenkins-k8s charm to the jenkins-k8s-agent charm.
-    await ensure_relation(
+) -> None:
+    """Verify Kubernetes agent relation lifecycle and deregistration."""
+    ensure_relation(
         model=model,
         application=application,
         other_application=jenkins_k8s_agents,
     )
-    await ensure_relation(
+    ensure_relation(
         model=model,
         application=application,
         other_application=extra_jenkins_k8s_agents,
     )
 
-    # Agent relation metadata uses unit names with slashes replaced by hyphens.
-    jenkins_k8s_agent_node = jenkins_k8s_agents.units[0].name.replace("/", "-")
-    extra_jenkins_k8s_agent_node = extra_jenkins_k8s_agents.units[0].name.replace("/", "-")
+    jenkins_k8s_agent_node = jenkins_k8s_agents.units[0].replace("/", "-")
+    extra_jenkins_k8s_agent_node = extra_jenkins_k8s_agents.units[0].replace("/", "-")
     node_names = sorted(jenkins_client.nodes.iterkeys())
     logger.info(
         "Jenkins agent nodes after relation: expected=%s actual=%s",
@@ -71,28 +52,26 @@ async def test_jenkins_k8s_agent_relation(
         node_names,
     )
 
-    # 1. Assert that the node is registered and is able to run jobs successfully.
     assert_job_success(jenkins_client, jenkins_k8s_agent_node, "k8s")
     assert_job_success(jenkins_client, extra_jenkins_k8s_agent_node, "k8s-extra")
     assert jenkins_client.get_node(jenkins_k8s_agent_node).get_config_element("remoteFS") == (
         "/var/lib/jenkins"
     )
-    assert jenkins_client.get_node(extra_jenkins_k8s_agent_node).get_config_element(
-        "remoteFS"
-    ) == ("/var/lib/jenkins")
-
-    # 2. Remove the relation
-    await application.remove_relation(
-        state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
-    )
-    await application.remove_relation(
-        state.AGENT_RELATION, f"{extra_jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
-    )
-    await model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agents.name, extra_jenkins_k8s_agents.name]
+    assert (
+        jenkins_client.get_node(extra_jenkins_k8s_agent_node).get_config_element("remoteFS")
+        == "/var/lib/jenkins"
     )
 
-    # 2. Assert that the agent nodes are deregistered from Jenkins.
+    model.remove_relation(
+        f"{application.name}:{state.AGENT_RELATION}",
+        f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}",
+    )
+    model.remove_relation(
+        f"{application.name}:{state.AGENT_RELATION}",
+        f"{extra_jenkins_k8s_agents.name}:{state.AGENT_RELATION}",
+    )
+    model.wait(jubilant.all_agents_idle, error=jubilant.any_error, timeout=20 * 60)
+
     node_names = sorted(jenkins_client.nodes.iterkeys())
     logger.info(
         "Jenkins agent nodes after relation removal: removed=%s remaining=%s",
@@ -103,12 +82,12 @@ async def test_jenkins_k8s_agent_relation(
     assert extra_jenkins_k8s_agent_node not in node_names
 
 
-async def test_manually_managed_node_survives_agent_relation(
-    model: Model,
-    application: Application,
-    jenkins_k8s_agents: Application,
+def test_manually_managed_node_survives_agent_relation(
+    model: jubilant.Juju,
+    application: JujuApplication,
+    jenkins_k8s_agents: JujuApplication,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
-):
+) -> None:
     """Preserve a manually created node through agent relation reconciliation."""
     node_name = "manual-external-agent"
     jenkins_client.create_node(
@@ -120,10 +99,14 @@ async def test_manually_managed_node_survives_agent_relation(
     )
 
     try:
-        await application.set_config({"external-agent-nodes": node_name})
-        await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+        model.config(application.name, {"external-agent-nodes": node_name})
+        model.wait(
+            lambda status: jubilant.all_active(status, application.name),
+            error=jubilant.any_error,
+            timeout=20 * 60,
+        )
 
-        await ensure_relation(
+        ensure_relation(
             model=model,
             application=application,
             other_application=jenkins_k8s_agents,
@@ -134,14 +117,13 @@ async def test_manually_managed_node_survives_agent_relation(
             "Created outside Juju"
         )
 
-        await application.remove_relation(
-            state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
+        model.remove_relation(
+            f"{application.name}:{state.AGENT_RELATION}",
+            f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}",
         )
-        await model.wait_for_idle(
-            apps=[application.name, jenkins_k8s_agents.name], wait_for_active=False
-        )
-        assert any(node_name == key for key in jenkins_client.nodes.iterkeys())
+        model.wait(jubilant.all_agents_idle, error=jubilant.any_error, timeout=20 * 60)
+        assert node_name in jenkins_client.nodes.iterkeys()
     finally:
-        await application.reset_config(["external-agent-nodes"])
-        if any(node_name == key for key in jenkins_client.nodes.iterkeys()):
+        model.config(application.name, reset=["external-agent-nodes"])
+        if node_name in jenkins_client.nodes.iterkeys():
             jenkins_client.delete_node(node_name)

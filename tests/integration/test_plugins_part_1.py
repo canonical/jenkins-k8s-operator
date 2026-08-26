@@ -5,18 +5,16 @@
 
 import json
 import logging
-import typing
+from collections.abc import Iterable
 
 import jenkinsapi.plugin
+import jubilant
 import kubernetes
 import pytest
 import requests
 import urllib3.exceptions
 from jinja2 import Environment, FileSystemLoader
-from juju.application import Application
-from juju.model import Model
 from kubernetes.stream import stream
-from pytest_operator.plugin import OpsTest
 
 from .constants import (
     ALLOWED_PLUGINS,
@@ -25,21 +23,23 @@ from .constants import (
     REMOVED_PLUGINS,
 )
 from .helpers import (
+    exec_in_container,
     gen_git_test_job_xml,
     gen_test_job_xml,
     get_job_invoked_unit,
     install_plugins,
+    short_model_name,
     wait_for,
 )
-from .types_ import LDAPSettings, UnitWebClient
+from .types_ import JujuApplication, LDAPSettings, UnitWebClient
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
-async def test_plugins_remove_delay(
-    ops_test: OpsTest,
-    update_status_env: typing.Iterable[str],
+def test_plugins_remove_delay(
+    model: jubilant.Juju,
+    update_status_env: Iterable[str],
     unit_web_client: UnitWebClient,
 ):
     """
@@ -65,75 +65,69 @@ async def test_plugins_remove_delay(
             logger.exception("Failed to post plugin installations.")
             return False
 
-    await wait_for(_install_plugins_via_web_api)
+    wait_for(_install_plugins_via_web_api)
 
-    async def has_temp_files():
-        """Check if tempfiles exist in Jenkins plugins directory.
-
-        Returns:
-            True if .tmp file exists, False otherwise.
-        """
-        ret_code, stdout, stderr = await ops_test.juju(
-            "exec", "--unit", unit_web_client.unit.name, "ls /var/lib/jenkins/plugins"
-        )
-        assert not ret_code, f"Failed to check for tmp files, {stderr}"
+    def has_temp_files() -> bool:
+        """Check if temporary files exist in the Jenkins plugins directory."""
+        try:
+            stdout = exec_in_container(
+                model,
+                unit_web_client.unit,
+                "jenkins",
+                "ls /var/lib/jenkins/plugins",
+            )
+        except jubilant.CLIError:
+            return False
         return "tmp" in stdout
 
-    await wait_for(has_temp_files)
-    ret_code, _, stderr = await ops_test.juju(
-        "exec",
-        "--unit",
-        unit_web_client.unit.name,
-        "--",
+    wait_for(has_temp_files)
+    exec_in_container(
+        model,
+        unit_web_client.unit,
+        "charm",
         f"{' '.join(update_status_env)} ./dispatch",
     )
-    assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
 
-    async def has_delay_log():
+    def has_delay_log():
         """Check if juju log contains plugin cleanup delayed log.
 
         Returns:
             True if plugin cleanup delayed log exists. False otherwise.
         """
-        ret_code, stdout, stderr = await ops_test.juju(
+        stdout = model.cli(
             "debug-log",
             "--replay",
             "--no-tail",
             "--level",
             "WARNING",
         )
-        assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
         return "Plugins being downloaded, waiting until further actions." in stdout
 
-    await wait_for(has_delay_log)
+    wait_for(has_delay_log)
     unit_web_client.client.safe_restart()
 
-    await wait_for(
-        lambda: all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
-    )
+    wait_for(lambda: all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS))
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
-async def test_jenkins_plugins_config(
-    ops_test: OpsTest,
+def test_jenkins_plugins_config(
+    model: jubilant.Juju,
     unit_web_client: UnitWebClient,
-    update_status_env: typing.Iterable[str],
+    update_status_env: Iterable[str],
 ):
     """
     arrange: given a jenkins charm with plugin config and plugins installed not in the config.
     act: when update_status_hook is fired.
     assert: the plugin is uninstalled and the system message is set on Jenkins.
     """
-    await install_plugins(unit_web_client, INSTALLED_PLUGINS)
+    install_plugins(unit_web_client, INSTALLED_PLUGINS)
 
-    ret_code, _, stderr = await ops_test.juju(
-        "exec",
-        "--unit",
-        unit_web_client.unit.name,
-        "--",
+    exec_in_container(
+        model,
+        unit_web_client.unit,
+        "charm",
         f"{' '.join(update_status_env)} ./dispatch",
     )
-    assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
     res = unit_web_client.client.requester.get_url(unit_web_client.web)
     page_content = str(res.content, encoding="utf-8")
 
@@ -147,13 +141,13 @@ async def test_jenkins_plugins_config(
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
-async def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
+def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
     """
     arrange: given a jenkins charm with git plugin installed.
     act: when a job is dispatched with a git workflow.
     assert: job completes successfully.
     """
-    await install_plugins(unit_web_client, INSTALLED_PLUGINS)
+    install_plugins(unit_web_client, INSTALLED_PLUGINS)
 
     job_name = "git-plugin-test-k8s"
     unit_web_client.client.create_job(job_name, gen_git_test_job_xml("k8s"))
@@ -173,7 +167,7 @@ async def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
 
 @pytest.fixture(name="seed_ldap_user")
 def seed_ldap_user_fixture(
-    model: Model,
+    model: jubilant.Juju,
     kube_core_client: kubernetes.client.CoreV1Api,
     ldap_settings: LDAPSettings,
 ):
@@ -202,12 +196,14 @@ gidNumber: 1001
 homeDirectory: /home/{ldap_settings.username}
 EOF""",
     ]
-    pods = kube_core_client.list_namespaced_pod(namespace=model.name, label_selector="app=ldap")
+    pods = kube_core_client.list_namespaced_pod(
+        namespace=short_model_name(model), label_selector="app=ldap"
+    )
     pod_name = pods.items[0].metadata.name
     response = stream(
         kube_core_client.connect_get_namespaced_pod_exec,
         name=pod_name,
-        namespace=model.name,
+        namespace=short_model_name(model),
         command=["sh", "-c", " ".join(command)],
         stderr=True,
         stdin=True,
@@ -217,7 +213,7 @@ EOF""",
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins", "seed_ldap_user")
-async def test_ldap_plugin(
+def test_ldap_plugin(
     unit_web_client: UnitWebClient,
     ldap_server_ip: str,
     ldap_settings: LDAPSettings,
@@ -227,7 +223,7 @@ async def test_ldap_plugin(
     act: when ldap plugin is configured and the user is queried.
     assert: the user is authenticated successfully.
     """
-    await install_plugins(unit_web_client, ("ldap",))
+    install_plugins(unit_web_client, ("ldap",))
 
     # This is same as: Manage Jenkins > Configure Global Security > Authentication >
     # Security Realm > LDAP > Test LDAP Settings.
@@ -285,13 +281,13 @@ async def test_ldap_plugin(
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
-async def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClient):
+def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a jenkins server with matrix-combinations-parameter plugin installed.
     act: when a multi-configuration job is created.
     assert: a matrix based test is created.
     """
-    await install_plugins(unit_web_client, ("matrix-combinations-parameter",))
+    install_plugins(unit_web_client, ("matrix-combinations-parameter",))
     matrix_project_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
         "matrix-project"
     ]
@@ -319,15 +315,16 @@ async def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClie
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
-async def test_postbuildscript_plugin(
-    ops_test: OpsTest, unit_web_client: UnitWebClient, jenkins_k8s_agents: Application
+def test_postbuildscript_plugin(
+    unit_web_client: UnitWebClient,
+    jenkins_k8s_agents: JujuApplication,
 ):
     """
     arrange: given a jenkins charm with postbuildscript plugin installed and related to an agent.
     act: when a postbuildscript job that writes a file to a /tmp folder is dispatched.
     assert: the file is written on the /tmp folder of the job host.
     """
-    await install_plugins(unit_web_client, ("postbuildscript",))
+    install_plugins(unit_web_client, ("postbuildscript",))
     postbuildscript_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
         "postbuildscript"
     ]
@@ -345,20 +342,22 @@ async def test_postbuildscript_plugin(
 
     unit = get_job_invoked_unit(job, jenkins_k8s_agents.units)
     assert unit, f"Agent unit running the job not found, {job.get_last_build().get_slave()}"
-    ret, stdout, stderr = await ops_test.juju(
-        "ssh", "--container", "jenkins-agent-k8s", unit.name, "cat", test_output_path
+    stdout = exec_in_container(
+        jenkins_k8s_agents.model,
+        unit,
+        "jenkins-agent-k8s",
+        f"cat {test_output_path}",
     )
-    assert ret == 0, f"Failed to scp test output file, {stderr}"
     assert stdout == test_output
 
 
-async def test_ssh_agent_plugin(unit_web_client: UnitWebClient):
+def test_ssh_agent_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given jenkins charm with ssh_agent plugin installed.
     act: when a job is being configured.
     assert: ssh-agent configuration is visible.
     """
-    await install_plugins(unit_web_client, ("ssh-agent",))
+    install_plugins(unit_web_client, ("ssh-agent",))
     unit_web_client.client.create_job("ssh_agent_test", gen_test_job_xml("k8s"))
 
     res = unit_web_client.client.requester.get_url(
@@ -369,13 +368,13 @@ async def test_ssh_agent_plugin(unit_web_client: UnitWebClient):
     assert "SSH Agent" in config_page, f"SSH agent configuration not found. {config_page}"
 
 
-async def test_blueocean_plugin(unit_web_client: UnitWebClient):
+def test_blueocean_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a jenkins charm with blueocean plugin installed.
     act: when blueocean frontend url is accessed.
     assert: 200 response is returned.
     """
-    await install_plugins(unit_web_client, ("blueocean",))
+    install_plugins(unit_web_client, ("blueocean",))
 
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/blue/organizations/jenkins/"
@@ -386,13 +385,13 @@ async def test_blueocean_plugin(unit_web_client: UnitWebClient):
     )
 
 
-async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+def test_thinbackup_plugin(model: jubilant.Juju, unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with thinbackup plugin installed and backup configured.
     act: when a backup action is run.
     assert: the backup is made on a configured directory.
     """
-    await install_plugins(unit_web_client, ("thinBackup",))
+    install_plugins(unit_web_client, ("thinBackup",))
     backup_path = "/srv/jenkins/backup/"
     payload = {
         **DEFAULT_SYSTEM_CONFIGURE_PAYLOAD,
@@ -415,7 +414,7 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     )
     res.raise_for_status()
 
-    async def has_backup() -> bool:
+    def has_backup() -> bool:
         """Get whether the backup is created.
 
         The backup folder of format FULL-<backup-date> should be created.
@@ -423,32 +422,28 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
         Returns:
             Whether the backup file has successfully been created.
         """
-        ret, stdout, stderr = await ops_test.juju(
-            "ssh",
-            "--container",
-            "jenkins",
-            unit_web_client.unit.name,
-            "ls",
-            backup_path,
-        )
-        logger.info(
-            "Run backup path ls result: code: %s stdout: %s, stderr: %s",
-            ret,
-            stdout,
-            stderr,
-        )
-        return ret == 0 and "FULL" in stdout
+        try:
+            stdout = exec_in_container(
+                model,
+                unit_web_client.unit,
+                "jenkins",
+                f"ls {backup_path}",
+            )
+        except jubilant.CLIError:
+            return False
+        logger.info("Run backup path ls result: stdout: %s", stdout)
+        return "FULL" in stdout
 
-    await wait_for(has_backup)
+    wait_for(has_backup)
 
 
-async def test_bzr_plugin(unit_web_client: UnitWebClient):
+def test_bzr_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with bazaar plugin installed.
     act: when a job configuration page is accessed.
     assert: bazaar plugin option exists.
     """
-    await install_plugins(unit_web_client, ("bazaar",))
+    install_plugins(unit_web_client, ("bazaar",))
     unit_web_client.client.create_job("bzr_plugin_test", gen_test_job_xml("k8s"))
 
     res = unit_web_client.client.requester.get_url(

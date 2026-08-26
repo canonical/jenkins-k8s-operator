@@ -5,80 +5,83 @@
 
 from dataclasses import dataclass
 
+import jubilant
 import pytest
-import pytest_asyncio
-from juju.application import Application
-from juju.model import Model
 
 import state
 
+from .constants import LXD_CONTROLLER_NAME
+from .helpers import short_model_name
+from .types_ import JujuApplication
 
-@dataclass
+
+@dataclass(frozen=True)
 class _IngressTraefiks:
-    """The ingress applications for Jenkins server.
+    """The ingress applications for the Jenkins server."""
 
-    Attributes:
-        agent_discovery: The ingress application for agent discovery.
-        server: The ingress application for Jenkins server.
-    """
-
-    agent_discovery: Application
-    server: Application
+    agent_discovery: JujuApplication
+    server: JujuApplication
 
 
-@pytest_asyncio.fixture(scope="module", name="ingress_traefik")
-async def ingress_traefik_fixture(model: Model):
-    """The application related to Jenkins via ingress v2 relation."""
-    agent_discovery_traefik = await model.deploy(
-        "traefik-k8s",
-        channel="edge",
-        trust=True,
-        config={"routing_mode": "path"},
-        application_name="agent-discovery-traefik",
-    )
-    server_traefik = await model.deploy(
-        "traefik-k8s",
-        channel="edge",
-        trust=True,
-        config={"routing_mode": "path"},
-        application_name="server-traefik",
-    )
-    await model.wait_for_idle(
-        status="active",
-        apps=[agent_discovery_traefik.name, server_traefik.name],
+@pytest.fixture(scope="module", name="ingress_traefik")
+def ingress_traefik_fixture(model: jubilant.Juju) -> _IngressTraefiks:
+    """Deploy the two Traefik applications used by the ingress test."""
+    agent_discovery_name = "agent-discovery-traefik"
+    server_name = "server-traefik"
+    for name in (agent_discovery_name, server_name):
+        model.deploy(
+            "traefik-k8s",
+            app=name,
+            channel="edge",
+            trust=True,
+            config={"routing_mode": "path"},
+        )
+    model.wait(
+        lambda status: jubilant.all_active(status, agent_discovery_name, server_name),
+        error=jubilant.any_error,
         timeout=20 * 60,
-        idle_period=30,
-        raise_on_error=False,
     )
-    return _IngressTraefiks(agent_discovery=agent_discovery_traefik, server=server_traefik)
+    return _IngressTraefiks(
+        agent_discovery=JujuApplication(
+            name=agent_discovery_name,
+            model=model,
+            units=tuple(model.status().apps[agent_discovery_name].units),
+        ),
+        server=JujuApplication(
+            name=server_name,
+            model=model,
+            units=tuple(model.status().apps[server_name].units),
+        ),
+    )
 
 
-# This will only work on microk8s !!
-@pytest.mark.abort_on_fail
-async def test_agent_discovery_ingress_integration(
-    application: Application,
+def test_agent_discovery_ingress_integration(
+    model: jubilant.Juju,
+    application: JujuApplication,
     ingress_traefik: _IngressTraefiks,
-    jenkins_machine_agents: Application,
-):
-    """
-    arrange: deploy the Jenkins charm, ingress, and a machine agent.
-    act: integrate the charms with each other.
-    assert: All units should be in active status.
-    """
-    model = application.model
-    machine_model = jenkins_machine_agents.model
-
-    await application.relate(
-        state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+    jenkins_machine_agents: JujuApplication,
+    machine_model: jubilant.Juju,
+) -> None:
+    """Verify agent discovery and server ingress relations become active."""
+    model.integrate(
+        f"{application.name}:{state.AGENT_DISCOVERY_INGRESS_RELATION_NAME}",
         f"{ingress_traefik.agent_discovery.name}:ingress",
     )
-    await application.relate(state.INGRESS_RELATION_NAME, f"{ingress_traefik.server.name}:ingress")
-
-    await model.relate(
+    model.integrate(
+        f"{application.name}:{state.INGRESS_RELATION_NAME}",
+        f"{ingress_traefik.server.name}:ingress",
+    )
+    model.integrate(
         f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
+        f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.{state.AGENT_RELATION}",
     )
-    await machine_model.wait_for_idle(
-        apps=[jenkins_machine_agents.name], wait_for_active=True, raise_on_error=False
+    machine_model.wait(
+        lambda status: jubilant.all_active(status, jenkins_machine_agents.name),
+        error=jubilant.any_error,
+        timeout=20 * 60,
     )
-    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+    model.wait(
+        lambda status: jubilant.all_active(status, application.name),
+        error=jubilant.any_error,
+        timeout=20 * 60,
+    )

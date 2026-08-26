@@ -1,0 +1,30 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+juju:
+  channel: 3.6/stable
+  model-defaults:
+    test-mode: "true"
+    automatically-retry-hooks: "false"
+
+providers:
+  lxd:
+    enable: true
+    bootstrap: true
+  k8s:
+    enable: true
+    bootstrap: true
+    channel: 1.32-classic/stable
+    bootstrap-constraints:
+      root-disk: "2G"
+    features:
+      load-balancer:
+        l2-mode: "true"
+        cidrs: "10.43.45.0/28"
+      local-storage: {}
+      network: {}
+      gateway: {}
+
+host:
+  packages:
+    - skopeo

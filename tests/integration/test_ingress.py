@@ -3,81 +3,55 @@
 
 """Integration tests for jenkins-k8s-operator with ingress."""
 
-import typing
-
-import pytest
+import jubilant
 import requests
-from juju.application import Application
-from juju.model import Model
-from pytest_operator.plugin import OpsTest
 
-from .helpers import ensure_relation
+from .helpers import ensure_relation, exec_in_container, short_model_name
+from .types_ import JujuApplication
 
 
-@pytest.mark.abort_on_fail
-async def test_ingress_integration(
-    model: Model,
-    application: Application,
-    traefik_application_and_unit_ip: typing.Tuple[Application, str],
-):
-    """
-    arrange: deploy the Jenkins charm and establish relations via ingress.
-    act: send a request to the ingress in /.
-    assert: the response succeeds.
-    """
+def test_ingress_integration(
+    model: jubilant.Juju,
+    application: JujuApplication,
+    traefik_application_and_unit_ip: tuple[JujuApplication, str],
+) -> None:
+    """Verify Jenkins is reachable through a Traefik ingress relation."""
     traefik_application, traefik_address = traefik_application_and_unit_ip
-    await ensure_relation(
+    ensure_relation(
         model=model,
         application=application,
         other_application=traefik_application,
         relation="ingress",
     )
     response = requests.get(
-        f"http://{traefik_address}/{model.name}-{application.name}",
+        f"http://{traefik_address}/{short_model_name(model)}-{application.name}",
         timeout=5,
     )
-
     assert "Authentication required" in str(response.content)
 
 
-@pytest.mark.abort_on_fail
-async def test_ingress_system_properties_flag_present(
-    model: Model,
-    application: Application,
-    ops_test: OpsTest,
-    traefik_application_and_unit_ip: typing.Tuple[Application, str],
-):
-    """
-    Confirm system-properties are appended to the JVM startup flags.
-
-    arrange: deploy Jenkins with Traefik ingress and set system-properties.
-    act: set crumb issuer proxy compatibility via config and inspect JVM args.
-    assert: the -D flag is present in the running java process.
-    """
+def test_ingress_system_properties_flag_present(
+    model: jubilant.Juju,
+    application: JujuApplication,
+    unit: str,
+    traefik_application_and_unit_ip: tuple[JujuApplication, str],
+) -> None:
+    """Confirm system properties are present in the running Java process."""
     traefik_application, _ = traefik_application_and_unit_ip
-    # Ensure relation exists
-    await ensure_relation(
+    ensure_relation(
         model=model,
         application=application,
         other_application=traefik_application,
         relation="ingress",
     )
 
-    # Apply the system property via charm config
     prop = "jenkins.model.Jenkins.crumbIssuerProxyCompatibility=true"
-    await application.set_config({"system-properties": prop})
-    await model.wait_for_idle(
-        apps=[application.name], wait_for_active=True, timeout=20 * 60, idle_period=30
+    model.config(application.name, {"system-properties": prop})
+    model.wait(
+        lambda status: jubilant.all_active(status, application.name),
+        error=jubilant.any_error,
+        timeout=20 * 60,
     )
 
-    # Inspect the running java command line inside the unit
-    unit = application.units[0]
-    ret, stdout, stderr = await ops_test.juju(
-        "ssh",
-        "--container",
-        "jenkins",
-        unit.name,
-        "ps -aux | cat",
-    )
-    assert ret == 0, f"Failed to exec in container, {stderr}"
+    stdout = exec_in_container(model, unit, "jenkins", "ps -aux | cat")
     assert f"-D{prop}" in stdout
