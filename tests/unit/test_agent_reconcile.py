@@ -4,6 +4,7 @@
 """Jenkins-k8s charm agent reconcile tests."""
 
 import inspect
+import json
 import secrets
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -231,3 +232,33 @@ def test_reconcile_agents_returns_early_when_no_relation_meta():
 
         mock_client.list_agent_nodes.assert_not_called()
         assert not isinstance(mgr.charm.unit.status, ops.MaintenanceStatus)
+
+
+def test_reconcile_agents_publishes_haproxy_endpoint():
+    """The agent writer uses HAProxy's endpoint instead of a Jenkins pod address."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    remote_units_data = {0: {"executors": "1", "labels": "testing", "name": "0"}}
+    state = testing.State(
+        config={"external-hostname": "jenkins.example.com"},
+        containers=[testing.Container("jenkins", can_connect=True)],  # type: ignore[arg-type]
+        storages={testing.Storage("jenkins-home")},
+        relations=[
+            _agent_relation(remote_units_data),
+            testing.Relation(
+                endpoint="haproxy-route",
+                interface="haproxy-route",
+                remote_app_data={"endpoints": json.dumps(["https://jenkins.example.com/"])},
+            ),
+        ],
+    )
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        fake_client = FakeJenkinsService(initial_agents=[])
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        mgr.charm._reconcile_agents(state=charm_state, client=fake_client)  # type: ignore[arg-type]
+        relation = mgr.charm.model.relations["agent"][0]
+        assert relation.data[mgr.charm.unit]["url"] == "https://jenkins.example.com"

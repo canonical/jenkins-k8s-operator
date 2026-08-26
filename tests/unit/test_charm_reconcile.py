@@ -174,8 +174,14 @@ def test__on_config_changed_success_replans_and_restarts(
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    reconcile_order: list[str] = []
 
     with (
+        patch.object(
+            jenkins_charm,
+            "_reconcile_haproxy_route",
+            side_effect=lambda *_args: reconcile_order.append("route"),
+        ),
         patch.object(jenkins_charm, "_reconcile_storage") as reconcile_storage_mock,
         patch.object(
             jenkins_charm,
@@ -183,10 +189,18 @@ def test__on_config_changed_success_replans_and_restarts(
             return_value="hash123",
         ),
         patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
-        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(
+            jenkins.Jenkins,
+            "wait_ready",
+            side_effect=lambda *_args, **_kwargs: reconcile_order.append("ready"),
+        ),
         patch.object(jenkins_charm, "_reconcile_api_token"),
         patch.object(jenkins_charm, "_reconcile_agents"),
-        patch.object(jenkins_charm, "_reconcile_agent_discovery"),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_agent_discovery",
+            side_effect=lambda: reconcile_order.append("agent-url"),
+        ),
         patch.object(jenkins_charm, "_reconcile_auth_proxy"),
         patch.object(jenkins_charm, "_reconcile_plugins"),
         patch.object(harness_container.container, "add_layer") as add_layer_mock,
@@ -197,6 +211,8 @@ def test__on_config_changed_success_replans_and_restarts(
         add_layer_mock.assert_called_once()
         replan_mock.assert_called_once()
         reconcile_storage_mock.assert_called_once_with(harness_container.container)
+
+    assert reconcile_order == ["route", "ready", "agent-url"]
 
 
 def test_reconcile_sets_blocked_status_on_reconcile_blocked_error(

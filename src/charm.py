@@ -71,6 +71,19 @@ class ReconcileBlockedError(Exception):
         super().__init__(message)
 
 
+class ReconcileWaitingError(Exception):
+    """Raised when reconciliation must wait for a relation to become ready."""
+
+    def __init__(self, message: str):
+        """Initialize ReconcileWaitingError.
+
+        Args:
+            message: The waiting status message to surface to the user.
+        """
+        self.message = message
+        super().__init__(message)
+
+
 class JenkinsK8sOperatorCharm(ops.CharmBase):
     """Charmed Jenkins."""
 
@@ -229,6 +242,17 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         try:
+            # Refresh the route before waiting for Jenkins. This keeps HAProxy's
+            # backend address current even while Jenkins API readiness is transient.
+            logger.info("Reconciling haproxy route")
+            self._reconcile_haproxy_route(charm_state)
+
+            # Validate the agent URL only after the route has been refreshed. In
+            # direct HAProxy mode this prevents a pod-address fallback while the
+            # external endpoint is still pending, without publishing before Jenkins
+            # itself is ready.
+            self._ensure_agent_discovery_url_ready()
+
             # Storage ownership only needs correction on attach/upgrade events
             logger.info("Reconciling storage")
             self._reconcile_storage(container)
@@ -259,10 +283,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._reconcile_agent_discovery()
             logger.info("Reconciling auth proxy")
             self._reconcile_auth_proxy(charm_state)
-            logger.info("Reconciling haproxy route")
-            self._reconcile_haproxy_route(charm_state)
             logger.info("Reconciling plugins")
             self._reconcile_plugins(charm_state, admin_client, container)
+        except ReconcileWaitingError as exc:
+            self.unit.status = ops.WaitingStatus(exc.message)
+            return
         except ReconcileBlockedError as exc:
             self.unit.status = ops.BlockedStatus(exc.message)
             return
@@ -385,13 +410,23 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             api_client=client,
         )
 
+    def _ensure_agent_discovery_url_ready(self) -> None:
+        """Ensure agent URL resolution cannot fall back to a stale pod address."""
+        if self.model.relations[AGENT_RELATION] and not self._agent_discovery_url:
+            raise ReconcileWaitingError("Unable to resolve the Jenkins endpoint for agents.")
+
     def _reconcile_agent_discovery(self) -> None:
         """Update the agent discovery URL in all connected agent relations."""
-        for relation in self.model.relations[AGENT_RELATION]:
+        relations = self.model.relations[AGENT_RELATION]
+        if not relations:
+            return
+
+        agent_discovery_url = self._agent_discovery_url
+        for relation in relations:
             relation_discovery_url = relation.data[self.model.unit].get("url")
-            if relation_discovery_url and relation_discovery_url == self._agent_discovery_url:
+            if relation_discovery_url and relation_discovery_url == agent_discovery_url:
                 continue
-            relation.data[self.model.unit].update({"url": self._agent_discovery_url})
+            relation.data[self.model.unit].update({"url": agent_discovery_url})
 
     def _reconcile_auth_proxy(self, state: State) -> None:
         """Reconcile auth proxy configuration.
@@ -480,40 +515,65 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
     @property
     def _agent_discovery_url(self) -> str:
-        """Return the external hostname to be passed to agents via the integration.
+        """Return the endpoint that agents use to reach Jenkins.
 
-        If there is no ingress, use the pod IP as hostname. The pod IP is preferred
-        over the pod name or a K8s service because those rely on the cluster's DNS
-        service, while the IP address is sometimes routable from the outside.
+        A configured HAProxy route has the highest priority. Its provider endpoint
+        is the source of truth. Dedicated agent ingress and normal server ingress
+        remain fallbacks for deployments without a configured HAProxy route. The
+        pod-address fallback is used only when no external route is
+        configured, because a pod address can become stale after replacement.
+
+        Raises:
+            ReconcileWaitingError: if direct HAProxy mode is configured but its
+                provider endpoint is not available yet.
 
         Returns:
-            The charm's agent discovery url.
+            The charm's agent discovery URL.
         """
+        configured_hostname = typing.cast(str, self.config.get("external-hostname") or "").strip()
+        haproxy_relation = self.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
+        if configured_hostname or (
+            haproxy_relation is not None
+            and not self.agent_discovery_ingress.url
+            and not self.server_ingress.url
+        ):
+            if not configured_hostname:
+                raise ReconcileWaitingError(
+                    "Waiting for external-hostname to be configured for the HAProxy route."
+                )
+            if haproxy_relation is None:
+                raise ReconcileWaitingError("Waiting for the HAProxy route relation for agents.")
+            if endpoints := self._haproxy_route.get_proxied_endpoints():
+                return str(endpoints[0]).rstrip("/")
+            raise ReconcileWaitingError(
+                "Waiting for HAProxy to publish the Jenkins endpoint for agents."
+            )
+
         if ingress_url := self.agent_discovery_ingress.url:
-            pass
-        elif ingress_url := self.server_ingress.url:
+            return ingress_url.rstrip("/")
+        if ingress_url := self.server_ingress.url:
             logger.warning(
                 "Using public ingress with protected endpoints (e.g. oathkeeper)"
                 "will result in agent discovery failure. Use %s for agents discovery.",
                 AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             )
-        else:
-            # Fallback to pod IP
-            if binding := self.model.get_binding("juju-info"):
-                try:
-                    unit_ip = str(binding.network.bind_address)
-                    ipaddress.ip_address(unit_ip)
-                    return f"http://{unit_ip}:{jenkins.WEB_PORT}{self._jenkins_prefix}"
-                except ValueError as exc:
-                    logger.error(
-                        "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
-                        exc,
-                    )
+            return ingress_url.rstrip("/")
 
-            # Fallback to using socket.fqdn
-            return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
+        # Fallback to pod IP only when no external route is intended. The pod IP is
+        # preferred over a pod name or K8s service because those rely on cluster DNS.
+        if binding := self.model.get_binding("juju-info"):
+            try:
+                unit_ip = str(binding.network.bind_address)
+                ipaddress.ip_address(unit_ip)
+                return f"http://{unit_ip}:{jenkins.WEB_PORT}{self._jenkins_prefix}"
+            except ValueError as exc:
+                logger.error(
+                    "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
+                    exc,
+                )
 
-        return ingress_url.rstrip("/")
+        # Fallback to using socket.fqdn
+        return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
 
     @property
     def _agent_status_message(self) -> str:
