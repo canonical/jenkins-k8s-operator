@@ -16,6 +16,34 @@ PS7 topology, connect that relation to `ingress-configurator`, then connect
 hostname and agent hostname must be distinct. Removing `agent-discovery-ingress`
 restores the legacy fallback path; keep it related while Gateway API is being repaired.
 
+## Choosing the route for each client
+
+Use the following decision tree:
+
+```text
+Users need direct HAProxy access?
+├─ No → use the existing server ingress.
+└─ Yes → relate haproxy-route and configure external-hostname.
+
+Agents use the Jenkins agent relation?
+├─ No → no agent route is required.
+└─ Yes
+   ├─ agent-discovery-ingress related and URL ready → use that URL.
+   ├─ agent-discovery-ingress related but URL pending → wait; do not use a pod IP.
+   ├─ normal ingress related → legacy fallback; warn if it is protected.
+   ├─ HAProxy server route only → block until dedicated agent ingress exists.
+   └─ no external route → legacy pod-IP/FQDN fallback.
+```
+
+A Kubernetes agent may be able to reach a pod address from the same cluster, but
+`jenkins-agent-k8s` still consumes the URL published through the Jenkins agent
+relation. The current charm does not discover a stable Kubernetes Service or
+choose a URL per agent type. Machine agents require a stable reachable endpoint.
+
+The dedicated agent ingress is therefore required by the current direct-HAProxy
+server policy, not by Kubernetes networking in general. A future per-agent or
+Service-based endpoint contract could relax this requirement.
+
 ## Prerequisites
 
 - An OIDC provider. For testing, a lightweight containerized provider (Dex, Keycloak,
