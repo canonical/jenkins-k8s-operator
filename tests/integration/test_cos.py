@@ -135,21 +135,55 @@ def dashboard_exist(loggedin_session: requests.Session, unit_address: str) -> in
     return len(dashboards)
 
 
+def _grafana_login_is_ready(
+    model: jubilant.Juju,
+    grafana_unit: str,
+    unit_ip: str,
+    session: requests.Session,
+) -> bool:
+    """Log in with a fresh password after Grafana restarts."""
+    action = model.run(grafana_unit, "get-admin-password")
+    if not action.success:
+        logger.info("Grafana password action not ready: status=%s", action.status)
+        return False
+    password = action.results.get("admin-password")
+    if not password:
+        logger.info("Grafana password action returned no password")
+        return False
+
+    session.cookies.clear()
+    try:
+        response = session.post(
+            f"http://{unit_ip}:3000/login",
+            json={"user": "admin", "password": password},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        logger.info("Grafana login endpoint not ready: %s", exc)
+        return False
+    logger.info("Grafana login status: %s", response.status_code)
+    return response.status_code == 200
+
+
 def test_grafana_integration(
     model: jubilant.Juju,
     application: JujuApplication,
     grafana_related: JujuApplication,
 ) -> None:
     """Verify Grafana has the Jenkins dashboard."""
-    action = model.run(grafana_related.units[0], "get-admin-password")
-    password = action.results["admin-password"]
     unit_ips = get_model_unit_addresses(model, grafana_related.name)
     for ip in unit_ips:
         session = requests.Session()
-        session.post(
-            f"http://{ip}:3000/login",
-            json={"user": "admin", "password": password},
-        ).raise_for_status()
+        wait_for(
+            functools.partial(
+                _grafana_login_is_ready,
+                model,
+                grafana_related.units[0],
+                ip,
+                session,
+            ),
+            timeout=10 * 60,
+        )
         wait_for(
             functools.partial(dashboard_exist, loggedin_session=session, unit_address=ip),
             timeout=60 * 20,
