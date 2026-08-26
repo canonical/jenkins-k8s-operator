@@ -45,7 +45,11 @@ def test_jenkins_automatic_update_out_of_range(
     """Verify maintenance does not run outside the configured restart window."""
     extra_plugin = "oic-auth"
     install_plugins(unit_web_client, (extra_plugin,))
-    command = f"{' '.join(libfaketime_env)} {' '.join(update_status_env)} /charm/dispatch"
+    charm_dispatch = f"/var/lib/juju/agents/unit-{unit.replace('/', '-')}"
+    command = (
+        f"{' '.join(libfaketime_env)} {' '.join(update_status_env)} "
+        f"{charm_dispatch}/charm/dispatch"
+    )
     exec_in_container(model, unit, "charm", command)
     assert unit_web_client.client.has_plugin(extra_plugin), (
         "additionally installed plugin cleaned up."
@@ -101,7 +105,7 @@ def _wait_for_exported_config(
     def ready() -> bool:
         try:
             response = client.requester.post_url(url)
-        except (requests.RequestException, JenkinsAPIException):
+        except (requests.RequestException, JenkinsAPIException, RuntimeError):
             return False
         return response.status_code == 200 and all(value in response.text for value in expected)
 
