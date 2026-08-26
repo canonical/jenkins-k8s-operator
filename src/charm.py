@@ -230,8 +230,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The triggering Juju event (unused, present for observe callback compatibility).
 
-        The unit enters WaitingStatus when the dedicated agent-discovery-ingress
-        relation exists but has not published an endpoint yet.
+        Reconcile runs in two phases: a blocking core workload path (storage,
+        config, pebble, startup) followed by non-blocking integration reconcilers
+        (agents, auth proxy, plugins). The unit enters WaitingStatus when the
+        dedicated agent-discovery-ingress relation exists but has not published an
+        endpoint yet.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
@@ -243,6 +246,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if charm_state is None:
             return
 
+        # Phase 1 - core workload path. Every step must succeed for Jenkins to
+        # serve; a domain failure here blocks the unit.
         try:
             # Refresh HAProxy before waiting for Jenkins so backend address changes
             # are propagated even when Jenkins API readiness is transient.
@@ -273,17 +278,20 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             # Post Jenkins server startup reconciliations
             logger.info("Reconciling API Token")
             self._reconcile_api_token(admin_client=admin_client)
-            agent_reconcile_waiting = self._reconcile_agent_pipeline(
-                charm_state, client=admin_client
-            )
-            logger.info("Reconciling auth proxy")
-            self._reconcile_auth_proxy(charm_state)
-            logger.info("Reconciling plugins")
-            self._reconcile_plugins(charm_state, admin_client, container)
         except ReconcileBlockedError as exc:
             self.unit.status = ops.BlockedStatus(exc.message)
             return
 
+        # Phase 2 - integration-facing reconcilers. These are independent of each
+        # other and must not block the core path; the agent pipeline defers with a
+        # waiting message instead of failing reconciliation.
+        agent_reconcile_waiting = self._reconcile_agent_pipeline(charm_state, client=admin_client)
+        logger.info("Reconciling auth proxy")
+        self._reconcile_auth_proxy(charm_state)
+        logger.info("Reconciling plugins")
+        self._reconcile_plugins(charm_state, admin_client, container)
+
+        # Single status resolution point: a deferred integration wins over Active.
         if agent_reconcile_waiting:
             self.unit.status = ops.WaitingStatus(agent_reconcile_waiting)
             return
