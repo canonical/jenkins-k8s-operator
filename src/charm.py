@@ -273,15 +273,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             # Post Jenkins server startup reconciliations
             logger.info("Reconciling API Token")
             self._reconcile_api_token(admin_client=admin_client)
-            agent_reconcile_waiting: typing.Optional[ReconcileWaitingError] = None
-            try:
-                logger.info("Reconciling agents")
-                self._reconcile_agents(charm_state, client=admin_client)
-                logger.info("Reconciling agent discovery")
-                self._reconcile_agent_discovery()
-            except ReconcileWaitingError as exc:
-                agent_reconcile_waiting = exc
-                logger.info("Waiting to reconcile agent discovery: %s", exc.message)
+            agent_reconcile_waiting = self._reconcile_agent_pipeline(
+                charm_state, client=admin_client
+            )
             logger.info("Reconciling auth proxy")
             self._reconcile_auth_proxy(charm_state)
             logger.info("Reconciling plugins")
@@ -291,7 +285,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         if agent_reconcile_waiting:
-            self.unit.status = ops.WaitingStatus(agent_reconcile_waiting.message)
+            self.unit.status = ops.WaitingStatus(agent_reconcile_waiting)
             return
         self.unit.status = ops.ActiveStatus(self._agent_status_message)
 
@@ -380,6 +374,28 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         )
         container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
         container.replan()
+
+    def _reconcile_agent_pipeline(
+        self, state: State, client: jenkins.Jenkins
+    ) -> typing.Optional[str]:
+        """Reconcile agent nodes and discovery data as one pipeline.
+
+        Args:
+            state: The current charm state.
+            client: Jenkins API client.
+
+        Returns:
+            A waiting message when the agent ingress is not ready, otherwise None.
+        """
+        try:
+            logger.info("Reconciling agents")
+            self._reconcile_agents(state, client=client)
+            logger.info("Reconciling agent discovery")
+            self._reconcile_agent_discovery()
+        except ReconcileWaitingError as exc:
+            logger.info("Waiting to reconcile agent discovery: %s", exc.message)
+            return exc.message
+        return None
 
     def _reconcile_agents(self, state: State, client: jenkins.Jenkins) -> None:
         """Reconcile Jenkins agent nodes to match relation state.
