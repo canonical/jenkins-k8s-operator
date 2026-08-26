@@ -203,6 +203,10 @@ def haproxy_with_spoe_fixture(
         f"{haproxy.name}:certificates",
         f"{self_signed_certificates.name}:certificates",
     )
+    machine_model.wait(
+        lambda status: "certificates" not in status.apps[haproxy.name].relations,
+        timeout=5 * 60,
+    )
     machine_model.integrate(
         f"{haproxy.name}:certificates",
         f"{self_signed_certificates.name}:certificates",
