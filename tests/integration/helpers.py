@@ -100,9 +100,8 @@ def dispatch_update_status(
     environment: Iterable[str],
 ) -> str:
     """Run update-status through the unit agent's command context."""
-    agent_tools = f"/var/lib/juju/tools/unit-{unit.replace('/', '-')}"
     environment_assignments = " ".join(environment)
-    command = f"{agent_tools}/juju-exec {unit} '{environment_assignments} ./dispatch'"
+    command = f"/usr/bin/juju-exec {unit} '{environment_assignments} ./dispatch'"
     return exec_in_container(model, unit, "charm", command)
 
 
