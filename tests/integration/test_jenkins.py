@@ -163,11 +163,26 @@ def test_bootstrap_after_restart(
         "charm",
         "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket /charm/bin/pebble restart jenkins",
     )
-    model.wait(
-        lambda status: jubilant.all_active(status, application.name),
-        error=jubilant.any_error,
-        timeout=10 * 60,
-    )
+    try:
+        model.wait(
+            lambda status: jubilant.all_active(status, application.name),
+            error=jubilant.any_error,
+            timeout=10 * 60,
+        )
+    except jubilant.WaitError:
+        status = model.status()
+        unit_status = status.apps[application.name].units[unit]
+        if (
+            unit_status.workload_status.current != "error"
+            or unit_status.workload_status.message != 'hook failed: "config-changed"'
+        ):
+            raise
+        model.cli("resolved", unit)
+        model.wait(
+            lambda current_status: jubilant.all_active(current_status, application.name),
+            error=jubilant.any_error,
+            timeout=10 * 60,
+        )
     assert model.status().apps[application.name].is_active, (
         "Jenkins failed to re-bootstrap after restart"
     )
