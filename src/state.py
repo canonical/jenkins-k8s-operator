@@ -251,10 +251,32 @@ def _validate_deployment_relations(charm: ops.CharmBase) -> None:
 
     agent_discovery_ingress = charm.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME)
     server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
-    if agent_discovery_ingress and not server_ingress:
+    haproxy_route = charm.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
+    external_hostname = _parse_external_hostname(charm)
+
+    if haproxy_route and not external_hostname:
         raise CharmConfigInvalidError(
-            f"{INGRESS_RELATION_NAME} integration is required when using "
-            f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME}"
+            f"{HAPROXY_ROUTE_RELATION_NAME} requires external-hostname to be configured."
+        )
+    if (
+        agent_discovery_ingress
+        and not server_ingress
+        and not (haproxy_route and external_hostname)
+    ):
+        raise CharmConfigInvalidError(
+            f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME} requires either "
+            f"{INGRESS_RELATION_NAME} or {HAPROXY_ROUTE_RELATION_NAME} with external-hostname."
+        )
+    if (
+        charm.model.get_relation(AGENT_RELATION)
+        and haproxy_route
+        and external_hostname
+        and not agent_discovery_ingress
+        and not server_ingress
+    ):
+        raise CharmConfigInvalidError(
+            f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME} is required for agents when "
+            f"{HAPROXY_ROUTE_RELATION_NAME} is the server route."
         )
 
 

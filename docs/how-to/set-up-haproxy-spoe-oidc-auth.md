@@ -9,9 +9,11 @@ headers are passed to Jenkins — this is edge access control only.
 
     jenkins-k8s ──haproxy-route──> haproxy ──spoe-auth──> haproxy-spoe-auth ──oauth──> <OIDC provider>
 
-The traefik `ingress` and `agent-discovery-ingress` relations are unaffected.
-Agent connections must NOT go through SPOE (agents cannot perform browser OIDC);
-keep agents on traefik or direct discovery.
+Machine agents must not go through SPOE because they cannot perform browser
+OIDC. Keep agents on the dedicated `agent-discovery-ingress` relation. For the
+PS7 topology, connect that relation to `ingress-configurator`, then connect
+`ingress-configurator:gateway-route` to `gateway-api-integrator`. The server
+hostname and agent hostname must be distinct.
 
 ## Prerequisites
 
@@ -23,11 +25,18 @@ keep agents on traefik or direct discovery.
 
 ## Steps
 
-1. Configure `external-hostname` on Jenkins to the public hostname (e.g.
-   `jenkins.example.com`) and relate Jenkins to HAProxy:
+1. Configure `external-hostname` on Jenkins to the protected server hostname
+   (e.g. `jenkins.example.com`) and relate Jenkins to HAProxy:
 
        juju config jenkins-k8s external-hostname=jenkins.example.com
        juju integrate jenkins-k8s:haproxy-route haproxy
+
+   Configure a distinct agent hostname on ingress-configurator and connect the
+   agent route through Gateway API:
+
+       juju config ingress-configurator hostname=jenkins-agent.example.com
+       juju integrate jenkins-k8s:agent-discovery-ingress ingress-configurator:ingress
+       juju integrate ingress-configurator:gateway-route gateway-api-integrator:gateway-route
 
 2. Register an OIDC client at your provider for that hostname. Set the redirect
    URI to the value expected by `haproxy-spoe-auth` for `jenkins.example.com`
@@ -59,8 +68,10 @@ keep agents on traefik or direct discovery.
 
 ## Notes
 
-- The `hostname` value is the join key: it must be identical across Jenkins'
-  `external-hostname` config, the `haproxy-spoe-auth` `hostname` config, and the
-  OIDC client's registered redirect URI.
+- The protected `hostname` value is the join key: it must be identical across
+  Jenkins' `external-hostname` config, the `haproxy-spoe-auth` `hostname` config,
+  and the OIDC client's registered redirect URI.
+- The Gateway API agent hostname must be distinct from the protected server
+  hostname. Do not connect the agent route to the HAProxy SPOE hostname.
 - Any credentials shown here are placeholders; substitute your own and keep
   secrets out of version control.

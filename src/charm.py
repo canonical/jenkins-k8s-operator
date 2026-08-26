@@ -71,6 +71,19 @@ class ReconcileBlockedError(Exception):
         super().__init__(message)
 
 
+class ReconcileWaitingError(Exception):
+    """Raised when reconciliation must wait for relation data."""
+
+    def __init__(self, message: str):
+        """Initialize ReconcileWaitingError.
+
+        Args:
+            message: The waiting status message to surface to the user.
+        """
+        self.message = message
+        super().__init__(message)
+
+
 class JenkinsK8sOperatorCharm(ops.CharmBase):
     """Charmed Jenkins."""
 
@@ -229,6 +242,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         try:
+            # Refresh HAProxy before waiting for Jenkins so backend address changes
+            # are propagated even when Jenkins API readiness is transient.
+            logger.info("Reconciling haproxy route")
+            self._reconcile_haproxy_route(charm_state)
+
             # Storage ownership only needs correction on attach/upgrade events
             logger.info("Reconciling storage")
             self._reconcile_storage(container)
@@ -253,20 +271,26 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             # Post Jenkins server startup reconciliations
             logger.info("Reconciling API Token")
             self._reconcile_api_token(admin_client=admin_client)
-            logger.info("Reconciling agents")
-            self._reconcile_agents(charm_state, client=admin_client)
-            logger.info("Reconciling agent discovery")
-            self._reconcile_agent_discovery()
+            agent_reconcile_waiting: typing.Optional[ReconcileWaitingError] = None
+            try:
+                logger.info("Reconciling agents")
+                self._reconcile_agents(charm_state, client=admin_client)
+                logger.info("Reconciling agent discovery")
+                self._reconcile_agent_discovery()
+            except ReconcileWaitingError as exc:
+                agent_reconcile_waiting = exc
+                logger.info("Waiting to reconcile agent discovery: %s", exc.message)
             logger.info("Reconciling auth proxy")
             self._reconcile_auth_proxy(charm_state)
-            logger.info("Reconciling haproxy route")
-            self._reconcile_haproxy_route(charm_state)
             logger.info("Reconciling plugins")
             self._reconcile_plugins(charm_state, admin_client, container)
         except ReconcileBlockedError as exc:
             self.unit.status = ops.BlockedStatus(exc.message)
             return
 
+        if agent_reconcile_waiting:
+            self.unit.status = ops.WaitingStatus(agent_reconcile_waiting.message)
+            return
         self.unit.status = ops.ActiveStatus(self._agent_status_message)
 
     def _reconcile_storage(self, container: ops.Container) -> None:
@@ -376,6 +400,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             logger.error(message)
             raise ReconcileBlockedError(message)
 
+        # Resolve the dedicated ingress URL before mutating Jenkins nodes or
+        # relation data. Never replace it with a stale pod address while the
+        # ingress-configurator is still converging.
+        agent_discovery_url = self._agent_discovery_url
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
         agent_node_names = [node.name for node in agent_nodes]
@@ -385,6 +413,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 agent_relation=state.agent_relation_meta,
                 agent_node_names=agent_node_names,
                 api_client=client,
+                agent_discovery_url=agent_discovery_url,
             )
             self._update_agent_nodes_from_relation(
                 agent_relation=state.agent_relation_meta,
@@ -393,6 +422,31 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             )
 
         self._remove_unmanaged_agents(
+             agent_node_names=agent_node_names,
+                api_client=client,
+            )
+            self._update_agent_nodes_from_relation(
+                agent_relation=state.agent_relation_meta,
+                agent_nodes=agent_nodes,
+                api_client=client,
+            )
+
+        self._remove_unmanaged_agents(
+=======
+        self._add_agent_nodes_from_relation(
+            agent_relation=state.agent_relation_meta,
+            agent_node_names=agent_node_names,
+            api_client=client,
+            agent_discovery_url=agent_discovery_url,
+        )
+        self._update_agent_nodes_from_relation(
+            agent_relation=state.agent_relation_meta,
+            agent_nodes=agent_nodes,
+            api_client=client,
+        )
+        self._remove_agent_nodes_not_in_relation(
+            agent_relation=state.agent_relation_meta,
+>>>>>>> e77bd03 (feat: support direct HAProxy server routing)
             agent_node_names=agent_node_names,
             relation_agent_names=relation_agent_names,
             external_agent_nodes=external_agent_nodes,
@@ -427,11 +481,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
     def _reconcile_agent_discovery(self) -> None:
         """Update the agent discovery URL in all connected agent relations."""
-        for relation in self.model.relations[AGENT_RELATION]:
+        relations = self.model.relations[AGENT_RELATION]
+        if not relations:
+            return
+
+        agent_discovery_url = self._agent_discovery_url
+        for relation in relations:
             relation_discovery_url = relation.data[self.model.unit].get("url")
-            if relation_discovery_url and relation_discovery_url == self._agent_discovery_url:
+            if relation_discovery_url and relation_discovery_url == agent_discovery_url:
                 continue
-            relation.data[self.model.unit].update({"url": self._agent_discovery_url})
+            relation.data[self.model.unit].update({"url": agent_discovery_url})
 
     def _reconcile_auth_proxy(self, state: State) -> None:
         """Reconcile auth proxy configuration.
@@ -529,35 +588,43 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The charm's agent discovery url.
         """
-        if ingress_url := self.agent_discovery_ingress.url:
-            pass
-        elif ingress_url := self.server_ingress.url:
+        if self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is not None:
+            if ingress_url := self.agent_discovery_ingress.url:
+                return ingress_url.rstrip("/")
+            raise ReconcileWaitingError(
+                "Waiting for the dedicated agent ingress endpoint to become available."
+            )
+        if ingress_url := self.server_ingress.url:
             logger.warning(
                 "Using public ingress with protected endpoints (e.g. oathkeeper)"
                 "will result in agent discovery failure. Use %s for agents discovery.",
                 AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             )
-        else:
-            # Fallback to pod IP
-            if binding := self.model.get_binding("juju-info"):
-                try:
-                    unit_ip = str(binding.network.bind_address)
-                    ipaddress.ip_address(unit_ip)
-                    return f"http://{unit_ip}:{jenkins.WEB_PORT}{self._jenkins_prefix}"
-                except ValueError as exc:
-                    logger.error(
-                        "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
-                        exc,
-                    )
+            return ingress_url.rstrip("/")
 
-            # Fallback to using socket.fqdn
-            return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
+        # Fallback to pod IP
+        if binding := self.model.get_binding("juju-info"):
+            try:
+                unit_ip = str(binding.network.bind_address)
+                ipaddress.ip_address(unit_ip)
+                return f"http://{unit_ip}:{jenkins.WEB_PORT}{self._jenkins_prefix}"
+            except ValueError as exc:
+                logger.error(
+                    "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
+                    exc,
+                )
 
-        return ingress_url.rstrip("/")
+        # Fallback to using socket.fqdn
+        return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
 
     @property
     def _agent_status_message(self) -> str:
-        """Status message regarding agent discovery ingress configuration."""
+        """Return guidance for configuring a dedicated agent ingress endpoint."""
+        if (
+            self.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
+            and not self.agent_discovery_ingress.url
+        ):
+            return f"Configure {AGENT_DISCOVERY_INGRESS_RELATION_NAME} for machine agents"
         if self.server_ingress.url and not self.agent_discovery_ingress.url:
             return (
                 f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
@@ -569,6 +636,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
         agent_node_names: list[str],
         api_client: jenkins.Jenkins,
+        agent_discovery_url: str,
     ) -> None:
         """Add agent nodes from relation data.
 
@@ -576,6 +644,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             agent_relation: Mapping of agent relation to agent metadata.
             agent_node_names: The node names of agents.
             api_client: The Jenkins API client.
+            agent_discovery_url: The resolved ingress URL for agents.
 
         Raises:
             JenkinsError: if there was an error while registering agent nodes to Jenkins.
@@ -591,7 +660,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     logger.exception("Failed to register agent node: %s", unregistered_agent)
                     raise
 
-            agent_relation_data: dict[str, str] = {"url": self._agent_discovery_url}
+            agent_relation_data: dict[str, str] = {"url": agent_discovery_url}
             for meta in agents:
                 try:
                     agent_relation_data[f"{meta.name}_secret"] = api_client.get_node_secret(

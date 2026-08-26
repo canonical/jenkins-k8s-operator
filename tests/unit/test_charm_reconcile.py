@@ -63,6 +63,19 @@ def test__get_state_returns_none_on_invalid_config(harness: Harness):
     assert jenkins_charm.unit.status.message == "bad config"
 
 
+def test_reconcile_storage_delegates_to_storage_reconciler(
+    harness_container: HarnessWithContainer,
+):
+    """Storage reconciliation delegates ownership correction to the storage reconciler."""
+    harness_container.harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    with patch.object(jenkins_charm.storage, "reconcile_storage") as reconcile_storage_mock:
+        jenkins_charm._reconcile_storage(harness_container.container)
+
+    reconcile_storage_mock.assert_called_once_with(container=harness_container.container)
+
+
 def test_calculate_env(harness: Harness):
     """
     arrange: given a charm.
@@ -174,8 +187,14 @@ def test__on_config_changed_success_replans_and_restarts(
     harness.begin()
 
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    reconcile_order: list[str] = []
 
     with (
+        patch.object(
+            jenkins_charm,
+            "_reconcile_haproxy_route",
+            side_effect=lambda *_args: reconcile_order.append("route"),
+        ),
         patch.object(jenkins_charm, "_reconcile_storage") as reconcile_storage_mock,
         patch.object(
             jenkins_charm,
@@ -183,10 +202,18 @@ def test__on_config_changed_success_replans_and_restarts(
             return_value="hash123",
         ),
         patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
-        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(
+            jenkins.Jenkins,
+            "wait_ready",
+            side_effect=lambda *_args, **_kwargs: reconcile_order.append("ready"),
+        ),
         patch.object(jenkins_charm, "_reconcile_api_token"),
         patch.object(jenkins_charm, "_reconcile_agents"),
-        patch.object(jenkins_charm, "_reconcile_agent_discovery"),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_agent_discovery",
+            side_effect=lambda *_args: reconcile_order.append("agent-url"),
+        ),
         patch.object(jenkins_charm, "_reconcile_auth_proxy"),
         patch.object(jenkins_charm, "_reconcile_plugins"),
         patch.object(harness_container.container, "add_layer") as add_layer_mock,
@@ -197,6 +224,43 @@ def test__on_config_changed_success_replans_and_restarts(
         add_layer_mock.assert_called_once()
         replan_mock.assert_called_once()
         reconcile_storage_mock.assert_called_once_with(harness_container.container)
+
+
+def test_reconcile_waiting_for_agent_ingress_continues_other_reconcile(
+    harness_container: HarnessWithContainer,
+):
+    """Agent ingress waiting does not stop unrelated reconciliation steps."""
+    harness = harness_container.harness
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    with (
+        patch.object(jenkins_charm, "_reconcile_haproxy_route"),
+        patch.object(jenkins_charm, "_reconcile_storage"),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_pre_startup_configurations",
+            return_value="hash123",
+        ),
+        patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
+        patch.object(jenkins_charm, "_reconcile_pebble"),
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins_charm, "_reconcile_api_token"),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_agents",
+            side_effect=charm.ReconcileWaitingError("agent ingress is pending"),
+        ),
+        patch.object(jenkins_charm, "_reconcile_agent_discovery") as discovery_mock,
+        patch.object(jenkins_charm, "_reconcile_auth_proxy"),
+        patch.object(jenkins_charm, "_reconcile_plugins") as plugins_mock,
+    ):
+        jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
+
+    assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
+    assert jenkins_charm.unit.status.message == "agent ingress is pending"
+    discovery_mock.assert_not_called()
+    plugins_mock.assert_called_once()
 
 
 def test_reconcile_sets_blocked_status_on_reconcile_blocked_error(
