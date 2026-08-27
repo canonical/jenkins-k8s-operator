@@ -442,6 +442,7 @@ def mock_charm_fixture():
     """A valid mock charm."""
     mock_charm = MagicMock(spec=CharmBase)
     mock_charm.app.planned_units.return_value = 1
+    mock_charm.model.get_relation.return_value = None
     return mock_charm
 
 

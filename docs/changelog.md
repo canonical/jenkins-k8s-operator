@@ -6,12 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
-## 2026-08-25
+## 2026-08-26
 
-- Preserve manually managed Jenkins nodes during agent relation reconciliation.
-- Add `external-agent-nodes` configuration to declare externally managed node names and reject
-  relation name collisions.
-- Clean up relation-managed nodes from departing relation data without deleting arbitrary nodes.
+- Reconcile a direct HAProxy server route while keeping machine-agent discovery on
+  the dedicated ingress path.
+- Allow `agent-discovery-ingress` without a server `ingress` relation when a valid
+  HAProxy server route is configured.
+- Avoid publishing pod-IP agent URLs while ingress-configurator or Gateway API
+  route data is pending.
+- Preserve manually managed Jenkins nodes during agent relation reconciliation and
+  reject relation name collisions with `external-agent-nodes`.
 
 ## 2026-08-24
 

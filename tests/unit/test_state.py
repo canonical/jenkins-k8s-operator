@@ -256,6 +256,89 @@ def test_agent_discovery_ingress_without_server_ingress(
         state.State.from_charm(mock_charm)
 
 
+def test_agent_discovery_ingress_allows_direct_haproxy_server(
+    mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
+    """Dedicated agent ingress is valid without server ingress in direct mode."""
+    agent_discovery = MagicMock()
+    haproxy_route = MagicMock()
+    monkeypatch.setattr(
+        mock_charm.model,
+        "get_relation",
+        lambda relation_name: {
+            state.AGENT_DISCOVERY_INGRESS_RELATION_NAME: agent_discovery,
+            state.HAPROXY_ROUTE_RELATION_NAME: haproxy_route,
+        }.get(relation_name),
+    )
+    mock_charm.model.relations = {state.AGENT_RELATION: []}
+    mock_charm.config = {"external-hostname": "jenkins.example.com"}
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.external_hostname == "jenkins.example.com"
+
+
+def test_agent_discovery_and_server_ingress_can_coexist_with_haproxy(
+    mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
+    """Legacy server ingress may coexist with the HAProxy migration route."""
+    relations = {
+        state.AGENT_DISCOVERY_INGRESS_RELATION_NAME: MagicMock(),
+        state.INGRESS_RELATION_NAME: MagicMock(),
+        state.HAPROXY_ROUTE_RELATION_NAME: MagicMock(),
+    }
+    monkeypatch.setattr(mock_charm.model, "get_relation", relations.get)
+    mock_charm.model.relations = {state.AGENT_RELATION: []}
+    mock_charm.config = {"external-hostname": "jenkins.example.com"}
+
+    charm_state = state.State.from_charm(mock_charm)
+
+    assert charm_state.external_hostname == "jenkins.example.com"
+
+
+def test_haproxy_route_requires_external_hostname(
+    mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
+    """A joined HAProxy route without a hostname is invalid configuration."""
+    haproxy_route = MagicMock()
+    monkeypatch.setattr(
+        mock_charm.model,
+        "get_relation",
+        lambda relation_name: haproxy_route
+        if relation_name == state.HAPROXY_ROUTE_RELATION_NAME
+        else None,
+    )
+    mock_charm.model.relations = {state.AGENT_RELATION: []}
+    mock_charm.config = {}
+
+    with pytest.raises(state.CharmConfigInvalidError, match="requires external-hostname"):
+        state.State.from_charm(mock_charm)
+
+
+def test_agents_require_agent_discovery_for_direct_haproxy(
+    mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
+    """Agents cannot use the direct server route as their discovery endpoint."""
+    agent_relation = MagicMock()
+    agent_relation.units = []
+    mock_charm.model.relations = {state.AGENT_RELATION: [agent_relation]}
+    monkeypatch.setattr(
+        mock_charm.model,
+        "get_relation",
+        lambda relation_name: (
+            agent_relation
+            if relation_name == state.AGENT_RELATION
+            else MagicMock()
+            if relation_name == state.HAPROXY_ROUTE_RELATION_NAME
+            else None
+        ),
+    )
+    mock_charm.config = {"external-hostname": "jenkins.example.com"}
+
+    with pytest.raises(state.CharmConfigInvalidError, match="agent-discovery-ingress"):
+        state.State.from_charm(mock_charm)
+
+
 def test_invalid_num_units(mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch):
     """
     arrange: given a mock charm with more than 1 unit of deployment.
