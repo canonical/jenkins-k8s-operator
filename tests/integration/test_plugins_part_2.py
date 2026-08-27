@@ -6,7 +6,9 @@
 import functools
 import json
 import logging
+import os
 
+import jenkinsapi.custom_exceptions
 import jenkinsapi.plugin
 import kubernetes.client
 import kubernetes.config
@@ -21,6 +23,7 @@ from .helpers import (
     gen_test_pipeline_with_custom_script_xml,
     install_plugins,
     kubernetes_test_pipeline_script,
+    pod_reachable_kube_config,
     wait_for,
 )
 from .types_ import KeycloakOIDCMetadata, UnitWebClient
@@ -28,13 +31,13 @@ from .types_ import KeycloakOIDCMetadata, UnitWebClient
 logger = logging.getLogger(__name__)
 
 
-async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
+def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with docker-build-publish plugin installed.
     act: when a job configuration page is accessed.
     assert: docker-build-publish plugin option exists.
     """
-    await install_plugins(unit_web_client, ("docker-build-publish",))
+    install_plugins(unit_web_client, ("docker-build-publish",))
     unit_web_client.client.create_job("docker_plugin_test", gen_test_job_xml("k8s"))
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/job/docker_plugin_test/configure"
@@ -45,13 +48,13 @@ async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
     )
 
 
-async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
+def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with reverse-proxy-auth-plugin plugin installed.
     act: when the security configuration is accessed.
     assert: reverse-proxy-auth-plugin plugin option exists.
     """
-    await install_plugins(unit_web_client, ("reverse-proxy-auth-plugin",))
+    install_plugins(unit_web_client, ("reverse-proxy-auth-plugin",))
 
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/manage/configureSecurity"
@@ -63,13 +66,13 @@ async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
     )
 
 
-async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
+def test_dependency_check_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with dependency-check-jenkins-plugin plugin installed.
     act: when a job configuration page is accessed.
     assert: dependency-check-jenkins-plugin plugin option exists.
     """
-    await install_plugins(unit_web_client, ("dependency-check-jenkins-plugin",))
+    install_plugins(unit_web_client, ("dependency-check-jenkins-plugin",))
     unit_web_client.client.create_job("deps_plugin_test", gen_test_job_xml("k8s"))
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/job/deps_plugin_test/configure"
@@ -85,13 +88,13 @@ async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
     )
 
 
-async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
+def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with pipeline-groovy-lib plugin installed.
     act: when a job configuration page is accessed.
     assert: pipeline-groovy-lib plugin option exists.
     """
-    await install_plugins(unit_web_client, ("pipeline-groovy-lib",))
+    install_plugins(unit_web_client, ("pipeline-groovy-lib",))
     res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configure")
 
     config_page = str(res.content, "utf-8")
@@ -103,13 +106,13 @@ async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
-async def test_rebuilder_plugin(unit_web_client: UnitWebClient):
+def test_rebuilder_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with rebuilder plugin installed.
     act: when a job is built and a rebuild is triggered.
     assert: last job is rebuilt.
     """
-    await install_plugins(unit_web_client, ("rebuild",))
+    install_plugins(unit_web_client, ("rebuild",))
 
     job_name = "rebuild_test"
     job = unit_web_client.client.create_job(job_name, gen_test_job_xml("k8s"))
@@ -123,13 +126,13 @@ async def test_rebuilder_plugin(unit_web_client: UnitWebClient):
     assert job.get_last_buildnumber() == 2, "Rebuild not triggered."
 
 
-async def test_openid_plugin(unit_web_client: UnitWebClient):
+def test_openid_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with openid plugin installed.
     act: when an openid endpoint is validated using the plugin.
     assert: the response returns a 200 status code.
     """
-    await install_plugins(unit_web_client, ("openid",))
+    install_plugins(unit_web_client, ("openid",))
 
     res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/descriptorByName/hudson.plugins.openid."
@@ -140,7 +143,7 @@ async def test_openid_plugin(unit_web_client: UnitWebClient):
     assert res.status_code == 200, "Failed to validate openid endpoint using the plugin."
 
 
-async def test_openid_connect_plugin(
+def test_openid_connect_plugin(
     unit_web_client: UnitWebClient,
     keycloak_oidc_meta: KeycloakOIDCMetadata,
     keycloak_ip: str,
@@ -154,7 +157,7 @@ async def test_openid_connect_plugin(
         1. a redirection to Keycloak SSO is made.
         2. native Jenkins login ui is loaded.
     """
-    await install_plugins(unit_web_client, ("oic-auth",))
+    install_plugins(unit_web_client, ("oic-auth",))
 
     # 1. when jenkins security realm is configured with oidc server and login page is requested.
     payload: dict = {
@@ -216,18 +219,18 @@ async def test_openid_connect_plugin(
     assert res.status_code == 200, "Failed to load Jenkins native login UI."
 
 
-async def test_kubernetes_plugin(
+def test_kubernetes_plugin(
     unit_web_client: UnitWebClient,
     kube_config: str,
     kube_core_client: kubernetes.client.CoreV1Api,
 ):
     """
-    arrange: given a Jenkins charm with kubernetes plugin installed and credentials from microk8s.
+    arrange: given a Jenkins charm with kubernetes plugin installed and credentials from Canonical Kubernetes.
     act: Run a job using an agent provided by the kubernetes plugin.
     assert: Job succeeds.
     """
     # Use plain credentials to be able to create secret-file/secret-text credentials
-    await install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
+    install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
 
     plugins = unit_web_client.client.plugins
     logger.info(
@@ -237,11 +240,16 @@ async def test_kubernetes_plugin(
 
     logger.info("Jenkins version pre-build: %s", unit_web_client.client.version)
 
-    credentials_id = await wait_for(
-        functools.partial(create_secret_file_credentials, unit_web_client, kube_config)
-    )
+    jenkins_kube_config = pod_reachable_kube_config(kube_config, kube_core_client)
+    try:
+        credentials_id = wait_for(
+            functools.partial(create_secret_file_credentials, unit_web_client, jenkins_kube_config)
+        )
+    finally:
+        if jenkins_kube_config != kube_config:
+            os.unlink(jenkins_kube_config)
     assert credentials_id, "Failed to create credentials id"
-    kubernetes_cloud_name = await wait_for(
+    kubernetes_cloud_name = wait_for(
         functools.partial(create_kubernetes_cloud, unit_web_client, credentials_id)
     )
     assert kubernetes_cloud_name, "Failed to create kubernetes cloud"
@@ -251,9 +259,48 @@ async def test_kubernetes_plugin(
     )
 
     queue_item = job.invoke()
-    queue_item.block_until_complete()
 
-    build: jenkinsapi.build.Build = queue_item.get_build()
+    def get_completed_build() -> jenkinsapi.build.Build | None:
+        try:
+            queue_item.poll()
+            build = queue_item.get_build()
+        except (jenkinsapi.custom_exceptions.NotBuiltYet, requests.exceptions.HTTPError):
+            return None
+        return build if not build.is_running() else None
+
+    try:
+        build: jenkinsapi.build.Build = wait_for(
+            get_completed_build,
+            timeout=10 * 60,
+            check_interval=5,
+        )
+    except TimeoutError as exc:
+        try:
+            queue_item.poll()
+            running_build = queue_item.get_build()
+        except (jenkinsapi.custom_exceptions.NotBuiltYet, requests.exceptions.HTTPError):
+            running_build = None
+        if running_build:
+            try:
+                logger.error(
+                    "Kubernetes plugin build console (last 10000 characters):\n%s",
+                    running_build.get_console()[-10000:],
+                )
+            except Exception as console_exc:  # pylint: disable=broad-except
+                logger.warning("Could not fetch Kubernetes plugin build console: %s", console_exc)
+        try:
+            system_log_resp = unit_web_client.client.requester.get_url(
+                f"{unit_web_client.web}/log/all/consoleText"
+            )
+            logger.error(
+                "Jenkins system log (last 10000 characters):\n%s",
+                system_log_resp.text[-10000:],
+            )
+        except Exception as log_exc:  # pylint: disable=broad-except
+            logger.warning("Could not fetch Jenkins system log: %s", log_exc)
+        _log_k8s_agent_pods(kube_core_client)
+        raise TimeoutError("Kubernetes plugin build did not complete within 600 seconds") from exc
+
     build_status = build.get_status()
     log_stream = build.stream_logs()
     logs = "".join(log_stream)
@@ -323,13 +370,13 @@ def _log_k8s_agent_pods(kube_core_client: kubernetes.client.CoreV1Api) -> None:
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
-async def test_pipeline_model_definition_plugin(unit_web_client: UnitWebClient):
+def test_pipeline_model_definition_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with declarative pipeline plugin installed.
     act: Run a job using a declarative pipeline script.
     assert: Job succeeds.
     """
-    await install_plugins(unit_web_client, ("pipeline-model-definition",))
+    install_plugins(unit_web_client, ("pipeline-model-definition",))
 
     job = unit_web_client.client.create_job(
         "pipeline_model_definition_plugin_test",

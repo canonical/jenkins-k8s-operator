@@ -4,7 +4,9 @@
 """Helpers for Jenkins-k8s-operator charm integration tests."""
 
 import logging
+import os
 import secrets
+import tempfile
 import textwrap
 import time
 import typing
@@ -17,6 +19,7 @@ import jubilant
 import kubernetes.client
 import requests
 import tenacity
+import yaml
 
 import jenkins
 
@@ -510,6 +513,84 @@ def declarative_pipeline_script() -> str:
                 }
             }
         }""")
+
+
+def pod_reachable_kube_config(
+    kube_config: str,
+    kube_core_client: kubernetes.client.CoreV1Api,
+) -> str:
+    """Make a loopback kubeconfig endpoint reachable from a Jenkins pod.
+
+    Canonical Kubernetes kubeconfigs use the loopback API endpoint for local
+    clients. A Jenkins pod cannot reach the runner's loopback interface, so
+    replace loopback endpoints with a control-plane node's InternalIP while
+    preserving the configured port and credentials.
+
+    Args:
+        kube_config: Path to the source kubeconfig.
+        kube_core_client: Kubernetes client connected using the source config.
+
+    Returns:
+        The source path when no loopback endpoint is present, otherwise a
+        temporary path containing the rewritten kubeconfig.
+    """
+    with open(kube_config, encoding="utf-8") as kube_config_file:
+        config = yaml.safe_load(kube_config_file)
+
+    loopback_clusters = []
+    for cluster_entry in config.get("clusters", []):
+        cluster = cluster_entry.get("cluster", {})
+        server = cluster.get("server")
+        if not server:
+            continue
+        parsed_server = urlparse(server)
+        if parsed_server.hostname in {"127.0.0.1", "::1", "localhost"}:
+            loopback_clusters.append((cluster, parsed_server))
+
+    if not loopback_clusters:
+        return kube_config
+
+    nodes = kube_core_client.list_node().items
+    control_plane_nodes = [
+        node
+        for node in nodes
+        if any(
+            role in (node.metadata.labels or {})
+            for role in (
+                "node-role.kubernetes.io/control-plane",
+                "node-role.kubernetes.io/master",
+            )
+        )
+    ]
+    candidate_nodes = control_plane_nodes or nodes
+    node_ip = next(
+        (
+            address.address
+            for node in candidate_nodes
+            for address in (node.status.addresses or [])
+            if address.type == "InternalIP"
+        ),
+        None,
+    )
+    if not node_ip:
+        raise RuntimeError("No Kubernetes node InternalIP found for kubeconfig rewrite")
+
+    node_host = f"[{node_ip}]" if ":" in node_ip else node_ip
+    for cluster, parsed_server in loopback_clusters:
+        port = f":{parsed_server.port}" if parsed_server.port else ""
+        cluster["server"] = parsed_server._replace(netloc=f"{node_host}{port}").geturl()
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", prefix="jenkins-k8s-kubeconfig-", suffix=".yaml", delete=False
+    ) as rewritten_file:
+        yaml.safe_dump(config, rewritten_file, default_flow_style=False)
+        rewritten_kube_config = rewritten_file.name
+    os.chmod(rewritten_kube_config, 0o600)
+    logger.info(
+        "Rewrote %d loopback kubeconfig endpoint(s) to Kubernetes node InternalIP",
+        len(loopback_clusters),
+    )
+    return rewritten_kube_config
 
 
 def create_secret_file_credentials(

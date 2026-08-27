@@ -1,74 +1,83 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Integration test relation file."""
+"""Integration test for upgrading the Jenkins charm."""
 
 import logging
-import pathlib
 
+import jubilant
 import pytest
-import pytest_asyncio
 import requests
-from juju.application import Application
-from juju.model import Model
-from pytest_operator.plugin import OpsTest
 
 from .helpers import (
     gen_git_test_job_xml,
     generate_unit_web_client_from_application,
     get_model_unit_addresses,
 )
+from .types_ import JujuApplication
 
 LOGGER = logging.getLogger(__name__)
 JENKINS_APP_NAME = "jenkins-k8s-upgrade"
 JOB_NAME = "test_job"
 
 
-@pytest_asyncio.fixture(scope="module")
-async def jenkins_upgrade_depl(ops_test: OpsTest, model: Model):
-    """
-    arrange: given a juju model.
-
-    act: deploy Jenkins, instantiate the Jenkins client and define a job.
-
-    assert: the deployment has no errors.
-    """
-    application: Application = await model.deploy(
+@pytest.fixture(scope="module")
+def jenkins_upgrade_depl(model: jubilant.Juju) -> None:
+    """Deploy Jenkins and create a job before refreshing the charm."""
+    model.deploy(
         "jenkins-k8s",
-        application_name=JENKINS_APP_NAME,
+        app=JENKINS_APP_NAME,
         channel="stable",
     )
-    await model.wait_for_idle(status="active", timeout=10 * 60)
-    unit_web_client = await generate_unit_web_client_from_application(ops_test, model, application)
+    model.wait(
+        lambda status: jubilant.all_active(status, JENKINS_APP_NAME),
+        error=jubilant.any_error,
+        timeout=10 * 60,
+    )
+    status = model.status().apps[JENKINS_APP_NAME]
+    application = JujuApplication(
+        name=JENKINS_APP_NAME,
+        model=model,
+        units=tuple(status.units),
+    )
+    unit_web_client = generate_unit_web_client_from_application(model, application)
     unit_web_client.client.create_job(JOB_NAME, gen_git_test_job_xml("k8s"))
 
 
 @pytest.mark.usefixtures("jenkins_upgrade_depl")
-async def test_jenkins_upgrade_check_job(
-    ops_test: OpsTest, jenkins_image: str, model: Model, charm: str | pathlib.Path
-):
-    """
-    arrange: given charm has been built, deployed and a job has been defined.
-
-    act: get Jenkins' version and upgrade the charm.
-
-    assert: if Jenkins versions differ, the job persists.
-    """
-    application = model.applications[JENKINS_APP_NAME]
-    unit_ips = await get_model_unit_addresses(model, JENKINS_APP_NAME)
+def test_jenkins_upgrade_check_job(
+    model: jubilant.Juju,
+    jenkins_image: str,
+    charm: str,
+) -> None:
+    """Verify a Jenkins job survives a charm refresh."""
+    unit_ips = get_model_unit_addresses(model, JENKINS_APP_NAME)
     assert unit_ips, f"Unit IP address not found for {JENKINS_APP_NAME}"
     address = f"http://{unit_ips[0]}:8080"
     response = requests.get(address, timeout=60)
     old_version = response.headers["X-Jenkins"]
-    await application.refresh(path=charm, resources={"jenkins-image": jenkins_image})
-    await model.wait_for_idle(status="active", timeout=10 * 60)
-    unit_ips = await get_model_unit_addresses(model, JENKINS_APP_NAME)
+
+    model.refresh(
+        JENKINS_APP_NAME,
+        path=charm,
+        resources={"jenkins-image": jenkins_image},
+    )
+    model.wait(
+        lambda status: jubilant.all_active(status, JENKINS_APP_NAME),
+        error=jubilant.any_error,
+        timeout=10 * 60,
+    )
+    unit_ips = get_model_unit_addresses(model, JENKINS_APP_NAME)
     assert unit_ips, f"Unit IP address not found for {JENKINS_APP_NAME}"
     address = f"http://{unit_ips[0]}:8080"
     response = requests.get(address, timeout=60)
     if old_version != response.headers["X-Jenkins"]:
-        unit_web_client = await generate_unit_web_client_from_application(
-            ops_test, model, application
+        status = model.status().apps[JENKINS_APP_NAME]
+        application = JujuApplication(
+            name=JENKINS_APP_NAME,
+            model=model,
+            units=tuple(status.units),
         )
+        unit_web_client = generate_unit_web_client_from_application(model, application)
         job = unit_web_client.client.get_job(JOB_NAME)
         assert job.name == JOB_NAME
