@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import ops
 import pytest
+from ops.model import TooManyRelatedAppsError
 
 import state
 
@@ -276,6 +277,28 @@ def test_agent_discovery_ingress_allows_direct_haproxy_server(
     charm_state = state.State.from_charm(mock_charm)
 
     assert charm_state.external_hostname == "jenkins.example.com"
+
+
+def test_direct_haproxy_validation_handles_multiple_agent_relations(
+    mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
+    """Direct HAProxy validation must not use single-relation get_relation for agents."""
+    agent_relations = [MagicMock(), MagicMock()]
+    relation_map = {
+        state.AGENT_DISCOVERY_INGRESS_RELATION_NAME: MagicMock(),
+        state.HAPROXY_ROUTE_RELATION_NAME: MagicMock(),
+    }
+
+    def get_relation(relation_name: str):
+        if relation_name == state.AGENT_RELATION:
+            raise TooManyRelatedAppsError(state.AGENT_RELATION, 2, 1)
+        return relation_map.get(relation_name)
+
+    monkeypatch.setattr(mock_charm.model, "get_relation", get_relation)
+    mock_charm.model.relations = {state.AGENT_RELATION: agent_relations}
+    mock_charm.config = {"external-hostname": "jenkins.example.com"}
+
+    state._validate_deployment_relations(mock_charm)
 
 
 def test_agent_discovery_and_server_ingress_can_coexist_with_haproxy(

@@ -265,7 +265,7 @@ def _validate_deployment_relations(charm: ops.CharmBase) -> None:
             f"{INGRESS_RELATION_NAME} or {HAPROXY_ROUTE_RELATION_NAME} with external-hostname."
         )
     if (
-        charm.model.get_relation(AGENT_RELATION)
+        charm.model.relations[AGENT_RELATION]
         and has_haproxy_server_route
         and not agent_discovery_ingress
         and not server_ingress
