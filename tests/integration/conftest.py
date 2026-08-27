@@ -29,6 +29,15 @@ from .helpers import (
     get_pod_ip,
     short_model_name,
 )
+from .resources import (
+    application_ref,
+    ensure_application,
+    ensure_configuration,
+    ensure_integration,
+    ensure_model,
+    ensure_offer,
+    ensure_relation,
+)
 from .types_ import (
     JujuApplication,
     KeycloakOIDCMetadata,
@@ -42,13 +51,6 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).parent / "data"
 DEFAULT_TEST_JCASC_REPOSITORY = "https://github.com/canonical/jenkins-k8s-operator.git"
 JENKINS_APP_NAME = "jenkins-k8s"
-
-
-def _application_ref(model: jubilant.Juju, name: str) -> JujuApplication:
-    """Return a stable application reference from the current model status."""
-    app_status = model.status().apps.get(name)
-    assert app_status, f"Application status {name} not found"
-    return JujuApplication(name=name, model=model, units=tuple(app_status.units))
 
 
 @pytest.fixture(scope="module", name="model")
@@ -129,18 +131,14 @@ def application_fixture(
     jenkins_image: str,
 ) -> JujuApplication:
     """Deploy Jenkins with the localized rock image resource."""
-    model.deploy(
+    return ensure_application(
+        model,
         charm,
-        app=JENKINS_APP_NAME,
+        name=JENKINS_APP_NAME,
         resources={"jenkins-image": jenkins_image},
         trust=True,
-    )
-    model.wait(
-        lambda status: jubilant.all_active(status, JENKINS_APP_NAME),
-        error=jubilant.any_error,
         timeout=30 * 60,
     )
-    return _application_ref(model, JENKINS_APP_NAME)
 
 
 @pytest.fixture(scope="module", name="unit")
@@ -220,19 +218,15 @@ def app_suffix_fixture() -> str:
 def jenkins_k8s_agents_fixture(model: jubilant.Juju) -> JujuApplication:
     """Deploy a Jenkins Kubernetes agent charm."""
     name = "jenkins-agent-k8s"
-    model.deploy(
+    return ensure_application(
+        model,
         "jenkins-agent-k8s",
-        app=name,
+        name=name,
         base="ubuntu@24.04",
         config={"jenkins_agent_labels": "k8s"},
         channel="latest/edge",
+        expected_status="blocked",
     )
-    model.wait(
-        lambda status: jubilant.all_blocked(status, name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
-    )
-    return _application_ref(model, name)
 
 
 @pytest.fixture(scope="module", name="k8s_agent_related_app")
@@ -242,14 +236,10 @@ def k8s_agent_related_app_fixture(
     model: jubilant.Juju,
 ) -> JujuApplication:
     """Relate the Jenkins server and Kubernetes agent charms."""
-    model.integrate(
-        f"{application.name}:{state.AGENT_RELATION}",
-        f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}",
-    )
-    model.wait(
-        lambda status: jubilant.all_active(status, application.name, jenkins_k8s_agents.name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
+    ensure_relation(
+        model=model,
+        application=application,
+        other_application=jenkins_k8s_agents,
     )
     return application
 
@@ -258,19 +248,15 @@ def k8s_agent_related_app_fixture(
 def extra_jenkins_k8s_agents_fixture(model: jubilant.Juju) -> JujuApplication:
     """Deploy a second Jenkins Kubernetes agent charm."""
     name = "jenkins-agent-k8s-extra"
-    model.deploy(
+    return ensure_application(
+        model,
         "jenkins-agent-k8s",
-        app=name,
+        name=name,
         base="ubuntu@24.04",
         config={"jenkins_agent_labels": "k8s-extra"},
         channel="latest/edge",
+        expected_status="blocked",
     )
-    model.wait(
-        lambda status: jubilant.all_blocked(status, name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
-    )
-    return _application_ref(model, name)
 
 
 @pytest.fixture(scope="module", name="machine_model")
@@ -283,7 +269,12 @@ def machine_model_fixture(
         model=f"{LXD_CONTROLLER_NAME}:{model_name}",
         wait_timeout=20 * 60,
     )
-    machine_model.add_model(model_name, "localhost", controller=LXD_CONTROLLER_NAME)
+    ensure_model(
+        machine_model,
+        model_name,
+        cloud="localhost",
+        controller=LXD_CONTROLLER_NAME,
+    )
     yield machine_model
     if not request.config.getoption("--keep-models"):
         machine_model.destroy_model(
@@ -299,25 +290,23 @@ def jenkins_machine_agents_fixture(
 ) -> JujuApplication:
     """Deploy machine agents and offer their agent endpoint."""
     name = f"jenkins-agent-{app_suffix}"
-    machine_model.deploy(
+    application = ensure_application(
+        machine_model,
         "jenkins-agent",
-        app=name,
+        name=name,
         channel="latest/stable",
         config={"jenkins_agent_labels": "machine"},
         num_units=num_units,
+        expected_status="blocked",
     )
-    machine_model.offer(
-        f"{short_model_name(machine_model)}.{name}",
+    ensure_offer(
+        machine_model,
+        application,
         controller=LXD_CONTROLLER_NAME,
         endpoint=state.AGENT_RELATION,
         name=state.AGENT_RELATION,
     )
-    machine_model.wait(
-        lambda status: jubilant.all_blocked(status, name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
-    )
-    return _application_ref(machine_model, name)
+    return application
 
 
 @pytest.fixture(scope="function", name="machine_agent_related_app")
@@ -328,17 +317,14 @@ def machine_agent_related_app_fixture(
     machine_model: jubilant.Juju,
 ) -> JujuApplication:
     """Relate the Jenkins server to the offered machine-agent endpoint."""
-    model.integrate(
+    ensure_integration(
+        model,
         f"{application.name}:{state.AGENT_RELATION}",
         f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.{state.AGENT_RELATION}",
+        applications=(application.name,),
     )
     machine_model.wait(
         lambda status: jubilant.all_active(status, jenkins_machine_agents.name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
-    )
-    model.wait(
-        lambda status: jubilant.all_active(status, application.name),
         error=jubilant.any_error,
         timeout=20 * 60,
     )
@@ -356,7 +342,11 @@ def app_with_restart_time_range_fixture(
     application: JujuApplication,
 ) -> Generator[JujuApplication, None, None]:
     """Configure a restart time range for one test."""
-    application.model.config(application.name, {"restart-time-range": "03-05"})
+    ensure_configuration(
+        application.model,
+        application=application,
+        configuration={"restart-time-range": "03-05"},
+    )
     yield application
     application.model.config(application.name, reset=["restart-time-range"])
 
@@ -480,7 +470,10 @@ def model_with_proxy_fixture(
 ) -> Generator[jubilant.Juju, None, None]:
     """Configure Juju HTTP and HTTPS proxies for one module."""
     tinyproxy_url = f"http://{tinyproxy_ip}:{tinyproxy_port}"
-    model.model_config({"juju-http-proxy": tinyproxy_url, "juju-https-proxy": tinyproxy_url})
+    ensure_configuration(
+        model,
+        configuration={"juju-http-proxy": tinyproxy_url, "juju-https-proxy": tinyproxy_url},
+    )
     yield model
     model.model_config({"juju-http-proxy": "", "juju-https-proxy": ""})
 
@@ -493,18 +486,14 @@ def jenkins_with_proxy_fixture(
 ) -> Generator[JujuApplication, None, None]:
     """Deploy Jenkins under a model with proxy configuration."""
     name = "jenkins-proxy-k8s"
-    model_with_proxy.deploy(
+    application = ensure_application(
+        model_with_proxy,
         charm,
-        app=name,
+        name=name,
         resources={"jenkins-image": jenkins_image},
         trust=True,
-    )
-    model_with_proxy.wait(
-        lambda status: jubilant.all_active(status, name),
-        error=jubilant.any_error,
         timeout=30 * 60,
     )
-    application = _application_ref(model_with_proxy, name)
     yield application
     model_with_proxy.remove_application(name, force=True)
 
@@ -545,14 +534,10 @@ def app_with_allowed_plugins_fixture(
     application: JujuApplication,
 ) -> Generator[JujuApplication, None, None]:
     """Configure Jenkins with the allowed plugin list."""
-    application.model.config(
-        application.name,
-        {"allowed-plugins": ",".join(ALLOWED_PLUGINS)},
-    )
-    application.model.wait(
-        lambda status: jubilant.all_active(status, application.name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
+    ensure_configuration(
+        application.model,
+        application=application,
+        configuration={"allowed-plugins": ",".join(ALLOWED_PLUGINS)},
     )
     yield application
     application.model.config(application.name, reset=["allowed-plugins"])
@@ -626,19 +611,22 @@ def prometheus_related_fixture(
 ) -> JujuApplication:
     """Deploy and relate Prometheus to Jenkins."""
     name = "prometheus-k8s"
-    model.deploy(name, app=name, channel="1/stable", trust=True)
-    model.wait(
-        lambda status: jubilant.all_active(status, name),
-        error=jubilant.any_error,
+    related = ensure_application(
+        model,
+        name,
+        name=name,
+        channel="1/stable",
+        trust=True,
         timeout=30 * 60,
     )
-    model.integrate(f"{application.name}:metrics-endpoint", name)
-    model.wait(
-        lambda status: jubilant.all_active(status, name, application.name),
-        error=jubilant.any_error,
+    ensure_integration(
+        model,
+        f"{application.name}:metrics-endpoint",
+        name,
+        applications=(name, application.name),
         timeout=30 * 60,
     )
-    return _application_ref(model, name)
+    return related
 
 
 @pytest.fixture(scope="module", name="loki_related")
@@ -648,19 +636,22 @@ def loki_related_fixture(
 ) -> JujuApplication:
     """Deploy and relate Loki to Jenkins."""
     name = "loki-k8s"
-    model.deploy(name, app=name, channel="1/stable", trust=True)
-    model.wait(
-        lambda status: jubilant.all_active(status, name),
-        error=jubilant.any_error,
+    related = ensure_application(
+        model,
+        name,
+        name=name,
+        channel="1/stable",
+        trust=True,
         timeout=30 * 60,
     )
-    model.integrate(f"{application.name}:logging", name)
-    model.wait(
-        lambda status: jubilant.all_active(status, name, application.name),
-        error=jubilant.any_error,
+    ensure_integration(
+        model,
+        f"{application.name}:logging",
+        name,
+        applications=(name, application.name),
         timeout=30 * 60,
     )
-    return _application_ref(model, name)
+    return related
 
 
 @pytest.fixture(scope="module", name="grafana_related")
@@ -670,19 +661,22 @@ def grafana_related_fixture(
 ) -> JujuApplication:
     """Deploy and relate Grafana to Jenkins."""
     name = "grafana-k8s"
-    model.deploy(name, app=name, channel="1/stable", trust=True)
-    model.wait(
-        lambda status: jubilant.all_active(status, name),
-        error=jubilant.any_error,
+    related = ensure_application(
+        model,
+        name,
+        name=name,
+        channel="1/stable",
+        trust=True,
         timeout=30 * 60,
     )
-    model.integrate(f"{application.name}:grafana-dashboard", name)
-    model.wait(
-        lambda status: jubilant.all_active(status, name, application.name),
-        error=jubilant.any_error,
+    ensure_integration(
+        model,
+        f"{application.name}:grafana-dashboard",
+        name,
+        applications=(name, application.name),
         timeout=30 * 60,
     )
-    return _application_ref(model, name)
+    return related
 
 
 @pytest.fixture(scope="module", name="keycloak_password")
@@ -824,18 +818,15 @@ def traefik_application_fixture(
 ) -> tuple[JujuApplication, str]:
     """Deploy Traefik and return its application plus unit address."""
     name = "traefik-k8s"
-    model.deploy(
+    ensure_application(
+        model,
         name,
-        app=name,
+        name=name,
         channel="edge",
         trust=True,
         config={"routing_mode": "path"},
-    )
-    model.wait(
-        lambda status: jubilant.all_active(status, name),
-        error=jubilant.any_error,
         timeout=30 * 60,
     )
     unit_ips = get_model_unit_addresses(model, name)
     assert unit_ips, f"Unit IP address not found for {name}"
-    return _application_ref(model, name), unit_ips[0]
+    return application_ref(model, name), unit_ips[0]

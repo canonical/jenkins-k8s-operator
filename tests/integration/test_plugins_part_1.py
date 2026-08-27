@@ -25,11 +25,11 @@ from .constants import (
 )
 from .helpers import (
     dispatch_update_status,
+    ensure_plugins,
     exec_in_container,
     gen_git_test_job_xml,
     gen_test_job_xml,
     get_job_invoked_unit,
-    install_plugins,
     short_model_name,
     wait_for,
 )
@@ -49,10 +49,11 @@ def test_plugins_remove_delay(
     act: when update_status_hook is fired.
     assert: the plugin removal delayed warning is logged until plugin installation is settled.
     """
+    # Arrange
     post_data = {f"plugin.{plugin}.default": "on" for plugin in ALLOWED_PLUGINS}
     post_data["dynamic_load"] = ""
 
-    def _install_plugins_via_web_api() -> bool:
+    def _ensure_plugins_via_web_api() -> bool:
         """Install plugins via pluginManager API.
 
         Returns:
@@ -67,7 +68,7 @@ def test_plugins_remove_delay(
             logger.exception("Failed to post plugin installations.")
             return False
 
-    wait_for(_install_plugins_via_web_api)
+    wait_for(_ensure_plugins_via_web_api)
 
     def has_temp_files() -> bool:
         """Check if temporary files exist in the Jenkins plugins directory."""
@@ -83,6 +84,8 @@ def test_plugins_remove_delay(
         return "tmp" in stdout
 
     wait_for(has_temp_files)
+
+    # Act
     dispatch_update_status(model, unit_web_client.unit, update_status_env)
 
     def has_delay_log():
@@ -100,10 +103,16 @@ def test_plugins_remove_delay(
         )
         return "Plugins being downloaded, waiting until further actions." in stdout
 
-    wait_for(has_delay_log)
+    delay_logged = wait_for(has_delay_log)
     unit_web_client.client.safe_restart()
 
-    wait_for(lambda: all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS))
+    plugins_ready = wait_for(
+        lambda: all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
+    )
+
+    # Assert
+    assert delay_logged
+    assert plugins_ready
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -117,12 +126,15 @@ def test_jenkins_plugins_config(
     act: when update_status_hook is fired.
     assert: the plugin is uninstalled and the system message is set on Jenkins.
     """
-    install_plugins(unit_web_client, INSTALLED_PLUGINS)
+    # Arrange
+    ensure_plugins(unit_web_client, INSTALLED_PLUGINS)
 
+    # Act
     dispatch_update_status(model, unit_web_client.unit, update_status_env)
     res = unit_web_client.client.requester.get_url(unit_web_client.web)
     page_content = str(res.content, encoding="utf-8")
 
+    # Assert
     assert all(plugin in page_content for plugin in REMOVED_PLUGINS), page_content
     assert "The following plugins have been removed by the system administrator:" in page_content
     assert (
@@ -139,8 +151,10 @@ def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
     act: when a job is dispatched with a git workflow.
     assert: job completes successfully.
     """
-    install_plugins(unit_web_client, INSTALLED_PLUGINS)
+    # Arrange
+    ensure_plugins(unit_web_client, INSTALLED_PLUGINS)
 
+    # Act
     job_name = "git-plugin-test-k8s"
     unit_web_client.client.create_job(job_name, gen_git_test_job_xml("k8s"))
     # check that git plugin git repository validation works on Jenkins server
@@ -152,6 +166,7 @@ def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
             "credentialsId": "",
         },
     )
+    # Assert
     assert (check_url_content := str(check_url_res.content, encoding="utf-8")) == "<div/>", (
         f"Non-empty error message returned, {check_url_content}"
     )
@@ -215,7 +230,8 @@ def test_ldap_plugin(
     act: when ldap plugin is configured and the user is queried.
     assert: the user is authenticated successfully.
     """
-    install_plugins(unit_web_client, ("ldap",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("ldap",))
 
     # This is same as: Manage Jenkins > Configure Global Security > Authentication >
     # Security Realm > LDAP > Test LDAP Settings.
@@ -261,12 +277,14 @@ def test_ldap_plugin(
         "testUser": ldap_settings.username,
         "testPassword": ldap_settings.password,
     }
+    # Act
     res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.client.baseurl}/manage/descriptorByName/hudson.security"
         ".LDAPSecurityRealm/validate",
         json=data,
     )
 
+    # Assert
     assert "User lookup: successful" in str(res.content, encoding="utf-8"), (
         f"User lookup unsuccessful, {res.content}"
     )
@@ -279,7 +297,8 @@ def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClient):
     act: when a multi-configuration job is created.
     assert: a matrix based test is created.
     """
-    install_plugins(unit_web_client, ("matrix-combinations-parameter",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("matrix-combinations-parameter",))
     matrix_project_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
         "matrix-project"
     ]
@@ -293,6 +312,7 @@ def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClient):
         matrix_combinations_plugin_version=matrix_combinations_plugin.version,
     )
     test_name = "matrix-combinations-parameter-test"
+    # Act
     unit_web_client.client.create_job(test_name, job_xml)
 
     def configuration_matrix_page() -> str:
@@ -309,6 +329,8 @@ def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClient):
         return test_page if "Configuration Matrix" in test_page else ""
 
     test_page = wait_for(configuration_matrix_page, timeout=10 * 60)
+
+    # Assert
     assert "Configuration Matrix" in test_page, (
         f"Configuration matrix table not found, {test_page}"
     )
@@ -324,7 +346,8 @@ def test_postbuildscript_plugin(
     act: when a postbuildscript job that writes a file to a /tmp folder is dispatched.
     assert: the file is written on the /tmp folder of the job host.
     """
-    install_plugins(unit_web_client, ("postbuildscript",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("postbuildscript",))
     postbuildscript_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
         "postbuildscript"
     ]
@@ -337,17 +360,23 @@ def test_postbuildscript_plugin(
         postbuildscript_plugin_version=postbuildscript_plugin.version,
         postbuildscript_command=f'echo -n "{test_output}" > {test_output_path}',
     )
+    # Act
     job = unit_web_client.client.create_job("postbuildscript-test-k8s", job_xml)
     job.invoke().block_until_complete()
 
     unit = get_job_invoked_unit(job, jenkins_k8s_agents.units)
-    assert unit, f"Agent unit running the job not found, {job.get_last_build().get_slave()}"
+    if not unit:
+        raise RuntimeError(
+            f"Agent unit running the job not found, {job.get_last_build().get_slave()}"
+        )
     stdout = exec_in_container(
         jenkins_k8s_agents.model,
         unit,
         "jenkins-agent-k8s",
         f"cat {test_output_path}",
     )
+
+    # Assert
     assert stdout == test_output
 
 
@@ -357,14 +386,18 @@ def test_ssh_agent_plugin(unit_web_client: UnitWebClient):
     act: when a job is being configured.
     assert: ssh-agent configuration is visible.
     """
-    install_plugins(unit_web_client, ("ssh-agent",))
-    unit_web_client.client.create_job("ssh_agent_test", gen_test_job_xml("k8s"))
+    # Arrange
+    ensure_plugins(unit_web_client, ("ssh-agent",))
 
+    # Act
+    unit_web_client.client.create_job("ssh_agent_test", gen_test_job_xml("k8s"))
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/job/ssh_agent_test/configure"
     )
 
     config_page = str(res.content, "utf-8")
+
+    # Assert
     assert "SSH Agent" in config_page, f"SSH agent configuration not found. {config_page}"
 
 
@@ -374,12 +407,15 @@ def test_blueocean_plugin(unit_web_client: UnitWebClient):
     act: when blueocean frontend url is accessed.
     assert: 200 response is returned.
     """
-    install_plugins(unit_web_client, ("blueocean",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("blueocean",))
 
+    # Act
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/blue/organizations/jenkins/"
     )
 
+    # Assert
     assert res.status_code == 200, (
         f"Failed to access Blueocean frontend, {str(res.content, encoding='utf-8')}"
     )
@@ -391,7 +427,8 @@ def test_thinbackup_plugin(model: jubilant.Juju, unit_web_client: UnitWebClient)
     act: when a backup action is run.
     assert: the backup is made on a configured directory.
     """
-    install_plugins(unit_web_client, ("thinBackup",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("thinBackup",))
     backup_path = "/srv/jenkins/backup/"
     payload = {
         **DEFAULT_SYSTEM_CONFIGURE_PAYLOAD,
@@ -409,6 +446,8 @@ def test_thinbackup_plugin(model: jubilant.Juju, unit_web_client: UnitWebClient)
         ],
     )
     res.raise_for_status()
+
+    # Act
     res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/thinBackup/backupManual"
     )
@@ -434,7 +473,10 @@ def test_thinbackup_plugin(model: jubilant.Juju, unit_web_client: UnitWebClient)
         logger.info("Run backup path ls result: stdout: %s", stdout)
         return "FULL" in stdout
 
-    wait_for(has_backup)
+    backup_ready = wait_for(has_backup)
+
+    # Assert
+    assert backup_ready
 
 
 def test_bzr_plugin(unit_web_client: UnitWebClient):
@@ -443,12 +485,16 @@ def test_bzr_plugin(unit_web_client: UnitWebClient):
     act: when a job configuration page is accessed.
     assert: bazaar plugin option exists.
     """
-    install_plugins(unit_web_client, ("bazaar",))
-    unit_web_client.client.create_job("bzr_plugin_test", gen_test_job_xml("k8s"))
+    # Arrange
+    ensure_plugins(unit_web_client, ("bazaar",))
 
+    # Act
+    unit_web_client.client.create_job("bzr_plugin_test", gen_test_job_xml("k8s"))
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/job/bzr_plugin_test/configure"
     )
 
     config_page = str(res.content, "utf-8")
+
+    # Assert
     assert "Bazaar" in config_page, f"Bzr configuration option not found. {config_page}"

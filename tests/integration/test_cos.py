@@ -40,13 +40,18 @@ def test_prometheus_integration(
     prometheus_related: JujuApplication,
 ) -> None:
     """Verify Prometheus scrapes Jenkins metrics."""
-    response = requests.get(f"{unit_web_client.web}/prometheus", timeout=10)
-    assert response.status_code == 200
+    # Arrange
 
-    wait_for(
+    # Act
+    response = requests.get(f"{unit_web_client.web}/prometheus", timeout=10)
+    targets_ready = wait_for(
         functools.partial(_prometheus_targets_exist, model, prometheus_related.name),
         timeout=10 * 60,
     )
+
+    # Assert
+    assert response.status_code == 200
+    assert targets_ready
 
 
 def log_files_exist(
@@ -93,7 +98,10 @@ def test_loki_integration(
     kube_core_client: CoreV1Api,
 ) -> None:
     """Verify Loki receives Jenkins logs."""
-    wait_for(
+    # Arrange
+
+    # Act
+    logs_ready = wait_for(
         functools.partial(
             _loki_logs_exist,
             model,
@@ -103,12 +111,14 @@ def test_loki_integration(
         ),
         timeout=10 * 60,
     )
-
     kube_log = kube_core_client.read_namespaced_pod_log(
         name=f"{application.name}-0",
         namespace=short_model_name(model),
         container="jenkins",
     )
+
+    # Assert
+    assert logs_ready
     assert kube_log
 
 
@@ -171,7 +181,11 @@ def test_grafana_integration(
     grafana_related: JujuApplication,
 ) -> None:
     """Verify Grafana has the Jenkins dashboard."""
+    # Arrange
     unit_ips = get_model_unit_addresses(model, grafana_related.name)
+
+    # Act
+    dashboard_counts = []
     for ip in unit_ips:
         session = requests.Session()
         wait_for(
@@ -184,7 +198,13 @@ def test_grafana_integration(
             ),
             timeout=10 * 60,
         )
-        wait_for(
-            functools.partial(dashboard_exist, loggedin_session=session, unit_address=ip),
-            timeout=60 * 20,
+        dashboard_counts.append(
+            wait_for(
+                functools.partial(dashboard_exist, loggedin_session=session, unit_address=ip),
+                timeout=60 * 20,
+            )
         )
+
+    # Assert
+    assert dashboard_counts
+    assert all(count > 0 for count in dashboard_counts)

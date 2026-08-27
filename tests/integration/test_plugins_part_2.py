@@ -19,9 +19,9 @@ from .helpers import (
     create_kubernetes_cloud,
     create_secret_file_credentials,
     declarative_pipeline_script,
+    ensure_plugins,
     gen_test_job_xml,
     gen_test_pipeline_with_custom_script_xml,
-    install_plugins,
     kubernetes_test_pipeline_script,
     pod_reachable_kube_config,
     wait_for,
@@ -31,18 +31,30 @@ from .types_ import KeycloakOIDCMetadata, UnitWebClient
 logger = logging.getLogger(__name__)
 
 
+def _require_text(value: str | None, description: str) -> str:
+    """Return a non-empty text result or fail the arrangement."""
+    if not value:
+        raise RuntimeError(description)
+    return value
+
+
 def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with docker-build-publish plugin installed.
     act: when a job configuration page is accessed.
     assert: docker-build-publish plugin option exists.
     """
-    install_plugins(unit_web_client, ("docker-build-publish",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("docker-build-publish",))
+
+    # Act
     unit_web_client.client.create_job("docker_plugin_test", gen_test_job_xml("k8s"))
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/job/docker_plugin_test/configure"
     )
     config_page = str(res.content, "utf-8")
+
+    # Assert
     assert "Docker Build and Publish" in config_page, (
         f"docker-build-publish configuration option not found. {config_page}"
     )
@@ -54,13 +66,16 @@ def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
     act: when the security configuration is accessed.
     assert: reverse-proxy-auth-plugin plugin option exists.
     """
-    install_plugins(unit_web_client, ("reverse-proxy-auth-plugin",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("reverse-proxy-auth-plugin",))
 
+    # Act
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/manage/configureSecurity"
     )
     config_page = str(res.content, "utf-8")
 
+    # Assert
     assert "HTTP Header by reverse proxy" in config_page, (
         f"reverse-proxy-auth-plugin configuration option not found. {config_page}"
     )
@@ -72,17 +87,22 @@ def test_dependency_check_plugin(unit_web_client: UnitWebClient):
     act: when a job configuration page is accessed.
     assert: dependency-check-jenkins-plugin plugin option exists.
     """
-    install_plugins(unit_web_client, ("dependency-check-jenkins-plugin",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("dependency-check-jenkins-plugin",))
+
+    # Act
     unit_web_client.client.create_job("deps_plugin_test", gen_test_job_xml("k8s"))
     res = unit_web_client.client.requester.get_url(
         f"{unit_web_client.web}/job/deps_plugin_test/configure"
     )
     job_page = str(res.content, "utf-8")
+    res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configureTools/")
+    tools_page = str(res.content, "utf-8")
+
+    # Assert
     assert "Invoke Dependency-Check" in job_page, (
         f"Dependency check job configuration option not found. {job_page}"
     )
-    res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configureTools/")
-    tools_page = str(res.content, "utf-8")
     assert "Dependency-Check installations" in tools_page, (
         f"Dependency check tool configuration option not found. {tools_page}"
     )
@@ -94,12 +114,16 @@ def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
     act: when a job configuration page is accessed.
     assert: pipeline-groovy-lib plugin option exists.
     """
-    install_plugins(unit_web_client, ("pipeline-groovy-lib",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("pipeline-groovy-lib",))
+
+    # Act
     res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configure")
 
     config_page = str(res.content, "utf-8")
     # The string is now "Global Trusted Pipeline Libraries" and
     # "Global Untrusted Pipeline Libraries" for v727.ve832a_9244dfa_
+    # Assert
     assert "Pipeline Libraries" in config_page, (
         f"Groovy libs configuration option not found. {config_page}"
     )
@@ -112,8 +136,10 @@ def test_rebuilder_plugin(unit_web_client: UnitWebClient):
     act: when a job is built and a rebuild is triggered.
     assert: last job is rebuilt.
     """
-    install_plugins(unit_web_client, ("rebuild",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("rebuild",))
 
+    # Act
     job_name = "rebuild_test"
     job = unit_web_client.client.create_job(job_name, gen_test_job_xml("k8s"))
     job.invoke().block_until_complete()
@@ -123,6 +149,7 @@ def test_rebuilder_plugin(unit_web_client: UnitWebClient):
     )
     job.get_last_build().block_until_complete()
 
+    # Assert
     assert job.get_last_buildnumber() == 2, "Rebuild not triggered."
 
 
@@ -132,14 +159,17 @@ def test_openid_plugin(unit_web_client: UnitWebClient):
     act: when an openid endpoint is validated using the plugin.
     assert: the response returns a 200 status code.
     """
-    install_plugins(unit_web_client, ("openid",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("openid",))
 
+    # Act
     res = unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/descriptorByName/hudson.plugins.openid."
         "OpenIdSsoSecurityRealm/validate",
         data={"endpoint": "https://login.ubuntu.com/+openid"},
     )
 
+    # Assert
     assert res.status_code == 200, "Failed to validate openid endpoint using the plugin."
 
 
@@ -157,7 +187,8 @@ def test_openid_connect_plugin(
         1. a redirection to Keycloak SSO is made.
         2. native Jenkins login ui is loaded.
     """
-    install_plugins(unit_web_client, ("oic-auth",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("oic-auth",))
 
     # 1. when jenkins security realm is configured with oidc server and login page is requested.
     payload: dict = {
@@ -177,7 +208,8 @@ def test_openid_connect_plugin(
         },
         "slaveAgentPort": {"type": "fixed", "value": "50000"},
     }
-    res = unit_web_client.client.requester.post_url(
+    # Act
+    unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/configureSecurity/configure",
         data=[
             (
@@ -186,9 +218,9 @@ def test_openid_connect_plugin(
             ),
         ],
     )
-    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
-    assert res.history[0].status_code == 302, "Jenkins login not redirected."
-    assert keycloak_ip in res.history[0].headers["location"], "Login not redirected to keycloak."
+    first_login = requests.get(
+        f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30
+    )
 
     # 2. when jenkins security realm is reset and login page is requested.
     payload = {
@@ -204,7 +236,7 @@ def test_openid_connect_plugin(
         },
         "slaveAgentPort": {"type": "fixed", "value": "50000"},
     }
-    res = unit_web_client.client.requester.post_url(
+    unit_web_client.client.requester.post_url(
         f"{unit_web_client.web}/manage/configureSecurity/configure",
         data=[
             (
@@ -213,10 +245,18 @@ def test_openid_connect_plugin(
             )
         ],
     )
-    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
-    assert res.status_code == 404, "Security realm login not reset."
-    res = requests.get(f"{unit_web_client.web}/login?from=%2F", timeout=30)
-    assert res.status_code == 200, "Failed to load Jenkins native login UI."
+    second_login = requests.get(
+        f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30
+    )
+    native_login = requests.get(f"{unit_web_client.web}/login?from=%2F", timeout=30)
+
+    # Assert
+    assert first_login.history[0].status_code == 302, "Jenkins login not redirected."
+    assert keycloak_ip in first_login.history[0].headers["location"], (
+        "Login not redirected to keycloak."
+    )
+    assert second_login.status_code == 404, "Security realm login not reset."
+    assert native_login.status_code == 200, "Failed to load Jenkins native login UI."
 
 
 def test_kubernetes_plugin(
@@ -230,7 +270,8 @@ def test_kubernetes_plugin(
     assert: Job succeeds.
     """
     # Use plain credentials to be able to create secret-file/secret-text credentials
-    install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
+    # Arrange
+    ensure_plugins(unit_web_client, ("kubernetes", "plain-credentials"))
 
     plugins = unit_web_client.client.plugins
     logger.info(
@@ -248,11 +289,14 @@ def test_kubernetes_plugin(
     finally:
         if jenkins_kube_config != kube_config:
             os.unlink(jenkins_kube_config)
-    assert credentials_id, "Failed to create credentials id"
-    kubernetes_cloud_name = wait_for(
-        functools.partial(create_kubernetes_cloud, unit_web_client, credentials_id)
+    credentials_id = _require_text(credentials_id, "Failed to create credentials id")
+    kubernetes_cloud_name = _require_text(
+        wait_for(functools.partial(create_kubernetes_cloud, unit_web_client, credentials_id)),
+        "Failed to create kubernetes cloud",
     )
-    assert kubernetes_cloud_name, "Failed to create kubernetes cloud"
+    logger.info("Kubernetes cloud configured: %s", kubernetes_cloud_name)
+
+    # Act
     job = unit_web_client.client.create_job(
         "kubernetes_plugin_test",
         gen_test_pipeline_with_custom_script_xml(kubernetes_test_pipeline_script()),
@@ -316,6 +360,7 @@ def test_kubernetes_plugin(
 
     _log_k8s_agent_pods(kube_core_client)
 
+    # Assert
     assert build_status == "SUCCESS"
 
 
@@ -376,8 +421,10 @@ def test_pipeline_model_definition_plugin(unit_web_client: UnitWebClient):
     act: Run a job using a declarative pipeline script.
     assert: Job succeeds.
     """
-    install_plugins(unit_web_client, ("pipeline-model-definition",))
+    # Arrange
+    ensure_plugins(unit_web_client, ("pipeline-model-definition",))
 
+    # Act
     job = unit_web_client.client.create_job(
         "pipeline_model_definition_plugin_test",
         gen_test_pipeline_with_custom_script_xml(declarative_pipeline_script()),
@@ -387,4 +434,6 @@ def test_pipeline_model_definition_plugin(unit_web_client: UnitWebClient):
     queue_item.block_until_complete()
 
     build: jenkinsapi.build.Build = queue_item.get_build()
+
+    # Assert
     assert build.get_status() == "SUCCESS"

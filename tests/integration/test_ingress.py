@@ -6,7 +6,8 @@
 import jubilant
 import requests
 
-from .helpers import ensure_relation, exec_in_container, short_model_name, wait_for
+from .helpers import exec_in_container, short_model_name, wait_for
+from .resources import ensure_configuration, ensure_integration
 from .types_ import JujuApplication
 
 
@@ -17,11 +18,13 @@ def test_ingress_integration(
 ) -> None:
     """Verify Jenkins is reachable through a Traefik ingress relation."""
     traefik_application, traefik_address = traefik_application_and_unit_ip
-    ensure_relation(
-        model=model,
-        application=application,
-        other_application=traefik_application,
-        relation="ingress",
+
+    # Arrange
+    ensure_integration(
+        model,
+        f"{application.name}:ingress",
+        f"{traefik_application.name}:ingress",
+        applications=(application.name, traefik_application.name),
     )
 
     def ingress_is_ready() -> bool:
@@ -34,7 +37,11 @@ def test_ingress_integration(
             return False
         return "Authentication required" in str(response.content)
 
-    wait_for(ingress_is_ready, timeout=10 * 60, check_interval=10)
+    # Act
+    ready = wait_for(ingress_is_ready, timeout=10 * 60, check_interval=10)
+
+    # Assert
+    assert ready
 
 
 def test_ingress_system_properties_flag_present(
@@ -45,19 +52,19 @@ def test_ingress_system_properties_flag_present(
 ) -> None:
     """Confirm system properties are present in the running Java process."""
     traefik_application, _ = traefik_application_and_unit_ip
-    ensure_relation(
-        model=model,
-        application=application,
-        other_application=traefik_application,
-        relation="ingress",
-    )
-
     prop = "jenkins.model.Jenkins.crumbIssuerProxyCompatibility=true"
-    model.config(application.name, {"system-properties": prop})
-    model.wait(
-        lambda status: jubilant.all_active(status, application.name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
+
+    # Arrange
+    ensure_integration(
+        model,
+        f"{application.name}:ingress",
+        f"{traefik_application.name}:ingress",
+        applications=(application.name, traefik_application.name),
+    )
+    ensure_configuration(
+        model,
+        application=application,
+        configuration={"system-properties": prop},
     )
 
     def java_process_has_property() -> bool:
@@ -67,4 +74,8 @@ def test_ingress_system_properties_flag_present(
             return False
         return f"-D{prop}" in stdout
 
-    wait_for(java_process_has_property, timeout=10 * 60, check_interval=10)
+    # Act
+    ready = wait_for(java_process_has_property, timeout=10 * 60, check_interval=10)
+
+    # Assert
+    assert ready

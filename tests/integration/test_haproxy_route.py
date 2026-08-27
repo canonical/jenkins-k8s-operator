@@ -15,6 +15,13 @@ from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
 from .constants import LXD_CONTROLLER_NAME
 from .helpers import get_model_unit_addresses, short_model_name, wait_for
+from .resources import (
+    application_ref,
+    ensure_application,
+    ensure_configuration,
+    ensure_integration,
+    ensure_offer,
+)
 from .types_ import JujuApplication, KeycloakOIDCMetadata
 
 EXTERNAL_HOSTNAME = "jenkins.internal"
@@ -25,27 +32,15 @@ HAPROXY_ROUTE_RELATION = "haproxy-route"
 SELF_SIGNED_CERTIFICATES_APP_NAME = "self-signed-certificates"
 
 
-def _application_ref(model: jubilant.Juju, name: str) -> JujuApplication:
-    """Return an application reference from model status."""
-    app_status = model.status().apps.get(name)
-    assert app_status, f"Application status {name} not found"
-    return JujuApplication(name=name, model=model, units=tuple(app_status.units))
-
-
 @pytest.fixture(scope="module", name="self_signed_certificates")
 def self_signed_certificates_fixture(machine_model: jubilant.Juju) -> JujuApplication:
     """Deploy self-signed-certificates to the machine model."""
-    machine_model.deploy(
+    return ensure_application(
+        machine_model,
         "self-signed-certificates",
-        app=SELF_SIGNED_CERTIFICATES_APP_NAME,
+        name=SELF_SIGNED_CERTIFICATES_APP_NAME,
         channel="1/stable",
     )
-    machine_model.wait(
-        lambda status: jubilant.all_active(status, SELF_SIGNED_CERTIFICATES_APP_NAME),
-        error=jubilant.any_error,
-        timeout=20 * 60,
-    )
-    return _application_ref(machine_model, SELF_SIGNED_CERTIFICATES_APP_NAME)
 
 
 @pytest.fixture(scope="module", name="haproxy")
@@ -55,28 +50,27 @@ def haproxy_fixture(
 ) -> JujuApplication:
     """Deploy HAProxy and create an offer for cross-model relations."""
     name = "haproxy"
-    machine_model.deploy(
+    application = ensure_application(
+        machine_model,
         "haproxy",
-        app=name,
+        name=name,
         channel="2.8/edge",
         config={"external-hostname": EXTERNAL_HOSTNAME},
     )
-    machine_model.integrate(
+    ensure_integration(
+        machine_model,
         f"{name}:certificates",
         f"{self_signed_certificates.name}:certificates",
+        applications=(name, self_signed_certificates.name),
     )
-    machine_model.wait(
-        lambda status: jubilant.all_active(status, name, self_signed_certificates.name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
-    )
-    machine_model.offer(
-        f"{short_model_name(machine_model)}.{name}",
+    ensure_offer(
+        machine_model,
+        application,
         controller=LXD_CONTROLLER_NAME,
         endpoint=HAPROXY_ROUTE_RELATION,
         name=HAPROXY_ROUTE_RELATION,
     )
-    return _application_ref(machine_model, name)
+    return application
 
 
 @pytest.fixture(scope="module", name="ca_cert_path")
@@ -103,9 +97,10 @@ def oauth_integrator_fixture(
     """Deploy oauth-external-idp-integrator configured for Keycloak."""
     base_url = keycloak_oidc_meta.well_known_endpoint.rsplit("/.well-known", 1)[0]
     name = "oauth-external-idp-integrator"
-    machine_model.deploy(
+    return ensure_application(
+        machine_model,
         "oauth-external-idp-integrator",
-        app=name,
+        name=name,
         channel="latest/edge",
         config={
             "client_id": keycloak_oidc_meta.client_id,
@@ -118,13 +113,8 @@ def oauth_integrator_fixture(
             "userinfo_endpoint": f"{base_url}/protocol/openid-connect/userinfo",
             "scope": "openid email profile",
         },
+        expected_status="blocked",
     )
-    machine_model.wait(
-        lambda status: jubilant.all_blocked(status, name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
-    )
-    return _application_ref(machine_model, name)
 
 
 @pytest.fixture(scope="module", name="haproxy_spoe_auth")
@@ -134,27 +124,26 @@ def haproxy_spoe_auth_fixture(
 ) -> JujuApplication:
     """Deploy haproxy-spoe-auth configured for the SPOE hostname."""
     name = "haproxy-spoe-auth"
-    machine_model.deploy(
+    application = ensure_application(
+        machine_model,
         "haproxy-spoe-auth",
-        app=name,
+        name=name,
         channel="latest/edge",
         config={"hostname": SPOE_EXTERNAL_HOSTNAME},
+        expected_status="blocked",
     )
-    machine_model.integrate(
+    ensure_integration(
+        machine_model,
         f"{name}:oauth",
         f"{oauth_integrator.name}:oauth",
-    )
-    machine_model.wait(
-        lambda status: jubilant.all_active(status, oauth_integrator.name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
+        applications=(oauth_integrator.name,),
     )
     machine_model.wait(
         lambda status: jubilant.all_blocked(status, name),
         error=jubilant.any_error,
         timeout=20 * 60,
     )
-    return _application_ref(machine_model, name)
+    return application
 
 
 def _certificate_has_hostname(
@@ -192,28 +181,30 @@ def haproxy_with_spoe_fixture(
 ) -> JujuApplication:
     """Wire the HAProxy, SPOE, OAuth, and Keycloak authentication chain."""
     # HAProxy proxy mode derives certificate SANs from Jenkins route data.
-    model.config(application.name, {"external-hostname": SPOE_EXTERNAL_HOSTNAME})
-    machine_model.config(
-        haproxy.name,
-        {"external-hostname": SPOE_EXTERNAL_HOSTNAME},
+    ensure_configuration(
+        model,
+        application=application,
+        configuration={"external-hostname": SPOE_EXTERNAL_HOSTNAME},
     )
-    machine_model.integrate(
+    ensure_configuration(
+        machine_model,
+        application=haproxy,
+        configuration={"external-hostname": SPOE_EXTERNAL_HOSTNAME},
+    )
+    ensure_integration(
+        machine_model,
         f"{haproxy.name}:spoe-auth",
         f"{haproxy_spoe_auth.name}:spoe-auth",
+        applications=(haproxy_spoe_auth.name,),
     )
     # Re-request the certificate after changing the HAProxy hostname. The
     # certificate relation is otherwise allowed to retain the old SAN.
-    machine_model.remove_relation(
+    ensure_integration(
+        machine_model,
         f"{haproxy.name}:certificates",
         f"{self_signed_certificates.name}:certificates",
-    )
-    machine_model.wait(
-        lambda status: "certificates" not in status.apps[haproxy.name].relations,
-        timeout=5 * 60,
-    )
-    machine_model.integrate(
-        f"{haproxy.name}:certificates",
-        f"{self_signed_certificates.name}:certificates",
+        applications=(haproxy.name, self_signed_certificates.name),
+        renew=True,
     )
     machine_model.wait(
         lambda status: jubilant.all_active(
@@ -245,56 +236,54 @@ def gateway_agent_ingress_fixture(
     """Deploy Gateway API and ingress-configurator for agent discovery."""
     gateway_name = "jenkins-gateway-api"
     ingress_name = "jenkins-agent-ingress-configurator"
-    model.deploy(
+    ensure_application(
+        model,
         "gateway-api-integrator",
-        app=gateway_name,
+        name=gateway_name,
         channel="1/stable",
         trust=True,
     )
-    model.config(
-        gateway_name,
-        {"gateway-class": GATEWAY_CLASS, "enforce-https": False},
-    )
-    model.wait(
-        lambda status: jubilant.all_active(status, gateway_name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
+    ensure_configuration(
+        model,
+        application=gateway_name,
+        configuration={"gateway-class": GATEWAY_CLASS, "enforce-https": False},
     )
     server_ingress_name = "jenkins-server-ingress"
-    model.deploy(
+    ensure_application(
+        model,
         "traefik-k8s",
-        app=server_ingress_name,
+        name=server_ingress_name,
         channel="edge",
         trust=True,
         config={"routing_mode": "path"},
     )
-    model.integrate(
+    ensure_integration(
+        model,
         f"{application.name}:ingress",
         f"{server_ingress_name}:ingress",
+        applications=(application.name, server_ingress_name),
     )
-    model.deploy(
+    ensure_application(
+        model,
         "ingress-configurator",
-        app=ingress_name,
+        name=ingress_name,
         channel="latest/stable",
         trust=True,
         config={"hostname": AGENT_EXTERNAL_HOSTNAME},
     )
-    model.integrate(
+    ensure_integration(
+        model,
         f"{gateway_name}:gateway-route",
         f"{ingress_name}:gateway-route",
+        applications=(gateway_name, ingress_name),
     )
-    model.integrate(
+    ensure_integration(
+        model,
         f"{application.name}:agent-discovery-ingress",
         f"{ingress_name}:ingress",
+        applications=(application.name, ingress_name),
     )
-    model.wait(
-        lambda status: jubilant.all_active(
-            status, gateway_name, server_ingress_name, ingress_name, application.name
-        ),
-        error=jubilant.any_error,
-        timeout=20 * 60,
-    )
-    return _application_ref(model, ingress_name)
+    return application_ref(model, ingress_name)
 
 
 def test_haproxy_route_serves_jenkins(
@@ -305,22 +294,25 @@ def test_haproxy_route_serves_jenkins(
     ca_cert_path: str,
 ) -> None:
     """Verify HAProxy serves Jenkins for the configured host header."""
-    model.config(application.name, {"external-hostname": EXTERNAL_HOSTNAME})
-    model.integrate(
+    # Arrange
+    ensure_configuration(
+        model,
+        application=application,
+        configuration={"external-hostname": EXTERNAL_HOSTNAME},
+    )
+    ensure_integration(
+        model,
         f"{application.name}:{HAPROXY_ROUTE_RELATION}",
         f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.{HAPROXY_ROUTE_RELATION}",
+        applications=(application.name,),
     )
     machine_model.wait(
         lambda status: jubilant.all_active(status, haproxy.name),
         error=jubilant.any_error,
         timeout=20 * 60,
     )
-    model.wait(
-        lambda status: jubilant.all_active(status, application.name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
-    )
 
+    # Act
     haproxy_ip = get_model_unit_addresses(machine_model, haproxy.name)[0]
     session = requests.Session()
     session.mount("https://", HostHeaderSSLAdapter())
@@ -331,6 +323,8 @@ def test_haproxy_route_serves_jenkins(
         allow_redirects=False,
         verify=ca_cert_path,
     )
+
+    # Assert
     assert response.status_code in (200, 403), (
         f"unexpected status {response.status_code}: {response.text[:200]}"
     )
@@ -346,23 +340,25 @@ def test_haproxy_spoe_redirects_to_oidc(
     ca_cert_path: str,
 ) -> None:
     """Verify HAProxy redirects an unauthenticated request to Keycloak."""
-    model.config(application.name, {"external-hostname": SPOE_EXTERNAL_HOSTNAME})
-    if HAPROXY_ROUTE_RELATION not in model.status().apps[application.name].relations:
-        model.integrate(
-            f"{application.name}:{HAPROXY_ROUTE_RELATION}",
-            f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.{HAPROXY_ROUTE_RELATION}",
-        )
+    # Arrange
+    ensure_configuration(
+        model,
+        application=application,
+        configuration={"external-hostname": SPOE_EXTERNAL_HOSTNAME},
+    )
+    ensure_integration(
+        model,
+        f"{application.name}:{HAPROXY_ROUTE_RELATION}",
+        f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.{HAPROXY_ROUTE_RELATION}",
+        applications=(application.name,),
+    )
     machine_model.wait(
         lambda status: jubilant.all_active(status, haproxy_with_spoe.name),
         error=jubilant.any_error,
         timeout=20 * 60,
     )
-    model.wait(
-        lambda status: jubilant.all_active(status, application.name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
-    )
 
+    # Act
     haproxy_ip = get_model_unit_addresses(machine_model, haproxy_with_spoe.name)[0]
     session = requests.Session()
     session.mount("https://", HostHeaderSSLAdapter())
@@ -373,6 +369,8 @@ def test_haproxy_spoe_redirects_to_oidc(
         allow_redirects=False,
         verify=ca_cert_path,
     )
+
+    # Assert
     assert response.status_code == 302, (
         f"Expected 302 redirect to OIDC, got {response.status_code}: {response.text[:200]}"
     )
@@ -393,21 +391,24 @@ def test_haproxy_server_and_gateway_agent_discovery(
 ) -> None:
     """Verify SPOE server routing and independent Gateway API agent discovery."""
     del gateway_agent_ingress
-    model.config(application.name, {"external-hostname": SPOE_EXTERNAL_HOSTNAME})
-    if HAPROXY_ROUTE_RELATION not in model.status().apps[application.name].relations:
-        model.integrate(
-            f"{application.name}:{HAPROXY_ROUTE_RELATION}",
-            f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.{HAPROXY_ROUTE_RELATION}",
-        )
-    if "agent" not in model.status().apps[application.name].relations:
-        model.integrate(
-            f"{application.name}:agent",
-            f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.agent",
-        )
-    model.wait(
-        lambda status: jubilant.all_active(status, application.name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
+
+    # Arrange
+    ensure_configuration(
+        model,
+        application=application,
+        configuration={"external-hostname": SPOE_EXTERNAL_HOSTNAME},
+    )
+    ensure_integration(
+        model,
+        f"{application.name}:{HAPROXY_ROUTE_RELATION}",
+        f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.{HAPROXY_ROUTE_RELATION}",
+        applications=(application.name,),
+    )
+    ensure_integration(
+        model,
+        f"{application.name}:agent",
+        f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.agent",
+        applications=(application.name,),
     )
     machine_model.wait(
         lambda status: jubilant.all_active(status, haproxy_with_spoe.name),
@@ -415,6 +416,7 @@ def test_haproxy_server_and_gateway_agent_discovery(
         timeout=20 * 60,
     )
 
+    # Act
     haproxy_ip = get_model_unit_addresses(machine_model, haproxy_with_spoe.name)[0]
     session = requests.Session()
     session.mount("https://", HostHeaderSSLAdapter())
@@ -425,6 +427,8 @@ def test_haproxy_server_and_gateway_agent_discovery(
         allow_redirects=False,
         verify=ca_cert_path,
     )
+
+    # Assert
     assert response.status_code == 302
 
     for unit_name in jenkins_machine_agents.units:

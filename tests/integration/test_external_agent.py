@@ -12,6 +12,7 @@ import state
 
 from .constants import LXD_CONTROLLER_NAME
 from .helpers import short_model_name
+from .resources import application_ref, ensure_application, ensure_integration
 from .types_ import JujuApplication
 
 
@@ -28,30 +29,25 @@ def ingress_traefik_fixture(model: jubilant.Juju) -> _IngressTraefiks:
     """Deploy the two Traefik applications used by the ingress test."""
     agent_discovery_name = "agent-discovery-traefik"
     server_name = "server-traefik"
-    for name in (agent_discovery_name, server_name):
-        model.deploy(
-            "traefik-k8s",
-            app=name,
-            channel="edge",
-            trust=True,
-            config={"routing_mode": "path"},
-        )
-    model.wait(
-        lambda status: jubilant.all_active(status, agent_discovery_name, server_name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
+    agent_discovery = ensure_application(
+        model,
+        "traefik-k8s",
+        name=agent_discovery_name,
+        channel="edge",
+        trust=True,
+        config={"routing_mode": "path"},
+    )
+    server = ensure_application(
+        model,
+        "traefik-k8s",
+        name=server_name,
+        channel="edge",
+        trust=True,
+        config={"routing_mode": "path"},
     )
     return _IngressTraefiks(
-        agent_discovery=JujuApplication(
-            name=agent_discovery_name,
-            model=model,
-            units=tuple(model.status().apps[agent_discovery_name].units),
-        ),
-        server=JujuApplication(
-            name=server_name,
-            model=model,
-            units=tuple(model.status().apps[server_name].units),
-        ),
+        agent_discovery=application_ref(model, agent_discovery.name),
+        server=application_ref(model, server.name),
     )
 
 
@@ -63,25 +59,35 @@ def test_agent_discovery_ingress_integration(
     machine_model: jubilant.Juju,
 ) -> None:
     """Verify agent discovery and server ingress relations become active."""
-    model.integrate(
+    # Arrange
+    ensure_integration(
+        model,
         f"{application.name}:{state.AGENT_DISCOVERY_INGRESS_RELATION_NAME}",
         f"{ingress_traefik.agent_discovery.name}:ingress",
+        applications=(application.name, ingress_traefik.agent_discovery.name),
     )
-    model.integrate(
+    ensure_integration(
+        model,
         f"{application.name}:{state.INGRESS_RELATION_NAME}",
         f"{ingress_traefik.server.name}:ingress",
+        applications=(application.name, ingress_traefik.server.name),
     )
-    model.integrate(
+    ensure_integration(
+        model,
         f"{application.name}:{state.AGENT_RELATION}",
         f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.{state.AGENT_RELATION}",
+        applications=(application.name,),
     )
     machine_model.wait(
         lambda status: jubilant.all_active(status, jenkins_machine_agents.name),
         error=jubilant.any_error,
         timeout=20 * 60,
     )
-    model.wait(
-        lambda status: jubilant.all_active(status, application.name),
-        error=jubilant.any_error,
-        timeout=20 * 60,
-    )
+
+    # Act
+    status = model.status()
+
+    # Assert
+    assert status.apps[application.name].is_active
+    assert status.apps[ingress_traefik.agent_discovery.name].is_active
+    assert status.apps[ingress_traefik.server.name].is_active

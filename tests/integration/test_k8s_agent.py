@@ -11,7 +11,8 @@ import requests
 
 import state
 
-from .helpers import assert_job_success, ensure_relation
+from .helpers import run_job
+from .resources import ensure_configuration, ensure_relation
 from .types_ import JujuApplication
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,12 @@ logger = logging.getLogger(__name__)
 
 def test_jenkins_wizard_bypass(web_address: str) -> None:
     """Verify the Jenkins setup wizard is bypassed."""
+    # Arrange
+
+    # Act
     response = requests.get(f"{web_address}/login", params={"from": "/"}, timeout=10)
+
+    # Assert
     assert "Unlock Jenkins" not in str(response.content), "Jenkins setup wizard not bypassed."
     assert "Sign in to Jenkins" in str(response.content)
 
@@ -32,6 +38,7 @@ def test_jenkins_k8s_agent_relation(
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ) -> None:
     """Verify Kubernetes agent relation lifecycle and deregistration."""
+    # Arrange
     ensure_relation(
         model=model,
         application=application,
@@ -52,14 +59,14 @@ def test_jenkins_k8s_agent_relation(
         node_names,
     )
 
-    assert_job_success(jenkins_client, jenkins_k8s_agent_node, "k8s")
-    assert_job_success(jenkins_client, extra_jenkins_k8s_agent_node, "k8s-extra")
-    assert jenkins_client.get_node(jenkins_k8s_agent_node).get_config_element("remoteFS") == (
-        "/var/lib/jenkins"
+    # Act
+    builds = (
+        run_job(jenkins_client, jenkins_k8s_agent_node, "k8s"),
+        run_job(jenkins_client, extra_jenkins_k8s_agent_node, "k8s-extra"),
     )
-    assert (
-        jenkins_client.get_node(extra_jenkins_k8s_agent_node).get_config_element("remoteFS")
-        == "/var/lib/jenkins"
+    remote_filesystems = (
+        jenkins_client.get_node(jenkins_k8s_agent_node).get_config_element("remoteFS"),
+        jenkins_client.get_node(extra_jenkins_k8s_agent_node).get_config_element("remoteFS"),
     )
 
     model.remove_relation(
@@ -78,6 +85,10 @@ def test_jenkins_k8s_agent_relation(
         [jenkins_k8s_agent_node, extra_jenkins_k8s_agent_node],
         node_names,
     )
+
+    # Assert
+    assert all(build.get_status() == "SUCCESS" for build in builds)
+    assert remote_filesystems == ("/var/lib/jenkins", "/var/lib/jenkins")
     assert jenkins_k8s_agent_node not in node_names
     assert extra_jenkins_k8s_agent_node not in node_names
 
@@ -90,6 +101,8 @@ def test_manually_managed_node_survives_agent_relation(
 ) -> None:
     """Preserve a manually created node through agent relation reconciliation."""
     node_name = "manual-external-agent"
+
+    # Arrange
     jenkins_client.create_node(
         name=node_name,
         num_executors=1,
@@ -99,11 +112,10 @@ def test_manually_managed_node_survives_agent_relation(
     )
 
     try:
-        model.config(application.name, {"external-agent-nodes": node_name})
-        model.wait(
-            lambda status: jubilant.all_active(status, application.name),
-            error=jubilant.any_error,
-            timeout=20 * 60,
+        ensure_configuration(
+            model,
+            application=application,
+            configuration={"external-agent-nodes": node_name},
         )
 
         ensure_relation(
@@ -113,17 +125,20 @@ def test_manually_managed_node_survives_agent_relation(
             renew=True,
         )
 
-        assert jenkins_client.get_node(node_name).get_config_element("description") == (
-            "Created outside Juju"
-        )
-
+        # Act
         model.remove_relation(
             f"{application.name}:{state.AGENT_RELATION}",
             f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}",
         )
         model.wait(jubilant.all_agents_idle, error=jubilant.any_error, timeout=20 * 60)
+
+        # Assert
+        assert jenkins_client.get_node(node_name).get_config_element("description") == (
+            "Created outside Juju"
+        )
         assert node_name in jenkins_client.nodes.iterkeys()
     finally:
+        # Teardown
         model.config(application.name, reset=["external-agent-nodes"])
         if node_name in jenkins_client.nodes.iterkeys():
             jenkins_client.delete_node(node_name)

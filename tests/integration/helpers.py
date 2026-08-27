@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
     reraise=True,
     stop=tenacity.stop_after_attempt(5),
 )
-def install_plugins(
+def ensure_plugins(
     unit_web_client: UnitWebClient,
     plugins: Iterable[str],
 ) -> None:
@@ -143,18 +143,18 @@ def gen_test_job_xml(node_label: str) -> str:
         """)
 
 
-def assert_job_success(
+def run_job(
     client: jenkinsapi.jenkins.Jenkins, agent_name: str, test_target_label: str
-) -> None:
-    """Assert that a job can be created and run successfully."""
+) -> jenkinsapi.build.Build:
+    """Create and run a job on a registered Jenkins agent."""
     nodes = client.nodes.iterkeys()
-    assert any(agent_name in key for key in nodes), f"Jenkins {agent_name} node not registered."
+    if not any(agent_name in key for key in nodes):
+        raise RuntimeError(f"Jenkins {agent_name} node not registered.")
 
     job = client.create_job(agent_name, gen_test_job_xml(test_target_label))
     queue_item = job.invoke()
     queue_item.block_until_complete()
-    build: jenkinsapi.build.Build = queue_item.get_build()
-    assert build.get_status() == "SUCCESS"
+    return queue_item.get_build()
 
 
 def gen_git_test_job_xml(node_label: str) -> str:
@@ -244,74 +244,6 @@ def wait_for(
     if result := func():
         return result
     raise TimeoutError()
-
-
-def _wait_for_apps(
-    model: jubilant.Juju,
-    apps: Iterable[str],
-    *,
-    wait_for_active: bool,
-    timeout: int,
-) -> None:
-    """Wait for the requested applications to settle in a model."""
-    app_list = list(apps)
-    if wait_for_active:
-        model.wait(
-            lambda status: jubilant.all_active(status, *app_list)
-            and jubilant.all_agents_idle(status, *app_list),
-            error=jubilant.any_error,
-            timeout=timeout,
-        )
-    else:
-        model.wait(jubilant.all_agents_idle, error=jubilant.any_error, timeout=timeout)
-
-
-def ensure_relation(
-    *,
-    model: jubilant.Juju,
-    application: JujuApplication,
-    other_application: JujuApplication,
-    relation: str | tuple[str, str] | None = None,
-    renew: bool = False,
-    apps: Iterable[str] | None = None,
-    wait_for_active: bool = True,
-    timeout: int = 20 * 60,
-    idle_period: int | None = None,
-) -> None:
-    """Ensure a relation exists and wait for its applications to settle."""
-    del idle_period  # Jubilant's status wait uses repeated successful polls.
-    if relation is None:
-        application_endpoint = other_application_endpoint = "agent"
-    elif isinstance(relation, tuple):
-        application_endpoint, other_application_endpoint = relation
-    else:
-        application_endpoint = other_application_endpoint = relation
-
-    app_list = list(apps) if apps is not None else [application.name, other_application.name]
-    relation_target = f"{other_application.name}:{other_application_endpoint}"
-    relation_source = f"{application.name}:{application_endpoint}"
-
-    if renew:
-        try:
-            model.remove_relation(relation_source, relation_target)
-        except jubilant.CLIError as exc:
-            if "not found" not in str(exc).lower() and "no relation" not in str(exc).lower():
-                raise
-        else:
-            _wait_for_apps(
-                model,
-                app_list,
-                wait_for_active=False,
-                timeout=timeout,
-            )
-
-    try:
-        model.integrate(relation_source, relation_target)
-    except jubilant.CLIError as exc:
-        if "already exists" not in str(exc).lower():
-            raise
-
-    _wait_for_apps(model, app_list, wait_for_active=wait_for_active, timeout=timeout)
 
 
 class AuthMethod(Enum):

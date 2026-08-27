@@ -36,6 +36,12 @@ from playwright.sync_api import (
 
 from .constants import K8S_CONTROLLER_NAME
 from .helpers import short_model_name, wait_for
+from .resources import (
+    ensure_application,
+    ensure_consume,
+    ensure_integration,
+    ensure_offer,
+)
 from .types_ import JujuApplication
 
 logger = logging.getLogger(__name__)
@@ -117,9 +123,10 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
     juju = identity_platform_juju
 
     traefik_public = "traefik-public"
-    juju.deploy(
+    ensure_application(
+        juju,
         "traefik-k8s",
-        traefik_public,
+        name=traefik_public,
         channel="latest/edge",
         revision=270,
         config={
@@ -127,9 +134,8 @@ def identity_platform_public_traefik_fixture(identity_platform_juju: jubilant.Ju
             "external_hostname": IDENTITY_PLATFORM_HOSTNAME,
         },
         trust=True,
+        timeout=60 * 30,
     )
-
-    juju.wait(lambda status: jubilant.all_active(status, traefik_public), timeout=60 * 30)
 
     return traefik_public
 
@@ -148,35 +154,52 @@ def identity_platform_offers_fixture(
     ca = "self-signed-certificates"
     traefik_public = identity_platform_public_traefik
 
-    juju.deploy(hydra, channel="latest/edge", revision=399, trust=True)
-    juju.deploy(kratos, channel="latest/edge", revision=567, trust=True)
-    juju.deploy(login_ui, channel="latest/edge", revision=200, trust=True)
-    juju.deploy(postgresql, channel="14/stable", trust=True)
-    juju.deploy(ca, channel="1/stable", revision=317, trust=True)
+    for charm, name, channel, revision in (
+        (hydra, hydra, "latest/edge", 399),
+        (kratos, kratos, "latest/edge", 567),
+        (login_ui, login_ui, "latest/edge", 200),
+        (postgresql, postgresql, "14/stable", None),
+        (ca, ca, "1/stable", 317),
+    ):
+        ensure_application(
+            juju,
+            charm,
+            name=name,
+            channel=channel,
+            revision=revision,
+            trust=True,
+            expected_status=None,
+        )
 
-    juju.integrate(f"{postgresql}:database", f"{hydra}:pg-database")
-    juju.integrate(f"{postgresql}:database", f"{kratos}:pg-database")
-    juju.integrate(f"{traefik_public}:certificates", f"{ca}:certificates")
-    juju.integrate(f"{kratos}:hydra-endpoint-info", f"{hydra}:hydra-endpoint-info")
-    juju.integrate(f"{kratos}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info")
-    juju.integrate(f"{kratos}:kratos-info", f"{login_ui}:kratos-info")
-    juju.integrate(f"{hydra}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info")
-    juju.integrate(f"{hydra}:hydra-endpoint-info", f"{login_ui}:hydra-endpoint-info")
-    juju.integrate(f"{traefik_public}:traefik-route", f"{hydra}:public-route")
-    juju.integrate(f"{traefik_public}:traefik-route", f"{kratos}:public-route")
-    juju.integrate(f"{traefik_public}:traefik-route", f"{login_ui}:public-route")
+    integrations = (
+        (f"{postgresql}:database", f"{hydra}:pg-database"),
+        (f"{postgresql}:database", f"{kratos}:pg-database"),
+        (f"{traefik_public}:certificates", f"{ca}:certificates"),
+        (f"{kratos}:hydra-endpoint-info", f"{hydra}:hydra-endpoint-info"),
+        (f"{kratos}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info"),
+        (f"{kratos}:kratos-info", f"{login_ui}:kratos-info"),
+        (f"{hydra}:ui-endpoint-info", f"{login_ui}:ui-endpoint-info"),
+        (f"{hydra}:hydra-endpoint-info", f"{login_ui}:hydra-endpoint-info"),
+        (f"{traefik_public}:traefik-route", f"{hydra}:public-route"),
+        (f"{traefik_public}:traefik-route", f"{kratos}:public-route"),
+        (f"{traefik_public}:traefik-route", f"{login_ui}:public-route"),
+    )
+    for endpoint, related_endpoint in integrations:
+        ensure_integration(juju, endpoint, related_endpoint)
 
     hydra_endpoint = "oauth"
     send_ca_cert_endpoint = "send-ca-cert"
     model_name = short_model_name(juju)
-    juju.offer(
-        f"{model_name}.{hydra}",
+    ensure_offer(
+        juju,
+        hydra,
         controller=K8S_CONTROLLER_NAME,
         endpoint=hydra_endpoint,
         name=hydra_endpoint,
     )
-    juju.offer(
-        f"{model_name}.{ca}",
+    ensure_offer(
+        juju,
+        ca,
         controller=K8S_CONTROLLER_NAME,
         endpoint=send_ca_cert_endpoint,
         name=send_ca_cert_endpoint,
@@ -222,31 +245,55 @@ def jenkins_k8s_charms_fixture(
     traefik_public = "traefik-k8s"
     ca = "self-signed-certificates"
     oauth2_proxy = "oauth2-proxy-k8s"
-    juju.deploy(
-        traefik_public,
+    ensure_application(
+        juju,
+        "traefik-k8s",
+        name=traefik_public,
         channel="latest/edge",
         config={
             "enable_experimental_forward_auth": "true",
             "external_hostname": JENKINS_HOSTNAME,
         },
         trust=True,
+        expected_status=None,
     )
-    juju.deploy(ca, channel="1/stable", trust=True)
-    juju.deploy(oauth2_proxy, channel="latest/edge", trust=True)
+    ensure_application(
+        juju,
+        "self-signed-certificates",
+        name=ca,
+        channel="1/stable",
+        trust=True,
+        expected_status=None,
+    )
+    ensure_application(
+        juju,
+        "oauth2-proxy-k8s",
+        name=oauth2_proxy,
+        channel="latest/edge",
+        trust=True,
+        expected_status=None,
+    )
 
-    juju.consume(identity_platform_offers.oauth.url, alias=identity_platform_offers.oauth.saas)
-    juju.consume(
+    ensure_consume(
+        juju, identity_platform_offers.oauth.url, alias=identity_platform_offers.oauth.saas
+    )
+    ensure_consume(
+        juju,
         identity_platform_offers.send_ca_cert.url,
         alias=identity_platform_offers.send_ca_cert.saas,
     )
 
-    juju.integrate(f"{traefik_public}:ingress", f"{application.name}:ingress")
-    juju.integrate(f"{traefik_public}:certificates", f"{ca}:certificates")
-    juju.integrate(f"{oauth2_proxy}:ingress", f"{traefik_public}:ingress")
-    juju.integrate(f"{oauth2_proxy}:oauth", identity_platform_offers.oauth.saas)
-    juju.integrate(f"{application.name}:auth-proxy", f"{oauth2_proxy}:auth-proxy")
-    juju.integrate(f"{oauth2_proxy}:forward-auth", f"{traefik_public}:experimental-forward-auth")
-    juju.integrate(f"{oauth2_proxy}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas)
+    integrations = (
+        (f"{traefik_public}:ingress", f"{application.name}:ingress"),
+        (f"{traefik_public}:certificates", f"{ca}:certificates"),
+        (f"{oauth2_proxy}:ingress", f"{traefik_public}:ingress"),
+        (f"{oauth2_proxy}:oauth", identity_platform_offers.oauth.saas),
+        (f"{application.name}:auth-proxy", f"{oauth2_proxy}:auth-proxy"),
+        (f"{oauth2_proxy}:forward-auth", f"{traefik_public}:experimental-forward-auth"),
+        (f"{oauth2_proxy}:receive-ca-cert", identity_platform_offers.send_ca_cert.saas),
+    )
+    for endpoint, related_endpoint in integrations:
+        ensure_integration(juju, endpoint, related_endpoint)
 
     def _is_transient_controller_error(exc: BaseException) -> bool:
         error_message = str(exc)
@@ -600,6 +647,7 @@ def test_auth_proxy_integration(
     act: send a request Jenkins.
     assert: a 200 is returned.
     """
+    # Arrange
 
     def is_auth_ui():
         """Get the application request via ingress.
@@ -620,10 +668,14 @@ def test_auth_proxy_integration(
         )
         return response.status_code == 200 and IDENTITY_PLATFORM_HOSTNAME in response.url
 
-    wait_for(
+    # Act
+    ready = wait_for(
         is_auth_ui,
         timeout=60 * 3,
     )
+
+    # Assert
+    assert ready
 
 
 @dataclass
@@ -727,6 +779,9 @@ def test_auth_proxy_integration_authorized(
     act: log in via IDP UI
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
+    # Arrange
+
+    # Act
     logger.info("Navigating to Jenkins public endpoint: %s", jenkins_endpoint)
     _goto_with_retry(page, jenkins_endpoint, timeout=60 * 3)
     page.wait_for_url(re.compile(r"https://idp\.test/.*"), timeout=1000 * 60)
@@ -748,4 +803,5 @@ def test_auth_proxy_integration_authorized(
     page.get_by_role("button", name="Sign in").click()
     logger.info("Signing in...")
 
+    # Assert
     expect(page).to_have_url(re.compile(r"https://jenkins.test/*"))
