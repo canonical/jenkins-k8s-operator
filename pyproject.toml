@@ -153,16 +153,16 @@ disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
 module = [
-  "tests.integration.test_auth_proxy",,
-  "tests.integration.test_cos",,
-  "tests.integration.test_external_agent",,
-  "tests.integration.test_haproxy_route",,
-  "tests.integration.test_ingress",,
-  "tests.integration.test_k8s_agent",,
-  "tests.integration.test_machine_agent",,
-  "tests.integration.test_plugins_part_1",,
-  "tests.integration.test_plugins_part_2",,
-  "tests.integration.test_proxy",,
+  "tests.integration.test_auth_proxy",
+  "tests.integration.test_cos",
+  "tests.integration.test_external_agent",
+  "tests.integration.test_haproxy_route",
+  "tests.integration.test_ingress",
+  "tests.integration.test_k8s_agent",
+  "tests.integration.test_machine_agent",
+  "tests.integration.test_plugins_part_1",
+  "tests.integration.test_plugins_part_2",
+  "tests.integration.test_proxy",
   "tests.integration.test_upgrade"
 ]
 ignore_errors = true
