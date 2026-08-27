@@ -15,7 +15,7 @@ jobs:
     secrets: inherit
     with:
       working-directory: .
-      spread-jobs-include: "*:tests/integration/run:test_jenkins"
+      spread-jobs-include: "*:build/tests/integration/run:test_jenkins"
   required_status_checks:
     name: Required Integration Test Status Checks
     runs-on: ubuntu-latest
