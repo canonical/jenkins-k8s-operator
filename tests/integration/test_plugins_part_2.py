@@ -262,8 +262,9 @@ def test_kubernetes_plugin(
 
     def get_completed_build() -> jenkinsapi.build.Build | None:
         try:
+            queue_item.poll()
             build = queue_item.get_build()
-        except jenkinsapi.custom_exceptions.NotBuiltYet:
+        except (jenkinsapi.custom_exceptions.NotBuiltYet, requests.exceptions.HTTPError):
             return None
         return build if not build.is_running() else None
 
@@ -275,8 +276,9 @@ def test_kubernetes_plugin(
         )
     except TimeoutError as exc:
         try:
+            queue_item.poll()
             running_build = queue_item.get_build()
-        except jenkinsapi.custom_exceptions.NotBuiltYet:
+        except (jenkinsapi.custom_exceptions.NotBuiltYet, requests.exceptions.HTTPError):
             running_build = None
         if running_build:
             try:
@@ -288,7 +290,7 @@ def test_kubernetes_plugin(
                 logger.warning("Could not fetch Kubernetes plugin build console: %s", console_exc)
         try:
             system_log_resp = unit_web_client.client.requester.get_url(
-                f"{unit_web_client.web}/log/all"
+                f"{unit_web_client.web}/log/all/consoleText"
             )
             logger.error(
                 "Jenkins system log (last 10000 characters):\n%s",
