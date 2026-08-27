@@ -41,7 +41,10 @@ def test_jenkins_machine_agent_relation(
 
     assert_job_success(jenkins_client, jenkins_machine_agents.name, "machine")
 
-    model.remove_relation(application.name, state.AGENT_RELATION)
+    model.remove_relation(
+        f"{application.name}:{state.AGENT_RELATION}",
+        machine_relation,
+    )
     model.wait(
         lambda status: jubilant.all_active(status, application.name),
         error=jubilant.any_error,
