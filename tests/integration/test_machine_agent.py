@@ -21,8 +21,10 @@ def test_jenkins_machine_agent_relation(
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ) -> None:
     """Verify the machine-agent relation lifecycle and deregistration."""
-    machine_relation = (
-        f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.{state.AGENT_RELATION}"
+    machine_relation = f"{short_model_name(machine_model)}-{state.AGENT_RELATION}"
+    model.consume(
+        f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.{state.AGENT_RELATION}",
+        alias=machine_relation,
     )
     model.integrate(
         f"{application.name}:{state.AGENT_RELATION}",
