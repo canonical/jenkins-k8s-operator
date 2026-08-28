@@ -5,8 +5,9 @@
 
 import jubilant
 import requests
+import tenacity
 
-from .helpers import ensure_relation, exec_in_container, short_model_name, wait_for
+from .helpers import _raise_timeout, ensure_relation, exec_in_container, short_model_name
 from .types_ import JujuApplication
 
 
@@ -28,6 +29,13 @@ def test_ingress_integration(
         relation="ingress",
     )
 
+    @tenacity.retry(
+        retry=tenacity.retry_if_result(lambda result: not result),
+        stop=tenacity.stop_after_delay(10 * 60),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
     def ingress_is_ready() -> bool:
         try:
             response = requests.get(
@@ -36,9 +44,9 @@ def test_ingress_integration(
             )
         except requests.RequestException:
             return False
-        return "Authentication required" in str(response.content)
+        return "Authentication required" in response.text
 
-    wait_for(ingress_is_ready, timeout=10 * 60, check_interval=10)
+    ingress_is_ready()
 
 
 def test_ingress_system_properties_flag_present(
@@ -68,6 +76,13 @@ def test_ingress_system_properties_flag_present(
         timeout=20 * 60,
     )
 
+    @tenacity.retry(
+        retry=tenacity.retry_if_result(lambda result: not result),
+        stop=tenacity.stop_after_delay(10 * 60),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
     def java_process_has_property() -> bool:
         try:
             stdout = exec_in_container(model, unit, "jenkins", "ps -aux | cat")
@@ -75,4 +90,4 @@ def test_ingress_system_properties_flag_present(
             return False
         return f"-D{prop}" in stdout
 
-    wait_for(java_process_has_property, timeout=10 * 60, check_interval=10)
+    java_process_has_property()

@@ -3,7 +3,6 @@
 
 """Integration tests for the jenkins-k8s haproxy-route relation."""
 
-import functools
 import json
 import socket
 import ssl
@@ -11,10 +10,11 @@ import ssl
 import jubilant
 import pytest
 import requests
+import tenacity
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
 from .constants import LXD_CONTROLLER_NAME
-from .helpers import application_ref, get_model_unit_addresses, short_model_name, wait_for
+from .helpers import _raise_timeout, application_ref, get_model_unit_addresses, short_model_name
 from .types_ import JujuApplication, KeycloakOIDCMetadata
 
 EXTERNAL_HOSTNAME = "jenkins.internal"
@@ -202,6 +202,7 @@ def haproxy_with_spoe_fixture(
     )
     machine_model.wait(
         lambda status: "certificates" not in status.apps[haproxy.name].relations,
+        error=jubilant.any_error,
         timeout=5 * 60,
     )
     machine_model.integrate(
@@ -217,16 +218,22 @@ def haproxy_with_spoe_fixture(
     )
 
     haproxy_ip = get_model_unit_addresses(machine_model, haproxy.name)[0]
-    wait_for(
-        functools.partial(
-            _certificate_has_hostname,
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_result(lambda result: not result),
+        stop=tenacity.stop_after_delay(10 * 60),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
+    def certificate_is_ready() -> bool:
+        return _certificate_has_hostname(
             haproxy_ip,
             SPOE_EXTERNAL_HOSTNAME,
             ca_cert_path,
-        ),
-        timeout=10 * 60,
-        check_interval=10,
-    )
+        )
+
+    certificate_is_ready()
     return haproxy
 
 

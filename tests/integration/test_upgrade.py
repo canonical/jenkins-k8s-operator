@@ -35,7 +35,8 @@ def jenkins_upgrade_depl(model: jubilant.Juju) -> None:
         channel="stable",
     )
     model.wait(
-        lambda status: jubilant.all_active(status, JENKINS_APP_NAME),
+        lambda status: jubilant.all_active(status, JENKINS_APP_NAME)
+        and jubilant.all_agents_idle(status, JENKINS_APP_NAME),
         error=jubilant.any_error,
         timeout=10 * 60,
     )
@@ -65,7 +66,8 @@ def test_jenkins_upgrade_check_job(
         resources={"jenkins-image": jenkins_image},
     )
     model.wait(
-        lambda status: jubilant.all_active(status, JENKINS_APP_NAME),
+        lambda status: jubilant.all_active(status, JENKINS_APP_NAME)
+        and jubilant.all_agents_idle(status, JENKINS_APP_NAME),
         error=jubilant.any_error,
         timeout=10 * 60,
     )

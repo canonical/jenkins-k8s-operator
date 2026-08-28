@@ -12,6 +12,7 @@ import jubilant
 import kubernetes
 import pytest
 import requests
+import tenacity
 import urllib3.exceptions
 from jenkinsapi.custom_exceptions import JenkinsAPIException
 from jinja2 import Environment, FileSystemLoader
@@ -24,6 +25,7 @@ from .constants import (
     REMOVED_PLUGINS,
 )
 from .helpers import (
+    _raise_timeout,
     dispatch_update_status,
     exec_in_container,
     gen_git_test_job_xml,
@@ -31,7 +33,6 @@ from .helpers import (
     get_job_invoked_unit,
     install_plugins,
     short_model_name,
-    wait_for,
 )
 from .types_ import JujuApplication, LDAPSettings, UnitWebClient
 
@@ -52,6 +53,13 @@ def test_plugins_remove_delay(
     post_data = {f"plugin.{plugin}.default": "on" for plugin in ALLOWED_PLUGINS}
     post_data["dynamic_load"] = ""
 
+    @tenacity.retry(
+        retry=tenacity.retry_if_result(lambda result: not result),
+        stop=tenacity.stop_after_delay(300),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
     def _install_plugins_via_web_api() -> bool:
         """Install plugins via pluginManager API.
 
@@ -67,8 +75,18 @@ def test_plugins_remove_delay(
             logger.exception("Failed to post plugin installations.")
             return False
 
-    wait_for(_install_plugins_via_web_api)
+    _install_plugins_via_web_api()
 
+    @tenacity.retry(
+        retry=tenacity.retry_any(
+            tenacity.retry_if_result(lambda result: not result),
+            tenacity.retry_if_exception_type(jubilant.CLIError),
+        ),
+        stop=tenacity.stop_after_delay(300),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
     def has_temp_files() -> bool:
         """Check if temporary files exist in the Jenkins plugins directory."""
         try:
@@ -82,10 +100,20 @@ def test_plugins_remove_delay(
             return False
         return "tmp" in stdout
 
-    wait_for(has_temp_files)
+    has_temp_files()
     dispatch_update_status(model, unit_web_client.unit, update_status_env)
 
-    def has_delay_log():
+    @tenacity.retry(
+        retry=tenacity.retry_any(
+            tenacity.retry_if_result(lambda result: not result),
+            tenacity.retry_if_exception_type(jubilant.CLIError),
+        ),
+        stop=tenacity.stop_after_delay(300),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
+    def has_delay_log() -> bool:
         """Check if juju log contains plugin cleanup delayed log.
 
         Returns:
@@ -100,10 +128,20 @@ def test_plugins_remove_delay(
         )
         return "Plugins being downloaded, waiting until further actions." in stdout
 
-    wait_for(has_delay_log)
+    has_delay_log()
     unit_web_client.client.safe_restart()
 
-    wait_for(lambda: all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS))
+    @tenacity.retry(
+        retry=tenacity.retry_if_result(lambda result: not result),
+        stop=tenacity.stop_after_delay(300),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
+    def all_plugins_are_installed() -> bool:
+        return all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
+
+    all_plugins_are_installed()
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -295,6 +333,13 @@ def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClient):
     test_name = "matrix-combinations-parameter-test"
     unit_web_client.client.create_job(test_name, job_xml)
 
+    @tenacity.retry(
+        retry=tenacity.retry_if_result(lambda result: not result),
+        stop=tenacity.stop_after_delay(10 * 60),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
     def configuration_matrix_page() -> str:
         """Wait until Jenkins has finished restarting after plugin changes."""
         try:
@@ -308,7 +353,7 @@ def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClient):
             return ""
         return test_page if "Configuration Matrix" in test_page else ""
 
-    test_page = wait_for(configuration_matrix_page, timeout=10 * 60)
+    test_page = configuration_matrix_page()
     assert "Configuration Matrix" in test_page, (
         f"Configuration matrix table not found, {test_page}"
     )
@@ -414,6 +459,16 @@ def test_thinbackup_plugin(model: jubilant.Juju, unit_web_client: UnitWebClient)
     )
     res.raise_for_status()
 
+    @tenacity.retry(
+        retry=tenacity.retry_any(
+            tenacity.retry_if_result(lambda result: not result),
+            tenacity.retry_if_exception_type(jubilant.CLIError),
+        ),
+        stop=tenacity.stop_after_delay(300),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
     def has_backup() -> bool:
         """Get whether the backup is created.
 
@@ -434,7 +489,7 @@ def test_thinbackup_plugin(model: jubilant.Juju, unit_web_client: UnitWebClient)
         logger.info("Run backup path ls result: stdout: %s", stdout)
         return "FULL" in stdout
 
-    wait_for(has_backup)
+    has_backup()
 
 
 def test_bzr_plugin(unit_web_client: UnitWebClient):
