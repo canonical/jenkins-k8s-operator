@@ -34,7 +34,11 @@ def test_jenkins_update_ui_disabled(
     web_address: str,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ) -> None:
-    """Verify the Jenkins UI does not show an update suggestion."""
+    """
+    Arrange: a deployed Jenkins application with an authenticated API client.
+    Act: request the Jenkins management page.
+    Assert: the page does not contain the "New version of Jenkins" update suggestion.
+    """
     response = jenkins_client.requester.get_url(f"{web_address}/manage")
     page_content = str(response.content, encoding="utf-8")
     assert "New version of Jenkins" not in page_content
@@ -48,7 +52,13 @@ def test_jenkins_automatic_update_out_of_range(
     update_status_env: tuple[str, ...],
     unit_web_client: UnitWebClient,
 ) -> None:
-    """Verify maintenance does not run outside the configured restart window."""
+    """
+    Arrange: a Jenkins application configured with a 03:00-05:00 restart window and a frozen
+    time of 15:00 UTC.
+    Act: install the "oic-auth" plugin and dispatch update-status with the frozen-time
+    environment.
+    Assert: the plugin remains installed.
+    """
     extra_plugin = "oic-auth"
     install_plugins(unit_web_client, (extra_plugin,))
     dispatch_update_status(model, unit, (*libfaketime_env, *update_status_env))
@@ -63,7 +73,14 @@ def test_rotate_password_action(
     unit: str,
     jenkins_user_client: jenkinsapi.jenkins.Jenkins,
 ) -> None:
-    """Verify rotating credentials invalidates the old session."""
+    """
+    Arrange: a deployed Jenkins application with a session authenticated by the current
+    administrator credentials.
+    Act: run the rotate-credentials action, then access Jenkins with the old session and the
+    returned password.
+    Assert: the action returns a new password, the old session receives HTTP 401, and the new
+    password receives HTTP 200.
+    """
     session = jenkins_user_client.requester.session
     session.auth = (jenkins_user_client.username, jenkins_user_client.password)
     result = session.get(f"{jenkins_user_client.baseurl}/manage")
@@ -118,7 +135,12 @@ def test_storage_mount(
     application: JujuApplication,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ) -> None:
-    """Verify Jenkins job configuration survives scaling the application."""
+    """
+    Arrange: a deployed Jenkins application with an authenticated API client.
+    Act: create a job, scale the application to zero units and back to one unit, then read the
+    job configuration from the remaining unit.
+    Assert: the stored configuration contains the original job configuration.
+    """
     test_job_name = token_hex(8)
     job_configuration = gen_test_job_xml("built-in")
     jenkins_client.create_job(test_job_name, job_configuration)
@@ -138,7 +160,11 @@ def test_storage_mount_owner(
     model: jubilant.Juju,
     application: JujuApplication,
 ) -> None:
-    """Verify jenkins_home belongs to the Jenkins user."""
+    """
+    Arrange: a deployed Jenkins application with its storage mounted.
+    Act: inspect the owner of /var/lib/jenkins in the Jenkins workload container.
+    Assert: the directory owner and group are UID 2000 and GID 2000.
+    """
     unit = next(iter(model.status().apps[application.name].units))
     output = exec_in_container(model, unit, "jenkins", 'stat -c "%u %g" /var/lib/jenkins')
     assert f"{JENKINS_UID} {JENKINS_GID}" in output
@@ -148,7 +174,12 @@ def test_bootstrap_after_restart(
     model: jubilant.Juju,
     application: JujuApplication,
 ) -> None:
-    """Verify Jenkins reboots and re-bootstraps after its API token is removed."""
+    """
+    Arrange: an active Jenkins application with its API token present.
+    Act: remove the API token from the charm container, restart Jenkins, and resolve the
+    config-changed error if it occurs while waiting for the application to become active.
+    Assert: the application becomes active after Jenkins re-bootstraps.
+    """
     unit = next(iter(model.status().apps[application.name].units))
     exec_in_container(
         model,
@@ -193,7 +224,12 @@ def test_jcasc_default_config_applied(
     web_address: str,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ) -> None:
-    """Verify the default JCasC configuration is applied."""
+    """
+    Arrange: a deployed Jenkins application with an authenticated API client.
+    Act: request the JCasC export endpoint.
+    Assert: the endpoint returns HTTP 200 and the exported configuration contains a jenkins
+    section.
+    """
     response = jenkins_client.requester.post_url(f"{web_address}/configuration-as-code/export")
     assert response.status_code == 200, "JCasC export endpoint should be accessible"
     assert "jenkins" in response.text, "Exported JCasC should contain jenkins section"
@@ -205,7 +241,12 @@ def test_jcasc_custom_config_updates(
     web_address: str,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ) -> None:
-    """Verify changing jcasc-config updates the Jenkins system message."""
+    """
+    Arrange: an active deployed Jenkins application with an authenticated API client.
+    Act: set jcasc-config to a custom system message and numExecutors value, wait for the
+    application to become active, and poll the JCasC export endpoint.
+    Assert: the exported configuration contains the custom system message.
+    """
     custom_message = "Managed by JCasC integration test"
     custom_config = yaml.dump({"jenkins": {"systemMessage": custom_message, "numExecutors": 0}})
     model.config(application.name, {"jcasc-config": custom_config})
@@ -225,7 +266,13 @@ def test_jcasc_invalid_yaml_blocks(
     model: jubilant.Juju,
     application: JujuApplication,
 ) -> None:
-    """Verify invalid JCasC YAML blocks the charm and can be recovered."""
+    """
+    Arrange: a deployed Jenkins application.
+    Act: set jcasc-config to invalid YAML, wait for the application to become blocked, then
+    restore a default configuration and wait for it to become active.
+    Assert: the blocked status message contains "Invalid jcasc-config YAML", and the
+    application recovers to active status.
+    """
     model.config(application.name, {"jcasc-config": "{{invalid yaml [["})
     model.wait(
         lambda status: jubilant.all_blocked(status, application.name),
@@ -253,7 +300,12 @@ def test_jcasc_reload_without_restart(
     web_address: str,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ) -> None:
-    """Verify JCasC changes are applied without restarting Jenkins."""
+    """
+    Arrange: an active deployed Jenkins application with an authenticated API client.
+    Act: access Jenkins, set jcasc-config to a new system message, wait for the application to
+    become active, and poll the JCasC export endpoint.
+    Assert: the exported configuration contains the new system message.
+    """
     response = jenkins_client.requester.get_url(web_address)
     assert response.status_code == 200
 
@@ -337,7 +389,14 @@ def test_jcasc_repository_config_from_file(
     jenkins_client: jenkinsapi.jenkins.Jenkins,
     test_jcasc_repository: str,
 ) -> None:
-    """Verify JCasC configuration loaded from the configured Git repository."""
+    """
+    Arrange: an active deployed Jenkins application with an authenticated API client and a
+    configured JCasC Git repository.
+    Act: select an available repository branch, configure the repository and fixture path,
+    wait for the application to become active, and poll the JCasC export endpoint.
+    Assert: the exported configuration contains the expected Jenkins, executor, mode,
+    unclassified, and location values from the repository fixture.
+    """
     branch = _get_current_branch(test_jcasc_repository)
     repository_config = {
         "jcasc-config": "",
