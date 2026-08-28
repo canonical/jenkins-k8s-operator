@@ -14,7 +14,7 @@ import requests
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
 from .constants import LXD_CONTROLLER_NAME
-from .helpers import get_model_unit_addresses, short_model_name, wait_for
+from .helpers import application_ref, get_model_unit_addresses, short_model_name, wait_for
 from .types_ import JujuApplication, KeycloakOIDCMetadata
 
 EXTERNAL_HOSTNAME = "jenkins.internal"
@@ -23,13 +23,6 @@ AGENT_EXTERNAL_HOSTNAME = "jenkins-agent.internal"
 GATEWAY_CLASS = "ck-gateway"
 HAPROXY_ROUTE_RELATION = "haproxy-route"
 SELF_SIGNED_CERTIFICATES_APP_NAME = "self-signed-certificates"
-
-
-def _application_ref(model: jubilant.Juju, name: str) -> JujuApplication:
-    """Return an application reference from model status."""
-    app_status = model.status().apps.get(name)
-    assert app_status, f"Application status {name} not found"
-    return JujuApplication(name=name, model=model, units=tuple(app_status.units))
 
 
 @pytest.fixture(scope="module", name="self_signed_certificates")
@@ -45,7 +38,7 @@ def self_signed_certificates_fixture(machine_model: jubilant.Juju) -> JujuApplic
         error=jubilant.any_error,
         timeout=20 * 60,
     )
-    return _application_ref(machine_model, SELF_SIGNED_CERTIFICATES_APP_NAME)
+    return application_ref(machine_model, SELF_SIGNED_CERTIFICATES_APP_NAME)
 
 
 @pytest.fixture(scope="module", name="haproxy")
@@ -76,7 +69,7 @@ def haproxy_fixture(
         endpoint=HAPROXY_ROUTE_RELATION,
         name=HAPROXY_ROUTE_RELATION,
     )
-    return _application_ref(machine_model, name)
+    return application_ref(machine_model, name)
 
 
 @pytest.fixture(scope="module", name="ca_cert_path")
@@ -124,7 +117,7 @@ def oauth_integrator_fixture(
         error=jubilant.any_error,
         timeout=20 * 60,
     )
-    return _application_ref(machine_model, name)
+    return application_ref(machine_model, name)
 
 
 @pytest.fixture(scope="module", name="haproxy_spoe_auth")
@@ -154,7 +147,7 @@ def haproxy_spoe_auth_fixture(
         error=jubilant.any_error,
         timeout=20 * 60,
     )
-    return _application_ref(machine_model, name)
+    return application_ref(machine_model, name)
 
 
 def _certificate_has_hostname(
@@ -294,7 +287,7 @@ def gateway_agent_ingress_fixture(
         error=jubilant.any_error,
         timeout=20 * 60,
     )
-    return _application_ref(model, ingress_name)
+    return application_ref(model, ingress_name)
 
 
 def test_haproxy_route_serves_jenkins(

@@ -73,6 +73,31 @@ def _goto_with_retry(
     wait_for(navigate, timeout=timeout, check_interval=check_interval)
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_exception_type((AssertionError, TypeError, KeyError, IndexError)),
+    stop=tenacity.stop_after_attempt(12),
+    wait=tenacity.wait_fixed(10),
+    before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
+def _get_load_balancer_ip(
+    kube_core_client: kubernetes.client.CoreV1Api,
+    service_prefix: str,
+    namespace: str,
+    description: str,
+) -> str:
+    """Return a service load-balancer IP, retrying until its ingress is ready."""
+    service = kube_core_client.read_namespaced_service(
+        name=f"{service_prefix}-lb",
+        namespace=namespace,
+    )
+    ingress = service.status.load_balancer.ingress
+    assert ingress, f"{description} load balancer ingress not ready"
+    ip = ingress[0].ip
+    assert ip, f"{description} load balancer IP not ready"
+    return str(ip)
+
+
 @dataclass
 class _Offer:
     """The representation of a Juju offer.
@@ -289,26 +314,12 @@ def identity_platform_traefik_ip_fixture(
     identity_platform_juju: jubilant.Juju,
 ):
     """Identity platform traefik ip."""
-
-    @tenacity.retry(
-        retry=tenacity.retry_if_exception_type((AssertionError, TypeError, KeyError, IndexError)),
-        stop=tenacity.stop_after_attempt(12),
-        wait=tenacity.wait_fixed(10),
-        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
-        reraise=True,
+    return _get_load_balancer_ip(
+        kube_core_client,
+        service_prefix=identity_platform_public_traefik,
+        namespace=short_model_name(identity_platform_juju),
+        description="Identity platform traefik",
     )
-    def _get_lb_ip() -> str:
-        idp_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
-            name=f"{identity_platform_public_traefik}-lb",
-            namespace=short_model_name(identity_platform_juju),
-        )
-        ingress = idp_traefik_loadbalancer_service.status.load_balancer.ingress
-        assert ingress, "Identity platform traefik load balancer ingress not ready"
-        ip = ingress[0].ip
-        assert ip, "Identity platform traefik load balancer IP not ready"
-        return str(ip)
-
-    return _get_lb_ip()
 
 
 @pytest.fixture(scope="module", name="jenkins_traefik_ip")
@@ -318,25 +329,12 @@ def jenkins_traefik_ip_fixture(
     model: jubilant.Juju,
 ):
     """Jenkins traefik ip."""
-
-    @tenacity.retry(
-        retry=tenacity.retry_if_exception_type((AssertionError, TypeError, KeyError, IndexError)),
-        stop=tenacity.stop_after_attempt(12),
-        wait=tenacity.wait_fixed(10),
-        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
-        reraise=True,
+    return _get_load_balancer_ip(
+        kube_core_client,
+        service_prefix=jenkins_k8s_charms.traefik,
+        namespace=short_model_name(model),
+        description="Jenkins traefik",
     )
-    def _get_lb_ip() -> str:
-        jenkins_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
-            name=f"{jenkins_k8s_charms.traefik}-lb", namespace=short_model_name(model)
-        )
-        ingress = jenkins_traefik_loadbalancer_service.status.load_balancer.ingress
-        assert ingress, "Jenkins traefik load balancer ingress not ready"
-        ip = ingress[0].ip
-        assert ip, "Jenkins traefik load balancer IP not ready"
-        return str(ip)
-
-    return _get_lb_ip()
 
 
 @pytest.fixture(scope="module", name="patch_dns_resolver")

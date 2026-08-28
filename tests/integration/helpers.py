@@ -28,6 +28,13 @@ from .types_ import JujuApplication, UnitWebClient
 logger = logging.getLogger(__name__)
 
 
+def application_ref(model: jubilant.Juju, name: str) -> JujuApplication:
+    """Return a stable application reference from the current model status."""
+    app_status = model.status().apps.get(name)
+    assert app_status, f"Application status {name} not found"
+    return JujuApplication(name=name, model=model, units=tuple(app_status.units))
+
+
 @tenacity.retry(
     wait=tenacity.wait_exponential(multiplier=2, max=60),
     reraise=True,
@@ -85,6 +92,18 @@ def get_model_unit_addresses(model: jubilant.Juju, app_name: str) -> list[str]:
         for unit in application_status.units.values()
         if unit.address or unit.public_address
     ]
+
+
+def get_model_unit_address(model: jubilant.Juju, app_name: str) -> str:
+    """Return the first available unit address for an application."""
+    addresses = get_model_unit_addresses(model, app_name)
+    assert addresses, f"Unit IP address not found for {app_name}"
+    return addresses[0]
+
+
+def web_address_for_ip(unit_ip: str) -> str:
+    """Return the Jenkins web address for a unit IP address."""
+    return f"http://{unit_ip}:8080"
 
 
 def exec_in_container(

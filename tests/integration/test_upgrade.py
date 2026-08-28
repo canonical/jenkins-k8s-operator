@@ -10,11 +10,12 @@ import pytest
 import requests
 
 from .helpers import (
+    application_ref,
     gen_git_test_job_xml,
     generate_unit_web_client_from_application,
-    get_model_unit_addresses,
+    get_model_unit_address,
+    web_address_for_ip,
 )
-from .types_ import JujuApplication
 
 LOGGER = logging.getLogger(__name__)
 JENKINS_APP_NAME = "jenkins-k8s-upgrade"
@@ -38,12 +39,7 @@ def jenkins_upgrade_depl(model: jubilant.Juju) -> None:
         error=jubilant.any_error,
         timeout=10 * 60,
     )
-    status = model.status().apps[JENKINS_APP_NAME]
-    application = JujuApplication(
-        name=JENKINS_APP_NAME,
-        model=model,
-        units=tuple(status.units),
-    )
+    application = application_ref(model, JENKINS_APP_NAME)
     unit_web_client = generate_unit_web_client_from_application(model, application)
     unit_web_client.client.create_job(JOB_NAME, gen_git_test_job_xml("k8s"))
 
@@ -59,9 +55,7 @@ def test_jenkins_upgrade_check_job(
     Act: Record the current Jenkins version, refresh the charm, and wait for Jenkins to become active.
     Assert: If the Jenkins version changes, ``test_job`` still exists after the refresh.
     """
-    unit_ips = get_model_unit_addresses(model, JENKINS_APP_NAME)
-    assert unit_ips, f"Unit IP address not found for {JENKINS_APP_NAME}"
-    address = f"http://{unit_ips[0]}:8080"
+    address = web_address_for_ip(get_model_unit_address(model, JENKINS_APP_NAME))
     response = requests.get(address, timeout=60)
     old_version = response.headers["X-Jenkins"]
 
@@ -75,17 +69,10 @@ def test_jenkins_upgrade_check_job(
         error=jubilant.any_error,
         timeout=10 * 60,
     )
-    unit_ips = get_model_unit_addresses(model, JENKINS_APP_NAME)
-    assert unit_ips, f"Unit IP address not found for {JENKINS_APP_NAME}"
-    address = f"http://{unit_ips[0]}:8080"
+    address = web_address_for_ip(get_model_unit_address(model, JENKINS_APP_NAME))
     response = requests.get(address, timeout=60)
     if old_version != response.headers["X-Jenkins"]:
-        status = model.status().apps[JENKINS_APP_NAME]
-        application = JujuApplication(
-            name=JENKINS_APP_NAME,
-            model=model,
-            units=tuple(status.units),
-        )
+        application = application_ref(model, JENKINS_APP_NAME)
         unit_web_client = generate_unit_web_client_from_application(model, application)
         job = unit_web_client.client.get_job(JOB_NAME)
         assert job.name == JOB_NAME
