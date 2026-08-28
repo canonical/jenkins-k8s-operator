@@ -62,7 +62,14 @@ def test_agent_discovery_ingress_integration(
     jenkins_machine_agents: JujuApplication,
     machine_model: jubilant.Juju,
 ) -> None:
-    """Verify agent discovery and server ingress relations become active."""
+    """Verify ingress and machine-agent integrations leave the applications active.
+
+    Arrange: Use the Jenkins application, the two ingress Traefik applications, and a
+    machine-agent application in its separate model.
+    Act: Integrate the Jenkins application with both ingress endpoints and the machine-agent
+    offer, then wait for the machine-agent and Jenkins applications to become active.
+    Assert: The machine-agent and Jenkins applications are active after all integrations.
+    """
     model.integrate(
         f"{application.name}:{state.AGENT_DISCOVERY_INGRESS_RELATION_NAME}",
         f"{ingress_traefik.agent_discovery.name}:ingress",

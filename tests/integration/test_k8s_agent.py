@@ -18,7 +18,12 @@ logger = logging.getLogger(__name__)
 
 
 def test_jenkins_wizard_bypass(web_address: str) -> None:
-    """Verify the Jenkins setup wizard is bypassed."""
+    """Verify the Jenkins setup wizard is bypassed.
+
+    Arrange: Use the active Jenkins web address.
+    Act: Request the Jenkins login page with `/` as the `from` query parameter.
+    Assert: The response does not contain "Unlock Jenkins" and contains "Sign in to Jenkins".
+    """
     response = requests.get(f"{web_address}/login", params={"from": "/"}, timeout=10)
     assert "Unlock Jenkins" not in str(response.content), "Jenkins setup wizard not bypassed."
     assert "Sign in to Jenkins" in str(response.content)
@@ -31,7 +36,18 @@ def test_jenkins_k8s_agent_relation(
     extra_jenkins_k8s_agents: JujuApplication,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ) -> None:
-    """Verify Kubernetes agent relation lifecycle and deregistration."""
+    """Verify the Kubernetes agent relation lifecycle and deregistration.
+
+    Arrange: Use the Jenkins server, two Kubernetes agent applications, and a Jenkins API client.
+    Act:
+        1. Relate the server to both Kubernetes agents, run jobs on their nodes, and inspect their
+           remote file-system settings.
+        2. Remove both relations and wait for all agents to become idle.
+    Assert:
+        1. Both agent jobs succeed, and both nodes use `/var/lib/jenkins` as their remote
+           file system.
+        2. Both agent nodes are absent from Jenkins after relation removal.
+    """
     ensure_relation(
         model=model,
         application=application,

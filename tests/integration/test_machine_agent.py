@@ -20,7 +20,19 @@ def test_jenkins_machine_agent_relation(
     machine_model: jubilant.Juju,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
 ) -> None:
-    """Verify the machine-agent relation lifecycle and deregistration."""
+    """Verify the machine-agent relation lifecycle and deregistration.
+
+    Arrange: Use the Jenkins server, an offered machine-agent application in a separate model, and
+    a Jenkins API client.
+    Act:
+        1. Consume the machine-agent offer, integrate it with the server, and wait for both
+           applications to become active.
+        2. Remove the relation and wait for the server to become active and the machine-agent
+           application to become idle.
+    Assert:
+        1. A job succeeds on the machine agent.
+        2. No Jenkins node containing the server application name remains after relation removal.
+    """
     machine_relation = f"{short_model_name(machine_model)}-{state.AGENT_RELATION}"
     model.consume(
         f"{LXD_CONTROLLER_NAME}:admin/{short_model_name(machine_model)}.{state.AGENT_RELATION}",
