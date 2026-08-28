@@ -12,7 +12,11 @@ def test_jenkins_ui_proxy_config(
     tinyproxy_port: int,
     tinyproxy_ip: str,
 ) -> None:
-    """Verify Jenkins displays the configured proxy host and port."""
+    """
+    Arrange: Use a Jenkins client configured with the proxy host and port fixtures.
+    Act: Fetch the Jenkins configuration page.
+    Assert: The page contains the configured proxy host and port.
+    """
     response = jenkins_with_proxy_client.requester.get_url(
         f"{proxy_jenkins_web_address}/manage/configure"
     )

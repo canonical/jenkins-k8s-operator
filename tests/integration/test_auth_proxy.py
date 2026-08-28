@@ -596,9 +596,9 @@ def test_auth_proxy_integration(
     jenkins_endpoint: str,
 ) -> None:
     """
-    arrange: deploy the Jenkins charm and establish auth_proxy relations.
-    act: send a request Jenkins.
-    assert: a 200 is returned.
+    Arrange: Use the Jenkins endpoint and patched DNS resolver supplied by the fixtures.
+    Act: Repeatedly request the Jenkins endpoint through ingress.
+    Assert: The response has status 200 and its URL contains the identity platform hostname.
     """
 
     def is_auth_ui():
@@ -723,9 +723,9 @@ def test_auth_proxy_integration_authorized(
     test_credentials: _TestCredentials,
 ) -> None:
     """
-    arrange: Deploy jenkins, the authentication bundle.
-    act: log in via IDP UI
-    assert: the browser is redirected to the Jenkins URL with response code 200
+    Arrange: Use the Jenkins endpoint, test credentials, TOTP, and injected DNS mapping from fixtures.
+    Act: Navigate to Jenkins and sign in through the identity-platform UI with the credentials and TOTP.
+    Assert: The browser URL matches the Jenkins hostname.
     """
     logger.info("Navigating to Jenkins public endpoint: %s", jenkins_endpoint)
     _goto_with_retry(page, jenkins_endpoint, timeout=60 * 3)

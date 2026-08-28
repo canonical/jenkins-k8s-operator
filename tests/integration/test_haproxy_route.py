@@ -304,7 +304,11 @@ def test_haproxy_route_serves_jenkins(
     machine_model: jubilant.Juju,
     ca_cert_path: str,
 ) -> None:
-    """Verify HAProxy serves Jenkins for the configured host header."""
+    """
+    Arrange: Configure Jenkins with `jenkins.internal` and relate it to HAProxy through the `haproxy-route` CMR.
+    Act: Send an HTTPS request to HAProxy with the `jenkins.internal` Host header.
+    Assert: The response status is 200 or 403 and its body contains Jenkins or `Authentication required`.
+    """
     model.config(application.name, {"external-hostname": EXTERNAL_HOSTNAME})
     model.integrate(
         f"{application.name}:{HAPROXY_ROUTE_RELATION}",
@@ -345,7 +349,11 @@ def test_haproxy_spoe_redirects_to_oidc(
     keycloak_oidc_meta: KeycloakOIDCMetadata,
     ca_cert_path: str,
 ) -> None:
-    """Verify HAProxy redirects an unauthenticated request to Keycloak."""
+    """
+    Arrange: Configure Jenkins with `jenkins-spoe.internal` and prepare the HAProxy SPOE authentication chain.
+    Act: Relate Jenkins to HAProxy through `haproxy-route` when needed, then send an unauthenticated HTTPS request with that Host header.
+    Assert: The response is 302 and its Location header identifies the Keycloak OpenID Connect authorization endpoint.
+    """
     model.config(application.name, {"external-hostname": SPOE_EXTERNAL_HOSTNAME})
     if HAPROXY_ROUTE_RELATION not in model.status().apps[application.name].relations:
         model.integrate(
@@ -391,7 +399,11 @@ def test_haproxy_server_and_gateway_agent_discovery(
     machine_model: jubilant.Juju,
     ca_cert_path: str,
 ) -> None:
-    """Verify SPOE server routing and independent Gateway API agent discovery."""
+    """
+    Arrange: Configure Jenkins with `jenkins-spoe.internal`, prepare the HAProxy SPOE chain, and set up Gateway API agent discovery at `jenkins-agent.internal`.
+    Act: Request the SPOE host without credentials and inspect each machine agent's `agent` relation URL.
+    Assert: The request returns 302, and every agent URL contains `jenkins-agent.internal`, not `jenkins-spoe.internal`, and does not start with `http://10.`.
+    """
     del gateway_agent_ingress
     model.config(application.name, {"external-hostname": SPOE_EXTERNAL_HOSTNAME})
     if HAPROXY_ROUTE_RELATION not in model.status().apps[application.name].relations:

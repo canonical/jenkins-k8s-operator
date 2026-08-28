@@ -15,7 +15,11 @@ def test_ingress_integration(
     application: JujuApplication,
     traefik_application_and_unit_ip: tuple[JujuApplication, str],
 ) -> None:
-    """Verify Jenkins is reachable through a Traefik ingress relation."""
+    """
+    Arrange: Establish the Jenkins-to-Traefik ingress relation.
+    Act: Repeatedly request Jenkins at its model-specific ingress path.
+    Assert: The response body contains "Authentication required".
+    """
     traefik_application, traefik_address = traefik_application_and_unit_ip
     ensure_relation(
         model=model,
@@ -43,7 +47,11 @@ def test_ingress_system_properties_flag_present(
     unit: str,
     traefik_application_and_unit_ip: tuple[JujuApplication, str],
 ) -> None:
-    """Confirm system properties are present in the running Java process."""
+    """
+    Arrange: Establish the Jenkins-to-Traefik ingress relation and select a Jenkins unit.
+    Act: Set the crumb issuer proxy compatibility system property and inspect the Java process command line.
+    Assert: The command line contains `-Djenkins.model.Jenkins.crumbIssuerProxyCompatibility=true`.
+    """
     traefik_application, _ = traefik_application_and_unit_ip
     ensure_relation(
         model=model,
