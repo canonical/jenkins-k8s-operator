@@ -225,9 +225,9 @@ def test_kubernetes_plugin(
     kube_core_client: kubernetes.client.CoreV1Api,
 ):
     """
-    arrange: given a Jenkins charm with kubernetes plugin installed and credentials from Canonical Kubernetes.
-    act: Run a job using an agent provided by the kubernetes plugin.
-    assert: Job succeeds.
+    Arrange: Given a Jenkins charm and a kubeconfig for Canonical Kubernetes.
+    Act: Install the Kubernetes plugins, configure a Kubernetes cloud, and run a job with a Kubernetes-plugin agent.
+    Assert: The Kubernetes credentials and cloud are created, and the build status is SUCCESS.
     """
     # Use plain credentials to be able to create secret-file/secret-text credentials
     install_plugins(unit_web_client, ("kubernetes", "plain-credentials"))

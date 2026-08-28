@@ -23,7 +23,11 @@ JOB_NAME = "test_job"
 
 @pytest.fixture(scope="module")
 def jenkins_upgrade_depl(model: jubilant.Juju) -> None:
-    """Deploy Jenkins and create a job before refreshing the charm."""
+    """
+    Arrange: Given a Juju model.
+    Act: Deploy Jenkins, wait for it to become active, and create ``test_job``.
+    Assert: Jenkins reaches an active state and ``test_job`` is created before the charm refresh.
+    """
     model.deploy(
         "jenkins-k8s",
         app=JENKINS_APP_NAME,
@@ -50,7 +54,11 @@ def test_jenkins_upgrade_check_job(
     jenkins_image: str,
     charm: str,
 ) -> None:
-    """Verify a Jenkins job survives a charm refresh."""
+    """
+    Arrange: Given Jenkins is deployed with ``test_job`` and a charm refresh is available.
+    Act: Record the current Jenkins version, refresh the charm, and wait for Jenkins to become active.
+    Assert: If the Jenkins version changes, ``test_job`` still exists after the refresh.
+    """
     unit_ips = get_model_unit_addresses(model, JENKINS_APP_NAME)
     assert unit_ips, f"Unit IP address not found for {JENKINS_APP_NAME}"
     address = f"http://{unit_ips[0]}:8080"

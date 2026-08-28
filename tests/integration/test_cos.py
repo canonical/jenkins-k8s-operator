@@ -39,7 +39,11 @@ def test_prometheus_integration(
     unit_web_client: UnitWebClient,
     prometheus_related: JujuApplication,
 ) -> None:
-    """Verify Prometheus scrapes Jenkins metrics."""
+    """
+    Arrange: Given the Jenkins application is related to Prometheus.
+    Act: Request Jenkins metrics and wait for every Prometheus unit to expose active scrape targets.
+    Assert: The metrics endpoint returns HTTP 200 and every Prometheus unit has active scrape targets.
+    """
     response = requests.get(f"{unit_web_client.web}/prometheus", timeout=10)
     assert response.status_code == 200
 
@@ -92,7 +96,11 @@ def test_loki_integration(
     loki_related: JujuApplication,
     kube_core_client: CoreV1Api,
 ) -> None:
-    """Verify Loki receives Jenkins logs."""
+    """
+    Arrange: Given the Jenkins application is related to Loki.
+    Act: Wait for Loki to expose Jenkins log data, then read the Jenkins pod log.
+    Assert: Loki exposes the expected Jenkins log data and the Jenkins pod log is not empty.
+    """
     wait_for(
         functools.partial(
             _loki_logs_exist,
@@ -170,7 +178,11 @@ def test_grafana_integration(
     application: JujuApplication,
     grafana_related: JujuApplication,
 ) -> None:
-    """Verify Grafana has the Jenkins dashboard."""
+    """
+    Arrange: Given the Jenkins application is related to Grafana.
+    Act: Log in to each Grafana unit and wait for the Jenkins dashboard.
+    Assert: Each Grafana unit accepts the login and exposes the Jenkins dashboard.
+    """
     unit_ips = get_model_unit_addresses(model, grafana_related.name)
     for ip in unit_ips:
         session = requests.Session()
