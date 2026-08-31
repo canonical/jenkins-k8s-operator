@@ -24,10 +24,12 @@ import state
 from .constants import ALLOWED_PLUGINS, K8S_CONTROLLER_NAME, LXD_CONTROLLER_NAME
 from .helpers import (
     AuthMethod,
+    application_ref,
     generate_jenkins_client,
-    get_model_unit_addresses,
+    get_model_unit_address,
     get_pod_ip,
     short_model_name,
+    web_address_for_ip,
 )
 from .types_ import (
     JujuApplication,
@@ -42,13 +44,6 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).parent / "data"
 DEFAULT_TEST_JCASC_REPOSITORY = "https://github.com/canonical/jenkins-k8s-operator.git"
 JENKINS_APP_NAME = "jenkins-k8s"
-
-
-def _application_ref(model: jubilant.Juju, name: str) -> JujuApplication:
-    """Return a stable application reference from the current model status."""
-    app_status = model.status().apps.get(name)
-    assert app_status, f"Application status {name} not found"
-    return JujuApplication(name=name, model=model, units=tuple(app_status.units))
 
 
 @pytest.fixture(scope="module", name="model")
@@ -140,7 +135,7 @@ def application_fixture(
         error=jubilant.any_error,
         timeout=30 * 60,
     )
-    return _application_ref(model, JENKINS_APP_NAME)
+    return application_ref(model, JENKINS_APP_NAME)
 
 
 @pytest.fixture(scope="module", name="unit")
@@ -162,15 +157,13 @@ def model_app_unit_fixture(
 @pytest.fixture(scope="function", name="unit_ip")
 def unit_ip_fixture(model: jubilant.Juju, application: JujuApplication) -> str:
     """Return the Jenkins unit IP address."""
-    unit_ips = get_model_unit_addresses(model, application.name)
-    assert unit_ips, f"Unit IP address not found for {application.name}"
-    return unit_ips[0]
+    return get_model_unit_address(model, application.name)
 
 
 @pytest.fixture(scope="function", name="web_address")
 def web_address_fixture(unit_ip: str) -> str:
     """Return the Jenkins web address."""
-    return f"http://{unit_ip}:8080"
+    return web_address_for_ip(unit_ip)
 
 
 @pytest.fixture(scope="function", name="jenkins_client")
@@ -232,7 +225,7 @@ def jenkins_k8s_agents_fixture(model: jubilant.Juju) -> JujuApplication:
         error=jubilant.any_error,
         timeout=20 * 60,
     )
-    return _application_ref(model, name)
+    return application_ref(model, name)
 
 
 @pytest.fixture(scope="module", name="k8s_agent_related_app")
@@ -270,7 +263,7 @@ def extra_jenkins_k8s_agents_fixture(model: jubilant.Juju) -> JujuApplication:
         error=jubilant.any_error,
         timeout=20 * 60,
     )
-    return _application_ref(model, name)
+    return application_ref(model, name)
 
 
 @pytest.fixture(scope="module", name="machine_model")
@@ -317,7 +310,7 @@ def jenkins_machine_agents_fixture(
         error=jubilant.any_error,
         timeout=20 * 60,
     )
-    return _application_ref(machine_model, name)
+    return application_ref(machine_model, name)
 
 
 @pytest.fixture(scope="function", name="machine_agent_related_app")
@@ -504,7 +497,7 @@ def jenkins_with_proxy_fixture(
         error=jubilant.any_error,
         timeout=30 * 60,
     )
-    application = _application_ref(model_with_proxy, name)
+    application = application_ref(model_with_proxy, name)
     yield application
     model_with_proxy.remove_application(name, force=True)
 
@@ -515,15 +508,13 @@ def proxy_jenkins_unit_ip_fixture(
     jenkins_with_proxy: JujuApplication,
 ) -> str:
     """Return the Jenkins unit IP under proxy configuration."""
-    unit_ips = get_model_unit_addresses(model_with_proxy, jenkins_with_proxy.name)
-    assert unit_ips, f"Unit IP address not found for {jenkins_with_proxy.name}"
-    return unit_ips[0]
+    return get_model_unit_address(model_with_proxy, jenkins_with_proxy.name)
 
 
 @pytest.fixture(scope="module", name="proxy_jenkins_web_address")
 def proxy_jenkins_web_address_fixture(proxy_jenkins_unit_ip: str) -> str:
     """Return the Jenkins web address under proxy configuration."""
-    return f"http://{proxy_jenkins_unit_ip}:8080"
+    return web_address_for_ip(proxy_jenkins_unit_ip)
 
 
 @pytest.fixture(scope="module", name="jenkins_with_proxy_client")
@@ -638,7 +629,7 @@ def prometheus_related_fixture(
         error=jubilant.any_error,
         timeout=30 * 60,
     )
-    return _application_ref(model, name)
+    return application_ref(model, name)
 
 
 @pytest.fixture(scope="module", name="loki_related")
@@ -660,7 +651,7 @@ def loki_related_fixture(
         error=jubilant.any_error,
         timeout=30 * 60,
     )
-    return _application_ref(model, name)
+    return application_ref(model, name)
 
 
 @pytest.fixture(scope="module", name="grafana_related")
@@ -682,7 +673,7 @@ def grafana_related_fixture(
         error=jubilant.any_error,
         timeout=30 * 60,
     )
-    return _application_ref(model, name)
+    return application_ref(model, name)
 
 
 @pytest.fixture(scope="module", name="keycloak_password")
@@ -836,6 +827,4 @@ def traefik_application_fixture(
         error=jubilant.any_error,
         timeout=30 * 60,
     )
-    unit_ips = get_model_unit_addresses(model, name)
-    assert unit_ips, f"Unit IP address not found for {name}"
-    return _application_ref(model, name), unit_ips[0]
+    return application_ref(model, name), get_model_unit_address(model, name)

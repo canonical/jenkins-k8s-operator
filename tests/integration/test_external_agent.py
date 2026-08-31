@@ -11,7 +11,7 @@ import pytest
 import state
 
 from .constants import LXD_CONTROLLER_NAME
-from .helpers import short_model_name
+from .helpers import application_ref, short_model_name
 from .types_ import JujuApplication
 
 
@@ -42,16 +42,8 @@ def ingress_traefik_fixture(model: jubilant.Juju) -> _IngressTraefiks:
         timeout=20 * 60,
     )
     return _IngressTraefiks(
-        agent_discovery=JujuApplication(
-            name=agent_discovery_name,
-            model=model,
-            units=tuple(model.status().apps[agent_discovery_name].units),
-        ),
-        server=JujuApplication(
-            name=server_name,
-            model=model,
-            units=tuple(model.status().apps[server_name].units),
-        ),
+        agent_discovery=application_ref(model, agent_discovery_name),
+        server=application_ref(model, server_name),
     )
 
 
