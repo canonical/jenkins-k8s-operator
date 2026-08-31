@@ -1,0 +1,39 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+project: jenkins-k8s-operator
+path: /home/ubuntu/proj
+kill-timeout: 60m
+warn-timeout: 1m
+backends:
+  integration-test:
+    type: integration-test
+    systems:
+    - ubuntu-24.04
+    # The integration tests run on the k8s model. LXD remains available for
+    # the machine-agent model used by the cross-model tests.
+    prepare: |
+      sudo -u ubuntu -H juju switch concierge-k8s:testing
+environment:
+  CONCIERGE: '$(HOST: echo "${CONCIERGE:-concierge-juju3.yaml}")'
+  OPCLI_GIT_REF: '$(HOST: echo "${OPCLI_GIT_REF:-main}")'
+exclude:
+- .git
+- .tox
+- .venv
+- .*_cache
+
+x-pytest-args: &pytest-args
+  pytest-arguments-template: |
+    --model testing
+    --kube-config=/home/ubuntu/.kube/config
+  pytest-environment-template: |
+    SPREAD_JOB={{ env.get("SPREAD_JOB", "") }}
+
+integration-suites:
+  tests/integration/:
+    <<: *pytest-args
+    working-dir: ./
+    summary: Canonical Kubernetes integration tests
+    backends:
+    - integration-test
