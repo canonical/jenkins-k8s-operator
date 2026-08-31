@@ -151,15 +151,6 @@ disallow_untyped_defs = true
 module = "tests.*"
 disallow_untyped_defs = false
 
-[[tool.mypy.overrides]]
-module = [
-  "tests.integration.test_cos",
-  "tests.integration.test_plugins_part_1",
-  "tests.integration.test_plugins_part_2",
-  "tests.integration.test_upgrade"
-]
-ignore_errors = true
-
 [tool.bandit]
 exclude_dirs = [ "/venv/" ]
 

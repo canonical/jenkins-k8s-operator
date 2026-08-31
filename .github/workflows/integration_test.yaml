@@ -3,10 +3,10 @@ name: Integration tests
 on:
   pull_request:
   schedule:
-  - cron: "0 15 * * SAT"
+    - cron: "0 15 * * SAT"
 
 jobs:
-  integration-tests-auth-proxy:
+  integration-tests:
     permissions:
       contents: read
       packages: write
@@ -15,43 +15,20 @@ jobs:
     secrets: inherit
     with:
       working-directory: .
-      spread-jobs-include: "*:build/tests/integration/run:test_*proxy"
-  integration-tests-ingress:
-    permissions:
-      contents: read
-      packages: write
-      actions: read
-    uses: canonical/charm-ci/.github/workflows/integration-test.yml@0eef5b8cbef3ee74907850f790cab64bcf0499e5 # v1.0.0
-    secrets: inherit
-    with:
-      working-directory: .
-      spread-jobs-include: "*:build/tests/integration/run:test_ingress"
-  integration-tests-haproxy-route:
-    permissions:
-      contents: read
-      packages: write
-      actions: read
-    uses: canonical/charm-ci/.github/workflows/integration-test.yml@0eef5b8cbef3ee74907850f790cab64bcf0499e5 # v1.0.0
-    secrets: inherit
-    with:
-      working-directory: .
-      spread-jobs-include: "*:build/tests/integration/run:test_haproxy_route"
   required_status_checks:
     name: Required Integration Test Status Checks
     runs-on: ubuntu-latest
     needs:
-      - integration-tests-auth-proxy
-      - integration-tests-ingress
-      - integration-tests-haproxy-route
+      - integration-tests
     if: always() && !cancelled()
     timeout-minutes: 5
     steps:
       - name: Check integration-test status
         run: |
-          RESULTS=("${{ needs.integration-tests-auth-proxy.result }}" "${{ needs.integration-tests-ingress.result }}" "${{ needs.integration-tests-haproxy-route.result }}")
-          for RESULT in "${RESULTS[@]}"; do
-            if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
-              echo "integration-test failed with status: $RESULT"
-              exit 1
-            fi
-          done
+          RESULT="${{ needs.integration-tests.result }}"
+          if [ "$RESULT" = "success" ] || [ "$RESULT" = "skipped" ]; then
+            exit 0
+          else
+            echo "integration-test failed with status: $RESULT"
+            exit 1
+          fi
