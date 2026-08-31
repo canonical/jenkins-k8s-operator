@@ -3,19 +3,21 @@
 
 """Integration tests for jenkins-k8s-operator charm."""
 
-import functools
 import json
 import logging
 import os
 
 import jenkinsapi.custom_exceptions
 import jenkinsapi.plugin
+import jenkinsapi.queue
 import kubernetes.client
 import kubernetes.config
 import pytest
 import requests
+import tenacity
 
 from .helpers import (
+    _raise_timeout,
     create_kubernetes_cloud,
     create_secret_file_credentials,
     declarative_pipeline_script,
@@ -24,11 +26,67 @@ from .helpers import (
     install_plugins,
     kubernetes_test_pipeline_script,
     pod_reachable_kube_config,
-    wait_for,
 )
 from .types_ import KeycloakOIDCMetadata, UnitWebClient
 
 logger = logging.getLogger(__name__)
+
+
+@tenacity.retry(
+    retry=tenacity.retry_any(
+        tenacity.retry_if_result(lambda result: not result),
+        tenacity.retry_if_exception_type(
+            (jenkinsapi.custom_exceptions.JenkinsAPIException, requests.RequestException)
+        ),
+    ),
+    stop=tenacity.stop_after_delay(300),
+    wait=tenacity.wait_fixed(10),
+    reraise=True,
+    retry_error_callback=_raise_timeout,
+)
+def _create_secret_file_credentials_with_retry(
+    unit_web_client: UnitWebClient, kube_config: str
+) -> str | None:
+    """Create Jenkins credentials, retrying while the credentials endpoint is unavailable."""
+    return create_secret_file_credentials(unit_web_client, kube_config)
+
+
+@tenacity.retry(
+    retry=tenacity.retry_any(
+        tenacity.retry_if_result(lambda result: not result),
+        tenacity.retry_if_exception_type(
+            (jenkinsapi.custom_exceptions.JenkinsAPIException, requests.RequestException)
+        ),
+    ),
+    stop=tenacity.stop_after_delay(300),
+    wait=tenacity.wait_fixed(10),
+    reraise=True,
+    retry_error_callback=_raise_timeout,
+)
+def _create_kubernetes_cloud_with_retry(
+    unit_web_client: UnitWebClient, credentials_id: str
+) -> str | None:
+    """Create the Jenkins Kubernetes cloud, retrying while Jenkins is settling."""
+    return create_kubernetes_cloud(unit_web_client, credentials_id)
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    stop=tenacity.stop_after_delay(10 * 60),
+    wait=tenacity.wait_fixed(5),
+    reraise=True,
+    retry_error_callback=_raise_timeout,
+)
+def _get_completed_build_with_retry(
+    queue_item: jenkinsapi.queue.QueueItem,
+) -> jenkinsapi.build.Build | None:
+    """Return a completed Jenkins build, retrying while it is queued or running."""
+    try:
+        queue_item.poll()
+        build = queue_item.get_build()
+    except (jenkinsapi.custom_exceptions.NotBuiltYet, requests.exceptions.HTTPError):
+        return None
+    return build if not build.is_running() else None
 
 
 def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
@@ -241,17 +299,17 @@ def test_kubernetes_plugin(
     logger.info("Jenkins version pre-build: %s", unit_web_client.client.version)
 
     jenkins_kube_config = pod_reachable_kube_config(kube_config, kube_core_client)
+
     try:
-        credentials_id = wait_for(
-            functools.partial(create_secret_file_credentials, unit_web_client, jenkins_kube_config)
+        credentials_id = _create_secret_file_credentials_with_retry(
+            unit_web_client, jenkins_kube_config
         )
     finally:
         if jenkins_kube_config != kube_config:
             os.unlink(jenkins_kube_config)
     assert credentials_id, "Failed to create credentials id"
-    kubernetes_cloud_name = wait_for(
-        functools.partial(create_kubernetes_cloud, unit_web_client, credentials_id)
-    )
+
+    kubernetes_cloud_name = _create_kubernetes_cloud_with_retry(unit_web_client, credentials_id)
     assert kubernetes_cloud_name, "Failed to create kubernetes cloud"
     job = unit_web_client.client.create_job(
         "kubernetes_plugin_test",
@@ -260,20 +318,8 @@ def test_kubernetes_plugin(
 
     queue_item = job.invoke()
 
-    def get_completed_build() -> jenkinsapi.build.Build | None:
-        try:
-            queue_item.poll()
-            build = queue_item.get_build()
-        except (jenkinsapi.custom_exceptions.NotBuiltYet, requests.exceptions.HTTPError):
-            return None
-        return build if not build.is_running() else None
-
     try:
-        build: jenkinsapi.build.Build = wait_for(
-            get_completed_build,
-            timeout=10 * 60,
-            check_interval=5,
-        )
+        build: jenkinsapi.build.Build = _get_completed_build_with_retry(queue_item)
     except TimeoutError as exc:
         try:
             queue_item.poll()

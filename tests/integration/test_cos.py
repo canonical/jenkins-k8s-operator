@@ -3,15 +3,15 @@
 
 """Integration tests for jenkins-k8s-operator with COS."""
 
-import functools
 import logging
 from collections.abc import Iterable
 
 import jubilant
 import requests
+import tenacity
 from kubernetes.client import CoreV1Api
 
-from .helpers import get_model_unit_addresses, short_model_name, wait_for
+from .helpers import _raise_timeout, get_model_unit_addresses, short_model_name
 from .types_ import JujuApplication, UnitWebClient
 
 logger = logging.getLogger(__name__)
@@ -47,10 +47,17 @@ def test_prometheus_integration(
     response = requests.get(f"{unit_web_client.web}/prometheus", timeout=10)
     assert response.status_code == 200
 
-    wait_for(
-        functools.partial(_prometheus_targets_exist, model, prometheus_related.name),
-        timeout=10 * 60,
+    @tenacity.retry(
+        retry=tenacity.retry_if_result(lambda result: not result),
+        stop=tenacity.stop_after_delay(10 * 60),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
     )
+    def prometheus_targets_are_ready() -> bool:
+        return _prometheus_targets_exist(model, prometheus_related.name)
+
+    prometheus_targets_are_ready()
 
 
 def log_files_exist(
@@ -101,16 +108,23 @@ def test_loki_integration(
     Act: Wait for Loki to expose Jenkins log data, then read the Jenkins pod log.
     Assert: Loki exposes the expected Jenkins log data and the Jenkins pod log is not empty.
     """
-    wait_for(
-        functools.partial(
-            _loki_logs_exist,
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_result(lambda result: not result),
+        stop=tenacity.stop_after_delay(10 * 60),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
+    def loki_logs_are_ready() -> bool:
+        return _loki_logs_exist(
             model,
             application.name,
             loki_related.name,
             ("/var/lib/jenkins/logs/jenkins.log",),
-        ),
-        timeout=10 * 60,
-    )
+        )
+
+    loki_logs_are_ready()
 
     kube_log = kube_core_client.read_namespaced_pod_log(
         name=f"{application.name}-0",
@@ -184,19 +198,44 @@ def test_grafana_integration(
     Assert: Each Grafana unit accepts the login and exposes the Jenkins dashboard.
     """
     unit_ips = get_model_unit_addresses(model, grafana_related.name)
+    assert unit_ips, f"Unit IP address not found for {grafana_related.name}"
     for ip in unit_ips:
         session = requests.Session()
-        wait_for(
-            functools.partial(
-                _grafana_login_is_ready,
+
+        @tenacity.retry(
+            retry=tenacity.retry_if_result(lambda result: not result),
+            stop=tenacity.stop_after_delay(10 * 60),
+            wait=tenacity.wait_fixed(10),
+            reraise=True,
+            retry_error_callback=_raise_timeout,
+        )
+        def grafana_login_is_ready(
+            unit_ip: str = ip,
+            login_session: requests.Session = session,
+        ) -> bool:
+            return _grafana_login_is_ready(
                 model,
                 grafana_related.units[0],
-                ip,
-                session,
+                unit_ip,
+                login_session,
+            )
+
+        grafana_login_is_ready()
+
+        @tenacity.retry(
+            retry=tenacity.retry_any(
+                tenacity.retry_if_result(lambda result: not result),
+                tenacity.retry_if_exception_type((requests.RequestException, ValueError)),
             ),
-            timeout=10 * 60,
+            stop=tenacity.stop_after_delay(60 * 20),
+            wait=tenacity.wait_fixed(10),
+            reraise=True,
+            retry_error_callback=_raise_timeout,
         )
-        wait_for(
-            functools.partial(dashboard_exist, loggedin_session=session, unit_address=ip),
-            timeout=60 * 20,
-        )
+        def dashboard_is_ready(
+            login_session: requests.Session = session,
+            unit_ip: str = ip,
+        ) -> int:
+            return dashboard_exist(loggedin_session=login_session, unit_address=unit_ip)
+
+        dashboard_is_ready()

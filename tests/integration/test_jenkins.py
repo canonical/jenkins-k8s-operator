@@ -13,15 +13,16 @@ import jenkinsapi
 import jubilant
 import pytest
 import requests
+import tenacity
 import yaml
 from jenkinsapi.custom_exceptions import JenkinsAPIException
 
 from .helpers import (
+    _raise_timeout,
     dispatch_update_status,
     exec_in_container,
     gen_test_job_xml,
     install_plugins,
-    wait_for,
 )
 from .types_ import JujuApplication, UnitWebClient
 
@@ -120,6 +121,13 @@ def _wait_for_exported_config(
 ) -> None:
     """Wait until Jenkins exposes the expected JCasC after a reload."""
 
+    @tenacity.retry(
+        retry=tenacity.retry_if_result(lambda result: not result),
+        stop=tenacity.stop_after_delay(10 * 60),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
     def ready() -> bool:
         try:
             response = client.requester.post_url(url)
@@ -127,7 +135,7 @@ def _wait_for_exported_config(
             return False
         return response.status_code == 200 and all(value in response.text for value in expected)
 
-    wait_for(ready, timeout=10 * 60, check_interval=10)
+    ready()
 
 
 def test_storage_mount(

@@ -35,7 +35,7 @@ from playwright.sync_api import (
 )
 
 from .constants import K8S_CONTROLLER_NAME
-from .helpers import short_model_name, wait_for
+from .helpers import _raise_timeout, short_model_name
 from .types_ import JujuApplication
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,13 @@ def _goto_with_retry(
 ) -> None:
     """Retry browser navigation to tolerate transient redirect aborts."""
 
+    @tenacity.retry(
+        retry=tenacity.retry_if_result(lambda result: not result),
+        stop=tenacity.stop_after_delay(timeout),
+        wait=tenacity.wait_fixed(check_interval),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
     def navigate() -> bool:
         try:
             response = page.goto(
@@ -70,7 +77,7 @@ def _goto_with_retry(
             logger.info("Navigation attempt to %s failed: %s", url, exc)
             return False
 
-    wait_for(navigate, timeout=timeout, check_interval=check_interval)
+    navigate()
 
 
 @tenacity.retry(
@@ -400,6 +407,16 @@ def _restart_coredns(kube_core_client: kubernetes.client.CoreV1Api) -> None:
             logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
             kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
 
+    @tenacity.retry(
+        retry=tenacity.retry_any(
+            tenacity.retry_if_result(lambda result: not result),
+            tenacity.retry_if_exception_type(kubernetes.client.exceptions.ApiException),
+        ),
+        stop=tenacity.stop_after_delay(5 * 60),
+        wait=tenacity.wait_fixed(5),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
     def pods_are_ready() -> bool:
         current_pods = kube_core_client.list_namespaced_pod(
             namespace="kube-system", label_selector=selector
@@ -413,7 +430,7 @@ def _restart_coredns(kube_core_client: kubernetes.client.CoreV1Api) -> None:
             for pod in current_pods
         )
 
-    wait_for(pods_are_ready, timeout=5 * 60, check_interval=5)
+    pods_are_ready()
 
 
 @pytest.fixture(scope="module", name="inject_dns")
@@ -599,7 +616,17 @@ def test_auth_proxy_integration(
     Assert: The response has status 200 and its URL contains the identity platform hostname.
     """
 
-    def is_auth_ui():
+    @tenacity.retry(
+        retry=tenacity.retry_any(
+            tenacity.retry_if_result(lambda result: not result),
+            tenacity.retry_if_exception_type(requests.RequestException),
+        ),
+        stop=tenacity.stop_after_delay(60 * 3),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
+    )
+    def is_auth_ui() -> bool:
         """Get the application request via ingress.
 
         Returns:
@@ -618,10 +645,7 @@ def test_auth_proxy_integration(
         )
         return response.status_code == 200 and IDENTITY_PLATFORM_HOSTNAME in response.url
 
-    wait_for(
-        is_auth_ui,
-        timeout=60 * 3,
-    )
+    is_auth_ui()
 
 
 @dataclass

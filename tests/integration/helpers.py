@@ -10,7 +10,7 @@ import tempfile
 import textwrap
 import time
 import typing
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from enum import Enum
 from urllib.parse import urlparse
 
@@ -20,6 +20,7 @@ import kubernetes.client
 import requests
 import tenacity
 import yaml
+from jenkinsapi.custom_exceptions import JenkinsAPIException
 
 import jenkins
 
@@ -33,6 +34,11 @@ def application_ref(model: jubilant.Juju, name: str) -> JujuApplication:
     app_status = model.status().apps.get(name)
     assert app_status, f"Application status {name} not found"
     return JujuApplication(name=name, model=model, units=tuple(app_status.units))
+
+
+def _raise_timeout(_: tenacity.RetryCallState) -> typing.NoReturn:
+    """Raise the timeout used when a tenacity polling retry expires."""
+    raise TimeoutError()
 
 
 @tenacity.retry(
@@ -61,23 +67,44 @@ def install_plugins(
     assert res.status_code == 200, "Failed to request plugins install"
 
     # Block until the UI does not have "Pending" in the download progress column.
-    wait_for(
-        lambda: "Pending"
-        not in str(
-            client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
-            encoding="utf-8",
+    @tenacity.retry(
+        retry=tenacity.retry_any(
+            tenacity.retry_if_result(lambda result: not result),
+            tenacity.retry_if_exception_type((JenkinsAPIException, requests.RequestException)),
         ),
-        timeout=60 * 10,
+        stop=tenacity.stop_after_delay(60 * 10),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
     )
+    def plugins_downloaded() -> bool:
+        try:
+            response = client.requester.post_url(f"{web}/manage/pluginManager/updates/body")
+        except (JenkinsAPIException, requests.RequestException) as exc:
+            logger.info("Plugin download status is not ready: %s", exc)
+            return False
+        return "Pending" not in str(response.content, encoding="utf-8")
+
+    plugins_downloaded()
 
     # The library can return 503 while Jenkins restarts, so restart and wait
     # for the authenticated endpoint rather than checking one status code.
     client.safe_restart()
-    wait_for(
-        lambda: requests.get(web, timeout=10).status_code == 403,
-        timeout=60 * 10,
-        check_interval=10,
+
+    @tenacity.retry(
+        retry=tenacity.retry_any(
+            tenacity.retry_if_result(lambda result: not result),
+            tenacity.retry_if_exception_type(requests.RequestException),
+        ),
+        stop=tenacity.stop_after_delay(60 * 10),
+        wait=tenacity.wait_fixed(10),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
     )
+    def jenkins_is_ready() -> bool:
+        return requests.get(web, timeout=10).status_code == 403
+
+    jenkins_is_ready()
 
 
 def get_model_unit_addresses(model: jubilant.Juju, app_name: str) -> list[str]:
@@ -242,27 +269,20 @@ def get_pod_ip(
                 return pod.status.pod_ip
         return None
 
-    return typing.cast(
-        str,
-        wait_for(get_ready_pod_ip, timeout=300, check_interval=5),
+    @tenacity.retry(
+        retry=tenacity.retry_any(
+            tenacity.retry_if_result(lambda result: not result),
+            tenacity.retry_if_exception_type(kubernetes.client.exceptions.ApiException),
+        ),
+        stop=tenacity.stop_after_delay(300),
+        wait=tenacity.wait_fixed(5),
+        reraise=True,
+        retry_error_callback=_raise_timeout,
     )
+    def get_ready_pod_ip_with_retry() -> str | None:
+        return get_ready_pod_ip()
 
-
-def wait_for(
-    func: Callable[[], typing.Any],
-    timeout: int = 300,
-    check_interval: int = 10,
-) -> typing.Any:
-    """Wait for a function to return a truthy value."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if result := func():
-            return result
-        time.sleep(check_interval)
-
-    if result := func():
-        return result
-    raise TimeoutError()
+    return typing.cast(str, get_ready_pod_ip_with_retry())
 
 
 def _wait_for_apps(

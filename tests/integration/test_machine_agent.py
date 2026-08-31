@@ -31,7 +31,7 @@ def test_jenkins_machine_agent_relation(
            application to become idle.
     Assert:
         1. A job succeeds on the machine agent.
-        2. No Jenkins node containing the server application name remains after relation removal.
+        2. No Jenkins node containing the machine-agent application name remains after relation removal.
     """
     machine_relation = f"{short_model_name(machine_model)}-{state.AGENT_RELATION}"
     model.consume(
@@ -43,12 +43,14 @@ def test_jenkins_machine_agent_relation(
         machine_relation,
     )
     machine_model.wait(
-        lambda status: jubilant.all_active(status, jenkins_machine_agents.name),
+        lambda status: jubilant.all_active(status, jenkins_machine_agents.name)
+        and jubilant.all_agents_idle(status, jenkins_machine_agents.name),
         error=jubilant.any_error,
         timeout=20 * 60,
     )
     model.wait(
-        lambda status: jubilant.all_active(status, application.name),
+        lambda status: jubilant.all_active(status, application.name)
+        and jubilant.all_agents_idle(status, application.name),
         error=jubilant.any_error,
         timeout=20 * 60,
     )
@@ -70,4 +72,4 @@ def test_jenkins_machine_agent_relation(
         timeout=20 * 60,
     )
 
-    assert not any(application.name in key for key in jenkins_client.nodes.iterkeys())
+    assert not any(jenkins_machine_agents.name in key for key in jenkins_client.nodes.iterkeys())
