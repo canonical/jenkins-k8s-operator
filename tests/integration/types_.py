@@ -6,37 +6,33 @@
 import dataclasses
 
 import jenkinsapi.jenkins
-from juju.application import Application
-from juju.model import Model
-from juju.unit import Unit
+import jubilant
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
+class JujuApplication:
+    """Reference to an application managed by a Jubilant model."""
+
+    name: str
+    model: jubilant.Juju
+    units: tuple[str, ...]
+
+
+@dataclasses.dataclass(frozen=True)
 class ModelAppUnit:
-    """The model, application, unit wrapper dataclass.
+    """The model, application, and unit used by an integration test."""
 
-    Attributes:
-        model: The model under test.
-        app: The jenkins application under test.
-        unit: The jenkins application unit under test.
-    """
-
-    model: Model
-    app: Application
-    unit: Unit
+    model: jubilant.Juju
+    app: JujuApplication
+    unit: str
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class UnitWebClient:
-    """The unit, web address, jenkins client wrapper dataclass.
+    """A Jenkins unit name, URL, and API client."""
 
-    Attributes:
-        unit: The jenkins application unit.
-        web: The jenkins unit web address.
-        client: The client connected to jenkins unit.
-    """
-
-    unit: Unit
+    model: jubilant.Juju
+    unit: str
     web: str
     client: jenkinsapi.jenkins.Jenkins
 
@@ -65,7 +61,7 @@ class KeycloakOIDCMetadata:
         password: The login password.
         realm: The Keycloak realm name.
         client_id: The Keycloak oidc client identifier.
-        client_secret: The Keycloak oidc client secret.
+        client_secret: The Keycloak client secret.
         well_known_endpoint: Well-known registry URI that can be used to automatically configure
             the endpoints.
     """

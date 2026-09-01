@@ -3,39 +3,40 @@
 
 """Integration tests for jenkins-k8s-operator with auth_proxy."""
 
-import asyncio
 import json
 import logging
 import re
 import secrets
 import socket
+import time
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator, Callable, Coroutine
+from typing import Any
 
 import jubilant
 import kubernetes
 import pyotp
 import pytest
-import pytest_asyncio
 import requests
 import tenacity
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from juju.application import Application
-from juju.client._definitions import UnitStatus
-from juju.model import Model
-from playwright.async_api import (
+from playwright.sync_api import (
     Browser,
     BrowserContext,
     BrowserType,
     Page,
-    async_playwright,
+    Playwright,
     expect,
+    sync_playwright,
 )
-from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import Playwright as AsyncPlaywright
+from playwright.sync_api import (
+    Error as PlaywrightError,
+)
 
-from .helpers import wait_for
+from .constants import K8S_CONTROLLER_NAME
+from .helpers import short_model_name, wait_for
+from .types_ import JujuApplication
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ IDENTITY_PLATFORM_HOSTNAME = "idp.test"
 JENKINS_HOSTNAME = "jenkins.test"
 
 
-async def _goto_with_retry(
+def _goto_with_retry(
     page: Page,
     url: str,
     *,
@@ -52,9 +53,9 @@ async def _goto_with_retry(
 ) -> None:
     """Retry browser navigation to tolerate transient redirect aborts."""
 
-    async def navigate() -> bool:
+    def navigate() -> bool:
         try:
-            response = await page.goto(
+            response = page.goto(
                 url=url,
                 timeout=30_000,
                 wait_until="domcontentloaded",
@@ -69,7 +70,7 @@ async def _goto_with_retry(
             logger.info("Navigation attempt to %s failed: %s", url, exc)
             return False
 
-    await wait_for(navigate, timeout=timeout, check_interval=check_interval)
+    wait_for(navigate, timeout=timeout, check_interval=check_interval)
 
 
 @dataclass
@@ -101,7 +102,12 @@ class _IdentityPlatformOffers:
 @pytest.fixture(scope="module", name="identity_platform_juju")
 def identity_platform_juju_fixture(request: pytest.FixtureRequest):
     """The identity platform juju model."""
-    with jubilant.temp_model(keep=request.config.option.keep_models) as juju:
+    with jubilant.temp_model(
+        keep=request.config.getoption("--keep-models"),
+        controller=K8S_CONTROLLER_NAME,
+        cloud="k8s",
+    ) as juju:
+        juju.wait_timeout = 30 * 60
         yield juju
 
 
@@ -162,15 +168,26 @@ def identity_platform_offers_fixture(
 
     hydra_endpoint = "oauth"
     send_ca_cert_endpoint = "send-ca-cert"
-    juju.offer(f"{juju.model}.{hydra}", endpoint=hydra_endpoint, name=hydra_endpoint)
-    juju.offer(f"{juju.model}.{ca}", endpoint=send_ca_cert_endpoint, name=send_ca_cert_endpoint)
+    model_name = short_model_name(juju)
+    juju.offer(
+        f"{model_name}.{hydra}",
+        controller=K8S_CONTROLLER_NAME,
+        endpoint=hydra_endpoint,
+        name=hydra_endpoint,
+    )
+    juju.offer(
+        f"{model_name}.{ca}",
+        controller=K8S_CONTROLLER_NAME,
+        endpoint=send_ca_cert_endpoint,
+        name=send_ca_cert_endpoint,
+    )
 
     juju.wait(jubilant.all_active, timeout=60 * 30)
 
     return _IdentityPlatformOffers(
-        oauth=_Offer(url=f"admin/{juju.model}.{hydra_endpoint}", saas=hydra_endpoint),
+        oauth=_Offer(url=f"admin/{model_name}.{hydra_endpoint}", saas=hydra_endpoint),
         send_ca_cert=_Offer(
-            url=f"admin/{juju.model}.{send_ca_cert_endpoint}",
+            url=f"admin/{model_name}.{send_ca_cert_endpoint}",
             saas=send_ca_cert_endpoint,
         ),
     )
@@ -193,14 +210,14 @@ class _JenkinsCharms:
 
 @pytest.fixture(scope="module", name="jenkins_k8s_charms")
 def jenkins_k8s_charms_fixture(
-    application: Application,
+    application: JujuApplication,
     identity_platform_offers: _IdentityPlatformOffers,
     # This fixture was deliberately chosen to be added as an argument here to explicitly show the
     # dependency.
     inject_dns: None,  # pylint: disable=unused-argument
 ):
     """The Jenkins K8s charms model."""
-    juju = jubilant.Juju(model=application.model.name)
+    juju = application.model
 
     traefik_public = "traefik-k8s"
     ca = "self-signed-certificates"
@@ -234,7 +251,7 @@ def jenkins_k8s_charms_fixture(
     def _is_transient_controller_error(exc: BaseException) -> bool:
         error_message = str(exc)
         return (
-            "controller-service.controller-microk8s.svc.cluster.local" in error_message
+            "controller-service.controller-concierge-k8s.svc.cluster.local" in error_message
             or "api connection open timed out" in error_message
             or "cannot open api" in error_message
         )
@@ -283,7 +300,7 @@ def identity_platform_traefik_ip_fixture(
     def _get_lb_ip() -> str:
         idp_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
             name=f"{identity_platform_public_traefik}-lb",
-            namespace=identity_platform_juju.model,
+            namespace=short_model_name(identity_platform_juju),
         )
         ingress = idp_traefik_loadbalancer_service.status.load_balancer.ingress
         assert ingress, "Identity platform traefik load balancer ingress not ready"
@@ -298,7 +315,7 @@ def identity_platform_traefik_ip_fixture(
 def jenkins_traefik_ip_fixture(
     kube_core_client: kubernetes.client.CoreV1Api,
     jenkins_k8s_charms: _JenkinsCharms,
-    model: Model,
+    model: jubilant.Juju,
 ):
     """Jenkins traefik ip."""
 
@@ -311,7 +328,7 @@ def jenkins_traefik_ip_fixture(
     )
     def _get_lb_ip() -> str:
         jenkins_traefik_loadbalancer_service = kube_core_client.read_namespaced_service(
-            name=f"{jenkins_k8s_charms.traefik}-lb", namespace=model.name
+            name=f"{jenkins_k8s_charms.traefik}-lb", namespace=short_model_name(model)
         )
         ingress = jenkins_traefik_loadbalancer_service.status.load_balancer.ingress
         assert ingress, "Jenkins traefik load balancer ingress not ready"
@@ -352,6 +369,55 @@ def patch_dns_resolver_fixture(identity_platform_traefik_ip: str, jenkins_traefi
     socket.getaddrinfo = original_getaddrinfo
 
 
+def _get_coredns_config_map(
+    kube_core_client: kubernetes.client.CoreV1Api,
+) -> kubernetes.client.V1ConfigMap:
+    """Find the CoreDNS ConfigMap installed by Canonical Kubernetes."""
+    config_maps = kube_core_client.list_namespaced_config_map(
+        namespace="kube-system",
+        label_selector="app.kubernetes.io/instance=ck-dns",
+    ).items
+    config_maps = [
+        config_map
+        for config_map in config_maps
+        if config_map.data and "Corefile" in config_map.data
+    ]
+    names = [
+        config_map.metadata.name
+        for config_map in config_maps
+        if config_map.metadata and config_map.metadata.name
+    ]
+    assert len(config_maps) == 1, f"Expected one CoreDNS ConfigMap, found {names}"
+    config_map = config_maps[0]
+    assert config_map.metadata and config_map.metadata.name
+    return config_map
+
+
+def _restart_coredns(kube_core_client: kubernetes.client.CoreV1Api) -> None:
+    """Restart CoreDNS and wait until its replacement pods are ready."""
+    selector = "app.kubernetes.io/name=coredns"
+    pods = kube_core_client.list_namespaced_pod(namespace="kube-system", label_selector=selector)
+    for pod in pods.items:
+        if pod.metadata and pod.metadata.name:
+            logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
+            kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+
+    def pods_are_ready() -> bool:
+        current_pods = kube_core_client.list_namespaced_pod(
+            namespace="kube-system", label_selector=selector
+        ).items
+        return bool(current_pods) and all(
+            pod.status
+            and pod.status.phase == "Running"
+            and pod.status.container_statuses
+            and all(container.ready for container in pod.status.container_statuses)
+            and not (pod.metadata and pod.metadata.deletion_timestamp)
+            for pod in current_pods
+        )
+
+    wait_for(pods_are_ready, timeout=5 * 60, check_interval=5)
+
+
 @pytest.fixture(scope="module", name="inject_dns")
 def inject_dns_fixture(
     kube_core_client: kubernetes.client.CoreV1Api,
@@ -366,156 +432,115 @@ def inject_dns_fixture(
     )
     coredns_configmap_manifest = yaml.safe_load(coredns_yaml)
 
-    original_manifest = kube_core_client.read_namespaced_config_map(
-        name="coredns", namespace="kube-system"
-    )
-    kube_core_client.replace_namespaced_config_map(
-        name="coredns", namespace="kube-system", body=coredns_configmap_manifest
+    original_manifest = _get_coredns_config_map(kube_core_client)
+    coredns_name = original_manifest.metadata.name
+    original_corefile = (original_manifest.data or {}).get("Corefile", "")
+    kube_core_client.patch_namespaced_config_map(
+        name=coredns_name,
+        namespace="kube-system",
+        body={"data": {"Corefile": coredns_configmap_manifest["data"]["Corefile"]}},
     )
 
-    pods = kube_core_client.list_namespaced_pod(
-        namespace="kube-system", label_selector="k8s-app=kube-dns"
-    )
-    for pod in pods.items:
-        logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-        kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+    _restart_coredns(kube_core_client)
 
     yield
 
-    coredns_configmap_manifest["data"]["Corefile"] = original_manifest.data.get("Corefile", "")
-    kube_core_client.replace_namespaced_config_map(
-        name="coredns", namespace="kube-system", body=coredns_configmap_manifest
+    kube_core_client.patch_namespaced_config_map(
+        name=coredns_name,
+        namespace="kube-system",
+        body={"data": {"Corefile": original_corefile}},
     )
-    pods = kube_core_client.list_namespaced_pod(
-        namespace="kube-system", label_selector="k8s-app=kube-dns"
-    )
-    for pod in pods.items:
-        logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-        kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+    _restart_coredns(kube_core_client)
 
 
-# The playwright fixtures are taken from:
-# https://github.com/microsoft/playwright-python/blob/main/tests/async/conftest.py
-@pytest_asyncio.fixture(scope="module", name="playwright")
-async def playwright_fixture() -> AsyncGenerator[AsyncPlaywright, None]:
-    """Playwright object."""
-    async with async_playwright() as playwright_object:
+# The Playwright fixtures are kept module-scoped so both auth tests share
+# one browser process while each test receives a fresh page.
+@pytest.fixture(scope="module", name="playwright")
+def playwright_fixture() -> Generator[Playwright, None, None]:
+    """Yield a synchronous Playwright instance."""
+    with sync_playwright() as playwright_object:
         yield playwright_object
 
 
-@pytest_asyncio.fixture(scope="module", name="browser_type")
-async def browser_type_fixture(
-    playwright: AsyncPlaywright,
-) -> AsyncGenerator[BrowserType, None]:
-    """Browser type for playwright."""
-    yield playwright.chromium
+@pytest.fixture(scope="module", name="browser_type")
+def browser_type_fixture(playwright: Playwright) -> BrowserType:
+    """Return the Chromium browser type."""
+    return playwright.chromium
 
 
-@pytest_asyncio.fixture(scope="module", name="browser_factory")
-async def browser_factory_fixture(
+@pytest.fixture(scope="module", name="browser_factory")
+def browser_factory_fixture(
     browser_type: BrowserType,
-) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, Browser]], None]:
-    """Browser factory."""
-    browsers = []
+) -> Generator[Callable[..., Browser], None, None]:
+    """Yield a browser factory and close all created browsers afterwards."""
+    browsers: list[Browser] = []
 
-    async def launch(**kwargs: Any) -> Browser:
-        """Launch browser.
-
-        Args:
-            kwargs: kwargs.
-
-        Returns:
-            a browser instance.
-        """
-        browser = await browser_type.launch(**kwargs)
+    def launch(**kwargs: Any) -> Browser:
+        """Launch and track one browser."""
+        browser = browser_type.launch(**kwargs)
         browsers.append(browser)
         return browser
 
     yield launch
     for browser in browsers:
-        await browser.close()
+        browser.close()
 
 
-@pytest_asyncio.fixture(scope="module", name="browser")
-async def browser_fixture(
-    browser_factory: Callable[..., Coroutine[Any, Any, Browser]],
+@pytest.fixture(scope="module", name="browser")
+def browser_fixture(
+    browser_factory: Callable[..., Browser],
     identity_platform_traefik_ip: str,
     jenkins_traefik_ip: str,
-) -> AsyncGenerator[Browser, None]:
-    """Browser."""
-    browser = await browser_factory(
-        # DO NOT modify /etc/hosts file to map the custom hosts for testing, since it will
-        # interfere with the following browser host resolver settings.
+) -> Generator[Browser, None, None]:
+    """Yield a browser with deterministic host resolution."""
+    browser = browser_factory(
         args=[
-            f"--host-resolver-rules=MAP "
-            f"{IDENTITY_PLATFORM_HOSTNAME} {identity_platform_traefik_ip},"
-            f"MAP {JENKINS_HOSTNAME} {jenkins_traefik_ip}"
+            f"--host-resolver-rules=MAP {IDENTITY_PLATFORM_HOSTNAME} "
+            f"{identity_platform_traefik_ip},MAP {JENKINS_HOSTNAME} {jenkins_traefik_ip}"
         ]
     )
     yield browser
-    await browser.close()
+    browser.close()
 
 
-@pytest_asyncio.fixture(scope="module", name="context_factory")
-async def context_factory_fixture(
+@pytest.fixture(scope="module", name="context_factory")
+def context_factory_fixture(
     browser: Browser,
-) -> AsyncGenerator[Callable[..., Coroutine[Any, Any, BrowserContext]], None]:
-    """Playwright context factory."""
-    contexts = []
+) -> Generator[Callable[..., BrowserContext], None, None]:
+    """Yield a browser context factory."""
+    contexts: list[BrowserContext] = []
 
-    async def launch(**kwargs: Any) -> BrowserContext:
-        """Launch browser.
-
-        Args:
-            kwargs: kwargs.
-
-        Returns:
-            the browser context.
-        """
-        context = await browser.new_context(**kwargs)
+    def launch(**kwargs: Any) -> BrowserContext:
+        """Create and track one browser context."""
+        context = browser.new_context(**kwargs)
         contexts.append(context)
         return context
 
     yield launch
     for context in contexts:
-        await context.close()
+        context.close()
 
 
-@pytest_asyncio.fixture(scope="module", name="context")
-async def context_fixture(
-    context_factory: Callable[..., Coroutine[Any, Any, BrowserContext]],
-) -> AsyncGenerator[BrowserContext, None]:
-    """Playwright context."""
-    context = await context_factory(
+@pytest.fixture(scope="module", name="context")
+def context_fixture(
+    context_factory: Callable[..., BrowserContext],
+) -> Generator[BrowserContext, None, None]:
+    """Yield the default browser context."""
+    context = context_factory(
         ignore_https_errors=True,
         record_video_dir="videos/",
         record_video_size={"width": 1280, "height": 720},
     )
     yield context
-    await context.close()
+    context.close()
 
 
-@pytest_asyncio.fixture(scope="function", name="page")
-async def page_fixture(context: BrowserContext) -> AsyncGenerator[Page, None]:
-    """Playwright page."""
-    new_page = await context.new_page()
-    yield new_page
-    await new_page.close()
-
-
-async def get_application_unit_status(model: Model, application: str) -> UnitStatus:
-    """Get the application unit status object.
-
-    Args:
-        model: The Juju model connection object.
-        application: The application unit to get the unit status.
-
-    Returns:
-        The application first unit's status.
-    """
-    status = await model.get_status()
-    unit_status: UnitStatus = status["applications"][application]["units"][f"{application}/0"]
-    return unit_status
+@pytest.fixture(scope="function", name="page")
+def page_fixture(context: BrowserContext) -> Generator[Page, None, None]:
+    """Yield a fresh page for each auth test."""
+    page = context.new_page()
+    yield page
+    page.close()
 
 
 def _get_traefik_proxied_endpoints(juju: jubilant.Juju, traefik_app_name: str) -> dict:
@@ -544,9 +569,9 @@ def _get_traefik_proxied_endpoints(juju: jubilant.Juju, traefik_app_name: str) -
 
 
 @pytest.fixture(scope="module", name="jenkins_endpoint")
-def jenkins_endpoint_fixture(model: Model, jenkins_k8s_charms: _JenkinsCharms):
+def jenkins_endpoint_fixture(model: jubilant.Juju, jenkins_k8s_charms: _JenkinsCharms):
     """The Jenkins endpoint URL from public traefik."""
-    juju = jubilant.Juju(model=model.name)
+    juju = model
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(AssertionError),
@@ -566,10 +591,8 @@ def jenkins_endpoint_fixture(model: Model, jenkins_k8s_charms: _JenkinsCharms):
     return _get_jenkins_endpoint()
 
 
-@pytest.mark.abort_on_fail
-@pytest.mark.asyncio
 @pytest.mark.usefixtures("patch_dns_resolver")
-async def test_auth_proxy_integration(
+def test_auth_proxy_integration(
     jenkins_endpoint: str,
 ) -> None:
     """
@@ -597,7 +620,7 @@ async def test_auth_proxy_integration(
         )
         return response.status_code == 200 and IDENTITY_PLATFORM_HOSTNAME in response.url
 
-    await wait_for(
+    wait_for(
         is_auth_ui,
         timeout=60 * 3,
     )
@@ -631,8 +654,8 @@ def test_credentials_fixture() -> _TestCredentials:
     )
 
 
-@pytest_asyncio.fixture(scope="function", name="totp")
-async def totp_fixture(
+@pytest.fixture(scope="function", name="totp")
+def totp_fixture(
     identity_platform_juju: jubilant.Juju,
     page: Page,
     test_credentials: _TestCredentials,
@@ -640,7 +663,7 @@ async def totp_fixture(
     """User OTP fixture."""
     juju = identity_platform_juju
 
-    await asyncio.sleep(5)
+    time.sleep(5)
 
     # output looks something like:
     # expires-at: "2025-09-18T17:44:47.541400692Z"
@@ -664,38 +687,36 @@ async def totp_fixture(
     logger.info("Created admin account, reset link: %s, code: %s", reset_page_url, reset_code)
 
     # sleep for 5 seconds to prevent weird behavior with reset link giving 500 errors.
-    await asyncio.sleep(5)
+    time.sleep(5)
 
     logger.info("Navigating to reset link: %s", reset_page_url)
-    await _goto_with_retry(page, reset_page_url)
-    await expect(page.get_by_label("Recovery code", exact=True)).to_be_visible(timeout=1000 * 60)
+    _goto_with_retry(page, reset_page_url)
+    expect(page.get_by_label("Recovery code", exact=True)).to_be_visible(timeout=1000 * 60)
 
-    logger.info("Page content:%s", await page.content())
-    await page.get_by_label("Recovery code", exact=True).fill(reset_code)
-    await page.get_by_role("button", name="Submit").click()
-    await expect(page.get_by_label("New password", exact=True)).to_be_visible(timeout=1000 * 60)
+    logger.info("Page content:%s", page.content())
+    page.get_by_label("Recovery code", exact=True).fill(reset_code)
+    page.get_by_role("button", name="Submit").click()
+    expect(page.get_by_label("New password", exact=True)).to_be_visible(timeout=1000 * 60)
 
     logger.info("Changing password: %s", test_credentials.password)
-    await page.get_by_label("New password", exact=True).fill(test_credentials.password)
-    await page.get_by_label("Confirm New password", exact=True).fill(test_credentials.password)
-    await page.get_by_role("button", name="Reset password").click()
-    await expect(page.get_by_role("code")).to_be_visible(timeout=1000 * 60)
+    page.get_by_label("New password", exact=True).fill(test_credentials.password)
+    page.get_by_label("Confirm New password", exact=True).fill(test_credentials.password)
+    page.get_by_role("button", name="Reset password").click()
+    expect(page.get_by_role("code")).to_be_visible(timeout=1000 * 60)
 
     logger.info("Getting OTP Code")
-    code = await page.get_by_role("code").text_content()
+    code = page.get_by_role("code").text_content()
     assert code, "Code content not found"
     logger.info("Got OTP Code: %s", code)
     totp = pyotp.TOTP(code)
-    await page.get_by_label("Verify code", exact=True).fill(totp.now())
-    await page.get_by_role("button", name="Save").click()
+    page.get_by_label("Verify code", exact=True).fill(totp.now())
+    page.get_by_role("button", name="Save").click()
 
     return totp
 
 
-@pytest.mark.abort_on_fail
-@pytest.mark.asyncio
 @pytest.mark.usefixtures("inject_dns")
-async def test_auth_proxy_integration_authorized(
+def test_auth_proxy_integration_authorized(
     jenkins_endpoint: str,
     page: Page,
     totp: pyotp.TOTP,
@@ -707,24 +728,24 @@ async def test_auth_proxy_integration_authorized(
     assert: the browser is redirected to the Jenkins URL with response code 200
     """
     logger.info("Navigating to Jenkins public endpoint: %s", jenkins_endpoint)
-    await _goto_with_retry(page, jenkins_endpoint, timeout=60 * 3)
-    await page.wait_for_url(re.compile(r"https://idp\.test/.*"), timeout=1000 * 60)
-    await expect(page.get_by_label("Email")).to_be_visible(timeout=1000 * 60)
+    _goto_with_retry(page, jenkins_endpoint, timeout=60 * 3)
+    page.wait_for_url(re.compile(r"https://idp\.test/.*"), timeout=1000 * 60)
+    expect(page.get_by_label("Email")).to_be_visible(timeout=1000 * 60)
 
     logger.info(
         "Filling in login-ui credentials: %s, %s",
         test_credentials.email,
         test_credentials.password,
     )
-    await page.get_by_label("Email").fill(test_credentials.email)
-    await page.get_by_label("Password").fill(test_credentials.password)
-    await page.get_by_role("button", name="Sign in").click()
+    page.get_by_label("Email").fill(test_credentials.email)
+    page.get_by_label("Password").fill(test_credentials.password)
+    page.get_by_role("button", name="Sign in").click()
     logger.info("Signing in...")
-    await expect(page.get_by_label("Authentication code")).to_be_visible(timeout=1000 * 60)
+    expect(page.get_by_label("Authentication code")).to_be_visible(timeout=1000 * 60)
 
     logger.info("Authenticating with TOTP")
-    await page.get_by_label("Authentication code").fill(totp.now())
-    await page.get_by_role("button", name="Sign in").click()
+    page.get_by_label("Authentication code").fill(totp.now())
+    page.get_by_role("button", name="Sign in").click()
     logger.info("Signing in...")
 
-    await expect(page).to_have_url(re.compile(r"https://jenkins.test/*"))
+    expect(page).to_have_url(re.compile(r"https://jenkins.test/*"))

@@ -71,6 +71,19 @@ class ReconcileBlockedError(Exception):
         super().__init__(message)
 
 
+class ReconcileWaitingError(Exception):
+    """Raised when reconciliation must wait for relation data."""
+
+    def __init__(self, message: str):
+        """Initialize ReconcileWaitingError.
+
+        Args:
+            message: The waiting status message to surface to the user.
+        """
+        self.message = message
+        super().__init__(message)
+
+
 class JenkinsK8sOperatorCharm(ops.CharmBase):
     """Charmed Jenkins."""
 
@@ -217,6 +230,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             event: The triggering Juju event (unused, present for observe callback compatibility).
 
+        Reconcile runs in two phases: a blocking core workload path (storage,
+        config, pebble, startup) followed by non-blocking integration reconcilers
+        (agents, auth proxy, plugins). The unit enters WaitingStatus when the
+        dedicated agent-discovery-ingress relation exists but has not published an
+        endpoint yet.
         """
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
@@ -228,7 +246,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         if charm_state is None:
             return
 
+        # Phase 1 - core workload path. Every step must succeed for Jenkins to
+        # serve; a domain failure here blocks the unit.
         try:
+            # Refresh HAProxy before waiting for Jenkins so backend address changes
+            # are propagated even when Jenkins API readiness is transient.
+            logger.info("Reconciling haproxy route")
+            self._reconcile_haproxy_route(charm_state)
+
             # Storage ownership only needs correction on attach/upgrade events
             logger.info("Reconciling storage")
             self._reconcile_storage(container)
@@ -253,20 +278,23 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             # Post Jenkins server startup reconciliations
             logger.info("Reconciling API Token")
             self._reconcile_api_token(admin_client=admin_client)
-            logger.info("Reconciling agents")
-            self._reconcile_agents(charm_state, client=admin_client)
-            logger.info("Reconciling agent discovery")
-            self._reconcile_agent_discovery()
-            logger.info("Reconciling auth proxy")
-            self._reconcile_auth_proxy(charm_state)
-            logger.info("Reconciling haproxy route")
-            self._reconcile_haproxy_route(charm_state)
-            logger.info("Reconciling plugins")
-            self._reconcile_plugins(charm_state, admin_client, container)
         except ReconcileBlockedError as exc:
             self.unit.status = ops.BlockedStatus(exc.message)
             return
 
+        # Phase 2 - integration-facing reconcilers. These are independent of each
+        # other and must not block the core path; the agent pipeline defers with a
+        # waiting message instead of failing reconciliation.
+        agent_reconcile_waiting = self._reconcile_agent_pipeline(charm_state, client=admin_client)
+        logger.info("Reconciling auth proxy")
+        self._reconcile_auth_proxy(charm_state)
+        logger.info("Reconciling plugins")
+        self._reconcile_plugins(charm_state, admin_client, container)
+
+        # Single status resolution point: a deferred integration wins over Active.
+        if agent_reconcile_waiting:
+            self.unit.status = ops.WaitingStatus(agent_reconcile_waiting)
+            return
         self.unit.status = ops.ActiveStatus(self._agent_status_message)
 
     def _reconcile_storage(self, container: ops.Container) -> None:
@@ -355,12 +383,37 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
         container.replan()
 
+    def _reconcile_agent_pipeline(
+        self, state: State, client: jenkins.Jenkins
+    ) -> typing.Optional[str]:
+        """Reconcile agent nodes and discovery data as one pipeline.
+
+        Args:
+            state: The current charm state.
+            client: Jenkins API client.
+
+        Returns:
+            A waiting message when the agent ingress is not ready, otherwise None.
+        """
+        try:
+            logger.info("Reconciling agents")
+            self._reconcile_agents(state, client=client)
+            logger.info("Reconciling agent discovery")
+            self._reconcile_agent_discovery()
+        except ReconcileWaitingError as exc:
+            logger.info("Waiting to reconcile agent discovery: %s", exc.message)
+            return exc.message
+        return None
+
     def _reconcile_agents(self, state: State, client: jenkins.Jenkins) -> None:
         """Reconcile Jenkins agent nodes to match relation state.
 
         Args:
             state: The current charm state.
             client: Jenkins API client.
+
+        Raises:
+            ReconcileWaitingError: if agent-discovery-ingress has no URL yet.
         """
         relation_agent_names = {
             agent.name for agents in (state.agent_relation_meta or {}).values() for agent in agents
@@ -376,6 +429,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             logger.error(message)
             raise ReconcileBlockedError(message)
 
+        # Resolve the dedicated ingress URL before mutating Jenkins nodes or
+        # relation data. Never replace it with a stale pod address while the
+        # ingress-configurator is still converging.
+        agent_discovery_url = self._agent_discovery_url
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
         agent_node_names = [node.name for node in agent_nodes]
@@ -385,6 +442,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 agent_relation=state.agent_relation_meta,
                 agent_node_names=agent_node_names,
                 api_client=client,
+                agent_discovery_url=agent_discovery_url,
             )
             self._update_agent_nodes_from_relation(
                 agent_relation=state.agent_relation_meta,
@@ -426,12 +484,21 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 raise
 
     def _reconcile_agent_discovery(self) -> None:
-        """Update the agent discovery URL in all connected agent relations."""
-        for relation in self.model.relations[AGENT_RELATION]:
+        """Update the agent discovery URL in all connected agent relations.
+
+        Raises:
+            ReconcileWaitingError: if agent-discovery-ingress has no URL yet.
+        """
+        relations = self.model.relations[AGENT_RELATION]
+        if not relations:
+            return
+
+        agent_discovery_url = self._agent_discovery_url
+        for relation in relations:
             relation_discovery_url = relation.data[self.model.unit].get("url")
-            if relation_discovery_url and relation_discovery_url == self._agent_discovery_url:
+            if relation_discovery_url and relation_discovery_url == agent_discovery_url:
                 continue
-            relation.data[self.model.unit].update({"url": self._agent_discovery_url})
+            relation.data[self.model.unit].update({"url": agent_discovery_url})
 
     def _reconcile_auth_proxy(self, state: State) -> None:
         """Reconcile auth proxy configuration.
@@ -479,6 +546,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             service=self.app.name,
             ports=[jenkins.WEB_PORT],
             hostname=state.external_hostname,
+            check_path=jenkins.JENKINS_HEALTH_CHECK_PATH,
         )
 
     def _reconcile_plugins(
@@ -522,46 +590,57 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
     def _agent_discovery_url(self) -> str:
         """Return the external hostname to be passed to agents via the integration.
 
-        If there is no ingress, use the pod IP as hostname. The pod IP is preferred
-        over the pod name or a K8s service because those rely on the cluster's DNS
-        service, while the IP address is sometimes routable from the outside.
+        If the dedicated ingress relation exists but has no URL yet, reconciliation
+        waits instead of publishing a pod address. If no ingress is intended, the
+        pod IP is preferred over a pod name or K8s service because those rely on
+        cluster DNS.
+
+        Raises:
+            ReconcileWaitingError: if the dedicated ingress relation has no URL yet.
 
         Returns:
-            The charm's agent discovery url.
+            The charm's agent discovery URL.
         """
-        if ingress_url := self.agent_discovery_ingress.url:
-            pass
-        elif ingress_url := self.server_ingress.url:
+        if self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is not None:
+            if ingress_url := self.agent_discovery_ingress.url:
+                return ingress_url.rstrip("/")
+            raise ReconcileWaitingError(
+                "Waiting for agent-discovery-ingress relation data to become available."
+            )
+        if ingress_url := self.server_ingress.url:
             logger.warning(
                 "Using public ingress with protected endpoints (e.g. oathkeeper)"
                 "will result in agent discovery failure. Use %s for agents discovery.",
                 AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             )
-        else:
-            # Fallback to pod IP
-            if binding := self.model.get_binding("juju-info"):
-                try:
-                    unit_ip = str(binding.network.bind_address)
-                    ipaddress.ip_address(unit_ip)
-                    return f"http://{unit_ip}:{jenkins.WEB_PORT}{self._jenkins_prefix}"
-                except ValueError as exc:
-                    logger.error(
-                        "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
-                        exc,
-                    )
+            return ingress_url.rstrip("/")
 
-            # Fallback to using socket.fqdn
-            return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
+        # Fallback to pod IP
+        if binding := self.model.get_binding("juju-info"):
+            try:
+                unit_ip = str(binding.network.bind_address)
+                ipaddress.ip_address(unit_ip)
+                return f"http://{unit_ip}:{jenkins.WEB_PORT}{self._jenkins_prefix}"
+            except ValueError as exc:
+                logger.error(
+                    "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
+                    exc,
+                )
 
-        return ingress_url.rstrip("/")
+        # Fallback to using socket.fqdn
+        return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
 
     @property
     def _agent_status_message(self) -> str:
-        """Status message regarding agent discovery ingress configuration."""
-        if self.server_ingress.url and not self.agent_discovery_ingress.url:
-            return (
-                f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
-            )
+        """Return guidance when machine agents lack dedicated ingress."""
+        if (
+            self.model.relations[AGENT_RELATION]
+            and self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is None
+        ):
+            if self.model.get_relation(HAPROXY_ROUTE_RELATION_NAME):
+                return f"Configure {AGENT_DISCOVERY_INGRESS_RELATION_NAME} for machine agents"
+            if self.server_ingress.url:
+                return f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
         return ""
 
     def _add_agent_nodes_from_relation(
@@ -569,6 +648,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
         agent_node_names: list[str],
         api_client: jenkins.Jenkins,
+        agent_discovery_url: str,
     ) -> None:
         """Add agent nodes from relation data.
 
@@ -576,6 +656,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             agent_relation: Mapping of agent relation to agent metadata.
             agent_node_names: The node names of agents.
             api_client: The Jenkins API client.
+            agent_discovery_url: The resolved ingress URL for agents.
 
         Raises:
             JenkinsError: if there was an error while registering agent nodes to Jenkins.
@@ -591,7 +672,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     logger.exception("Failed to register agent node: %s", unregistered_agent)
                     raise
 
-            agent_relation_data: dict[str, str] = {"url": self._agent_discovery_url}
+            agent_relation_data: dict[str, str] = {"url": agent_discovery_url}
             for meta in agents:
                 try:
                     agent_relation_data[f"{meta.name}_secret"] = api_client.get_node_secret(
