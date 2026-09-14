@@ -10,6 +10,7 @@ from juju.application import Application
 from juju.model import Model
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
+from .constants import MACHINE_CONTROLLER_NAME
 from .helpers import get_model_unit_addresses
 from .types_ import KeycloakOIDCMetadata
 
@@ -185,7 +186,7 @@ async def test_haproxy_route_serves_jenkins(
     # Cross-model relation: k8s model (jenkins) -> machine model (haproxy)
     await model.integrate(
         f"{application.name}:{HAPROXY_ROUTE_RELATION}",
-        f"localhost:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
+        f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
     )
     await machine_model.wait_for_idle(apps=[haproxy.name], wait_for_active=True, timeout=20 * 60)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
@@ -245,7 +246,7 @@ async def test_haproxy_spoe_redirects_to_oidc(
     if HAPROXY_ROUTE_RELATION not in existing_endpoints:
         await model.integrate(
             f"{application.name}:{HAPROXY_ROUTE_RELATION}",
-            f"localhost:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
+            f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
         )
     await machine_model.wait_for_idle(
         apps=[haproxy_with_spoe.name], wait_for_active=True, timeout=20 * 60

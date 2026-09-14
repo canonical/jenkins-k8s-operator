@@ -23,11 +23,18 @@ from juju.model import Model
 from juju.unit import Unit
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 from pytest import FixtureRequest
+
+try:
+    from opcli.pytest_plugin import CharmPathList
+except ImportError:
+    # opcli requires Python >= 3.12; on older Pythons the charm fixture
+    # falls back to building the charm locally.
+    CharmPathList = dict  # type: ignore[assignment,misc]
 from pytest_operator.plugin import OpsTest
 
 import state
 
-from .constants import ALLOWED_PLUGINS
+from .constants import ALLOWED_PLUGINS, MACHINE_CONTROLLER_NAME
 from .helpers import (
     AuthMethod,
     generate_jenkins_client,
@@ -81,8 +88,11 @@ def cloud_fixture(ops_test: OpsTest) -> Optional[str]:
 
 @pytest.fixture(scope="module", name="jenkins_image")
 def jenkins_image_fixture(request: FixtureRequest) -> str:
-    """The OCI image for Jenkins charm."""
+    """The OCI image for Jenkins charm (from pytest-opcli artifacts or --jenkins-image)."""
     jenkins_image = request.config.getoption("--jenkins-image")
+    if not jenkins_image:
+        # Resolve lazily so local runs with --jenkins-image don't need artifacts.build.yaml.
+        jenkins_image = request.getfixturevalue("resource_images")["jenkins-image"]
     assert jenkins_image, (
         "--jenkins-image argument is required which should contain the name of the OCI image."
     )
@@ -97,16 +107,18 @@ def num_units_fixture(request: FixtureRequest) -> int:
 
 @pytest_asyncio.fixture(scope="module", name="charm")
 async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Path:
-    """The path to charm."""
-    charms = request.config.getoption("--charm-file")
-    if not charms:
+    """The path to the built charm (from pytest-opcli artifacts or built locally)."""
+    try:
+        # Resolve lazily so local runs without artifacts.build.yaml build the charm.
+        paths = request.getfixturevalue("charm_paths")["jenkins-k8s"]
+    except Exception:
         charm = await ops_test.build_charm(".")
         assert charm, "Charm not built"
         return charm
-    # Charms with multiple bases are passed in (22.04, 24.04), choose the latest base.
-    latest_charm = sorted(charms)[-1]
-    logger.info("Available charms: %s, using: %s", charms, latest_charm)
-    return latest_charm
+    # Charms with multiple bases are built (22.04, 24.04), choose the latest base.
+    if len(paths) == 1:
+        return Path(paths.path)
+    return Path(paths["ubuntu@24.04"])
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
@@ -301,7 +313,7 @@ async def extra_jenkins_k8s_agents_fixture(
 async def machine_controller_fixture() -> AsyncGenerator[Controller, None]:
     """The lxd controller."""
     controller = Controller()
-    await controller.connect_controller("localhost")
+    await controller.connect_controller(MACHINE_CONTROLLER_NAME)
     yield controller
     await controller.disconnect()
 
@@ -314,7 +326,7 @@ async def machine_model_fixture(
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
     model = await machine_controller.add_model(machine_model_name)
-    await model.connect(f"localhost:admin/{model.name}")
+    await model.connect(f"{MACHINE_CONTROLLER_NAME}:admin/{model.name}")
     yield model
     if not request.config.option.keep_models:
         await machine_controller.destroy_models(
@@ -355,7 +367,7 @@ async def machine_agent_related_app_fixture(
     )
     await model.integrate(
         f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
+        f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
     await machine_model.wait_for_idle(
         apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5

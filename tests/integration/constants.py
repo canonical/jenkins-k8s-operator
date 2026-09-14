@@ -4,6 +4,8 @@
 """Constants for Jenkins-k8s-operator charm integration tests."""
 
 ALLOWED_PLUGINS = ("git", "blueocean", "openid")
+# LXD controller name provisioned by concierge in charm-ci (local and CI runs).
+MACHINE_CONTROLLER_NAME = "concierge-lxd"
 INSTALLED_PLUGINS = ("git", "timestamper", "blueocean", "openid")
 REMOVED_PLUGINS = set(INSTALLED_PLUGINS) - set(ALLOWED_PLUGINS)
 ALL_PLUGINS = [

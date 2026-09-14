@@ -12,6 +12,8 @@ from juju.model import Model
 
 import state
 
+from .constants import MACHINE_CONTROLLER_NAME
+
 
 @dataclass
 class _IngressTraefiks:
@@ -76,7 +78,7 @@ async def test_agent_discovery_ingress_integration(
 
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
+        f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
     await machine_model.wait_for_idle(
         apps=[jenkins_machine_agents.name], wait_for_active=True, raise_on_error=False
