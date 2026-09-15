@@ -114,7 +114,7 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Pat
         return Path(request.getfixturevalue("charm_paths")["jenkins-k8s"].path)
     try:
         paths = request.getfixturevalue("charm_paths")["jenkins-k8s"]
-    except pytest.UsageError:
+    except (pytest.FixtureLookupError, pytest.UsageError):
         charm = await ops_test.build_charm(".")
         assert charm, "Charm not built"
         return charm
