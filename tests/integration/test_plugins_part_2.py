@@ -6,12 +6,15 @@
 import functools
 import json
 import logging
+import os
 
 import jenkinsapi.plugin
+import jenkinsapi.queue
 import kubernetes.client
 import kubernetes.config
 import pytest
 import requests
+from jenkinsapi.custom_exceptions import NotBuiltYet
 
 from .helpers import (
     create_kubernetes_cloud,
@@ -21,6 +24,7 @@ from .helpers import (
     gen_test_pipeline_with_custom_script_xml,
     install_plugins,
     kubernetes_test_pipeline_script,
+    pod_reachable_kube_config,
     wait_for,
 )
 from .types_ import KeycloakOIDCMetadata, UnitWebClient
@@ -216,13 +220,25 @@ async def test_openid_connect_plugin(
     assert res.status_code == 200, "Failed to load Jenkins native login UI."
 
 
+def _get_completed_build(
+    queue_item: jenkinsapi.queue.QueueItem,
+) -> "jenkinsapi.build.Build | None":
+    """Return a completed Jenkins build, retrying while it is queued or running."""
+    try:
+        queue_item.poll()
+        build = queue_item.get_build()
+    except (NotBuiltYet, requests.HTTPError):
+        return None
+    return build if not build.is_running() else None
+
+
 async def test_kubernetes_plugin(
     unit_web_client: UnitWebClient,
     kube_config: str,
     kube_core_client: kubernetes.client.CoreV1Api,
 ):
     """
-    arrange: given a Jenkins charm with kubernetes plugin installed and credentials from microk8s.
+    arrange: given a Jenkins charm with kubernetes plugin installed and credentials from the k8s backend.
     act: Run a job using an agent provided by the kubernetes plugin.
     assert: Job succeeds.
     """
@@ -237,9 +253,14 @@ async def test_kubernetes_plugin(
 
     logger.info("Jenkins version pre-build: %s", unit_web_client.client.version)
 
-    credentials_id = await wait_for(
-        functools.partial(create_secret_file_credentials, unit_web_client, kube_config)
-    )
+    jenkins_kube_config = pod_reachable_kube_config(kube_config, kube_core_client)
+    try:
+        credentials_id = await wait_for(
+            functools.partial(create_secret_file_credentials, unit_web_client, jenkins_kube_config)
+        )
+    finally:
+        if jenkins_kube_config != kube_config:
+            os.unlink(jenkins_kube_config)
     assert credentials_id, "Failed to create credentials id"
     kubernetes_cloud_name = await wait_for(
         functools.partial(create_kubernetes_cloud, unit_web_client, credentials_id)
@@ -251,9 +272,40 @@ async def test_kubernetes_plugin(
     )
 
     queue_item = job.invoke()
-    queue_item.block_until_complete()
 
-    build: jenkinsapi.build.Build = queue_item.get_build()
+    try:
+        build = await wait_for(
+            functools.partial(_get_completed_build, queue_item),
+            timeout=10 * 60,
+            check_interval=5,
+        )
+    except TimeoutError as exc:
+        try:
+            queue_item.poll()
+            running_build = queue_item.get_build()
+        except (NotBuiltYet, requests.HTTPError):
+            running_build = None
+        if running_build:
+            try:
+                logger.error(
+                    "Kubernetes plugin build console (last 10000 characters):\n%s",
+                    running_build.get_console()[-10000:],
+                )
+            except Exception as console_exc:  # pylint: disable=broad-except
+                logger.warning("Could not fetch Kubernetes plugin build console: %s", console_exc)
+        try:
+            system_log_resp = unit_web_client.client.requester.get_url(
+                f"{unit_web_client.web}/log/all/consoleText"
+            )
+            logger.error(
+                "Jenkins system log (last 10000 characters):\n%s",
+                system_log_resp.text[-10000:],
+            )
+        except Exception as log_exc:  # pylint: disable=broad-except
+            logger.warning("Could not fetch Jenkins system log: %s", log_exc)
+        _log_k8s_agent_pods(kube_core_client)
+        raise TimeoutError("Kubernetes plugin build did not complete within 600 seconds") from exc
+
     build_status = build.get_status()
     log_stream = build.stream_logs()
     logs = "".join(log_stream)
