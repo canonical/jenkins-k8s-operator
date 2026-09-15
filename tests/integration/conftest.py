@@ -100,13 +100,7 @@ def num_units_fixture(request: FixtureRequest) -> int:
 
 
 def _select_charm_path(paths: Any) -> str:
-    """Select the charm path from a pytest-opcli CharmPathList.
-
-    artifacts.build.yaml lists one build per charm base for the active
-    architecture (e.g. ubuntu@22.04 and ubuntu@24.04), so ``.path`` is
-    ambiguous. Pick the newest base, mirroring the historical CI behaviour of
-    sorting --charm-file entries and taking the last one.
-    """
+    """Return the charm path, choosing the newest base when several are built."""
     if len(paths) == 1:
         return paths.path
     return paths[sorted(paths.bases)[-1]]
@@ -117,15 +111,10 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Pat
     """The path to the built charm (from pytest-opcli artifacts or built locally)."""
     charm_files = request.config.getoption("--charm-file", default=None)
     if charm_files:
-        # Repo-style bare paths (Python < 3.12, where pytest-opcli is not
-        # installed): each entry is a path, sorted so the latest base wins.
-        if not any("=" in entry for entry in charm_files):
-            return Path(sorted(charm_files)[-1])
         return Path(request.getfixturevalue("charm_paths")["jenkins-k8s"].path)
     try:
-        # Resolve lazily so local runs without artifacts.build.yaml build the charm.
         paths = request.getfixturevalue("charm_paths")["jenkins-k8s"]
-    except Exception:
+    except pytest.UsageError:
         charm = await ops_test.build_charm(".")
         assert charm, "Charm not built"
         return charm
