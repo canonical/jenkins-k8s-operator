@@ -232,6 +232,38 @@ def _get_completed_build(
     return build if not build.is_running() else None
 
 
+def _log_build_timeout_diagnostics(
+    queue_item: jenkinsapi.queue.QueueItem,
+    unit_web_client: UnitWebClient,
+    kube_core_client: kubernetes.client.CoreV1Api,
+) -> None:
+    """Log build console, Jenkins system log and agent pod state on build timeout."""
+    try:
+        queue_item.poll()
+        running_build = queue_item.get_build()
+    except (NotBuiltYet, requests.HTTPError):
+        running_build = None
+    if running_build:
+        try:
+            logger.error(
+                "Kubernetes plugin build console (last 10000 characters):\n%s",
+                running_build.get_console()[-10000:],
+            )
+        except requests.RequestException as console_exc:
+            logger.warning("Could not fetch Kubernetes plugin build console: %s", console_exc)
+    try:
+        system_log_resp = unit_web_client.client.requester.get_url(
+            f"{unit_web_client.web}/log/all/consoleText"
+        )
+        logger.error(
+            "Jenkins system log (last 10000 characters):\n%s",
+            system_log_resp.text[-10000:],
+        )
+    except requests.RequestException as log_exc:
+        logger.warning("Could not fetch Jenkins system log: %s", log_exc)
+    _log_k8s_agent_pods(kube_core_client)
+
+
 async def test_kubernetes_plugin(
     unit_web_client: UnitWebClient,
     kube_config: str,
@@ -280,30 +312,7 @@ async def test_kubernetes_plugin(
             check_interval=5,
         )
     except TimeoutError as exc:
-        try:
-            queue_item.poll()
-            running_build = queue_item.get_build()
-        except (NotBuiltYet, requests.HTTPError):
-            running_build = None
-        if running_build:
-            try:
-                logger.error(
-                    "Kubernetes plugin build console (last 10000 characters):\n%s",
-                    running_build.get_console()[-10000:],
-                )
-            except Exception as console_exc:  # pylint: disable=broad-except
-                logger.warning("Could not fetch Kubernetes plugin build console: %s", console_exc)
-        try:
-            system_log_resp = unit_web_client.client.requester.get_url(
-                f"{unit_web_client.web}/log/all/consoleText"
-            )
-            logger.error(
-                "Jenkins system log (last 10000 characters):\n%s",
-                system_log_resp.text[-10000:],
-            )
-        except Exception as log_exc:  # pylint: disable=broad-except
-            logger.warning("Could not fetch Jenkins system log: %s", log_exc)
-        _log_k8s_agent_pods(kube_core_client)
+        _log_build_timeout_diagnostics(queue_item, unit_web_client, kube_core_client)
         raise TimeoutError("Kubernetes plugin build did not complete within 600 seconds") from exc
 
     build_status = build.get_status()
