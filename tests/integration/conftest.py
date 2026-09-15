@@ -9,7 +9,7 @@ import random
 import secrets
 import string
 from pathlib import Path
-from typing import AsyncGenerator, Iterable, Optional
+from typing import Any, AsyncGenerator, Iterable, Optional
 
 import jenkinsapi.jenkins
 import kubernetes.config
@@ -23,13 +23,6 @@ from juju.model import Model
 from juju.unit import Unit
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 from pytest import FixtureRequest
-
-try:
-    from opcli.pytest_plugin import CharmPathList
-except ImportError:
-    # opcli requires Python >= 3.12; on older Pythons the charm fixture
-    # falls back to building the charm locally.
-    CharmPathList = dict  # type: ignore[assignment,misc]
 from pytest_operator.plugin import OpsTest
 
 import state
@@ -89,12 +82,13 @@ def cloud_fixture(ops_test: OpsTest) -> Optional[str]:
 @pytest.fixture(scope="module", name="jenkins_image")
 def jenkins_image_fixture(request: FixtureRequest) -> str:
     """The OCI image for Jenkins charm (from pytest-opcli artifacts or --jenkins-image)."""
-    jenkins_image = request.config.getoption("--jenkins-image")
-    if not jenkins_image:
-        # Resolve lazily so local runs with --jenkins-image don't need artifacts.build.yaml.
-        jenkins_image = request.getfixturevalue("resource_images")["jenkins-image"]
+    jenkins_image = (
+        request.config.getoption("--jenkins-image")
+        or request.getfixturevalue("resource_images")["jenkins-image"]
+    )
     assert jenkins_image, (
-        "--jenkins-image argument is required which should contain the name of the OCI image."
+        "Jenkins OCI image not resolved: pass --jenkins-image or run 'opcli artifacts build' "
+        "so pytest-opcli can resolve resources from artifacts.build.yaml."
     )
     return jenkins_image
 
@@ -105,9 +99,29 @@ def num_units_fixture(request: FixtureRequest) -> int:
     return int(request.config.getoption("--num-units"))
 
 
+def _select_charm_path(paths: Any) -> str:
+    """Select the charm path from a pytest-opcli CharmPathList.
+
+    artifacts.build.yaml lists one build per charm base for the active
+    architecture (e.g. ubuntu@22.04 and ubuntu@24.04), so ``.path`` is
+    ambiguous. Pick the newest base, mirroring the historical CI behaviour of
+    sorting --charm-file entries and taking the last one.
+    """
+    if len(paths) == 1:
+        return paths.path
+    return paths[sorted(paths.bases)[-1]]
+
+
 @pytest_asyncio.fixture(scope="module", name="charm")
 async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Path:
     """The path to the built charm (from pytest-opcli artifacts or built locally)."""
+    charm_files = request.config.getoption("--charm-file", default=None)
+    if charm_files:
+        # Repo-style bare paths (Python < 3.12, where pytest-opcli is not
+        # installed): each entry is a path, sorted so the latest base wins.
+        if not any("=" in entry for entry in charm_files):
+            return Path(sorted(charm_files)[-1])
+        return Path(request.getfixturevalue("charm_paths")["jenkins-k8s"].path)
     try:
         # Resolve lazily so local runs without artifacts.build.yaml build the charm.
         paths = request.getfixturevalue("charm_paths")["jenkins-k8s"]
@@ -115,10 +129,7 @@ async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Pat
         charm = await ops_test.build_charm(".")
         assert charm, "Charm not built"
         return charm
-    # Charms with multiple bases are built (22.04, 24.04), choose the latest base.
-    if len(paths) == 1:
-        return Path(paths.path)
-    return Path(paths["ubuntu@24.04"])
+    return Path(_select_charm_path(paths))
 
 
 @pytest_asyncio.fixture(scope="module", name="application")

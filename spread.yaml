@@ -1,7 +1,13 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+# Spread drives the charm-ci integration tests. opcli expands the virtual
+# "integration-test" backend below into "integration-test-local" (LXD VM on a
+# dev machine) or "integration-test-ci" (GitHub-hosted runner), then creates
+# one spread task per integration test module in tests/integration/. Each task
+# gets a fresh VM + model, provisioning Canonical Kubernetes via concierge.
 project: jenkins-k8s-operator
+# Project root inside the test VM; part of the charm-ci/opcli backend contract.
 path: /home/ubuntu/proj
 kill-timeout: 60m
 warn-timeout: 1m
@@ -16,7 +22,11 @@ backends:
       snap install charmcraft --classic
       sudo -u ubuntu -H juju switch concierge-k8s:testing
 environment:
+  # Concierge config used to provision the controllers (Juju 3 + CK8s + LXD).
+  # Suites can override per module via "environment: CONCIERGE: <file>".
   CONCIERGE: '$(HOST: echo "${CONCIERGE:-concierge-juju3.yaml}")'
+  # opcli version installed in the test VM. CI sets this to the workflow's
+  # pinned charm-ci ref; local runs fall back to main.
   OPCLI_GIT_REF: '$(HOST: echo "${OPCLI_GIT_REF:-main}")'
 exclude:
 - .git
@@ -31,6 +41,8 @@ x-pytest-args: &pytest-args
   pytest-environment-template: |
     SPREAD_JOB={{ env.get("SPREAD_JOB", "") }}
 
+# Auto-discovers every test_*.py under tests/integration/ and runs it as its
+# own spread job (one module per VM/model; see `opcli spread jobs` output).
 integration-suites:
   tests/integration/:
     <<: *pytest-args
