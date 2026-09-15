@@ -33,7 +33,7 @@ from playwright.async_api import (
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Playwright as AsyncPlaywright
 
-from .helpers import wait_for
+from .helpers import get_coredns_config_map, restart_coredns, wait_for
 
 logger = logging.getLogger(__name__)
 
@@ -350,70 +350,6 @@ def patch_dns_resolver_fixture(identity_platform_traefik_ip: str, jenkins_traefi
     socket.getaddrinfo = original_getaddrinfo
 
 
-def _get_coredns_config_map(
-    kube_core_client: kubernetes.client.CoreV1Api,
-) -> kubernetes.client.V1ConfigMap:
-    """Find the CoreDNS ConfigMap installed by Canonical Kubernetes."""
-    config_maps = kube_core_client.list_namespaced_config_map(
-        namespace="kube-system",
-        label_selector="app.kubernetes.io/instance=ck-dns",
-    ).items
-    config_maps = [
-        config_map
-        for config_map in config_maps
-        if config_map.data and "Corefile" in config_map.data
-    ]
-    names = [
-        config_map.metadata.name
-        for config_map in config_maps
-        if config_map.metadata and config_map.metadata.name
-    ]
-    assert len(config_maps) == 1, f"Expected one CoreDNS ConfigMap, found {names}"
-    config_map = config_maps[0]
-    assert config_map.metadata and config_map.metadata.name
-    return config_map
-
-
-def _raise_timeout(_: tenacity.RetryCallState) -> None:
-    """Raise the timeout used when a tenacity polling retry expires."""
-    raise TimeoutError()
-
-
-def _restart_coredns(kube_core_client: kubernetes.client.CoreV1Api) -> None:
-    """Restart CoreDNS and wait until its replacement pods are ready."""
-    selector = "app.kubernetes.io/name=coredns"
-    pods = kube_core_client.list_namespaced_pod(namespace="kube-system", label_selector=selector)
-    for pod in pods.items:
-        if pod.metadata and pod.metadata.name:
-            logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-            kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
-
-    @tenacity.retry(
-        retry=tenacity.retry_any(
-            tenacity.retry_if_result(lambda result: not result),
-            tenacity.retry_if_exception_type(kubernetes.client.exceptions.ApiException),
-        ),
-        stop=tenacity.stop_after_delay(5 * 60),
-        wait=tenacity.wait_fixed(5),
-        reraise=True,
-        retry_error_callback=_raise_timeout,
-    )
-    def pods_are_ready() -> bool:
-        current_pods = kube_core_client.list_namespaced_pod(
-            namespace="kube-system", label_selector=selector
-        ).items
-        return bool(current_pods) and all(
-            pod.status
-            and pod.status.phase == "Running"
-            and pod.status.container_statuses
-            and all(container.ready for container in pod.status.container_statuses)
-            and not (pod.metadata and pod.metadata.deletion_timestamp)
-            for pod in current_pods
-        )
-
-    pods_are_ready()
-
-
 @pytest.fixture(scope="module", name="inject_dns")
 def inject_dns_fixture(
     kube_core_client: kubernetes.client.CoreV1Api,
@@ -421,7 +357,7 @@ def inject_dns_fixture(
 ):
     """Inject IDP hostname to CoreDNS."""
     logger.info("Patching CoreDNS configmap, idp public IP: %s", identity_platform_traefik_ip)
-    original_manifest = _get_coredns_config_map(kube_core_client)
+    original_manifest = get_coredns_config_map(kube_core_client)
     coredns_name = original_manifest.metadata.name
     original_corefile = (original_manifest.data or {}).get("Corefile", "")
     injected_corefile = (
@@ -438,7 +374,7 @@ def inject_dns_fixture(
             namespace="kube-system",
             body={"data": {"Corefile": injected_corefile}},
         )
-        _restart_coredns(kube_core_client)
+        restart_coredns(kube_core_client)
         yield
     finally:
         kube_core_client.patch_namespaced_config_map(
@@ -446,7 +382,7 @@ def inject_dns_fixture(
             namespace="kube-system",
             body={"data": {"Corefile": original_corefile}},
         )
-        _restart_coredns(kube_core_client)
+        restart_coredns(kube_core_client)
 
 
 # The playwright fixtures are taken from:

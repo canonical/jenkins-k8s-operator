@@ -33,6 +33,7 @@ from .helpers import (
     generate_jenkins_client,
     get_model_unit_addresses,
     get_pod_ip,
+    pod_reachable_kube_config,
 )
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
@@ -434,6 +435,17 @@ def kube_core_client_fixture(kube_config: str) -> kubernetes.client.CoreV1Api:
     """Create a kubernetes client for core v1 API."""
     kubernetes.config.load_kube_config(config_file=kube_config)
     return kubernetes.client.CoreV1Api()
+
+
+@pytest.fixture(scope="module", name="jenkins_kube_config")
+def jenkins_kube_config_fixture(
+    kube_config: str, kube_core_client: kubernetes.client.CoreV1Api
+) -> Iterable[Path]:
+    """Kubeconfig for the Jenkins kubernetes cloud, reachable from inside the pod."""
+    kube_config_path = pod_reachable_kube_config(Path(kube_config), kube_core_client)
+    yield kube_config_path
+    if kube_config_path != Path(kube_config):
+        kube_config_path.unlink()
 
 
 @pytest.fixture(scope="module", name="kube_apps_client")

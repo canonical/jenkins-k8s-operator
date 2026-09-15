@@ -786,6 +786,73 @@ def pod_reachable_kube_config(
     return rewritten_kube_config
 
 
+def _raise_timeout(_: tenacity.RetryCallState) -> None:
+    """Raise the timeout used when a tenacity polling retry expires."""
+    raise TimeoutError()
+
+
+def get_coredns_config_map(
+    kube_core_client: kubernetes.client.CoreV1Api,
+) -> kubernetes.client.V1ConfigMap:
+    """Find the CoreDNS ConfigMap installed by Canonical Kubernetes."""
+    config_maps = kube_core_client.list_namespaced_config_map(
+        namespace="kube-system",
+        label_selector="app.kubernetes.io/instance=ck-dns",
+    ).items
+    config_maps = [
+        config_map
+        for config_map in config_maps
+        if config_map.data and "Corefile" in config_map.data
+    ]
+    names = [
+        config_map.metadata.name
+        for config_map in config_maps
+        if config_map.metadata and config_map.metadata.name
+    ]
+    assert len(config_maps) == 1, f"Expected one CoreDNS ConfigMap, found {names}"
+    config_map = config_maps[0]
+    assert config_map.metadata and config_map.metadata.name
+    return config_map
+
+
+@tenacity.retry(
+    retry=tenacity.retry_any(
+        tenacity.retry_if_result(lambda result: not result),
+        tenacity.retry_if_exception_type(kubernetes.client.exceptions.ApiException),
+    ),
+    stop=tenacity.stop_after_delay(5 * 60),
+    wait=tenacity.wait_fixed(5),
+    reraise=True,
+    retry_error_callback=_raise_timeout,
+)
+def _wait_for_coredns_pods_ready(
+    kube_core_client: kubernetes.client.CoreV1Api, selector: str
+) -> bool:
+    """Return True when all CoreDNS pods with the given selector are running and ready."""
+    current_pods = kube_core_client.list_namespaced_pod(
+        namespace="kube-system", label_selector=selector
+    ).items
+    return bool(current_pods) and all(
+        pod.status
+        and pod.status.phase == "Running"
+        and pod.status.container_statuses
+        and all(container.ready for container in pod.status.container_statuses)
+        and not (pod.metadata and pod.metadata.deletion_timestamp)
+        for pod in current_pods
+    )
+
+
+def restart_coredns(kube_core_client: kubernetes.client.CoreV1Api) -> None:
+    """Restart CoreDNS and wait until its replacement pods are ready."""
+    selector = "app.kubernetes.io/name=coredns"
+    pods = kube_core_client.list_namespaced_pod(namespace="kube-system", label_selector=selector)
+    for pod in pods.items:
+        if pod.metadata and pod.metadata.name:
+            logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
+            kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+    _wait_for_coredns_pods_ready(kube_core_client, selector)
+
+
 def create_secret_file_credentials(
     unit_web_client: UnitWebClient, kube_config: str
 ) -> typing.Optional[str]:

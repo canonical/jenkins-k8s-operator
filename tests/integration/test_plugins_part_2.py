@@ -24,7 +24,6 @@ from .helpers import (
     gen_test_pipeline_with_custom_script_xml,
     install_plugins,
     kubernetes_test_pipeline_script,
-    pod_reachable_kube_config,
     wait_for,
 )
 from .types_ import KeycloakOIDCMetadata, UnitWebClient
@@ -266,7 +265,7 @@ def _log_build_timeout_diagnostics(
 
 async def test_kubernetes_plugin(
     unit_web_client: UnitWebClient,
-    kube_config: str,
+    jenkins_kube_config: Path,
     kube_core_client: kubernetes.client.CoreV1Api,
 ):
     """
@@ -285,17 +284,11 @@ async def test_kubernetes_plugin(
 
     logger.info("Jenkins version pre-build: %s", unit_web_client.client.version)
 
-    kube_config_path = Path(kube_config)
-    jenkins_kube_config = pod_reachable_kube_config(kube_config_path, kube_core_client)
-    try:
-        credentials_id = await wait_for(
-            functools.partial(
-                create_secret_file_credentials, unit_web_client, str(jenkins_kube_config)
-            )
+    credentials_id = await wait_for(
+        functools.partial(
+            create_secret_file_credentials, unit_web_client, str(jenkins_kube_config)
         )
-    finally:
-        if jenkins_kube_config != kube_config_path:
-            jenkins_kube_config.unlink()
+    )
     assert credentials_id, "Failed to create credentials id"
     kubernetes_cloud_name = await wait_for(
         functools.partial(create_kubernetes_cloud, unit_web_client, credentials_id)
