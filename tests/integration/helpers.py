@@ -5,13 +5,13 @@
 
 import inspect
 import logging
-import os
 import secrets
 import tempfile
 import textwrap
 import time
 import typing
 from enum import Enum
+from pathlib import Path
 from urllib.parse import urlparse
 
 import jenkinsapi.jenkins
@@ -704,15 +704,18 @@ def declarative_pipeline_script() -> str:
 
 
 def pod_reachable_kube_config(
-    kube_config: str,
+    kube_config: Path,
     kube_core_client: kubernetes.client.CoreV1Api,
-) -> str:
+) -> Path:
     """Make a loopback kubeconfig endpoint reachable from a Jenkins pod.
 
-    Canonical Kubernetes kubeconfigs use the loopback API endpoint for local
-    clients. A Jenkins pod cannot reach the runner's loopback interface, so
-    replace loopback endpoints with a control-plane node's InternalIP while
-    preserving the configured port and credentials.
+    Canonical Kubernetes kubeconfigs point local clients at a loopback API
+    endpoint: ``k8s kubectl config view`` output is only valid on cluster nodes
+    where control plane services are available on localhost endpoints
+    (https://documentation.ubuntu.com/k8s/latest/snap/howto/troubleshooting/).
+    A Jenkins pod cannot reach the runner's loopback interface, so replace
+    loopback endpoints with a control-plane node's InternalIP while preserving
+    the configured port and credentials.
 
     Args:
         kube_config: Path to the source kubeconfig.
@@ -722,8 +725,7 @@ def pod_reachable_kube_config(
         The source path when no loopback endpoint is present, otherwise a
         temporary path containing the rewritten kubeconfig.
     """
-    with open(kube_config, encoding="utf-8") as kube_config_file:
-        config = yaml.safe_load(kube_config_file)
+    config = yaml.safe_load(kube_config.read_text(encoding="utf-8"))
 
     loopback_clusters = []
     for cluster_entry in config.get("clusters", []):
@@ -772,11 +774,11 @@ def pod_reachable_kube_config(
         mode="w",
         prefix="jenkins-k8s-kubeconfig-",
         suffix=".yaml",
-        dir=os.path.dirname(os.path.abspath(kube_config)),
+        dir=kube_config.parent,
         delete=False,
     ) as rewritten_file:
         yaml.safe_dump(config, rewritten_file, default_flow_style=False)
-        rewritten_kube_config = rewritten_file.name
+        rewritten_kube_config = Path(rewritten_file.name)
     logger.info(
         "Rewrote %d loopback kubeconfig endpoint(s) to Kubernetes node InternalIP",
         len(loopback_clusters),

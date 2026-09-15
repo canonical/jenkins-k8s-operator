@@ -6,7 +6,7 @@
 import functools
 import json
 import logging
-import os
+from pathlib import Path
 
 import jenkinsapi.plugin
 import jenkinsapi.queue
@@ -285,14 +285,17 @@ async def test_kubernetes_plugin(
 
     logger.info("Jenkins version pre-build: %s", unit_web_client.client.version)
 
-    jenkins_kube_config = pod_reachable_kube_config(kube_config, kube_core_client)
+    kube_config_path = Path(kube_config)
+    jenkins_kube_config = pod_reachable_kube_config(kube_config_path, kube_core_client)
     try:
         credentials_id = await wait_for(
-            functools.partial(create_secret_file_credentials, unit_web_client, jenkins_kube_config)
+            functools.partial(
+                create_secret_file_credentials, unit_web_client, str(jenkins_kube_config)
+            )
         )
     finally:
-        if jenkins_kube_config != kube_config:
-            os.unlink(jenkins_kube_config)
+        if jenkins_kube_config != kube_config_path:
+            jenkins_kube_config.unlink()
     assert credentials_id, "Failed to create credentials id"
     kubernetes_cloud_name = await wait_for(
         functools.partial(create_kubernetes_cloud, unit_web_client, credentials_id)
