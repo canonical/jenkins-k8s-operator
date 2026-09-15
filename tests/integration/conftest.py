@@ -10,12 +10,14 @@ import secrets
 import string
 from pathlib import Path
 from typing import Any, AsyncGenerator, Iterable, Optional
+from urllib.parse import urlparse
 
 import jenkinsapi.jenkins
 import kubernetes.config
 import pytest
 import pytest_asyncio
 import requests
+import yaml
 from juju.action import Action
 from juju.application import Application
 from juju.controller import Controller
@@ -33,7 +35,6 @@ from .helpers import (
     generate_jenkins_client,
     get_model_unit_addresses,
     get_pod_ip,
-    pod_reachable_kube_config,
 )
 from .types_ import KeycloakOIDCMetadata, LDAPSettings, ModelAppUnit, UnitWebClient
 
@@ -439,13 +440,73 @@ def kube_core_client_fixture(kube_config: str) -> kubernetes.client.CoreV1Api:
 
 @pytest.fixture(scope="module", name="jenkins_kube_config")
 def jenkins_kube_config_fixture(
-    kube_config: str, kube_core_client: kubernetes.client.CoreV1Api
-) -> Iterable[Path]:
-    """Kubeconfig for the Jenkins kubernetes cloud, reachable from inside the pod."""
-    kube_config_path = pod_reachable_kube_config(Path(kube_config), kube_core_client)
-    yield kube_config_path
-    if kube_config_path != Path(kube_config):
-        kube_config_path.unlink()
+    tmp_path_factory: pytest.TempPathFactory,
+    kube_config: str,
+    kube_core_client: kubernetes.client.CoreV1Api,
+) -> Path:
+    """Kubeconfig for the Jenkins kubernetes cloud, reachable from inside the pod.
+
+    Canonical Kubernetes kubeconfigs point local clients at a loopback API
+    endpoint: ``k8s kubectl config view`` output is only valid on cluster nodes
+    where control plane services are available on localhost endpoints
+    (https://documentation.ubuntu.com/k8s/latest/snap/howto/troubleshooting/).
+    A Jenkins pod cannot reach the runner's loopback interface, so replace
+    loopback endpoints with a control-plane node's InternalIP while preserving
+    the configured port and credentials.
+    """
+    kube_config_path = Path(kube_config)
+    config = yaml.safe_load(kube_config_path.read_text(encoding="utf-8"))
+
+    loopback_clusters = []
+    for cluster_entry in config.get("clusters", []):
+        cluster = cluster_entry.get("cluster", {})
+        server = cluster.get("server")
+        if not server:
+            continue
+        parsed_server = urlparse(server)
+        if parsed_server.hostname in {"127.0.0.1", "::1", "localhost"}:
+            loopback_clusters.append((cluster, parsed_server))
+
+    if not loopback_clusters:
+        return kube_config_path
+
+    nodes = kube_core_client.list_node().items
+    control_plane_nodes = [
+        node
+        for node in nodes
+        if any(
+            role in (node.metadata.labels or {})
+            for role in (
+                "node-role.kubernetes.io/control-plane",
+                "node-role.kubernetes.io/master",
+            )
+        )
+    ]
+    candidate_nodes = control_plane_nodes or nodes
+    node_ip = next(
+        (
+            address.address
+            for node in candidate_nodes
+            for address in (node.status.addresses or [])
+            if address.type == "InternalIP"
+        ),
+        None,
+    )
+    if not node_ip:
+        raise RuntimeError("No Kubernetes node InternalIP found for kubeconfig rewrite")
+
+    node_host = f"[{node_ip}]" if ":" in node_ip else node_ip
+    for cluster, parsed_server in loopback_clusters:
+        port = f":{parsed_server.port}" if parsed_server.port else ""
+        cluster["server"] = parsed_server._replace(netloc=f"{node_host}{port}").geturl()
+
+    rewritten_kube_config = tmp_path_factory.mktemp("jenkins-kube-config") / "kubeconfig.yaml"
+    rewritten_kube_config.write_text(yaml.safe_dump(config, default_flow_style=False), "utf-8")
+    logger.info(
+        "Rewrote %d loopback kubeconfig endpoint(s) to Kubernetes node InternalIP",
+        len(loopback_clusters),
+    )
+    return rewritten_kube_config
 
 
 @pytest.fixture(scope="module", name="kube_apps_client")
