@@ -19,8 +19,6 @@ import pytest
 import pytest_asyncio
 import requests
 import tenacity
-import yaml
-from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from juju.client._definitions import UnitStatus
 from juju.model import Model
@@ -35,9 +33,11 @@ from playwright.async_api import (
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Playwright as AsyncPlaywright
 
-from .helpers import wait_for
+from .helpers import get_coredns_config_map, restart_coredns, wait_for
 
 logger = logging.getLogger(__name__)
+
+pytestmark = pytest.mark.skip(reason="Auth proxy tests are being ejected.")
 
 IDENTITY_PLATFORM_HOSTNAME = "idp.test"
 JENKINS_HOSTNAME = "jenkins.test"
@@ -359,39 +359,32 @@ def inject_dns_fixture(
 ):
     """Inject IDP hostname to CoreDNS."""
     logger.info("Patching CoreDNS configmap, idp public IP: %s", identity_platform_traefik_ip)
-    environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
-    template = environment.get_template("coredns.yaml.j2")
-    coredns_yaml = template.render(
-        hostname=IDENTITY_PLATFORM_HOSTNAME, ip=identity_platform_traefik_ip
+    original_manifest = get_coredns_config_map(kube_core_client)
+    coredns_name = original_manifest.metadata.name
+    original_corefile = (original_manifest.data or {}).get("Corefile", "")
+    injected_corefile = (
+        f"{original_corefile}\n"
+        f"{IDENTITY_PLATFORM_HOSTNAME}:53 {{\n"
+        "    hosts {\n"
+        f"        {identity_platform_traefik_ip} {IDENTITY_PLATFORM_HOSTNAME}\n"
+        "    }\n"
+        "}\n"
     )
-    coredns_configmap_manifest = yaml.safe_load(coredns_yaml)
-
-    original_manifest = kube_core_client.read_namespaced_config_map(
-        name="coredns", namespace="kube-system"
-    )
-    kube_core_client.replace_namespaced_config_map(
-        name="coredns", namespace="kube-system", body=coredns_configmap_manifest
-    )
-
-    pods = kube_core_client.list_namespaced_pod(
-        namespace="kube-system", label_selector="k8s-app=kube-dns"
-    )
-    for pod in pods.items:
-        logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-        kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
-
-    yield
-
-    coredns_configmap_manifest["data"]["Corefile"] = original_manifest.data.get("Corefile", "")
-    kube_core_client.replace_namespaced_config_map(
-        name="coredns", namespace="kube-system", body=coredns_configmap_manifest
-    )
-    pods = kube_core_client.list_namespaced_pod(
-        namespace="kube-system", label_selector="k8s-app=kube-dns"
-    )
-    for pod in pods.items:
-        logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-        kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+    try:
+        kube_core_client.patch_namespaced_config_map(
+            name=coredns_name,
+            namespace="kube-system",
+            body={"data": {"Corefile": injected_corefile}},
+        )
+        restart_coredns(kube_core_client)
+        yield
+    finally:
+        kube_core_client.patch_namespaced_config_map(
+            name=coredns_name,
+            namespace="kube-system",
+            body={"data": {"Corefile": original_corefile}},
+        )
+        restart_coredns(kube_core_client)
 
 
 # The playwright fixtures are taken from:

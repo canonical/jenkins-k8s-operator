@@ -16,6 +16,7 @@ import jenkinsapi.jenkins
 import kubernetes.client
 import requests
 import tenacity
+from jenkinsapi.custom_exceptions import JenkinsAPIException
 from juju.application import Application
 from juju.client._definitions import ApplicationStatus, FullStatus, UnitStatus
 from juju.model import Model
@@ -27,6 +28,30 @@ import jenkins
 from .types_ import UnitWebClient
 
 logger = logging.getLogger(__name__)
+
+
+def _jenkins_available(web: str) -> bool:
+    """Return whether Jenkins is responding after a restart."""
+    try:
+        return requests.get(web, timeout=10).status_code in (200, 403)
+    except requests.RequestException:
+        return False
+
+
+def _plugins_are_active(
+    client: jenkinsapi.jenkins.Jenkins, plugins: tuple[str, ...]
+) -> bool:
+    """Return whether all requested Jenkins plugins are active and enabled."""
+    try:
+        plugin_map = client.get_plugins(depth=1).get_plugins_dict()
+    except (JenkinsAPIException, requests.RequestException):
+        return False
+    return all(
+        (plugin := plugin_map.get(name))
+        and getattr(plugin, "active", False)
+        and getattr(plugin, "enabled", False)
+        for name in plugins
+    )
 
 
 @tenacity.retry(
@@ -44,21 +69,18 @@ async def install_plugins(
         unit_web_client: The wrapper around unit, web_address and jenkins_client.
         plugins: Desired plugins to install.
     """
-    unit, web, client = (
-        unit_web_client.unit,
-        unit_web_client.web,
-        unit_web_client.client,
-    )
+    web, client = unit_web_client.web, unit_web_client.client
     plugins = tuple(plugin for plugin in plugins if not client.has_plugin(plugin))
     if not plugins:
         return
 
+    logger.info("phase=plugin_install requested=%s", plugins)
     post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
     post_data["dynamic_load"] = ""
     res = client.requester.post_url(f"{web}/manage/pluginManager/install", data=post_data)
     assert res.status_code == 200, "Failed to request plugins install"
 
-    # block until the UI does not have "Pending" in download progress column.
+    logger.info("phase=plugin_install waiting_for_download plugins=%s", plugins)
     await wait_for(
         lambda: (
             "Pending"
@@ -69,15 +91,16 @@ async def install_plugins(
         ),
         timeout=60 * 10,
     )
+    logger.info("phase=plugin_install download_complete plugins=%s", plugins)
 
-    # the library will return 503 or other status codes that are not 200, hence restart and
-    # wait rather than check for status code.
     client.safe_restart()
-    await unit.model.block_until(
-        lambda: requests.get(web, timeout=10).status_code == 403,
-        timeout=60 * 10,
-        wait_period=10,
-    )
+    logger.info("phase=plugin_install restart_requested plugins=%s", plugins)
+
+    await wait_for(lambda: _jenkins_available(web), timeout=60 * 10)
+    logger.info("phase=plugin_install jenkins_available plugins=%s", plugins)
+
+    await wait_for(lambda: _plugins_are_active(client, plugins), timeout=60 * 10)
+    logger.info("phase=plugin_install active plugins=%s", plugins)
 
 
 async def get_model_unit_addresses(model: Model, app_name: str) -> list[str]:
@@ -698,6 +721,73 @@ def declarative_pipeline_script() -> str:
                 }
             }
         }""")
+
+
+def _raise_timeout(_: tenacity.RetryCallState) -> None:
+    """Raise the timeout used when a tenacity polling retry expires."""
+    raise TimeoutError()
+
+
+def get_coredns_config_map(
+    kube_core_client: kubernetes.client.CoreV1Api,
+) -> kubernetes.client.V1ConfigMap:
+    """Find the CoreDNS ConfigMap installed by Canonical Kubernetes."""
+    config_maps = kube_core_client.list_namespaced_config_map(
+        namespace="kube-system",
+        label_selector="app.kubernetes.io/instance=ck-dns",
+    ).items
+    config_maps = [
+        config_map
+        for config_map in config_maps
+        if config_map.data and "Corefile" in config_map.data
+    ]
+    names = [
+        config_map.metadata.name
+        for config_map in config_maps
+        if config_map.metadata and config_map.metadata.name
+    ]
+    assert len(config_maps) == 1, f"Expected one CoreDNS ConfigMap, found {names}"
+    config_map = config_maps[0]
+    assert config_map.metadata and config_map.metadata.name
+    return config_map
+
+
+@tenacity.retry(
+    retry=tenacity.retry_any(
+        tenacity.retry_if_result(lambda result: not result),
+        tenacity.retry_if_exception_type(kubernetes.client.exceptions.ApiException),
+    ),
+    stop=tenacity.stop_after_delay(5 * 60),
+    wait=tenacity.wait_fixed(5),
+    reraise=True,
+    retry_error_callback=_raise_timeout,
+)
+def _wait_for_coredns_pods_ready(
+    kube_core_client: kubernetes.client.CoreV1Api, selector: str
+) -> bool:
+    """Return True when all CoreDNS pods with the given selector are running and ready."""
+    current_pods = kube_core_client.list_namespaced_pod(
+        namespace="kube-system", label_selector=selector
+    ).items
+    return bool(current_pods) and all(
+        pod.status
+        and pod.status.phase == "Running"
+        and pod.status.container_statuses
+        and all(container.ready for container in pod.status.container_statuses)
+        and not (pod.metadata and pod.metadata.deletion_timestamp)
+        for pod in current_pods
+    )
+
+
+def restart_coredns(kube_core_client: kubernetes.client.CoreV1Api) -> None:
+    """Restart CoreDNS and wait until its replacement pods are ready."""
+    selector = "app.kubernetes.io/name=coredns"
+    pods = kube_core_client.list_namespaced_pod(namespace="kube-system", label_selector=selector)
+    for pod in pods.items:
+        if pod.metadata and pod.metadata.name:
+            logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
+            kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
+    _wait_for_coredns_pods_ready(kube_core_client, selector)
 
 
 def create_secret_file_credentials(

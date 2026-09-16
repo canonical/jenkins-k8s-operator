@@ -6,12 +6,15 @@
 import functools
 import json
 import logging
+from pathlib import Path
 
 import jenkinsapi.plugin
+import jenkinsapi.queue
 import kubernetes.client
 import kubernetes.config
 import pytest
 import requests
+from jenkinsapi.custom_exceptions import NotBuiltYet
 
 from .helpers import (
     create_kubernetes_cloud,
@@ -183,9 +186,16 @@ async def test_openid_connect_plugin(
             ),
         ],
     )
-    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
-    assert res.history[0].status_code == 302, "Jenkins login not redirected."
-    assert keycloak_ip in res.history[0].headers["location"], "Login not redirected to keycloak."
+    res = requests.get(
+        f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F",
+        allow_redirects=False,
+        timeout=30,
+    )
+    assert res.status_code == 302, (
+        f"Jenkins login not redirected: status={res.status_code}, url={res.url}"
+    )
+    location = res.headers.get("location", "")
+    assert keycloak_ip in location, f"Login not redirected to keycloak: location={location}"
 
     # 2. when jenkins security realm is reset and login page is requested.
     payload = {
@@ -216,13 +226,57 @@ async def test_openid_connect_plugin(
     assert res.status_code == 200, "Failed to load Jenkins native login UI."
 
 
+def _get_completed_build(
+    queue_item: jenkinsapi.queue.QueueItem,
+) -> "jenkinsapi.build.Build | None":
+    """Return a completed Jenkins build, retrying while it is queued or running."""
+    try:
+        queue_item.poll()
+        build = queue_item.get_build()
+    except (NotBuiltYet, requests.HTTPError):
+        return None
+    return build if not build.is_running() else None
+
+
+def _log_build_timeout_diagnostics(
+    queue_item: jenkinsapi.queue.QueueItem,
+    unit_web_client: UnitWebClient,
+    kube_core_client: kubernetes.client.CoreV1Api,
+) -> None:
+    """Log build console, Jenkins system log and agent pod state on build timeout."""
+    try:
+        queue_item.poll()
+        running_build = queue_item.get_build()
+    except (NotBuiltYet, requests.HTTPError):
+        running_build = None
+    if running_build:
+        try:
+            logger.error(
+                "Kubernetes plugin build console (last 10000 characters):\n%s",
+                running_build.get_console()[-10000:],
+            )
+        except requests.RequestException as console_exc:
+            logger.warning("Could not fetch Kubernetes plugin build console: %s", console_exc)
+    try:
+        system_log_resp = unit_web_client.client.requester.get_url(
+            f"{unit_web_client.web}/log/all/consoleText"
+        )
+        logger.error(
+            "Jenkins system log (last 10000 characters):\n%s",
+            system_log_resp.text[-10000:],
+        )
+    except requests.RequestException as log_exc:
+        logger.warning("Could not fetch Jenkins system log: %s", log_exc)
+    _log_k8s_agent_pods(kube_core_client)
+
+
 async def test_kubernetes_plugin(
     unit_web_client: UnitWebClient,
-    kube_config: str,
+    jenkins_kube_config: Path,
     kube_core_client: kubernetes.client.CoreV1Api,
 ):
     """
-    arrange: given a Jenkins charm with kubernetes plugin installed and credentials from microk8s.
+    arrange: given a Jenkins charm with kubernetes plugin installed and credentials from the k8s backend.
     act: Run a job using an agent provided by the kubernetes plugin.
     assert: Job succeeds.
     """
@@ -238,7 +292,9 @@ async def test_kubernetes_plugin(
     logger.info("Jenkins version pre-build: %s", unit_web_client.client.version)
 
     credentials_id = await wait_for(
-        functools.partial(create_secret_file_credentials, unit_web_client, kube_config)
+        functools.partial(
+            create_secret_file_credentials, unit_web_client, str(jenkins_kube_config)
+        )
     )
     assert credentials_id, "Failed to create credentials id"
     kubernetes_cloud_name = await wait_for(
@@ -251,9 +307,17 @@ async def test_kubernetes_plugin(
     )
 
     queue_item = job.invoke()
-    queue_item.block_until_complete()
 
-    build: jenkinsapi.build.Build = queue_item.get_build()
+    try:
+        build = await wait_for(
+            functools.partial(_get_completed_build, queue_item),
+            timeout=10 * 60,
+            check_interval=5,
+        )
+    except TimeoutError as exc:
+        _log_build_timeout_diagnostics(queue_item, unit_web_client, kube_core_client)
+        raise TimeoutError("Kubernetes plugin build did not complete within 600 seconds") from exc
+
     build_status = build.get_status()
     log_stream = build.stream_logs()
     logs = "".join(log_stream)
