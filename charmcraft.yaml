@@ -71,10 +71,6 @@ requires:
   agent:
     interface: jenkins_agent_v0
     optional: true
-  auth-proxy:
-    interface: auth_proxy
-    optional: true
-    limit: 1
   ingress:
     interface: ingress
     optional: true
@@ -132,7 +128,6 @@ config:
         Jenkins Configuration as Code (JCasC) YAML content. This is the declarative
         way to manage Jenkins configuration (security, clouds, credentials, views, etc.).
         The charm auto-injects admin credentials if the user config omits securityRealm,
-        and injects auth proxy config when the relation is active.
         See https://www.jenkins.io/projects/jcasc/ for schema reference.
       default: |
         jenkins:
@@ -218,8 +213,6 @@ charm-libs:
   - lib: loki-k8s.loki_push_api
     version: "0"
   - lib: prometheus-k8s.prometheus_scrape
-    version: "0"
-  - lib: oauth2-proxy-k8s.auth_proxy
     version: "0"
   - lib: haproxy.haproxy_route
     version: "2"

@@ -47,7 +47,6 @@ variable "public_ingress" {
     app_name = optional(string, "public-traefik-k8s")
     channel  = optional(string, "latest/edge")
     config = optional(map(string), {
-      "enable_experimental_forward_auth" : "true",
       "external_hostname" : ""
     })
     constraints = optional(string, "")
@@ -65,18 +64,6 @@ variable "agent_discovery_ingress" {
     constraints = optional(string, "")
     revision    = optional(number)
     base        = optional(string, "ubuntu@20.04")
-  })
-  default = {}
-}
-
-variable "oauth2_proxy" {
-  type = object({
-    app_name    = optional(string, "oauth2-proxy-k8s")
-    channel     = optional(string, "latest/edge")
-    config      = optional(map(string), {})
-    constraints = optional(string, "")
-    revision    = optional(number)
-    base        = optional(string, "ubuntu@22.04")
   })
   default = {}
 }
