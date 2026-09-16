@@ -37,6 +37,8 @@ from .helpers import get_coredns_config_map, restart_coredns, wait_for
 
 logger = logging.getLogger(__name__)
 
+pytestmark = pytest.mark.skip(reason="Auth proxy tests are being ejected.")
+
 IDENTITY_PLATFORM_HOSTNAME = "idp.test"
 JENKINS_HOSTNAME = "jenkins.test"
 
