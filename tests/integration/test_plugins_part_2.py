@@ -186,9 +186,16 @@ async def test_openid_connect_plugin(
             ),
         ],
     )
-    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
-    assert res.history[0].status_code == 302, "Jenkins login not redirected."
-    assert keycloak_ip in res.history[0].headers["location"], "Login not redirected to keycloak."
+    res = requests.get(
+        f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F",
+        allow_redirects=False,
+        timeout=30,
+    )
+    assert res.status_code == 302, (
+        f"Jenkins login not redirected: status={res.status_code}, url={res.url}"
+    )
+    location = res.headers.get("location", "")
+    assert keycloak_ip in location, f"Login not redirected to keycloak: location={location}"
 
     # 2. when jenkins security realm is reset and login page is requested.
     payload = {

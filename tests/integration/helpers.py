@@ -16,6 +16,7 @@ import jenkinsapi.jenkins
 import kubernetes.client
 import requests
 import tenacity
+from jenkinsapi.custom_exceptions import JenkinsAPIException
 from juju.application import Application
 from juju.client._definitions import ApplicationStatus, FullStatus, UnitStatus
 from juju.model import Model
@@ -27,6 +28,30 @@ import jenkins
 from .types_ import UnitWebClient
 
 logger = logging.getLogger(__name__)
+
+
+def _jenkins_available(web: str) -> bool:
+    """Return whether Jenkins is responding after a restart."""
+    try:
+        return requests.get(web, timeout=10).status_code in (200, 403)
+    except requests.RequestException:
+        return False
+
+
+def _plugins_are_active(
+    client: jenkinsapi.jenkins.Jenkins, plugins: tuple[str, ...]
+) -> bool:
+    """Return whether all requested Jenkins plugins are active and enabled."""
+    try:
+        plugin_map = client.get_plugins(depth=1).get_plugins_dict()
+    except (JenkinsAPIException, requests.RequestException):
+        return False
+    return all(
+        (plugin := plugin_map.get(name))
+        and getattr(plugin, "active", False)
+        and getattr(plugin, "enabled", False)
+        for name in plugins
+    )
 
 
 @tenacity.retry(
@@ -44,21 +69,18 @@ async def install_plugins(
         unit_web_client: The wrapper around unit, web_address and jenkins_client.
         plugins: Desired plugins to install.
     """
-    unit, web, client = (
-        unit_web_client.unit,
-        unit_web_client.web,
-        unit_web_client.client,
-    )
+    web, client = unit_web_client.web, unit_web_client.client
     plugins = tuple(plugin for plugin in plugins if not client.has_plugin(plugin))
     if not plugins:
         return
 
+    logger.info("phase=plugin_install requested=%s", plugins)
     post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
     post_data["dynamic_load"] = ""
     res = client.requester.post_url(f"{web}/manage/pluginManager/install", data=post_data)
     assert res.status_code == 200, "Failed to request plugins install"
 
-    # block until the UI does not have "Pending" in download progress column.
+    logger.info("phase=plugin_install waiting_for_download plugins=%s", plugins)
     await wait_for(
         lambda: (
             "Pending"
@@ -69,15 +91,16 @@ async def install_plugins(
         ),
         timeout=60 * 10,
     )
+    logger.info("phase=plugin_install download_complete plugins=%s", plugins)
 
-    # the library will return 503 or other status codes that are not 200, hence restart and
-    # wait rather than check for status code.
     client.safe_restart()
-    await unit.model.block_until(
-        lambda: requests.get(web, timeout=10).status_code == 403,
-        timeout=60 * 10,
-        wait_period=10,
-    )
+    logger.info("phase=plugin_install restart_requested plugins=%s", plugins)
+
+    await wait_for(lambda: _jenkins_available(web), timeout=60 * 10)
+    logger.info("phase=plugin_install jenkins_available plugins=%s", plugins)
+
+    await wait_for(lambda: _plugins_are_active(client, plugins), timeout=60 * 10)
+    logger.info("phase=plugin_install active plugins=%s", plugins)
 
 
 async def get_model_unit_addresses(model: Model, app_name: str) -> list[str]:
