@@ -12,8 +12,6 @@ def pytest_addoption(parser: pytest.Parser):
     Args:
         parser: pytest command line parser.
     """
-    # The prebuilt charm file.
-    parser.addoption("--charm-file", action="append", default=[])
     # The Jenkins image name:tag.
     parser.addoption("--jenkins-image", action="store", default="")
     # The path to kubernetes config.

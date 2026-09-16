@@ -8,6 +8,7 @@ from juju.application import Application
 
 import state
 
+from .constants import MACHINE_CONTROLLER_NAME
 from .helpers import assert_job_success
 
 
@@ -33,7 +34,7 @@ async def test_jenkins_machine_agent_relation(
     # pylint: disable=duplicate-code
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
+        f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
     await machine_model.wait_for_idle(apps=[jenkins_machine_agents.name], wait_for_active=True)
     await model.wait_for_idle(apps=[application.name], wait_for_active=True)

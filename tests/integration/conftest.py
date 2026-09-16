@@ -9,13 +9,15 @@ import random
 import secrets
 import string
 from pathlib import Path
-from typing import AsyncGenerator, Iterable, Optional
+from typing import Any, AsyncGenerator, Iterable, Optional
+from urllib.parse import urlparse
 
 import jenkinsapi.jenkins
 import kubernetes.config
 import pytest
 import pytest_asyncio
 import requests
+import yaml
 from juju.action import Action
 from juju.application import Application
 from juju.controller import Controller
@@ -27,7 +29,7 @@ from pytest_operator.plugin import OpsTest
 
 import state
 
-from .constants import ALLOWED_PLUGINS
+from .constants import ALLOWED_PLUGINS, MACHINE_CONTROLLER_NAME
 from .helpers import (
     AuthMethod,
     generate_jenkins_client,
@@ -81,10 +83,14 @@ def cloud_fixture(ops_test: OpsTest) -> Optional[str]:
 
 @pytest.fixture(scope="module", name="jenkins_image")
 def jenkins_image_fixture(request: FixtureRequest) -> str:
-    """The OCI image for Jenkins charm."""
-    jenkins_image = request.config.getoption("--jenkins-image")
+    """The OCI image for Jenkins charm (from pytest-opcli artifacts or --jenkins-image)."""
+    jenkins_image = (
+        request.config.getoption("--jenkins-image")
+        or request.getfixturevalue("resource_images")["jenkins-image"]
+    )
     assert jenkins_image, (
-        "--jenkins-image argument is required which should contain the name of the OCI image."
+        "Jenkins OCI image not resolved: pass --jenkins-image or run 'opcli artifacts build' "
+        "so pytest-opcli can resolve resources from artifacts.build.yaml."
     )
     return jenkins_image
 
@@ -95,18 +101,26 @@ def num_units_fixture(request: FixtureRequest) -> int:
     return int(request.config.getoption("--num-units"))
 
 
+def _select_charm_path(paths: Any) -> str:
+    """Return the charm path, choosing the newest base when several are built."""
+    if len(paths) == 1:
+        return paths.path
+    return paths[sorted(paths.bases)[-1]]
+
+
 @pytest_asyncio.fixture(scope="module", name="charm")
 async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Path:
-    """The path to charm."""
-    charms = request.config.getoption("--charm-file")
-    if not charms:
+    """The path to the built charm (from pytest-opcli artifacts or built locally)."""
+    charm_files = request.config.getoption("--charm-file", default=None)
+    if charm_files:
+        return Path(request.getfixturevalue("charm_paths")["jenkins-k8s"].path)
+    try:
+        paths = request.getfixturevalue("charm_paths")["jenkins-k8s"]
+    except (pytest.FixtureLookupError, pytest.UsageError):
         charm = await ops_test.build_charm(".")
         assert charm, "Charm not built"
         return charm
-    # Charms with multiple bases are passed in (22.04, 24.04), choose the latest base.
-    latest_charm = sorted(charms)[-1]
-    logger.info("Available charms: %s, using: %s", charms, latest_charm)
-    return latest_charm
+    return Path(_select_charm_path(paths))
 
 
 @pytest_asyncio.fixture(scope="module", name="application")
@@ -301,7 +315,7 @@ async def extra_jenkins_k8s_agents_fixture(
 async def machine_controller_fixture() -> AsyncGenerator[Controller, None]:
     """The lxd controller."""
     controller = Controller()
-    await controller.connect_controller("localhost")
+    await controller.connect_controller(MACHINE_CONTROLLER_NAME)
     yield controller
     await controller.disconnect()
 
@@ -314,7 +328,7 @@ async def machine_model_fixture(
     """The machine model for jenkins agent machine charm."""
     machine_model_name = f"jenkins-agent-machine-{secrets.token_hex(2)}"
     model = await machine_controller.add_model(machine_model_name)
-    await model.connect(f"localhost:admin/{model.name}")
+    await model.connect(f"{MACHINE_CONTROLLER_NAME}:admin/{model.name}")
     yield model
     if not request.config.option.keep_models:
         await machine_controller.destroy_models(
@@ -355,7 +369,7 @@ async def machine_agent_related_app_fixture(
     )
     await model.integrate(
         f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
+        f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
     await machine_model.wait_for_idle(
         apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5
@@ -422,6 +436,77 @@ def kube_core_client_fixture(kube_config: str) -> kubernetes.client.CoreV1Api:
     """Create a kubernetes client for core v1 API."""
     kubernetes.config.load_kube_config(config_file=kube_config)
     return kubernetes.client.CoreV1Api()
+
+
+@pytest.fixture(scope="module", name="jenkins_kube_config")
+def jenkins_kube_config_fixture(
+    tmp_path_factory: pytest.TempPathFactory,
+    kube_config: str,
+    kube_core_client: kubernetes.client.CoreV1Api,
+) -> Path:
+    """Kubeconfig for the Jenkins kubernetes cloud, reachable from inside the pod.
+
+    Canonical Kubernetes kubeconfigs point local clients at a loopback API
+    endpoint: ``k8s kubectl config view`` output is only valid on cluster nodes
+    where control plane services are available on localhost endpoints
+    (https://documentation.ubuntu.com/k8s/latest/snap/howto/troubleshooting/).
+    A Jenkins pod cannot reach the runner's loopback interface, so replace
+    loopback endpoints with a control-plane node's InternalIP while preserving
+    the configured port and credentials.
+    """
+    kube_config_path = Path(kube_config)
+    config = yaml.safe_load(kube_config_path.read_text(encoding="utf-8"))
+
+    loopback_clusters = []
+    for cluster_entry in config.get("clusters", []):
+        cluster = cluster_entry.get("cluster", {})
+        server = cluster.get("server")
+        if not server:
+            continue
+        parsed_server = urlparse(server)
+        if parsed_server.hostname in {"127.0.0.1", "::1", "localhost"}:
+            loopback_clusters.append((cluster, parsed_server))
+
+    if not loopback_clusters:
+        return kube_config_path
+
+    nodes = kube_core_client.list_node().items
+    control_plane_nodes = [
+        node
+        for node in nodes
+        if any(
+            role in (node.metadata.labels or {})
+            for role in (
+                "node-role.kubernetes.io/control-plane",
+                "node-role.kubernetes.io/master",
+            )
+        )
+    ]
+    candidate_nodes = control_plane_nodes or nodes
+    node_ip = next(
+        (
+            address.address
+            for node in candidate_nodes
+            for address in (node.status.addresses or [])
+            if address.type == "InternalIP"
+        ),
+        None,
+    )
+    if not node_ip:
+        raise RuntimeError("No Kubernetes node InternalIP found for kubeconfig rewrite")
+
+    node_host = f"[{node_ip}]" if ":" in node_ip else node_ip
+    for cluster, parsed_server in loopback_clusters:
+        port = f":{parsed_server.port}" if parsed_server.port else ""
+        cluster["server"] = parsed_server._replace(netloc=f"{node_host}{port}").geturl()
+
+    rewritten_kube_config = tmp_path_factory.mktemp("jenkins-kube-config") / "kubeconfig.yaml"
+    rewritten_kube_config.write_text(yaml.safe_dump(config, default_flow_style=False), "utf-8")
+    logger.info(
+        "Rewrote %d loopback kubeconfig endpoint(s) to Kubernetes node InternalIP",
+        len(loopback_clusters),
+    )
+    return rewritten_kube_config
 
 
 @pytest.fixture(scope="module", name="kube_apps_client")

@@ -61,6 +61,7 @@ coverage-report = [
 ]
 integration = [
   "allure-pytest>=2.8.18",
+  "opcli; python_version >= '3.12'",
   "allure-pytest-collection-report @ git+https://github.com/canonical/data-platform-workflows@v24.0.0#subdirectory=python/pytest_plugins/allure_pytest_collection_report",
   "httpx==0.28.1",
   "jinja2==3.1.6",
@@ -84,6 +85,11 @@ static = [
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+# opcli is published only from the charm-ci git repository, not PyPI.
+# v1.0.0 == 0eef5b8, matching the pinned canonical/charm-ci workflow.
+opcli = { git = "https://github.com/canonical/charm-ci.git", tag = "v1.0.0" }
 
 [tool.ruff]
 target-version = "py310"
