@@ -4,10 +4,12 @@
 """Jenkins States."""
 
 import dataclasses
+import json
 import logging
 import os
 import re
 import typing
+from urllib.parse import urlparse
 
 import ops
 import yaml
@@ -224,6 +226,26 @@ def _parse_external_agent_nodes(charm: ops.CharmBase) -> frozenset[str]:
     return frozenset(names)
 
 
+def _get_ingress_path(relation: typing.Optional[ops.Relation]) -> typing.Optional[str]:
+    """Return a ready ingress relation path, or None while its data is pending."""
+    if not relation or not relation.app:
+        return None
+    try:
+        raw_data = relation.data[relation.app].get("ingress")
+    except KeyError:
+        return None
+    if not raw_data:
+        return None
+    try:
+        ingress_data = json.loads(raw_data)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    url = ingress_data.get("url") if isinstance(ingress_data, dict) else None
+    if not url:
+        return None
+    return urlparse(str(url)).path.rstrip("/")
+
+
 def _validate_deployment_relations(charm: ops.CharmBase) -> None:
     """Validate supported deployment topology and required integrations."""
     if charm.app.planned_units() > 1:
@@ -231,10 +253,28 @@ def _validate_deployment_relations(charm: ops.CharmBase) -> None:
 
     agent_discovery_ingress = charm.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME)
     server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
-    if agent_discovery_ingress and not server_ingress:
+    haproxy_route = charm.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
+    external_hostname = _parse_external_hostname(charm)
+
+    if haproxy_route and not external_hostname:
         raise CharmConfigInvalidError(
-            f"{INGRESS_RELATION_NAME} integration is required when using "
-            f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME}"
+            f"{HAPROXY_ROUTE_RELATION_NAME} requires external-hostname to be configured."
+        )
+    ingress_path = _get_ingress_path(server_ingress)
+    if haproxy_route and server_ingress and ingress_path:
+        raise CharmConfigInvalidError(
+            "ingress and haproxy-route cannot be combined when ingress uses a non-root path."
+        )
+    if (
+        charm.model.get_relation(AGENT_RELATION)
+        and haproxy_route
+        and external_hostname
+        and not agent_discovery_ingress
+        and not server_ingress
+    ):
+        raise CharmConfigInvalidError(
+            f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME} is required for agents when "
+            f"{HAPROXY_ROUTE_RELATION_NAME} is the server route."
         )
 
 

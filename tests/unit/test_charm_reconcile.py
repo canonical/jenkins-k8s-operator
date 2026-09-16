@@ -8,7 +8,7 @@
 
 import typing
 from secrets import token_hex
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import ops
 import pytest
@@ -196,6 +196,49 @@ def test__on_config_changed_success_replans_and_restarts(
         add_layer_mock.assert_called_once()
         replan_mock.assert_called_once()
         reconcile_storage_mock.assert_called_once_with(harness_container.container)
+
+
+def test_reconcile_waits_for_pending_agent_ingress(
+    harness_container: HarnessWithContainer,
+):
+    """A pending dedicated agent route yields WaitingStatus after core reconcile."""
+    harness = harness_container.harness
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    charm_state = MagicMock(spec=state.State)
+    charm_state.agent_relation_meta = {MagicMock(): []}
+    charm_state.external_agent_nodes = frozenset()
+    charm_state.jcasc_environment_secrets = None
+
+    with (
+        patch("precondition.check", return_value=precondition._CheckResult(True, None)),
+        patch.object(jenkins_charm, "_get_state", return_value=charm_state),
+        patch.object(jenkins_charm, "_retract_invalid_haproxy_route"),
+        patch.object(jenkins_charm, "_reconcile_storage"),
+        patch.object(jenkins_charm, "_reconcile_pre_startup_configurations", return_value="hash"),
+        patch.object(jenkins_charm, "_reconcile_admin", return_value="password"),
+        patch.object(jenkins_charm, "_reconcile_pebble"),
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins_charm, "_reconcile_api_token"),
+        patch.object(
+            type(jenkins_charm),
+            "_agent_discovery_url",
+            new_callable=PropertyMock,
+            side_effect=charm.ReconcileWaitingError("agent ingress pending"),
+        ) as discovery_url_mock,
+        patch.object(jenkins_charm, "_reconcile_agent_discovery") as discovery_mock,
+        patch.object(jenkins_charm, "_reconcile_haproxy_route") as haproxy_mock,
+        patch.object(jenkins_charm, "_reconcile_plugins") as plugins_mock,
+    ):
+        jenkins_charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
+
+    discovery_url_mock.assert_called_once()
+    haproxy_mock.assert_called_once()
+
+    assert jenkins_charm.unit.status.name == "waiting"
+    assert jenkins_charm.unit.status.message == "agent ingress pending"
+    discovery_mock.assert_not_called()
+    plugins_mock.assert_called_once()
 
 
 def test_reconcile_sets_blocked_status_on_reconcile_blocked_error(

@@ -192,8 +192,9 @@ config:
         jenkins.example.com). HAProxy performs hostname-based routing on this
         value, and it is the join key for edge OIDC authentication via HAProxy
         SPOE (the haproxy-spoe-auth charm builds the OIDC redirect URI from the
-        same hostname). Leave unset to disable haproxy-route publication; the
-        traefik ingress relation is unaffected.
+        same hostname). Leave unset to disable haproxy-route publication. The
+        ingress, agent-discovery-ingress, and haproxy-route relations are
+        independent; machine agents must not use an HAProxy SPOE/OIDC route.
 
 actions:
   get-admin-password:

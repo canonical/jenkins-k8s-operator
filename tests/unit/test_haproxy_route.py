@@ -10,7 +10,7 @@ from ops.testing import Harness
 
 import jenkins
 from charm import JenkinsK8sOperatorCharm
-from state import State
+from state import CharmConfigInvalidError, State
 
 
 @pytest.mark.parametrize(
@@ -97,8 +97,10 @@ def test_reconcile_haproxy_route_retracts_when_hostname_cleared():
     assert published_data
 
     harness.update_config({"external-hostname": ""})
-    harness.charm._reconcile_haproxy_route(State.from_charm(harness.charm))
+    harness.charm._retract_invalid_haproxy_route()
 
+    assert harness.charm._get_state() is None
+    assert harness.charm.unit.status.name == "blocked"
     assert harness.get_relation_data(relation_id, harness.charm.app) == {}
 
 
@@ -117,7 +119,8 @@ def test_reconcile_haproxy_route_noop_without_hostname(monkeypatch: pytest.Monke
         harness.charm._haproxy_route, "provide_haproxy_route_requirements", provide_mock
     )
 
-    harness.charm._reconcile_haproxy_route(State.from_charm(harness.charm))
+    with pytest.raises(CharmConfigInvalidError, match="requires external-hostname"):
+        State.from_charm(harness.charm)
 
     provide_mock.assert_not_called()
 
