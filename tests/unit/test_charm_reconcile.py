@@ -201,7 +201,10 @@ def test__on_config_changed_success_replans_and_restarts(
 def test_get_state_waits_for_pending_ingress(
     harness_container: HarnessWithContainer,
 ):
-    """State validation stops reconcile before agent mutation when ingress is pending."""
+    """arrange: given State validation reports pending ingress data.
+    act: when the charm derives its state.
+    assert: the unit enters WaitingStatus before agent mutation.
+    """
     harness_container.harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
 
@@ -218,7 +221,10 @@ def test_get_state_waits_for_pending_ingress(
 def test_reconcile_sets_blocked_status_on_reconcile_blocked_error(
     harness_container: HarnessWithContainer,
 ):
-    """_reconcile maps ReconcileBlockedError to unit BlockedStatus message."""
+    """arrange: given a reconciliation step raises ReconcileBlockedError.
+    act: when the charm reconciles.
+    assert: the unit enters BlockedStatus with the error message.
+    """
     harness = harness_container.harness
     harness.begin()
 
@@ -242,7 +248,10 @@ def test_reconcile_sets_blocked_status_on_reconcile_blocked_error(
 def test_reconcile_admin_generates_password_when_container_credentials_missing(
     harness_container: HarnessWithContainer,
 ):
-    """_reconcile_admin generates a new password when container has no bootstrap credentials."""
+    """arrange: given Jenkins has no bootstrap credentials.
+    act: when admin reconciliation runs.
+    assert: a password is generated and stored in a Juju secret.
+    """
     harness = harness_container.harness
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
@@ -270,7 +279,10 @@ def test_reconcile_admin_generates_password_when_container_credentials_missing(
 def test_reconcile_admin_updates_existing_secret(
     harness_container: HarnessWithContainer,
 ):
-    """_reconcile_admin updates existing app secret via set_content when secret already exists."""
+    """arrange: given an existing admin secret and missing container credentials.
+    act: when admin reconciliation runs.
+    assert: the existing secret is updated in place.
+    """
     harness = harness_container.harness
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
@@ -298,7 +310,10 @@ def test_reconcile_admin_updates_existing_secret(
 def test_reconcile_api_token_returns_when_api_client_exists(
     harness_container: HarnessWithContainer,
 ):
-    """_reconcile_api_token is a no-op when admin API client is already available."""
+    """arrange: given an already available admin API client.
+    act: when API-token reconciliation runs.
+    assert: no new token is generated.
+    """
     harness = harness_container.harness
     harness.begin()
 
@@ -314,7 +329,10 @@ def test_reconcile_api_token_returns_when_api_client_exists(
 def test_reconcile_plugins_skips_when_not_in_restart_window(
     harness_container: HarnessWithContainer,
 ):
-    """_reconcile_plugins skips plugin cleanup when outside configured restart window."""
+    """arrange: given a configured restart window that is not active.
+    act: when plugin reconciliation runs.
+    assert: unlisted plugins are not removed.
+    """
     harness = harness_container.harness
     harness.begin()
 
@@ -486,7 +504,10 @@ def test_reconcile_pre_startup_configurations_runs_required_steps(
 
 
 def test_reconcile_calls_agent_reconciliation(harness_container: HarnessWithContainer):
-    """Run agent reconciliation as part of the common reconcile flow."""
+    """arrange: given a started charm with reconciliation steps mocked.
+    act: when the common reconcile flow runs.
+    assert: agent reconciliation is invoked.
+    """
     harness = harness_container.harness
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)

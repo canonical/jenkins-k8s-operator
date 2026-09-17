@@ -22,37 +22,50 @@ def _base_state() -> testing.State:
     )
 
 
-def _state_with_ingress(
-    public_url: str | None,
-    discovery_url: str | None,
-    *,
-    public_related: bool = False,
-    discovery_related: bool = False,
-) -> testing.State:
-    """Create Scenario state with optional ready or pending ingress relations."""
-    relations = []
-    if public_url or public_related:
-        relations.append(
+def _state_with_ingress(public_url: str, discovery_url: str) -> testing.State:
+    """Create Scenario state with ready server and agent ingress relations."""
+    return testing.State(
+        containers=[testing.Container(name=JENKINS_SERVICE_NAME, can_connect=True)],  # type: ignore[arg-type]
+        relations=[
             testing.Relation(
                 endpoint="ingress",
                 interface="ingress",
-                remote_app_data=({"ingress": f'{{"url":"{public_url}"}}'} if public_url else {}),
-            )
-        )
-    if discovery_url or discovery_related:
-        relations.append(
+                remote_app_data={"ingress": f'{{"url":"{public_url}"}}'},
+            ),
             testing.Relation(
                 endpoint=AGENT_DISCOVERY_INGRESS_RELATION_NAME,
                 interface="ingress",
-                remote_app_data=(
-                    {"ingress": f'{{"url":"{discovery_url}"}}'} if discovery_url else {}
-                ),
-            )
-        )
+                remote_app_data={"ingress": f'{{"url":"{discovery_url}"}}'},
+            ),
+        ],
+    )
 
+
+def _state_with_dedicated_ingress(discovery_url: str) -> testing.State:
+    """Create Scenario state with a ready dedicated agent ingress relation only."""
     return testing.State(
         containers=[testing.Container(name=JENKINS_SERVICE_NAME, can_connect=True)],  # type: ignore[arg-type]
-        relations=relations,
+        relations=[
+            testing.Relation(
+                endpoint=AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                interface="ingress",
+                remote_app_data={"ingress": f'{{"url":"{discovery_url}"}}'},
+            )
+        ],
+    )
+
+
+def _state_with_server_ingress(public_url: str) -> testing.State:
+    """Create Scenario state with a ready server ingress relation only."""
+    return testing.State(
+        containers=[testing.Container(name=JENKINS_SERVICE_NAME, can_connect=True)],  # type: ignore[arg-type]
+        relations=[
+            testing.Relation(
+                endpoint="ingress",
+                interface="ingress",
+                remote_app_data={"ingress": f'{{"url":"{public_url}"}}'},
+            )
+        ],
     )
 
 
@@ -71,7 +84,10 @@ def _state_with_juju_info_bind(address: str) -> testing.State:
 
 @patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)
 def test_agent_discovery_url_priority(_mock_fqdn):
-    """Agent discovery URL prioritizes dedicated ingress, then public ingress, then network/fqdn."""
+    """arrange: given dedicated, server, and fallback route scenarios.
+    act: when the agent discovery URL is resolved.
+    assert: dedicated, server, network, and FQDN priority is preserved.
+    """
     ctx = testing.Context(JenkinsK8sOperatorCharm)
     public_url = "https://public-ingress.com"
     discovery_url = "https://agent-discovery-ingress.com"
@@ -81,7 +97,7 @@ def test_agent_discovery_url_priority(_mock_fqdn):
             _state_with_ingress(public_url=public_url, discovery_url=discovery_url),
             discovery_url,
         ),
-        (_state_with_ingress(public_url=public_url, discovery_url=None), public_url),
+        (_state_with_server_ingress(public_url), public_url),
         (_state_with_juju_info_bind("192.168.0.1"), "http://192.168.0.1:8080"),
         (
             _state_with_juju_info_bind("invalidaddress"),
@@ -96,9 +112,12 @@ def test_agent_discovery_url_priority(_mock_fqdn):
 
 
 def test_dedicated_agent_ingress_is_valid_without_server_ingress():
-    """The dedicated route can be used independently of the server route."""
+    """arrange: given only a ready dedicated agent route.
+    act: when the agent URL and Jenkins path are resolved.
+    assert: the agent route is used and the server prefix is empty.
+    """
     ctx = testing.Context(JenkinsK8sOperatorCharm)
-    state = _state_with_ingress(public_url=None, discovery_url="https://agents.example.com")
+    state = _state_with_dedicated_ingress("https://agents.example.com")
 
     with ctx(ctx.on.config_changed(), state) as mgr:
         assert mgr.charm._agent_discovery_url == "https://agents.example.com"
@@ -107,14 +126,17 @@ def test_dedicated_agent_ingress_is_valid_without_server_ingress():
 
 @patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)
 def test_agent_status_message(_mock_fqdn):
-    """Agent status message warns only when only public ingress is configured."""
+    """arrange: given server-only and server-plus-dedicated route scenarios.
+    act: when the agent status message is computed.
+    assert: only server-only routing emits the guidance message.
+    """
     ctx = testing.Context(JenkinsK8sOperatorCharm)
 
     both = _state_with_ingress(
         public_url="https://public-ingress.com",
         discovery_url="https://agent-discovery-ingress.com",
     )
-    public_only = _state_with_ingress(public_url="https://public-ingress.com", discovery_url=None)
+    public_only = _state_with_server_ingress("https://public-ingress.com")
 
     with ctx(ctx.on.config_changed(), both) as mgr:
         assert mgr.charm._agent_status_message == ""
@@ -128,7 +150,10 @@ def test_agent_status_message(_mock_fqdn):
 
 @patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)
 def test_reconcile_agent_discovery_updates_relation(_mock_fqdn):
-    """_reconcile_agent_discovery writes discovery URL into agent relation unit data."""
+    """arrange: given an agent relation without a discovery URL.
+    act: when agent discovery reconciliation runs.
+    assert: the unit relation data receives the selected URL.
+    """
     state = testing.State(
         containers=[testing.Container(name=JENKINS_SERVICE_NAME, can_connect=True)],  # type: ignore[arg-type]
         relations=[
@@ -152,9 +177,12 @@ def test_reconcile_agent_discovery_updates_relation(_mock_fqdn):
 
 @patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)
 def test_agent_discovery_url_public_ingress_logs_warning(_mock_fqdn):
-    """_agent_discovery_url warns when falling back to public ingress URL."""
+    """arrange: given server ingress without dedicated agent ingress.
+    act: when the agent URL is resolved.
+    assert: the server URL is returned and a warning is logged.
+    """
     ctx = testing.Context(JenkinsK8sOperatorCharm)
-    state = _state_with_ingress(public_url="https://public-ingress.com", discovery_url=None)
+    state = _state_with_server_ingress("https://public-ingress.com")
 
     with (
         patch.object(charm.logger, "warning") as warning_mock,
@@ -167,7 +195,10 @@ def test_agent_discovery_url_public_ingress_logs_warning(_mock_fqdn):
 
 @patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)
 def test_reconcile_agent_discovery_skips_when_url_already_matches(_mock_fqdn):
-    """_reconcile_agent_discovery leaves existing matching relation URL unchanged."""
+    """arrange: given agent data that already contains the selected URL.
+    act: when agent discovery reconciliation runs.
+    assert: the relation data remains unchanged.
+    """
     discovery_url = "https://agent-discovery-ingress.com"
     state = testing.State(
         containers=[testing.Container(name=JENKINS_SERVICE_NAME, can_connect=True)],  # type: ignore[arg-type]
@@ -175,9 +206,7 @@ def test_reconcile_agent_discovery_skips_when_url_already_matches(_mock_fqdn):
             testing.Relation(
                 endpoint=AGENT_DISCOVERY_INGRESS_RELATION_NAME,
                 interface="ingress",
-                remote_app_data=(
-                    {"ingress": f'{{"url":"{discovery_url}"}}'} if discovery_url else {}
-                ),
+                remote_app_data={"ingress": f'{{"url":"{discovery_url}"}}'},
             ),
             testing.Relation(
                 endpoint="agent",

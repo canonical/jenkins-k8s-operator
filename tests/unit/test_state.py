@@ -212,151 +212,175 @@ def test_plugins_config(mock_charm: MagicMock):
     assert tuple(config.plugins) == ("hello", "world")
 
 
-def _topology_relation(endpoint: str, url: str | None = None) -> MagicMock:
-    """Build a relation mock with ready or pending ingress data."""
+def _topology_relation(endpoint: str, data: dict[str, str]) -> MagicMock:
+    """Build a relation mock with the supplied application databag."""
     relation = MagicMock()
-    if endpoint in (state.INGRESS_RELATION_NAME, state.AGENT_DISCOVERY_INGRESS_RELATION_NAME):
-        relation.app = MagicMock()
-        relation.data = {
-            relation.app: {} if url is None else {"ingress": json.dumps({"url": url})}
-        }
+    relation.app = MagicMock()
+    relation.data = {relation.app: data}
     return relation
 
 
+def _configure_topology(
+    mock_charm: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    relation_specs: tuple[tuple[str, dict[str, str]], ...],
+    config: dict[str, str],
+) -> None:
+    """Install relation and config fixtures for a topology scenario."""
+    relations = {endpoint: _topology_relation(endpoint, data) for endpoint, data in relation_specs}
+    monkeypatch.setattr(mock_charm.model, "get_relation", relations.get)
+    mock_charm.model.relations = {
+        state.AGENT_RELATION: list(filter(None, [relations.get(state.AGENT_RELATION)]))
+    }
+    mock_charm.config = config
+
+
 @pytest.mark.parametrize(
-    "agent, dedicated_url, server_url, haproxy, hostname, expected_error, error_match",
+    "relation_specs, config",
     [
         pytest.param(
-            False,
-            "https://agents.example.com/",
-            None,
-            False,
-            None,
-            None,
-            None,
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://agents.example.com/"})},
+                ),
+            ),
+            {},
             id="dedicated-only",
         ),
         pytest.param(
-            False, None, "https://jenkins.example.com/", False, None, None, None, id="server-only"
+            (
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/"})},
+                ),
+            ),
+            {},
+            id="server-only",
         ),
+        pytest.param((), {"external-hostname": "jenkins.example.com"}, id="staged-hostname"),
         pytest.param(
-            False, None, None, False, "jenkins.example.com", None, None, id="staged-hostname"
-        ),
-        pytest.param(
-            False,
-            None,
-            None,
-            True,
-            None,
-            state.CharmConfigInvalidError,
-            "requires external-hostname",
-            id="haproxy-without-hostname",
-        ),
-        pytest.param(
-            True,
-            None,
-            None,
-            True,
-            "jenkins.example.com",
-            state.CharmConfigInvalidError,
-            "agent-discovery-ingress",
-            id="agents-haproxy-only",
-        ),
-        pytest.param(
-            True,
-            "pending",
-            None,
-            False,
-            None,
-            state.CharmRelationDataNotReadyError,
-            "dedicated agent ingress",
-            id="pending-dedicated",
-        ),
-        pytest.param(
-            True,
-            None,
-            "pending",
-            False,
-            None,
-            state.CharmRelationDataNotReadyError,
-            "server ingress",
-            id="pending-server-fallback",
-        ),
-        pytest.param(
-            False,
-            None,
-            "https://jenkins.example.com/",
-            True,
-            "jenkins.example.com",
-            None,
-            None,
+            (
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/"})},
+                ),
+                (state.HAPROXY_ROUTE_RELATION_NAME, {}),
+            ),
+            {"external-hostname": "jenkins.example.com"},
             id="root-ingress-with-haproxy",
         ),
         pytest.param(
-            False,
-            None,
-            "https://jenkins.example.com/jenkins",
-            True,
-            "jenkins.example.com",
-            state.CharmConfigInvalidError,
-            "non-root path",
-            id="non-root-ingress-with-haproxy",
-        ),
-        pytest.param(
-            True,
-            "https://agents.example.com/",
-            "https://jenkins.example.com/",
-            True,
-            "jenkins.example.com",
-            None,
-            None,
+            (
+                (state.AGENT_RELATION, {}),
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://agents.example.com/"})},
+                ),
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/"})},
+                ),
+                (state.HAPROXY_ROUTE_RELATION_NAME, {}),
+            ),
+            {"external-hostname": "jenkins.example.com"},
             id="all-routes",
         ),
     ],
 )
-def test_deployment_topology_matrix(
+def test_deployment_topology_is_valid(
     mock_charm: MagicMock,
     monkeypatch: pytest.MonkeyPatch,
-    agent: bool,
-    dedicated_url: str | None,
-    server_url: str | None,
-    haproxy: bool,
-    hostname: str | None,
-    expected_error: type[Exception] | None,
-    error_match: str | None,
+    relation_specs: tuple[tuple[str, dict[str, str]], ...],
+    config: dict[str, str],
 ):
-    """Validate route combinations with one behavior-focused topology matrix."""
-    relations: dict[str, MagicMock] = {}
-    if agent:
-        agent_relation = MagicMock()
-        agent_relation.units = []
-        relations[state.AGENT_RELATION] = agent_relation
-    if dedicated_url is not None:
-        relations[state.AGENT_DISCOVERY_INGRESS_RELATION_NAME] = _topology_relation(
-            state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
-            None if dedicated_url == "pending" else dedicated_url,
-        )
-    if server_url is not None:
-        relations[state.INGRESS_RELATION_NAME] = _topology_relation(
-            state.INGRESS_RELATION_NAME,
-            None if server_url == "pending" else server_url,
-        )
-    if haproxy:
-        relations[state.HAPROXY_ROUTE_RELATION_NAME] = _topology_relation(
-            state.HAPROXY_ROUTE_RELATION_NAME
-        )
+    """
+    arrange: given an allowed combination of route relations and config.
+    act: when State.from_charm validates the deployment topology.
+    assert: state validation succeeds.
+    """
+    _configure_topology(mock_charm, monkeypatch, relation_specs, config)
 
-    monkeypatch.setattr(mock_charm.model, "get_relation", relations.get)
-    mock_charm.model.relations = {
-        state.AGENT_RELATION: [relations[state.AGENT_RELATION]] if agent else []
-    }
-    mock_charm.config = {"external-hostname": hostname} if hostname else {}
+    assert state.State.from_charm(mock_charm) is not None
 
-    if expected_error is None:
-        assert state.State.from_charm(mock_charm) is not None
-    else:
-        with pytest.raises(expected_error, match=error_match):
-            state.State.from_charm(mock_charm)
+
+@pytest.mark.parametrize(
+    "relation_specs, config, error_match",
+    [
+        pytest.param(
+            ((state.HAPROXY_ROUTE_RELATION_NAME, {}),),
+            {},
+            "requires external-hostname",
+            id="haproxy-without-hostname",
+        ),
+        pytest.param(
+            ((state.AGENT_RELATION, {}), (state.HAPROXY_ROUTE_RELATION_NAME, {})),
+            {"external-hostname": "jenkins.example.com"},
+            "agent-discovery-ingress",
+            id="agents-haproxy-only",
+        ),
+        pytest.param(
+            (
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
+                ),
+                (state.HAPROXY_ROUTE_RELATION_NAME, {}),
+            ),
+            {"external-hostname": "jenkins.example.com"},
+            "non-root path",
+            id="non-root-ingress-with-haproxy",
+        ),
+    ],
+)
+def test_deployment_topology_rejects_invalid_combinations(
+    mock_charm: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    relation_specs: tuple[tuple[str, dict[str, str]], ...],
+    config: dict[str, str],
+    error_match: str,
+):
+    """
+    arrange: given an invalid combination of route relations and config.
+    act: when State.from_charm validates the deployment topology.
+    assert: CharmConfigInvalidError is raised with the topology reason.
+    """
+    _configure_topology(mock_charm, monkeypatch, relation_specs, config)
+
+    with pytest.raises(state.CharmConfigInvalidError, match=error_match):
+        state.State.from_charm(mock_charm)
+
+
+@pytest.mark.parametrize(
+    "relation_specs, error_match",
+    [
+        pytest.param(
+            ((state.AGENT_RELATION, {}), (state.AGENT_DISCOVERY_INGRESS_RELATION_NAME, {})),
+            "dedicated agent ingress",
+            id="pending-dedicated",
+        ),
+        pytest.param(
+            ((state.AGENT_RELATION, {}), (state.INGRESS_RELATION_NAME, {})),
+            "server ingress",
+            id="pending-server-fallback",
+        ),
+    ],
+)
+def test_deployment_topology_waits_for_pending_ingress(
+    mock_charm: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    relation_specs: tuple[tuple[str, dict[str, str]], ...],
+    error_match: str,
+):
+    """
+    arrange: given agents and a related ingress without published URL data.
+    act: when State.from_charm validates the deployment topology.
+    assert: CharmRelationDataNotReadyError is raised with the ingress reason.
+    """
+    _configure_topology(mock_charm, monkeypatch, relation_specs, {})
+
+    with pytest.raises(state.CharmRelationDataNotReadyError, match=error_match):
+        state.State.from_charm(mock_charm)
 
 
 def test_invalid_num_units(mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch):
@@ -448,7 +472,10 @@ def test_agent_meta_from_relation_data_complete():
 
 
 def test_agent_meta_from_relation_data_remote_fs():
-    """An explicitly supplied remote filesystem is propagated to AgentMeta."""
+    """arrange: given agent metadata with an explicit remote filesystem.
+    act: when AgentMeta is built from relation data.
+    assert: the remote filesystem is preserved.
+    """
     result = state.AgentMeta.from_agent_relation(
         {
             "executors": "1",
@@ -825,7 +852,10 @@ def test_jcasc_environment_secrets_invalid_env_var_names_blocks(
     ["relative/path", "/", "//", "///", "/var/lib/../etc/jenkins", "/var/lib/jenkins\n"],
 )
 def test_agent_meta_rejects_unsafe_remote_fs(remote_fs: str):
-    """Reject unsafe workspace roots from relation metadata."""
+    """arrange: given unsafe remote filesystem values.
+    act: when AgentMeta validates the values.
+    assert: validation rejects each unsafe path.
+    """
     with pytest.raises(state.ValidationError, match="remote_fs"):
         state.AgentMeta(
             executors="1",
@@ -850,7 +880,10 @@ def test_agent_meta_rejects_unsafe_remote_fs(remote_fs: str):
 def test_external_agent_nodes_config_parses_names(
     mock_charm: MagicMock, config_value: dict[str, str], expected: frozenset[str]
 ):
-    """Parse the minimal comma-separated external agent node declaration."""
+    """arrange: given comma-separated external agent node names.
+    act: when State parses the configuration.
+    assert: the names are stored as a set.
+    """
     mock_charm.config = config_value
 
     charm_state = state.State.from_charm(mock_charm)
@@ -859,7 +892,10 @@ def test_external_agent_nodes_config_parses_names(
 
 
 def test_external_agent_nodes_config_rejects_duplicate_names(mock_charm: MagicMock):
-    """Reject duplicate names so the protection declaration is unambiguous."""
+    """arrange: given duplicate external agent node names.
+    act: when State parses the configuration.
+    assert: configuration validation raises an error.
+    """
     mock_charm.config = {"external-agent-nodes": "agent-0, agent-0"}
 
     with pytest.raises(state.CharmConfigInvalidError, match="duplicate"):
