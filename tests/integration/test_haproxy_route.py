@@ -265,7 +265,7 @@ async def gateway_agent_network_fixture(
     port_forward = await asyncio.create_subprocess_exec(
         "sudo", "kubectl", "--kubeconfig", kube_config, "-n", model.name,
         "port-forward", "--address", bridge_address,
-        f"svc/cilium-gateway-{GATEWAY_APPLICATION_NAME}", "443:443",
+        f"pod/{GATEWAY_APPLICATION_NAME}-0", "443:443",
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         start_new_session=True,
     )
@@ -278,7 +278,8 @@ async def gateway_agent_network_fixture(
             )
         yield
     finally:
-        port_forward.terminate()
+        if port_forward.returncode is None:
+            port_forward.terminate()
         try:
             await asyncio.wait_for(port_forward.wait(), timeout=5)
         except asyncio.TimeoutError:
