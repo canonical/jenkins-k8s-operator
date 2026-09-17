@@ -3,19 +3,16 @@
 
 """Integration tests for the jenkins-k8s haproxy-route relation."""
 
-import json
-import os
-
+import jenkinsapi.jenkins
 import pytest
 import pytest_asyncio
 import requests
 from juju.application import Application
 from juju.model import Model
-from pytest_operator.plugin import OpsTest
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
 from .constants import MACHINE_CONTROLLER_NAME
-from .helpers import get_model_unit_addresses
+from .helpers import assert_job_success, get_model_unit_addresses
 from .types_ import KeycloakOIDCMetadata
 
 EXTERNAL_HOSTNAME = "jenkins.internal"
@@ -183,14 +180,23 @@ async def gateway_agent_ingress_fixture(model: Model, application: Application) 
         application_name="jenkins-gateway-api",
     )
     await gateway.set_config({"gateway-class": GATEWAY_CLASS})
-    await model.wait_for_idle(apps=[gateway.name], status="active", timeout=20 * 60)
+    certificates = await model.deploy(
+        "self-signed-certificates",
+        channel="1/stable",
+        trust=True,
+        application_name="jenkins-gateway-certificates",
+    )
+    await model.integrate(f"{gateway.name}:certificates", f"{certificates.name}:certificates")
+    await model.wait_for_idle(
+        apps=[gateway.name, certificates.name], status="active", timeout=20 * 60
+    )
 
     ingress_configurator = await model.deploy(
         "ingress-configurator",
         channel="latest/stable",
         trust=True,
         application_name="jenkins-agent-ingress-configurator",
-        config={"hostname": AGENT_EXTERNAL_HOSTNAME},
+        config={"hostname": AGENT_EXTERNAL_HOSTNAME, "paths": "/"},
     )
     await model.integrate(
         f"{gateway.name}:gateway-route",
@@ -326,22 +332,22 @@ async def test_haproxy_spoe_redirects_to_oidc(
     )
 
 
-@pytest.mark.skipif(
-    os.environ.get("TEST_GATEWAY_API") != "1",
-    reason="Gateway API controller is required for this integration test",
-)
 @pytest.mark.abort_on_fail
 async def test_haproxy_server_and_gateway_agent_discovery(
-    ops_test: OpsTest,
     model: Model,
     application: Application,
     haproxy_with_spoe: Application,
     gateway_agent_ingress: Application,
     jenkins_machine_agents: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
     machine_model: Model,
     ca_cert_path: str,
 ):
-    """Verify SPOE server routing and independent Gateway API agent discovery."""
+    """
+    arrange: given HAProxy/SPOE for users and Gateway API ingress for agents.
+    act: route Jenkins through HAProxy and execute a job on the related machine agent.
+    assert: browser traffic reaches SPOE and the agent executes the Jenkins job through Gateway API.
+    """
     await application.set_config({"external-hostname": SPOE_EXTERNAL_HOSTNAME})
 
     related_endpoints = {
@@ -378,19 +384,4 @@ async def test_haproxy_server_and_gateway_agent_discovery(
     )
     assert server_response.status_code == 302
 
-    # The Jenkins agent relation must receive the ingress-configurator/Gateway
-    # URL, never the SPOE-protected HAProxy server URL or a pod IP.
-    for unit in jenkins_machine_agents.units:
-        return_code, stdout, stderr = await ops_test.juju(
-            "show-unit", "-m", machine_model.name, unit.name, "--format=json"
-        )
-        assert return_code == 0, f"Failed to inspect {unit.name}: {stderr}"
-        unit_info = json.loads(stdout)[unit.name]
-        relation_info = next(
-            relation for relation in unit_info["relation-info"] if relation["endpoint"] == "agent"
-        )
-        server_unit_data = next(iter(relation_info["related-units"].values()))["data"]
-        agent_url = server_unit_data["url"]
-        assert AGENT_EXTERNAL_HOSTNAME in agent_url
-        assert SPOE_EXTERNAL_HOSTNAME not in agent_url
-        assert not agent_url.startswith("http://10.")
+    assert_job_success(jenkins_client, jenkins_machine_agents.name, "machine")
