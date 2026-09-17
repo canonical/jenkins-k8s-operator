@@ -224,8 +224,32 @@ def test_agent_discovery_ingress_without_server_ingress_is_valid(
             agent_ingress if relation_name == state.AGENT_DISCOVERY_INGRESS_RELATION_NAME else None
         ),
     )
+    mock_charm.model.relations = {state.AGENT_RELATION: []}
 
     assert state.State.from_charm(mock_charm) is not None
+
+
+def test_pending_dedicated_ingress_is_not_ready_for_agents(
+    mock_charm: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
+    """State validation waits before agent reconciliation when ingress data is pending."""
+    agent_relation = MagicMock()
+    agent_relation.units = []
+    dedicated_ingress = MagicMock()
+    dedicated_ingress.app = MagicMock()
+    dedicated_ingress.data = {dedicated_ingress.app: {}}
+    monkeypatch.setattr(
+        mock_charm.model,
+        "get_relation",
+        lambda relation_name: {
+            state.AGENT_RELATION: agent_relation,
+            state.AGENT_DISCOVERY_INGRESS_RELATION_NAME: dedicated_ingress,
+        }.get(relation_name),
+    )
+    mock_charm.model.relations = {state.AGENT_RELATION: [agent_relation]}
+
+    with pytest.raises(state.CharmRelationDataNotReadyError, match="dedicated agent ingress"):
+        state.State.from_charm(mock_charm)
 
 
 def test_haproxy_route_requires_external_hostname(

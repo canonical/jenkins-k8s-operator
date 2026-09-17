@@ -6,11 +6,10 @@
 import socket
 from unittest.mock import patch
 
-import pytest
 from ops import testing
 
 import charm
-from charm import JenkinsK8sOperatorCharm, ReconcileWaitingError
+from charm import JenkinsK8sOperatorCharm
 from state import AGENT_DISCOVERY_INGRESS_RELATION_NAME, JENKINS_SERVICE_NAME
 
 _MONKEYPATCHED_FQDN = "192.0.2.0"
@@ -104,58 +103,6 @@ def test_dedicated_agent_ingress_is_valid_without_server_ingress():
     with ctx(ctx.on.config_changed(), state) as mgr:
         assert mgr.charm._agent_discovery_url == "https://agents.example.com"
         assert mgr.charm._get_ingress_path() == ""
-
-
-def test_pending_dedicated_agent_ingress_waits_without_fallback():
-    """A related dedicated route must not publish a pod fallback while pending."""
-    ctx = testing.Context(JenkinsK8sOperatorCharm)
-    state = testing.State(
-        containers=[testing.Container(name=JENKINS_SERVICE_NAME, can_connect=True)],  # type: ignore[arg-type]
-        relations=[
-            testing.Relation(
-                endpoint=AGENT_DISCOVERY_INGRESS_RELATION_NAME,
-                interface="ingress",
-            )
-        ],
-    )
-
-    with ctx(ctx.on.config_changed(), state) as mgr, pytest.raises(ReconcileWaitingError):
-        _ = mgr.charm._agent_discovery_url
-
-
-def test_pending_server_ingress_waits_without_dedicated_route():
-    """A pending server ingress is authoritative instead of a pod fallback."""
-    ctx = testing.Context(JenkinsK8sOperatorCharm)
-    state = _state_with_ingress(public_url=None, discovery_url=None, public_related=True)
-
-    with ctx(ctx.on.config_changed(), state) as mgr, pytest.raises(ReconcileWaitingError):
-        _ = mgr.charm._agent_discovery_url
-
-
-def test_pending_dedicated_agent_ingress_does_not_overwrite_agent_url():
-    """Pending dedicated ingress leaves existing agent relation data unchanged."""
-    ctx = testing.Context(JenkinsK8sOperatorCharm)
-    state = testing.State(
-        containers=[testing.Container(name=JENKINS_SERVICE_NAME, can_connect=True)],  # type: ignore[arg-type]
-        relations=[
-            testing.Relation(
-                endpoint=AGENT_DISCOVERY_INGRESS_RELATION_NAME,
-                interface="ingress",
-            ),
-            testing.Relation(
-                endpoint="agent",
-                interface="jenkins_agent_v0",
-                remote_units_data={0: {"executors": "1", "labels": "x", "name": "a1"}},
-                local_unit_data={"url": "https://old.example.com"},
-            ),
-        ],
-    )
-
-    with ctx(ctx.on.config_changed(), state) as mgr:
-        with pytest.raises(ReconcileWaitingError):
-            mgr.charm._reconcile_agent_discovery()
-        agent_relation = mgr.charm.model.relations["agent"][0]
-        assert agent_relation.data[mgr.charm.unit]["url"] == "https://old.example.com"
 
 
 @patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)

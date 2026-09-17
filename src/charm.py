@@ -38,6 +38,7 @@ from state import (
     CharmConfigInvalidError,
     CharmIllegalNumUnitsError,
     CharmRelationDataInvalidError,
+    CharmRelationDataNotReadyError,
     State,
 )
 
@@ -64,19 +65,6 @@ class ReconcileBlockedError(Exception):
 
         Args:
             message: The blocked status message to surface to the user.
-        """
-        self.message = message
-        super().__init__(message)
-
-
-class ReconcileWaitingError(Exception):
-    """Raised when reconciliation must wait for relation data."""
-
-    def __init__(self, message: str):
-        """Initialize ReconcileWaitingError.
-
-        Args:
-            message: The waiting status message to surface to the user.
         """
         self.message = message
         super().__init__(message)
@@ -191,6 +179,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except (CharmConfigInvalidError, CharmIllegalNumUnitsError) as exc:
             self.unit.status = ops.BlockedStatus(exc.msg)
             return None
+        except CharmRelationDataNotReadyError as exc:
+            self.unit.status = ops.WaitingStatus(exc.msg)
+            return None
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
 
@@ -281,15 +272,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             # Post Jenkins server startup reconciliations
             logger.info("Reconciling API Token")
             self._reconcile_api_token(admin_client=admin_client)
-            agent_reconcile_waiting: typing.Optional[ReconcileWaitingError] = None
-            try:
-                logger.info("Reconciling agents")
-                self._reconcile_agents(charm_state, client=admin_client)
-                logger.info("Reconciling agent discovery")
-                self._reconcile_agent_discovery()
-            except ReconcileWaitingError as exc:
-                agent_reconcile_waiting = exc
-                logger.info("Waiting to reconcile agent discovery: %s", exc.message)
+            logger.info("Reconciling agents")
+            self._reconcile_agents(charm_state, client=admin_client)
+            logger.info("Reconciling agent discovery")
+            self._reconcile_agent_discovery()
             logger.info("Reconciling haproxy route")
             self._reconcile_haproxy_route(charm_state)
             logger.info("Reconciling plugins")
@@ -298,9 +284,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.unit.status = ops.BlockedStatus(exc.message)
             return
 
-        if agent_reconcile_waiting:
-            self.unit.status = ops.WaitingStatus(agent_reconcile_waiting.message)
-            return
         self.unit.status = ops.ActiveStatus(self._agent_status_message)
 
     def _reconcile_storage(self, container: ops.Container) -> None:
@@ -544,23 +527,19 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The charm's agent discovery url.
         """
-        if self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME):
-            if ingress_url := self.agent_discovery_ingress.url:
-                return ingress_url.rstrip("/")
-            raise ReconcileWaitingError(
-                "Waiting for the dedicated agent ingress endpoint to become available."
+        if self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) and (
+            ingress_url := self.agent_discovery_ingress.url
+        ):
+            return ingress_url.rstrip("/")
+        if self.model.get_relation(INGRESS_RELATION_NAME) and (
+            ingress_url := self.server_ingress.url
+        ):
+            logger.warning(
+                "Using server ingress without a dedicated agent route may"
+                " result in agent discovery failure. Use %s for agents discovery.",
+                AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             )
-        if self.model.get_relation(INGRESS_RELATION_NAME):
-            if ingress_url := self.server_ingress.url:
-                logger.warning(
-                    "Using server ingress without a dedicated agent route may"
-                    " result in agent discovery failure. Use %s for agents discovery.",
-                    AGENT_DISCOVERY_INGRESS_RELATION_NAME,
-                )
-                return ingress_url.rstrip("/")
-            raise ReconcileWaitingError(
-                "Waiting for the server ingress endpoint to become available."
-            )
+            return ingress_url.rstrip("/")
 
         # Fallback to pod IP
         if binding := self.model.get_binding("juju-info"):

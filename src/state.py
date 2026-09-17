@@ -49,6 +49,14 @@ class CharmConfigInvalidError(CharmStateBaseError):
         self.msg = msg
 
 
+class CharmRelationDataNotReadyError(CharmStateBaseError):
+    """Exception raised when a related endpoint has not published its URL yet."""
+
+    def __init__(self, msg: str):
+        """Initialize a relation-not-ready error."""
+        self.msg = msg
+
+
 class CharmRelationDataInvalidError(CharmStateBaseError):
     """Represents an error with invalid data in relation data.
 
@@ -264,6 +272,24 @@ def _validate_deployment_relations(charm: ops.CharmBase) -> None:
     if haproxy_route and server_ingress and ingress_path:
         raise CharmConfigInvalidError(
             "ingress and haproxy-route cannot be combined when ingress uses a non-root path."
+        )
+    has_agents = bool(charm.model.relations[AGENT_RELATION])
+    if (
+        has_agents
+        and agent_discovery_ingress
+        and _get_ingress_path(agent_discovery_ingress) is None
+    ):
+        raise CharmRelationDataNotReadyError(
+            "Waiting for the dedicated agent ingress endpoint to become available."
+        )
+    if (
+        has_agents
+        and not agent_discovery_ingress
+        and server_ingress
+        and _get_ingress_path(server_ingress) is None
+    ):
+        raise CharmRelationDataNotReadyError(
+            "Waiting for the server ingress endpoint to become available."
         )
     if (
         charm.model.get_relation(AGENT_RELATION)
