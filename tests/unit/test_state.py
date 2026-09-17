@@ -212,7 +212,7 @@ def test_plugins_config(mock_charm: MagicMock):
     assert tuple(config.plugins) == ("hello", "world")
 
 
-def _topology_relation(endpoint: str, data: dict[str, str]) -> MagicMock:
+def _topology_relation(data: dict[str, str]) -> MagicMock:
     """Build a relation mock with the supplied application databag."""
     relation = MagicMock()
     relation.app = MagicMock()
@@ -227,7 +227,7 @@ def _configure_topology(
     config: dict[str, str],
 ) -> None:
     """Install relation and config fixtures for a topology scenario."""
-    relations = {endpoint: _topology_relation(endpoint, data) for endpoint, data in relation_specs}
+    relations = {endpoint: _topology_relation(data) for endpoint, data in relation_specs}
     monkeypatch.setattr(mock_charm.model, "get_relation", relations.get)
     mock_charm.model.relations = {
         state.AGENT_RELATION: list(filter(None, [relations.get(state.AGENT_RELATION)]))

@@ -124,8 +124,7 @@ def test_dedicated_agent_ingress_is_valid_without_server_ingress():
         assert mgr.charm._get_ingress_path() == ""
 
 
-@patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)
-def test_agent_status_message(_mock_fqdn):
+def test_agent_status_message():
     """arrange: given server-only and server-plus-dedicated route scenarios.
     act: when the agent status message is computed.
     assert: only server-only routing emits the guidance message.
@@ -175,8 +174,7 @@ def test_reconcile_agent_discovery_updates_relation(_mock_fqdn):
         assert "url" in agent_rel.data[mgr.charm.unit]
 
 
-@patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)
-def test_agent_discovery_url_public_ingress_logs_warning(_mock_fqdn):
+def test_agent_discovery_url_public_ingress_logs_warning():
     """arrange: given server ingress without dedicated agent ingress.
     act: when the agent URL is resolved.
     assert: the server URL is returned and a warning is logged.
@@ -193,8 +191,7 @@ def test_agent_discovery_url_public_ingress_logs_warning(_mock_fqdn):
     warning_mock.assert_called_once()
 
 
-@patch.object(socket, "getfqdn", return_value=_MONKEYPATCHED_FQDN)
-def test_reconcile_agent_discovery_skips_when_url_already_matches(_mock_fqdn):
+def test_reconcile_agent_discovery_skips_when_url_already_matches():
     """arrange: given agent data that already contains the selected URL.
     act: when agent discovery reconciliation runs.
     assert: the relation data remains unchanged.
