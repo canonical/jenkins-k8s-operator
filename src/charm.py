@@ -20,7 +20,6 @@ import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.haproxy.v2.haproxy_route import HaproxyRouteRequirer
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
-from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
@@ -32,7 +31,6 @@ import timerange
 from state import (
     AGENT_DISCOVERY_INGRESS_RELATION_NAME,
     AGENT_RELATION,
-    AUTH_PROXY_RELATION,
     HAPROXY_ROUTE_RELATION_NAME,
     INGRESS_RELATION_NAME,
     JENKINS_SERVICE_NAME,
@@ -117,7 +115,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             ],
         )
         self._grafana = GrafanaDashboardProvider(self)
-        self._auth_proxy = AuthProxyRequirer(self)
         self._haproxy_route = HaproxyRouteRequirer(
             self,
             relation_name=HAPROXY_ROUTE_RELATION_NAME,
@@ -138,8 +135,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.agent_discovery_ingress.on.revoked,
             self.server_ingress.on.ready,
             self.server_ingress.on.revoked,
-            self.on[AUTH_PROXY_RELATION].relation_joined,
-            self.on[AUTH_PROXY_RELATION].relation_departed,
             self._haproxy_route.on.ready,
             self._haproxy_route.on.removed,
             self.on.update_status,
@@ -257,8 +252,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._reconcile_agents(charm_state, client=admin_client)
             logger.info("Reconciling agent discovery")
             self._reconcile_agent_discovery()
-            logger.info("Reconciling auth proxy")
-            self._reconcile_auth_proxy(charm_state)
             logger.info("Reconciling haproxy route")
             self._reconcile_haproxy_route(charm_state)
             logger.info("Reconciling plugins")
@@ -433,27 +426,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 continue
             relation.data[self.model.unit].update({"url": self._agent_discovery_url})
 
-    def _reconcile_auth_proxy(self, state: State) -> None:
-        """Reconcile auth proxy configuration.
-
-        Args:
-            state: The current charm state.
-        """
-        if state.auth_proxy_integrated:
-            if self.server_ingress.url:
-                auth_proxy_config = AuthProxyConfig(
-                    protected_urls=[self.server_ingress.url],
-                    allowed_endpoints=[],
-                    headers=["X-Auth-Request-User"],
-                )
-            else:
-                auth_proxy_config = AuthProxyConfig(
-                    protected_urls=[],
-                    allowed_endpoints=[],
-                    headers=["X-Auth-Request-User"],
-                )
-            self._auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
-
     def _reconcile_haproxy_route(self, state: State) -> None:
         """Publish or retract haproxy-route requirements.
 
@@ -533,8 +505,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             pass
         elif ingress_url := self.server_ingress.url:
             logger.warning(
-                "Using public ingress with protected endpoints (e.g. oathkeeper)"
-                "will result in agent discovery failure. Use %s for agents discovery.",
+                "Using server ingress without a dedicated agent route may"
+                " result in agent discovery failure. Use %s for agents discovery.",
                 AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             )
         else:
@@ -667,7 +639,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """Reconcile JCasC configuration to desired state.
 
         Builds the desired JCasC config by merging user-provided config with
-        charm-managed sections (admin credentials, auth proxy), then delegates
+        charm-managed sections (admin credentials), then delegates
         file I/O, validation, and reload to jenkins.sync_jcasc_config.
 
         If jcasc-repository is set, fetches and merges YAML files from the repository.
@@ -739,7 +711,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         desired_config = jenkins.build_jcasc_config(
             jcasc_config,
             charm_state.proxy_config,
-            charm_state.auth_proxy_integrated,
         )
         try:
             desired_yaml = yaml.dump(desired_config, default_flow_style=False, sort_keys=False)

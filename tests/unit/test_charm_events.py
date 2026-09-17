@@ -98,7 +98,6 @@ def test__agent_relation_handlers_reconcile_agents(
         patch.object(jenkins_charm, "_reconcile_api_token"),
         patch.object(jenkins_charm, "_reconcile_agents") as reconcile_agents_mock,
         patch.object(jenkins_charm, "_reconcile_agent_discovery"),
-        patch.object(jenkins_charm, "_reconcile_auth_proxy"),
         patch.object(jenkins_charm, "_reconcile_plugins"),
     ):
         event = MagicMock(spec=event_type)
@@ -140,7 +139,6 @@ def test__agent_discovery_ingress_handlers_reconfigure_agents(
         patch.object(jenkins_charm, "_reconcile_api_token"),
         patch.object(jenkins_charm, "_reconcile_agents"),
         patch.object(jenkins_charm, "_reconcile_agent_discovery") as reconcile_discovery_mock,
-        patch.object(jenkins_charm, "_reconcile_auth_proxy"),
         patch.object(jenkins_charm, "_reconcile_plugins"),
     ):
         jenkins_charm._reconcile(MagicMock(spec=event_spec))
@@ -171,55 +169,11 @@ def test__upgrade_charm_reconciles_storage_and_agents(
         patch.object(jenkins_charm, "_reconcile_api_token"),
         patch.object(jenkins_charm, "_reconcile_agents"),
         patch.object(jenkins_charm, "_reconcile_agent_discovery"),
-        patch.object(jenkins_charm, "_reconcile_auth_proxy"),
         patch.object(jenkins_charm, "_reconcile_plugins"),
     ):
         jenkins_charm._reconcile(MagicMock(spec=ops.UpgradeCharmEvent))
 
     reconcile_storage_mock.assert_called_once()
-
-
-@pytest.mark.parametrize(
-    "event_type",
-    [
-        pytest.param(ops.RelationJoinedEvent, id="joined"),
-        pytest.param(ops.RelationDepartedEvent, id="departed"),
-    ],
-)
-def test__auth_proxy_relation_handlers_delegate(
-    harness_container: HarnessWithContainer,
-    event_type: type[ops.EventBase],
-):
-    """
-    arrange: given a started charm and downstream reconcile steps stubbed.
-    act: when an auth-proxy relation event triggers _reconcile.
-    assert: _reconcile_auth_proxy is called.
-    """
-    harness_container.harness.begin()
-    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
-
-    with (
-        patch.object(jenkins_charm, "_reconcile_storage"),
-        patch.object(
-            jenkins_charm,
-            "_reconcile_pre_startup_configurations",
-            return_value="hash123",
-        ),
-        patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
-        patch("jenkins.Jenkins.wait_ready"),
-        patch.object(jenkins_charm, "_reconcile_api_token"),
-        patch.object(jenkins_charm, "_reconcile_agents"),
-        patch.object(jenkins_charm, "_reconcile_agent_discovery"),
-        patch.object(jenkins_charm, "_reconcile_auth_proxy") as reconcile_auth_proxy_mock,
-        patch.object(jenkins_charm, "_reconcile_plugins"),
-    ):
-        event = MagicMock(spec=event_type)
-        if event_type is ops.RelationDepartedEvent:
-            event.relation = SimpleNamespace(name="auth-proxy", data={})
-            event.departing_unit = None
-        jenkins_charm._reconcile(event)
-
-    reconcile_auth_proxy_mock.assert_called_once()
 
 
 def test_secret_changed_observer_registered(harness: Harness):
@@ -277,7 +231,6 @@ def test_jcasc_environment_secrets_injected_during_reconcile(
         patch.object(jenkins_charm, "_reconcile_api_token"),
         patch.object(jenkins_charm, "_reconcile_agents"),
         patch.object(jenkins_charm, "_reconcile_agent_discovery"),
-        patch.object(jenkins_charm, "_reconcile_auth_proxy"),
         patch.object(jenkins_charm, "_reconcile_plugins"),
         patch.object(
             jenkins_charm.model,

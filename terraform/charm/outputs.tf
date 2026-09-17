@@ -11,7 +11,6 @@ output "requires" {
     agent                   = "agent"
     ingress                 = "ingress"
     agent_discovery_ingress = "agent-discovery-ingress"
-    auth_proxy              = "auth-proxy"
     logging                 = "loki_push_api"
   }
 }

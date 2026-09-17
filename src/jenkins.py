@@ -70,7 +70,6 @@ WAR_DOWNLOAD_URL = "https://updates.jenkins.io/download/war"
 SYSTEM_PROPERTY_HEADLESS = "java.awt.headless=true"
 # Java system property to load logging configuration from file
 SYSTEM_PROPERTY_LOGGING = f"java.util.logging.config.file={LOGGING_CONFIG_PATH}"
-AUTH_PROXY_JENKINS_CONFIG = "templates/jenkins-auth-proxy-config.xml"
 DEFAULT_JENKINS_CONFIG = "templates/jenkins-config.xml"
 JENKINS_LOGGING_CONFIG = "templates/logging.properties"
 
@@ -840,15 +839,6 @@ def install_default_config(container: ops.Container) -> None:
     _install_config(container, DEFAULT_JENKINS_CONFIG, CONFIG_FILE_PATH)
 
 
-def install_auth_proxy_config(container: ops.Container) -> None:
-    """Install jenkins-config.xml for auth_proxy.
-
-    Args:
-        container: The Jenkins workload container.
-    """
-    _install_config(container, AUTH_PROXY_JENKINS_CONFIG, CONFIG_FILE_PATH)
-
-
 def install_logging_config(container: ops.Container) -> None:
     """Install logging config.
 
@@ -1155,35 +1145,20 @@ def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str
 def build_jcasc_config(
     jcasc_config: dict[str, typing.Any],
     proxy_config: typing.Optional[state.ProxyConfig] = None,
-    auth_proxy: bool = False,
 ) -> typing.Dict[str, typing.Any]:
     """Build the desired JCasC config by merging user config with charm-managed sections.
 
     Injects admin credentials (local securityRealm) when the user hasn't provided one.
-    Checks for conflicts with auth_proxy relation.
 
     Args:
         jcasc_config: User-provided JCasC mapping from charm config.
         proxy_config: Optional model proxy configuration to inject into Jenkins config.
-        auth_proxy: Whether auth proxy integration is active.
 
     Returns:
         The merged JCasC configuration dict.
     """
     config = copy.deepcopy(jcasc_config)
     jenkins_section: typing.Dict[str, typing.Any] = config.get("jenkins") or {}
-
-    # Conflict check: user provides securityRealm or authorizationStrategy while auth_proxy is active
-    if auth_proxy:
-        if "securityRealm" in jenkins_section or "authorizationStrategy" in jenkins_section:
-            logger.warning(
-                "Jenkins security is managed by user-provided jcasc-config; "
-                "auth-proxy bypass not injected."
-            )
-        else:
-            logger.warning("Bypassing Jenkins security, security via auth proxy assumed.")
-            jenkins_section["securityRealm"] = "none"
-            jenkins_section["authorizationStrategy"] = "unsecured"
 
     # Inject admin credentials if securityRealm not provided by user
     if "securityRealm" not in jenkins_section:

@@ -99,49 +99,6 @@ resource "juju_integration" "jenkins_k8s_agent_discovery_ingress" {
   }
 }
 
-resource "juju_application" "oauth2_proxy_k8s" {
-  name  = var.oauth2_proxy.app_name
-  model = var.model
-
-  charm {
-    name     = "oauth2-proxy-k8s"
-    channel  = var.oauth2_proxy.channel
-    revision = var.oauth2_proxy.revision
-    base     = var.oauth2_proxy.base
-  }
-
-  config      = var.oauth2_proxy.config
-  constraints = var.oauth2_proxy.constraints
-  units       = 1
-}
-
-resource "juju_integration" "jenkins_k8s_oauth2_proxy_k8s" {
-  model = var.model
-
-  depends_on = [null_resource.wait_for_jenkins_up]
-
-  application {
-    name     = module.jenkins_k8s.app_name
-    endpoint = module.jenkins_k8s.requires.auth_proxy
-  }
-  application {
-    name     = juju_application.oauth2_proxy_k8s.name
-    endpoint = "auth-proxy"
-  }
-}
-
-resource "juju_integration" "public_ingress_oauth2_proxy_k8s" {
-  model = var.model
-  application {
-    name     = juju_application.public_ingress.name
-    endpoint = "ingress"
-  }
-  application {
-    name     = juju_application.oauth2_proxy_k8s.name
-    endpoint = "ingress"
-  }
-}
-
 resource "juju_integration" "jenkins_k8s_jenkins_agent_k8s_agent" {
   model = var.model
 

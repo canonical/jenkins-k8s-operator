@@ -40,9 +40,6 @@ def _patch_reconcile_dependencies(monkeypatch: pytest.MonkeyPatch):
         MagicMock(return_value=None),
     )
     monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_auth_proxy", MagicMock(return_value=None)
-    )
-    monkeypatch.setattr(
         JenkinsK8sOperatorCharm, "_reconcile_plugins", MagicMock(return_value=None)
     )
 
@@ -79,40 +76,6 @@ def test_traefik_integration_added_replans_jenkins(
 
     harness.add_storage("jenkins-home", attach=True)
     harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-
-    container = harness.model.unit.containers["jenkins"]
-    replan_mock = MagicMock()
-    monkeypatch.setattr(container, "replan", replan_mock)
-
-    ingress_relation_id = harness.add_relation(
-        "ingress",
-        "traefik-k8s",
-        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
-    )
-    harness.remove_relation(ingress_relation_id)
-
-    assert replan_mock.call_count == 2
-
-
-def test_traefik_integration_added_with_auth_proxy_replans_jenkins(
-    harness: Harness, monkeypatch: pytest.MonkeyPatch
-):
-    """
-    arrange: given a base jenkins charm with auth-proxy relation.
-    act: add an integration with traefik on :ingress endpoint and remove it.
-    assert: pebble replan should run twice, one for ingress ready, one for ingress revoked.
-    """
-    _patch_reconcile_dependencies(monkeypatch)
-    mock_ingress_url = "http://ingress.test/model-unit-0"
-    harness.add_storage("jenkins-home", attach=True)
-    harness.add_relation(
-        "auth-proxy",
-        "oathkeeper",
-        app_data={},
-    )
-    harness.begin()
-
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
 
     container = harness.model.unit.containers["jenkins"]

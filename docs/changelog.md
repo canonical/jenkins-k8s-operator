@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+## 2026-08-26
+
+- Remove the unsupported `auth-proxy` relation, OAuth2-proxy integration, and
+  automatic unsecured Jenkins mode. Existing deployments must migrate to an
+  external edge-authentication solution while keeping Jenkins' own security
+  realm enabled.
+
 ## 2026-08-25
 
 - Preserve manually managed Jenkins nodes during agent relation reconciliation.

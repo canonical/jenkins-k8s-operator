@@ -18,7 +18,6 @@ from timerange import InvalidTimeRangeError, Range
 logger = logging.getLogger(__name__)
 
 AGENT_RELATION = "agent"
-AUTH_PROXY_RELATION = "auth-proxy"
 JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
 INGRESS_RELATION_NAME = "ingress"
@@ -165,19 +164,6 @@ def _get_agent_meta_map_from_relation(
     return relation_agents_map
 
 
-def _is_auth_proxy_integrated(relation: typing.Optional[ops.Relation]) -> bool:
-    """Check if there is an auth proxy integration..
-
-    Args:
-        relation: The auth-proxy relation.
-
-    Returns:
-        True if an integration for atuh proxy exists.
-    """
-    # No relation data is written by the provider, so checking the existence suffices.
-    return bool(relation)
-
-
 def _parse_restart_time_range(charm: ops.CharmBase) -> typing.Optional[Range]:
     """Parse restart-time-range from charm config."""
     try:
@@ -190,19 +176,13 @@ def _parse_restart_time_range(charm: ops.CharmBase) -> typing.Optional[Range]:
 
 def _get_relation_state(
     charm: ops.CharmBase,
-) -> tuple[
-    typing.Optional[typing.Mapping[ops.Relation, list[AgentMeta]]],
-    bool,
-]:
+) -> typing.Optional[typing.Mapping[ops.Relation, list[AgentMeta]]]:
     """Build relation-derived state used by the charm."""
     try:
         agent_relation_meta_map = _get_agent_meta_map_from_relation(
             charm.model.relations[AGENT_RELATION]
         )
-        is_auth_proxy_integrated = _is_auth_proxy_integrated(
-            charm.model.get_relation(AUTH_PROXY_RELATION)
-        )
-        return agent_relation_meta_map, is_auth_proxy_integrated
+        return agent_relation_meta_map
     except ValidationError as exc:
         logger.error("Invalid agent relation data received, %s", exc)
         raise CharmRelationDataInvalidError(f"Invalid {AGENT_RELATION} relation data.") from exc
@@ -441,7 +421,6 @@ class State:
         agent_relation_meta: Metadata of all agents from units related through agent relation.
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
-        auth_proxy_integrated: if an auth proxy integrated has been set.
         jcasc_config: Raw JCasC YAML content from charm config.
         jcasc_repository: Git repository URL for JCasC YAML files.
         jcasc_repository_token: (username, token) tuple for private repos, or None.
@@ -456,7 +435,6 @@ class State:
     agent_relation_meta: typing.Optional[typing.Mapping[ops.Relation, list[AgentMeta]]]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
-    auth_proxy_integrated: bool
     jcasc_config: typing.Optional[typing.Dict[str, typing.Any]]
     jcasc_repository: typing.Optional[str] = None
     jcasc_repository_token: typing.Optional[typing.Tuple[str, str]] = None
@@ -483,7 +461,7 @@ class State:
             CharmIllegalNumUnitsError: if more than 1 unit of Jenkins charm is deployed.
         """
         restart_time_range = _parse_restart_time_range(charm)
-        agent_relation_meta_map, is_auth_proxy_integrated = _get_relation_state(charm)
+        agent_relation_meta_map = _get_relation_state(charm)
         proxy_config = _parse_proxy_config()
 
         plugins_str = typing.cast(str, charm.config.get("allowed-plugins"))
@@ -512,7 +490,6 @@ class State:
             agent_relation_meta=agent_relation_meta_map,
             plugins=plugins,
             proxy_config=proxy_config,
-            auth_proxy_integrated=is_auth_proxy_integrated,
             jcasc_config=jcasc_config,
             jcasc_repository=jcasc_repository,
             jcasc_repository_token=jcasc_repository_token,
