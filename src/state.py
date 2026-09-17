@@ -292,7 +292,7 @@ def _validate_deployment_relations(charm: ops.CharmBase) -> None:
             "Waiting for the server ingress endpoint to become available."
         )
     if (
-        charm.model.get_relation(AGENT_RELATION)
+        has_agents
         and haproxy_route
         and external_hostname
         and not agent_discovery_ingress
