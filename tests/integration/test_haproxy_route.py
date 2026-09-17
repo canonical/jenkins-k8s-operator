@@ -3,12 +3,18 @@
 
 """Integration tests for the jenkins-k8s haproxy-route relation."""
 
+import asyncio
+import re
+
 import jenkinsapi.jenkins
 import pytest
 import pytest_asyncio
 import requests
+import tenacity
 from juju.application import Application
 from juju.model import Model
+from juju.unit import Unit
+from pytest_operator.plugin import OpsTest
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
 from .constants import MACHINE_CONTROLLER_NAME
@@ -19,6 +25,7 @@ EXTERNAL_HOSTNAME = "jenkins.internal"
 SPOE_EXTERNAL_HOSTNAME = "jenkins-spoe.internal"
 AGENT_EXTERNAL_HOSTNAME = "jenkins-agent.internal"
 GATEWAY_CLASS = "ck-gateway"
+GATEWAY_APPLICATION_NAME = "jenkins-gateway-api"
 HAPROXY_ROUTE_RELATION = "haproxy-route"
 SELF_SIGNED_CERTIFICATES_APP_NAME = "self-signed-certificates"
 
@@ -177,7 +184,7 @@ async def gateway_agent_ingress_fixture(model: Model, application: Application) 
         "gateway-api-integrator",
         channel="1/stable",
         trust=True,
-        application_name="jenkins-gateway-api",
+        application_name=GATEWAY_APPLICATION_NAME,
     )
     await gateway.set_config({"gateway-class": GATEWAY_CLASS})
     certificates = await model.deploy(
@@ -212,6 +219,88 @@ async def gateway_agent_ingress_fixture(model: Model, application: Application) 
         timeout=20 * 60,
     )
     return ingress_configurator
+
+
+async def _get_machine_model_gateway(
+    ops_test: OpsTest, machine_model: Model, unit: Unit
+) -> str:
+    """Get the LXD bridge gateway used by a machine-model unit."""
+    return_code, stdout, stderr = await ops_test.juju(
+        "-c", MACHINE_CONTROLLER_NAME, "-m", machine_model.name,
+        "ssh", "--proxy", unit.name, "ip", "-4", "route", "show", "default",
+    )
+    assert return_code == 0, f"Failed to inspect {unit.name} route: {stderr}"
+    match = re.search(r"^default via (?P<gateway>\S+)", stdout, re.MULTILINE)
+    assert match, f"No default gateway found for {unit.name}: {stdout}"
+    return match.group("gateway")
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_exception_type(OSError),
+    wait=tenacity.wait_fixed(1),
+    stop=tenacity.stop_after_delay(30),
+    reraise=True,
+)
+async def _wait_for_gateway_forward(process: asyncio.subprocess.Process, address: str) -> None:
+    """Wait until the local Gateway HTTPS forward accepts connections."""
+    if process.returncode is not None:
+        stderr = (await process.stderr.read()).decode(errors="replace")
+        raise RuntimeError(f"Gateway port-forward exited early: {stderr}")
+    _, writer = await asyncio.open_connection(address, 443)
+    writer.close()
+    await writer.wait_closed()
+
+
+@pytest_asyncio.fixture(scope="function", name="gateway_agent_network")
+async def gateway_agent_network_fixture(
+    gateway_agent_ingress: Application,
+    jenkins_machine_agents: Application,
+    machine_model: Model,
+    model: Model,
+    kube_config: str,
+    ops_test: OpsTest,
+):
+    """Bridge the CK8s Gateway HTTPS endpoint into the LXD agent network."""
+    del gateway_agent_ingress  # dependency: Gateway service must be ready first
+    # The integration backend places all LXD units on this runner. Fail rather
+    # than silently misrouting if that topology changes.
+    gateways = {
+        await _get_machine_model_gateway(ops_test, machine_model, unit)
+        for unit in jenkins_machine_agents.units
+    }
+    assert len(gateways) == 1, f"Machine agents use different gateways: {sorted(gateways)}"
+    bridge_address = next(iter(gateways))
+    host_line = f"{bridge_address} {AGENT_EXTERNAL_HOSTNAME}"
+    port_forward = await asyncio.create_subprocess_exec(
+        "sudo", "kubectl", "--kubeconfig", kube_config, "-n", model.name,
+        "port-forward", "--address", bridge_address,
+        f"svc/cilium-gateway-{GATEWAY_APPLICATION_NAME}", "443:443",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        await _wait_for_gateway_forward(port_forward, bridge_address)
+        for unit in jenkins_machine_agents.units:
+            return_code, _, stderr = await ops_test.juju(
+                "-c", MACHINE_CONTROLLER_NAME, "-m", machine_model.name,
+                "ssh", "--proxy", unit.name, "sudo", "sh", "-c",
+                f"grep -qF '{host_line}' /etc/hosts || echo '{host_line}' >> /etc/hosts",
+            )
+            assert return_code == 0, f"Failed to configure {unit.name}: {stderr}"
+        yield
+    finally:
+        port_forward.terminate()
+        try:
+            await asyncio.wait_for(port_forward.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            port_forward.kill()
+            await port_forward.wait()
+        for unit in jenkins_machine_agents.units:
+            await ops_test.juju(
+                "-c", MACHINE_CONTROLLER_NAME, "-m", machine_model.name,
+                "ssh", "--proxy", unit.name, "sudo", "sed", "-i",
+                rf"\|{AGENT_EXTERNAL_HOSTNAME}|d", "/etc/hosts",
+            )
 
 
 @pytest.mark.abort_on_fail
@@ -337,7 +426,7 @@ async def test_haproxy_server_and_gateway_agent_discovery(
     model: Model,
     application: Application,
     haproxy_with_spoe: Application,
-    gateway_agent_ingress: Application,
+    gateway_agent_network: None,
     jenkins_machine_agents: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
     machine_model: Model,
