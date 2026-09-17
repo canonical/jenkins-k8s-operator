@@ -225,8 +225,9 @@ async def _get_machine_model_gateway(
     ops_test: OpsTest, machine_model: Model, unit: Unit
 ) -> str:
     """Get the LXD bridge gateway used by a machine-model unit."""
+    machine_model_name = machine_model.name.rsplit("/", 1)[-1]
     return_code, stdout, stderr = await ops_test.juju(
-        "ssh", "--model", f"{MACHINE_CONTROLLER_NAME}:{machine_model.name}",
+        "ssh", "--model", f"{MACHINE_CONTROLLER_NAME}:{machine_model_name}",
         "--proxy", unit.name, "ip", "-4", "route", "show", "default",
     )
     assert return_code == 0, f"Failed to inspect {unit.name} route: {stderr}"
@@ -263,6 +264,7 @@ async def gateway_agent_network_fixture(
 ):
     """Bridge the CK8s Gateway HTTPS endpoint into the LXD agent network."""
     del gateway_agent_ingress  # dependency: Gateway service must be ready first
+    machine_model_name = machine_model.name.rsplit("/", 1)[-1]
     # The integration backend places all LXD units on this runner. Fail rather
     # than silently misrouting if that topology changes.
     gateways = {
@@ -283,7 +285,7 @@ async def gateway_agent_network_fixture(
         await _wait_for_gateway_forward(port_forward, bridge_address)
         for unit in jenkins_machine_agents.units:
             return_code, _, stderr = await ops_test.juju(
-                "ssh", "--model", f"{MACHINE_CONTROLLER_NAME}:{machine_model.name}",
+                "ssh", "--model", f"{MACHINE_CONTROLLER_NAME}:{machine_model_name}",
                 "--proxy", unit.name, "sudo", "sh", "-c",
                 f"grep -qF '{host_line}' /etc/hosts || echo '{host_line}' >> /etc/hosts",
             )
@@ -298,7 +300,7 @@ async def gateway_agent_network_fixture(
             await port_forward.wait()
         for unit in jenkins_machine_agents.units:
             await ops_test.juju(
-                "ssh", "--model", f"{MACHINE_CONTROLLER_NAME}:{machine_model.name}",
+                "ssh", "--model", f"{MACHINE_CONTROLLER_NAME}:{machine_model_name}",
                 "--proxy", unit.name, "sudo", "sed", "-i",
                 rf"\|{AGENT_EXTERNAL_HOSTNAME}|d", "/etc/hosts",
             )
