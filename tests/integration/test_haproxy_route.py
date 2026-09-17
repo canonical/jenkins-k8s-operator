@@ -14,7 +14,6 @@ import tenacity
 from juju.application import Application
 from juju.model import Model
 from juju.unit import Unit
-from pytest_operator.plugin import OpsTest
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
 from .constants import MACHINE_CONTROLLER_NAME
@@ -221,19 +220,11 @@ async def gateway_agent_ingress_fixture(model: Model, application: Application) 
     return ingress_configurator
 
 
-async def _get_machine_model_gateway(
-    ops_test: OpsTest, machine_model: Model, unit: Unit
-) -> str:
+async def _get_machine_model_gateway(unit: Unit) -> str:
     """Get the LXD bridge gateway used by a machine-model unit."""
-    machine_model_name = machine_model.name.rsplit("/", 1)[-1]
-    return_code, stdout, stderr = await ops_test.run(
-        "env", "-u", "JUJU_MODEL", "juju", "ssh", "--model",
-        f"{MACHINE_CONTROLLER_NAME}:{machine_model_name}", "--proxy", unit.name,
-        "ip", "-4", "route", "show", "default",
-    )
-    assert return_code == 0, f"Failed to inspect {unit.name} route: {stderr}"
+    stdout = await unit.ssh("ip -4 route show default")
     match = re.search(r"^default via (?P<gateway>\S+)", stdout, re.MULTILINE)
-    assert match, f"No default gateway found for {unit.name}: {stdout}"
+    assert match, f"No IPv4 default gateway found for {unit.name}: {stdout}"
     return match.group("gateway")
 
 
@@ -258,19 +249,15 @@ async def _wait_for_gateway_forward(process: asyncio.subprocess.Process, address
 async def gateway_agent_network_fixture(
     gateway_agent_ingress: Application,
     jenkins_machine_agents: Application,
-    machine_model: Model,
     model: Model,
     kube_config: str,
-    ops_test: OpsTest,
 ):
     """Bridge the CK8s Gateway HTTPS endpoint into the LXD agent network."""
     del gateway_agent_ingress  # dependency: Gateway service must be ready first
-    machine_model_name = machine_model.name.rsplit("/", 1)[-1]
     # The integration backend places all LXD units on this runner. Fail rather
     # than silently misrouting if that topology changes.
     gateways = {
-        await _get_machine_model_gateway(ops_test, machine_model, unit)
-        for unit in jenkins_machine_agents.units
+        await _get_machine_model_gateway(unit) for unit in jenkins_machine_agents.units
     }
     assert len(gateways) == 1, f"Machine agents use different gateways: {sorted(gateways)}"
     bridge_address = next(iter(gateways))
@@ -285,13 +272,10 @@ async def gateway_agent_network_fixture(
     try:
         await _wait_for_gateway_forward(port_forward, bridge_address)
         for unit in jenkins_machine_agents.units:
-            return_code, _, stderr = await ops_test.run(
-                "env", "-u", "JUJU_MODEL", "juju", "ssh", "--model",
-                f"{MACHINE_CONTROLLER_NAME}:{machine_model_name}", "--proxy", unit.name,
-                "sudo", "sh", "-c",
-                f"grep -qF '{host_line}' /etc/hosts || echo '{host_line}' >> /etc/hosts",
+            await unit.ssh(
+                f"sudo sh -c \"grep -qF '{host_line}' /etc/hosts || "
+                f"echo '{host_line}' >> /etc/hosts\""
             )
-            assert return_code == 0, f"Failed to configure {unit.name}: {stderr}"
         yield
     finally:
         port_forward.terminate()
@@ -301,11 +285,8 @@ async def gateway_agent_network_fixture(
             port_forward.kill()
             await port_forward.wait()
         for unit in jenkins_machine_agents.units:
-            await ops_test.run(
-                "env", "-u", "JUJU_MODEL", "juju", "ssh", "--model",
-                f"{MACHINE_CONTROLLER_NAME}:{machine_model_name}", "--proxy", unit.name,
-                "sudo", "sed", "-i",
-                rf"\|{AGENT_EXTERNAL_HOSTNAME}|d", "/etc/hosts",
+            await unit.ssh(
+                f"sudo sed -i 's|.*{AGENT_EXTERNAL_HOSTNAME}.*||' /etc/hosts"
             )
 
 
