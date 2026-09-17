@@ -16,7 +16,7 @@ import jenkinsapi.jenkins
 import kubernetes.client
 import requests
 import tenacity
-from jenkinsapi.custom_exceptions import JenkinsAPIException
+from jenkinsapi.custom_exceptions import JenkinsAPIException, NotBuiltYet
 from juju.application import Application
 from juju.client._definitions import ApplicationStatus, FullStatus, UnitStatus
 from juju.model import Model
@@ -258,8 +258,21 @@ def assert_job_success(
 
     job = client.create_job(agent_name, gen_test_job_xml(test_target_label))
     queue_item = job.invoke()
-    queue_item.block_until_complete()
-    build: jenkinsapi.build.Build = queue_item.get_build()
+    deadline = time.monotonic() + 10 * 60
+    while True:
+        try:
+            queue_item.poll()
+            build: jenkinsapi.build.Build = queue_item.get_build()
+        except NotBuiltYet:
+            build = None  # type: ignore[assignment]
+        if build is not None and not build.is_running():
+            break
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"Jenkins job did not complete: agent={agent_name}, "
+                f"why={queue_item.why!r}, queue={queue_item._data!r}"
+            )
+        time.sleep(5)
     assert build.get_status() == "SUCCESS"
 
 
