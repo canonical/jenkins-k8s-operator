@@ -256,6 +256,19 @@ def test_ingress_path_is_none_until_relation_data_is_ready(relation_data_factory
     assert state._get_ingress_path(relation) is None
 
 
+def test_ingress_path_returns_none_when_relation_data_is_unavailable():
+    """
+    arrange: given an ingress relation whose data lookup raises ModelError.
+    act: when the ingress path is parsed.
+    assert: no path is returned while relation data is unavailable.
+    """
+    relation = MagicMock()
+    relation.app = MagicMock()
+    relation.data.__getitem__.side_effect = ops.ModelError()
+
+    assert state._get_ingress_path(relation) is None
+
+
 @pytest.mark.parametrize(
     "relation_specs, config",
     [
@@ -351,6 +364,21 @@ def test_deployment_topology_is_valid(
             {"external-hostname": "jenkins.example.com"},
             "non-root path",
             id="non-root-ingress-with-haproxy",
+        ),
+        pytest.param(
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://agents.example.com/"})},
+                ),
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
+                ),
+            ),
+            {},
+            "agent-discovery-ingress and ingress",
+            id="non-root-ingress-with-agent-route",
         ),
     ],
 )

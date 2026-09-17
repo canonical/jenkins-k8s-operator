@@ -240,7 +240,7 @@ def _get_ingress_path(relation: typing.Optional[ops.Relation]) -> typing.Optiona
         return None
     try:
         raw_data = relation.data[relation.app].get("ingress")
-    except KeyError:
+    except (KeyError, ops.ModelError):
         return None
     if not raw_data:
         return None
@@ -274,6 +274,17 @@ def _validate_haproxy_route_configuration(
     if haproxy_route and server_ingress and ingress_path:
         raise CharmConfigInvalidError(
             "ingress and haproxy-route cannot be combined when ingress uses a non-root path."
+        )
+
+
+def _validate_agent_route_path(
+    agent_discovery_ingress: typing.Optional[ops.Relation],
+    server_ingress: typing.Optional[ops.Relation],
+) -> None:
+    """Reject dedicated agent routes that cannot preserve a server prefix."""
+    if agent_discovery_ingress and server_ingress and _get_ingress_path(server_ingress):
+        raise CharmConfigInvalidError(
+            "agent-discovery-ingress and ingress cannot be combined when ingress uses a non-root path."
         )
 
 
@@ -328,6 +339,7 @@ def _validate_deployment_relations(charm: ops.CharmBase) -> None:
     haproxy_route = charm.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
     external_hostname = _parse_external_hostname(charm)
     _validate_haproxy_route_configuration(server_ingress, haproxy_route, external_hostname)
+    _validate_agent_route_path(agent_discovery_ingress, server_ingress)
     _validate_agent_ingress_readiness(charm, agent_discovery_ingress, server_ingress)
     _validate_agent_route_configuration(
         charm, agent_discovery_ingress, server_ingress, haproxy_route, external_hostname
