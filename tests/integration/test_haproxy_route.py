@@ -359,12 +359,12 @@ async def test_haproxy_server_and_gateway_agent_discovery(
     if HAPROXY_ROUTE_RELATION not in related_endpoints:
         await model.integrate(
             f"{application.name}:{HAPROXY_ROUTE_RELATION}",
-            f"localhost:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
+            f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
         )
     if "agent" not in related_endpoints:
         await model.integrate(
             f"{application.name}:agent",
-            f"localhost:admin/{machine_model.name}.agent",
+            f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.agent",
         )
 
     await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
