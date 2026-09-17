@@ -226,8 +226,8 @@ async def _get_machine_model_gateway(
 ) -> str:
     """Get the LXD bridge gateway used by a machine-model unit."""
     return_code, stdout, stderr = await ops_test.juju(
-        "-c", MACHINE_CONTROLLER_NAME, "-m", machine_model.name,
-        "ssh", "--proxy", unit.name, "ip", "-4", "route", "show", "default",
+        "ssh", "--model", f"{MACHINE_CONTROLLER_NAME}:{machine_model.name}",
+        "--proxy", unit.name, "ip", "-4", "route", "show", "default",
     )
     assert return_code == 0, f"Failed to inspect {unit.name} route: {stderr}"
     match = re.search(r"^default via (?P<gateway>\S+)", stdout, re.MULTILINE)
@@ -283,8 +283,8 @@ async def gateway_agent_network_fixture(
         await _wait_for_gateway_forward(port_forward, bridge_address)
         for unit in jenkins_machine_agents.units:
             return_code, _, stderr = await ops_test.juju(
-                "-c", MACHINE_CONTROLLER_NAME, "-m", machine_model.name,
-                "ssh", "--proxy", unit.name, "sudo", "sh", "-c",
+                "ssh", "--model", f"{MACHINE_CONTROLLER_NAME}:{machine_model.name}",
+                "--proxy", unit.name, "sudo", "sh", "-c",
                 f"grep -qF '{host_line}' /etc/hosts || echo '{host_line}' >> /etc/hosts",
             )
             assert return_code == 0, f"Failed to configure {unit.name}: {stderr}"
@@ -298,8 +298,8 @@ async def gateway_agent_network_fixture(
             await port_forward.wait()
         for unit in jenkins_machine_agents.units:
             await ops_test.juju(
-                "-c", MACHINE_CONTROLLER_NAME, "-m", machine_model.name,
-                "ssh", "--proxy", unit.name, "sudo", "sed", "-i",
+                "ssh", "--model", f"{MACHINE_CONTROLLER_NAME}:{machine_model.name}",
+                "--proxy", unit.name, "sudo", "sed", "-i",
                 rf"\|{AGENT_EXTERNAL_HOSTNAME}|d", "/etc/hosts",
             )
 
