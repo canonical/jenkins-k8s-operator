@@ -244,6 +244,7 @@ async def _get_machine_model_gateway(
 async def _wait_for_gateway_forward(process: asyncio.subprocess.Process, address: str) -> None:
     """Wait until the local Gateway HTTPS forward accepts connections."""
     if process.returncode is not None:
+        assert process.stderr is not None
         stderr = (await process.stderr.read()).decode(errors="replace")
         raise RuntimeError(f"Gateway port-forward exited early: {stderr}")
     _, writer = await asyncio.open_connection(address, 443)
