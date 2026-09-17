@@ -99,6 +99,24 @@ def test_reconcile_haproxy_route_retracts_when_hostname_cleared(harness: Harness
     assert harness.get_relation_data(relation_id, harness.charm.app) == {}
 
 
+def test_reconcile_haproxy_route_clears_missing_hostname_data(harness: Harness):
+    """
+    arrange: given a leader with published HAProxy route data.
+    act: when route reconciliation receives no hostname.
+    assert: application route data is cleared.
+    """
+    relation_id = harness.add_relation("haproxy-route", "haproxy")
+    harness.add_relation_unit(relation_id, "haproxy/0")
+    harness.set_leader(True)
+    harness.begin()
+    relation = harness.charm.model.relations["haproxy-route"][0]
+    relation.data[harness.charm.app].update({"hostname": "jenkins.example.com"})
+
+    harness.charm._reconcile_haproxy_route(MagicMock(external_hostname=None))
+
+    assert harness.get_relation_data(relation_id, harness.charm.app) == {}
+
+
 def test_haproxy_route_without_hostname_blocks(harness: Harness):
     """
     arrange: given a related haproxy-route without external-hostname.

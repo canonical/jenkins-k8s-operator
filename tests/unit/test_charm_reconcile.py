@@ -63,6 +63,23 @@ def test__get_state_returns_none_on_invalid_config(harness: Harness):
     assert jenkins_charm.unit.status.message == "bad config"
 
 
+def test_reconcile_storage_delegates_to_storage_reconciler(
+    harness_container: HarnessWithContainer,
+):
+    """
+    arrange: given a connected charm container.
+    act: when storage reconciliation runs.
+    assert: the storage reconciler receives the container.
+    """
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    with patch.object(charm.storage, "reconcile_storage") as reconcile_storage_mock:
+        charm._reconcile_storage(harness_container.container)
+
+    reconcile_storage_mock.assert_called_once_with(container=harness_container.container)
+
+
 def test_calculate_env(harness: Harness):
     """
     arrange: given a charm.

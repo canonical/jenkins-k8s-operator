@@ -236,6 +236,27 @@ def _configure_topology(
 
 
 @pytest.mark.parametrize(
+    "relation_data_factory",
+    [
+        pytest.param(lambda _app: {}, id="missing-databag"),
+        pytest.param(lambda app: {app: {"ingress": "not-json"}}, id="malformed-json"),
+        pytest.param(lambda app: {app: {"ingress": json.dumps({})}}, id="missing-url"),
+    ],
+)
+def test_ingress_path_is_none_until_relation_data_is_ready(relation_data_factory):
+    """
+    arrange: given an ingress relation with incomplete provider data.
+    act: when the ingress path is parsed.
+    assert: no path is returned until a valid URL is published.
+    """
+    relation = MagicMock()
+    relation.app = MagicMock()
+    relation.data = relation_data_factory(relation.app)
+
+    assert state._get_ingress_path(relation) is None
+
+
+@pytest.mark.parametrize(
     "relation_specs, config",
     [
         pytest.param(
