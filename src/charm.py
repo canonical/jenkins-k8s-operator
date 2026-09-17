@@ -147,7 +147,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
 
     def _retract_invalid_haproxy_route(self) -> None:
-        """Clear stale HAProxy data before invalid topology is reported."""
+        """Clear stale routing before validation can stop normal reconciliation.
+
+        Invalid state would otherwise skip the normal HAProxy reconciler and leave
+        a previously published route active.
+        """
         relation = self.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
         if not relation or not self.unit.is_leader():
             return

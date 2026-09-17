@@ -254,16 +254,18 @@ def _get_ingress_path(relation: typing.Optional[ops.Relation]) -> typing.Optiona
     return urlparse(str(url)).path.rstrip("/")
 
 
-def _validate_deployment_relations(charm: ops.CharmBase) -> None:
-    """Validate supported deployment topology and required integrations."""
+def _validate_unit_count(charm: ops.CharmBase) -> None:
+    """Reject deployments with more than one Jenkins unit."""
     if charm.app.planned_units() > 1:
         raise CharmIllegalNumUnitsError("The Jenkins charm supports only 1 unit of deployment.")
 
-    agent_discovery_ingress = charm.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME)
-    server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
-    haproxy_route = charm.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
-    external_hostname = _parse_external_hostname(charm)
 
+def _validate_haproxy_route_configuration(
+    server_ingress: typing.Optional[ops.Relation],
+    haproxy_route: typing.Optional[ops.Relation],
+    external_hostname: typing.Optional[str],
+) -> None:
+    """Validate HAProxy hostname and server-ingress path compatibility."""
     if haproxy_route and not external_hostname:
         raise CharmConfigInvalidError(
             f"{HAPROXY_ROUTE_RELATION_NAME} requires external-hostname to be configured."
@@ -273,26 +275,40 @@ def _validate_deployment_relations(charm: ops.CharmBase) -> None:
         raise CharmConfigInvalidError(
             "ingress and haproxy-route cannot be combined when ingress uses a non-root path."
         )
-    has_agents = bool(charm.model.relations[AGENT_RELATION])
-    if (
-        has_agents
-        and agent_discovery_ingress
-        and _get_ingress_path(agent_discovery_ingress) is None
-    ):
+
+
+def _validate_agent_ingress_readiness(
+    charm: ops.CharmBase,
+    agent_discovery_ingress: typing.Optional[ops.Relation],
+    server_ingress: typing.Optional[ops.Relation],
+) -> None:
+    """Wait for the selected agent ingress before agent reconciliation."""
+    if not charm.model.relations[AGENT_RELATION]:
+        return
+    if agent_discovery_ingress and _get_ingress_path(agent_discovery_ingress) is None:
         raise CharmRelationDataNotReadyError(
             "Waiting for the dedicated agent ingress endpoint to become available."
         )
     if (
-        has_agents
-        and not agent_discovery_ingress
+        not agent_discovery_ingress
         and server_ingress
         and _get_ingress_path(server_ingress) is None
     ):
         raise CharmRelationDataNotReadyError(
             "Waiting for the server ingress endpoint to become available."
         )
+
+
+def _validate_agent_route_configuration(
+    charm: ops.CharmBase,
+    agent_discovery_ingress: typing.Optional[ops.Relation],
+    server_ingress: typing.Optional[ops.Relation],
+    haproxy_route: typing.Optional[ops.Relation],
+    external_hostname: typing.Optional[str],
+) -> None:
+    """Require a non-HAProxy route for agents using direct HAProxy service."""
     if (
-        has_agents
+        charm.model.relations[AGENT_RELATION]
         and haproxy_route
         and external_hostname
         and not agent_discovery_ingress
@@ -302,6 +318,20 @@ def _validate_deployment_relations(charm: ops.CharmBase) -> None:
             f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME} is required for agents when "
             f"{HAPROXY_ROUTE_RELATION_NAME} is the server route."
         )
+
+
+def _validate_deployment_relations(charm: ops.CharmBase) -> None:
+    """Validate deployment size and the independent route contracts."""
+    _validate_unit_count(charm)
+    agent_discovery_ingress = charm.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME)
+    server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
+    haproxy_route = charm.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
+    external_hostname = _parse_external_hostname(charm)
+    _validate_haproxy_route_configuration(server_ingress, haproxy_route, external_hostname)
+    _validate_agent_ingress_readiness(charm, agent_discovery_ingress, server_ingress)
+    _validate_agent_route_configuration(
+        charm, agent_discovery_ingress, server_ingress, haproxy_route, external_hostname
+    )
 
 
 def _parse_jcasc_config(
