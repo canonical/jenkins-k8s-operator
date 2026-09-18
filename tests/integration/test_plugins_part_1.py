@@ -260,6 +260,7 @@ def seed_ldap_user_fixture(
     model: Model,
     kube_core_client: kubernetes.client.CoreV1Api,
     ldap_settings: LDAPSettings,
+    ldap_server: kubernetes.client.V1Deployment,
 ):
     """Seed user into ldap server."""
     command = [
