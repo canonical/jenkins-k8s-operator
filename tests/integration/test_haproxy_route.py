@@ -265,15 +265,15 @@ def _get_gateway_load_balancer_ip(
 async def _wait_for_gateway_bridge(process: asyncio.subprocess.Process, address: str) -> None:
     """Wait until the local Gateway bridge accepts TCP connections."""
     if process.returncode is not None:
-        assert process.stderr is not None
-        stderr = (await process.stderr.read()).decode(errors="replace")
-        raise RuntimeError(f"Gateway bridge exited early: {stderr}")
+        raise RuntimeError("Gateway bridge exited before opening its listener")
     _, writer = await asyncio.wait_for(asyncio.open_connection(address, 443), timeout=10)
     writer.close()
     await writer.wait_closed()
 
 
-async def _start_gateway_bridge(bridge_address: str, gateway_ip: str):
+async def _start_gateway_bridge(
+    bridge_address: str, gateway_ip: str
+) -> tuple[asyncio.subprocess.Process, asyncio.Task[bytes]]:
     """Start a TCP bridge from the LXD gateway to the Gateway LoadBalancer IP."""
     process = await asyncio.create_subprocess_exec(
         "sudo",
@@ -286,6 +286,8 @@ async def _start_gateway_bridge(bridge_address: str, gateway_ip: str):
         stderr=asyncio.subprocess.PIPE,
         start_new_session=True,
     )
+    assert process.stderr is not None
+    stderr_reader = asyncio.create_task(process.stderr.read())
     try:
         await _wait_for_gateway_bridge(process, bridge_address)
     except BaseException:
@@ -294,25 +296,24 @@ async def _start_gateway_bridge(bridge_address: str, gateway_ip: str):
                 process.terminate()
         with contextlib.suppress(ProcessLookupError):
             await process.wait()
+        await asyncio.gather(stderr_reader, return_exceptions=True)
         raise
-    return process
+    return process, stderr_reader
 
 
 async def _supervise_gateway_bridge(
-    bridge: list[asyncio.subprocess.Process],
+    bridge: list[tuple[asyncio.subprocess.Process, asyncio.Task[bytes]]],
     stop: asyncio.Event,
     bridge_address: str,
     gateway_ip: str,
 ) -> None:
     """Restart the bridge if its listener process exits during the fixture."""
     while not stop.is_set():
-        process = bridge[0]
+        process, stderr_reader = bridge[0]
         await process.wait()
+        stderr = (await stderr_reader).decode(errors="replace")
         if stop.is_set():
             return
-        stderr = ""
-        if process.stderr is not None:
-            stderr = (await process.stderr.read()).decode(errors="replace")
         logger.warning("Gateway bridge exited; restarting: %s", stderr.strip())
         while not stop.is_set():
             try:
@@ -346,7 +347,7 @@ async def gateway_agent_network_fixture(
     ca_certificate = action.results["ca-certificate"]
     ca_payload = base64.b64encode(ca_certificate.encode()).decode()
     host_line = f"{bridge_address} {AGENT_EXTERNAL_HOSTNAME}"
-    bridge: list[asyncio.subprocess.Process] = []
+    bridge: list[tuple[asyncio.subprocess.Process, asyncio.Task[bytes]]] = []
     stop = asyncio.Event()
     supervisor: asyncio.Task[None] | None = None
     try:
@@ -375,7 +376,7 @@ async def gateway_agent_network_fixture(
             supervisor.cancel()
             await asyncio.gather(supervisor, return_exceptions=True)
         if bridge:
-            process = bridge[0]
+            process, stderr_reader = bridge[0]
             with contextlib.suppress(ProcessLookupError):
                 if process.returncode is None:
                     process.terminate()
@@ -386,6 +387,7 @@ async def gateway_agent_network_fixture(
                 await process.wait()
             except ProcessLookupError:
                 pass
+            await asyncio.gather(stderr_reader, return_exceptions=True)
         for unit in jenkins_machine_agents.units:
             await unit.ssh(
                 "sudo rm -f /usr/local/share/ca-certificates/jenkins-gateway.crt "
