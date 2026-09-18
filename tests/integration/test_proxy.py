@@ -15,18 +15,13 @@ from juju.model import Model
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
+from .constants import TINYPROXY_PORT
 from .helpers import get_model_unit_addresses, get_pod_ip
-
-
-@pytest.fixture(scope="module", name="tinyproxy_port")
-def tinyproxy_port_fixture() -> int:
-    """Tinyproxy port."""
-    return 8888
 
 
 @pytest.fixture(scope="module", name="tiny_proxy_daemonset")
 def tiny_proxy_daemonset_fixture(
-    model: Model, kube_apps_client: kubernetes.client.AppsV1Api, tinyproxy_port: int
+    model: Model, kube_apps_client: kubernetes.client.AppsV1Api
 ) -> kubernetes.client.V1DaemonSet:
     """Create a tiny proxy daemonset."""
     container = kubernetes.client.V1Container(
@@ -35,7 +30,7 @@ def tiny_proxy_daemonset_fixture(
         image_pull_policy="IfNotPresent",
         ports=[
             kubernetes.client.V1ContainerPort(
-                container_port=tinyproxy_port, host_port=tinyproxy_port
+                container_port=TINYPROXY_PORT, host_port=TINYPROXY_PORT
             )
         ],
         args=["ANY"],
@@ -74,11 +69,9 @@ async def tinyproxy_ip_fixture(
 
 
 @pytest_asyncio.fixture(scope="module", name="model_with_proxy")
-async def model_with_proxy_fixture(
-    model: Model, tinyproxy_ip: str, tinyproxy_port: int
-) -> AsyncGenerator[Model, None]:
+async def model_with_proxy_fixture(model: Model, tinyproxy_ip: str) -> AsyncGenerator[Model, None]:
     """Model with proxy configuration values."""
-    tinyproxy_url = f"http://{tinyproxy_ip}:{tinyproxy_port}"
+    tinyproxy_url = f"http://{tinyproxy_ip}:{TINYPROXY_PORT}"
     await model.set_config({"juju-http-proxy": tinyproxy_url, "juju-https-proxy": tinyproxy_url})
     yield model
     await model.set_config({"juju-http-proxy": "", "juju-https-proxy": ""})

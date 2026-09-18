@@ -6,6 +6,7 @@
 ALLOWED_PLUGINS = ("git", "blueocean", "openid")
 # LXD controller name provisioned by concierge in charm-ci (local and CI runs).
 MACHINE_CONTROLLER_NAME = "concierge-lxd"
+TINYPROXY_PORT = 8888
 INSTALLED_PLUGINS = ("git", "timestamper", "blueocean", "openid")
 REMOVED_PLUGINS = set(INSTALLED_PLUGINS) - set(ALLOWED_PLUGINS)
 ALL_PLUGINS = [
