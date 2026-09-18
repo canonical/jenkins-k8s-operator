@@ -18,6 +18,7 @@ import requests
 import yaml
 from juju.action import Action
 from juju.application import Application
+from juju.model import Model
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
@@ -43,11 +44,12 @@ def freeze_time_fixture() -> str:
 
 
 @pytest_asyncio.fixture(scope="function", name="app_with_restart_time_range")
-async def app_with_restart_time_range_fixture(application: Application):
+async def app_with_restart_time_range_fixture(application: Application, model: Model):
     """Application with restart-time-range configured."""
     await application.set_config({"restart-time-range": "03-05"})
     yield application
     await application.reset_config(["restart-time-range"])
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
 
 @pytest_asyncio.fixture(scope="function", name="libfaketime_unit")
