@@ -15,6 +15,7 @@ import kubernetes.client
 import pytest
 import pytest_asyncio
 import requests
+import tenacity
 import urllib3.exceptions
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
@@ -29,6 +30,8 @@ from .constants import (
     REMOVED_PLUGINS,
 )
 from .helpers import (
+    _log_retry,
+    _raise_retry_timeout,
     gen_git_test_job_xml,
     gen_test_job_xml,
     get_job_invoked_unit,
@@ -121,6 +124,22 @@ async def ldap_server_ip_fixture(
     return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(300),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+async def _has_plugin_temp_files(ops_test: OpsTest, unit_name: str) -> bool:
+    """Return whether Jenkins still has plugin download temporary files."""
+    ret_code, stdout, stderr = await ops_test.juju(
+        "exec", "--unit", unit_name, "ls /var/lib/jenkins/plugins"
+    )
+    assert not ret_code, f"Failed to check for tmp files, {stderr}"
+    return "tmp" in stdout
+
+
 @pytest.mark.usefixtures("app_with_allowed_plugins")
 async def test_plugins_remove_delay(
     ops_test: OpsTest,
@@ -152,19 +171,7 @@ async def test_plugins_remove_delay(
 
     await wait_for(_install_plugins_via_web_api)
 
-    async def has_temp_files():
-        """Check if tempfiles exist in Jenkins plugins directory.
-
-        Returns:
-            True if .tmp file exists, False otherwise.
-        """
-        ret_code, stdout, stderr = await ops_test.juju(
-            "exec", "--unit", unit_web_client.unit.name, "ls /var/lib/jenkins/plugins"
-        )
-        assert not ret_code, f"Failed to check for tmp files, {stderr}"
-        return "tmp" in stdout
-
-    await wait_for(has_temp_files)
+    await _has_plugin_temp_files(ops_test, unit_web_client.unit.name)
     ret_code, _, stderr = await ops_test.juju(
         "exec",
         "--unit",
