@@ -4,6 +4,7 @@
 """Integration tests for the jenkins-k8s haproxy-route relation."""
 
 import asyncio
+import base64
 import re
 
 import jenkinsapi.jenkins
@@ -261,6 +262,11 @@ async def gateway_agent_network_fixture(
     }
     assert len(gateways) == 1, f"Machine agents use different gateways: {sorted(gateways)}"
     bridge_address = next(iter(gateways))
+    gateway_certificates = model.applications["jenkins-gateway-certificates"]
+    action = await gateway_certificates.units[0].run_action("get-ca-certificate")
+    await action.wait()
+    ca_certificate = action.results["ca-certificate"]
+    ca_payload = base64.b64encode(ca_certificate.encode()).decode()
     host_line = f"{bridge_address} {AGENT_EXTERNAL_HOSTNAME}"
     port_forward = await asyncio.create_subprocess_exec(
         "sudo", "kubectl", "--kubeconfig", kube_config, "-n", model.name,
@@ -272,6 +278,11 @@ async def gateway_agent_network_fixture(
     try:
         await _wait_for_gateway_forward(port_forward, bridge_address)
         for unit in jenkins_machine_agents.units:
+            await unit.ssh(
+                f"echo '{ca_payload}' | base64 -d | sudo tee "
+                "/usr/local/share/ca-certificates/jenkins-gateway.crt >/dev/null "
+                "&& sudo update-ca-certificates"
+            )
             await unit.ssh(
                 f"sudo sh -c \"grep -qF '{host_line}' /etc/hosts || "
                 f"echo '{host_line}' >> /etc/hosts\""
@@ -286,6 +297,10 @@ async def gateway_agent_network_fixture(
             port_forward.kill()
             await port_forward.wait()
         for unit in jenkins_machine_agents.units:
+            await unit.ssh(
+                "sudo rm -f /usr/local/share/ca-certificates/jenkins-gateway.crt "
+                "&& sudo update-ca-certificates"
+            )
             await unit.ssh(
                 f"sudo sed -i 's|.*{AGENT_EXTERNAL_HOSTNAME}.*||' /etc/hosts"
             )
