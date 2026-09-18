@@ -3,7 +3,6 @@
 
 """Integration tests for jenkins-k8s-operator with COS."""
 
-import functools
 import logging
 import typing
 
@@ -20,7 +19,6 @@ from .helpers import (
     _log_retry,
     _raise_retry_timeout,
     get_model_unit_addresses,
-    wait_for,
 )
 from .types_ import UnitWebClient
 
@@ -186,6 +184,13 @@ def datasources_exist(
     return all(datasource in datasource_types for datasource in datasources)
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(20 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def dashboard_exist(loggedin_session: requests.Session, unit_address: str):
     """Checks if the Jenkins dashboard is registered in Grafana.
 
@@ -227,7 +232,4 @@ async def test_grafana_integration(
                 "password": password,
             },
         ).raise_for_status()
-        await wait_for(
-            functools.partial(dashboard_exist, loggedin_session=sess, unit_address=ip),
-            timeout=60 * 20,
-        )
+        dashboard_exist(loggedin_session=sess, unit_address=ip)
