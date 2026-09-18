@@ -28,7 +28,7 @@ async def traefik_agent_ingress_fixture(model: Model) -> Application:
     traefik = await model.deploy(
         "traefik-k8s",
         channel="latest/stable",
-        revision=378,
+        revision=377,
         trust=True,
         config={"routing_mode": "path"},
         application_name=AGENT_TRAEFIK_APPLICATION_NAME,
