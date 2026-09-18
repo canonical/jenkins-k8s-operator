@@ -3,6 +3,7 @@
 
 """Integration tests for the jenkins-k8s haproxy-route relation."""
 
+import jenkinsapi.jenkins
 import pytest
 import pytest_asyncio
 import requests
@@ -11,7 +12,7 @@ from juju.model import Model
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
 from .constants import MACHINE_CONTROLLER_NAME
-from .helpers import get_model_unit_addresses
+from .helpers import assert_job_success, get_model_unit_addresses
 from .types_ import KeycloakOIDCMetadata
 
 EXTERNAL_HOSTNAME = "jenkins.internal"
@@ -283,3 +284,60 @@ async def test_haproxy_spoe_redirects_to_oidc(
     assert keycloak_oidc_meta.realm in location or "openid-connect/auth" in location, (
         f"Expected redirect to Keycloak OIDC, got Location: {location}"
     )
+
+
+@pytest.mark.abort_on_fail
+async def test_haproxy_server_and_traefik_agent_discovery(
+    model: Model,
+    application: Application,
+    haproxy_with_spoe: Application,
+    traefik_application_and_unit_ip: tuple[Application, str],
+    jenkins_machine_agents: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    machine_model: Model,
+    ca_cert_path: str,
+):
+    """Verify HAProxy serves Jenkins while Traefik serves machine agents."""
+    traefik, _ = traefik_application_and_unit_ip
+    await application.set_config({"external-hostname": SPOE_EXTERNAL_HOSTNAME})
+
+    related_endpoints = {
+        endpoint.name
+        for relation in application.relations
+        for endpoint in relation.endpoints
+        if endpoint.application_name == application.name
+    }
+    if HAPROXY_ROUTE_RELATION not in related_endpoints:
+        await model.integrate(
+            f"{application.name}:{HAPROXY_ROUTE_RELATION}",
+            f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
+        )
+    if "agent-discovery-ingress" not in related_endpoints:
+        await model.integrate(
+            f"{application.name}:agent-discovery-ingress",
+            f"{traefik.name}:ingress",
+        )
+    if "agent" not in related_endpoints:
+        await model.integrate(
+            f"{application.name}:agent",
+            f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.agent",
+        )
+
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
+    await machine_model.wait_for_idle(
+        apps=[haproxy_with_spoe.name], wait_for_active=True, timeout=20 * 60
+    )
+
+    haproxy_ip = (await get_model_unit_addresses(machine_model, haproxy_with_spoe.name))[0]
+    session = requests.Session()
+    session.mount("https://", HostHeaderSSLAdapter())
+    server_response = session.get(
+        f"https://{haproxy_ip}",
+        headers={"Host": SPOE_EXTERNAL_HOSTNAME},
+        timeout=30,
+        allow_redirects=False,
+        verify=ca_cert_path,
+    )
+    assert server_response.status_code == 302
+
+    assert_job_success(jenkins_client, jenkins_machine_agents.name, "machine")
