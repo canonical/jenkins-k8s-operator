@@ -3,7 +3,6 @@
 
 """Integration tests for jenkins-k8s-operator charm."""
 
-import functools
 import json
 import logging
 from pathlib import Path
@@ -29,7 +28,6 @@ from .helpers import (
     gen_test_pipeline_with_custom_script_xml,
     install_plugins,
     kubernetes_test_pipeline_script,
-    wait_for,
 )
 from .types_ import KeycloakOIDCMetadata, UnitWebClient
 
@@ -373,15 +371,9 @@ async def test_kubernetes_plugin(
 
     logger.info("Jenkins version pre-build: %s", unit_web_client.client.version)
 
-    credentials_id = await wait_for(
-        functools.partial(
-            create_secret_file_credentials, unit_web_client, str(jenkins_kube_config)
-        )
-    )
+    credentials_id = create_secret_file_credentials(unit_web_client, str(jenkins_kube_config))
     assert credentials_id, "Failed to create credentials id"
-    kubernetes_cloud_name = await wait_for(
-        functools.partial(create_kubernetes_cloud, unit_web_client, credentials_id)
-    )
+    kubernetes_cloud_name = create_kubernetes_cloud(unit_web_client, credentials_id)
     assert kubernetes_cloud_name, "Failed to create kubernetes cloud"
     job = unit_web_client.client.create_job(
         "kubernetes_plugin_test",
