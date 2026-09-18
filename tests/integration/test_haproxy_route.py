@@ -37,8 +37,13 @@ async def traefik_agent_ingress_fixture(model: Model) -> Application:
         apps=[traefik.name],
         status="active",
         timeout=20 * 60,
-        raise_on_error=True,
+        raise_on_error=False,
     )
+    unit_ips = await get_model_unit_addresses(model=model, app_name=traefik.name)
+    assert unit_ips, f"Unit IP address not found for {traefik.name}"
+    # Concierge does not provide a LoadBalancer address. Publish the unit
+    # address explicitly so Traefik can provide a usable ingress URL to agents.
+    await traefik.set_config({"external_hostname": unit_ips[0]})
     return traefik
 
 
