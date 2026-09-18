@@ -347,6 +347,16 @@ async def test_haproxy_server_and_traefik_agent_discovery(
     await machine_model.wait_for_idle(
         apps=[haproxy_with_spoe.name], wait_for_active=True, timeout=20 * 60
     )
+    # The agent application can still be in maintenance while the CMR is
+    # established. Do not enqueue a Jenkins job until its units are active;
+    # otherwise Jenkins reports all nodes offline while the charm is installing.
+    await machine_model.wait_for_idle(
+        apps=[jenkins_machine_agents.name],
+        status="active",
+        idle_period=30,
+        timeout=20 * 60,
+        check_freq=5,
+    )
 
     haproxy_ip = (await get_model_unit_addresses(machine_model, haproxy_with_spoe.name))[0]
     session = requests.Session()
