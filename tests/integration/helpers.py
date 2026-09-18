@@ -256,6 +256,26 @@ def assert_job_success(
     nodes = client.nodes.iterkeys()
     assert any(agent_name in key for key in nodes), f"Jenkins {agent_name} node not registered."
 
+    deadline = time.monotonic() + 10 * 60
+    while True:
+        node = client.get_node(agent_name)
+        online = node.is_online()
+        offline_reason = "" if online else node.offline_reason()
+        logger.info(
+            "phase=jenkins_agent_readiness agent=%s online=%s offline_reason=%r",
+            agent_name,
+            online,
+            offline_reason,
+        )
+        if online:
+            break
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"Jenkins agent did not come online: agent={agent_name}, "
+                f"offline_reason={offline_reason!r}"
+            )
+        time.sleep(5)
+
     job = client.create_job(agent_name, gen_test_job_xml(test_target_label))
     queue_item = job.invoke()
     deadline = time.monotonic() + 10 * 60

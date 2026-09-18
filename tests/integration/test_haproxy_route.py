@@ -337,15 +337,19 @@ async def test_haproxy_server_and_traefik_agent_discovery(
             f"{application.name}:{HAPROXY_ROUTE_RELATION}",
             f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
         )
-    if "agent-discovery-ingress" not in related_endpoints:
-        await model.integrate(
-            f"{application.name}:agent-discovery-ingress",
-            f"{traefik_agent_ingress.name}:ingress",
-        )
+    # Establish the agent relation first so Jenkins can publish its initial
+    # relation data. Traefik needs that data before it can publish the ingress
+    # URL; adding both relations at once creates a readiness cycle.
     if "agent" not in related_endpoints:
         await model.integrate(
             f"{application.name}:agent",
             f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.agent",
+        )
+        await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
+    if "agent-discovery-ingress" not in related_endpoints:
+        await model.integrate(
+            f"{application.name}:agent-discovery-ingress",
+            f"{traefik_agent_ingress.name}:ingress",
         )
 
     await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
