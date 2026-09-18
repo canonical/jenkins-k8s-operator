@@ -137,7 +137,6 @@ async def jenkins_with_proxy_client_fixture(
 async def test_jenkins_ui_proxy_config(
     jenkins_with_proxy_client: jenkinsapi.jenkins.Jenkins,
     proxy_jenkins_web_address: str,
-    tinyproxy_port: int,
     tinyproxy_ip: str,
 ):
     """
@@ -152,4 +151,4 @@ async def test_jenkins_ui_proxy_config(
     page_content = str(res.content, encoding="utf-8")
 
     assert tinyproxy_ip in page_content, "Proxy host not configured."
-    assert str(tinyproxy_port) in page_content, "Proxy port not configured."
+    assert str(TINYPROXY_PORT) in page_content, "Proxy port not configured."
