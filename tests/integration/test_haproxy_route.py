@@ -5,9 +5,12 @@
 
 import asyncio
 import base64
+import contextlib
+import logging
 import re
 
 import jenkinsapi.jenkins
+import kubernetes.client
 import pytest
 import pytest_asyncio
 import requests
@@ -21,11 +24,14 @@ from .constants import MACHINE_CONTROLLER_NAME
 from .helpers import assert_job_success, get_model_unit_addresses
 from .types_ import KeycloakOIDCMetadata
 
+logger = logging.getLogger(__name__)
+
 EXTERNAL_HOSTNAME = "jenkins.internal"
 SPOE_EXTERNAL_HOSTNAME = "jenkins-spoe.internal"
 AGENT_EXTERNAL_HOSTNAME = "jenkins-agent.internal"
 GATEWAY_CLASS = "ck-gateway"
 GATEWAY_APPLICATION_NAME = "jenkins-gateway-api"
+GATEWAY_SERVICE_NAME = f"cilium-gateway-{GATEWAY_APPLICATION_NAME}"
 HAPROXY_ROUTE_RELATION = "haproxy-route"
 SELF_SIGNED_CERTIFICATES_APP_NAME = "self-signed-certificates"
 
@@ -230,20 +236,91 @@ async def _get_machine_model_gateway(unit: Unit) -> str:
 
 
 @tenacity.retry(
-    retry=tenacity.retry_if_exception_type(OSError),
+    retry=tenacity.retry_if_exception_type(
+        (AssertionError, kubernetes.client.exceptions.ApiException)
+    ),
+    wait=tenacity.wait_fixed(5),
+    stop=tenacity.stop_after_delay(5 * 60),
+    reraise=True,
+)
+def _get_gateway_load_balancer_ip(
+    kube_core_client: kubernetes.client.CoreV1Api, namespace: str
+) -> str:
+    """Get the IP allocated to the Gateway's LoadBalancer Service."""
+    service = kube_core_client.read_namespaced_service(GATEWAY_SERVICE_NAME, namespace)
+    load_balancer = service.status.load_balancer if service.status else None
+    ingress = load_balancer.ingress if load_balancer else None
+    assert ingress, f"Gateway LoadBalancer has no external address: {service.status}"
+    ip = next((entry.ip for entry in ingress if entry.ip), None)
+    assert ip, f"Gateway LoadBalancer has no IP address: {ingress}"
+    return ip
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_exception_type((OSError, asyncio.TimeoutError)),
     wait=tenacity.wait_fixed(1),
     stop=tenacity.stop_after_delay(30),
     reraise=True,
 )
-async def _wait_for_gateway_forward(process: asyncio.subprocess.Process, address: str) -> None:
-    """Wait until the local Gateway HTTPS forward accepts connections."""
+async def _wait_for_gateway_bridge(process: asyncio.subprocess.Process, address: str) -> None:
+    """Wait until the local Gateway bridge accepts TCP connections."""
     if process.returncode is not None:
         assert process.stderr is not None
         stderr = (await process.stderr.read()).decode(errors="replace")
-        raise RuntimeError(f"Gateway port-forward exited early: {stderr}")
-    _, writer = await asyncio.open_connection(address, 443)
+        raise RuntimeError(f"Gateway bridge exited early: {stderr}")
+    _, writer = await asyncio.wait_for(asyncio.open_connection(address, 443), timeout=10)
     writer.close()
     await writer.wait_closed()
+
+
+async def _start_gateway_bridge(bridge_address: str, gateway_ip: str):
+    """Start a TCP bridge from the LXD gateway to the Gateway LoadBalancer IP."""
+    process = await asyncio.create_subprocess_exec(
+        "sudo",
+        "socat",
+        "-d",
+        "-d",
+        f"TCP-LISTEN:443,bind={bridge_address},reuseaddr,fork",
+        f"TCP:{gateway_ip}:443",
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        await _wait_for_gateway_bridge(process, bridge_address)
+    except BaseException:
+        with contextlib.suppress(ProcessLookupError):
+            if process.returncode is None:
+                process.terminate()
+        with contextlib.suppress(ProcessLookupError):
+            await process.wait()
+        raise
+    return process
+
+
+async def _supervise_gateway_bridge(
+    bridge: list[asyncio.subprocess.Process],
+    stop: asyncio.Event,
+    bridge_address: str,
+    gateway_ip: str,
+) -> None:
+    """Restart the bridge if its listener process exits during the fixture."""
+    while not stop.is_set():
+        process = bridge[0]
+        await process.wait()
+        if stop.is_set():
+            return
+        stderr = ""
+        if process.stderr is not None:
+            stderr = (await process.stderr.read()).decode(errors="replace")
+        logger.warning("Gateway bridge exited; restarting: %s", stderr.strip())
+        while not stop.is_set():
+            try:
+                bridge[0] = await _start_gateway_bridge(bridge_address, gateway_ip)
+                break
+            except (OSError, RuntimeError, asyncio.TimeoutError) as exc:
+                logger.warning("Gateway bridge restart failed: %s", exc)
+                await asyncio.sleep(1)
 
 
 @pytest_asyncio.fixture(scope="function", name="gateway_agent_network")
@@ -251,32 +328,32 @@ async def gateway_agent_network_fixture(
     gateway_agent_ingress: Application,
     jenkins_machine_agents: Application,
     model: Model,
-    kube_config: str,
+    kube_core_client: kubernetes.client.CoreV1Api,
 ):
-    """Bridge the CK8s Gateway HTTPS endpoint into the LXD agent network."""
+    """Bridge the CK8s Gateway LoadBalancer into the LXD agent network."""
     del gateway_agent_ingress  # dependency: Gateway service must be ready first
     # The integration backend places all LXD units on this runner. Fail rather
     # than silently misrouting if that topology changes.
-    gateways = {
-        await _get_machine_model_gateway(unit) for unit in jenkins_machine_agents.units
-    }
+    gateways = {await _get_machine_model_gateway(unit) for unit in jenkins_machine_agents.units}
     assert len(gateways) == 1, f"Machine agents use different gateways: {sorted(gateways)}"
     bridge_address = next(iter(gateways))
+    gateway_ip = _get_gateway_load_balancer_ip(kube_core_client, model.name)
+    logger.info("Gateway LoadBalancer IP=%s bridge_address=%s", gateway_ip, bridge_address)
+
     gateway_certificates = model.applications["jenkins-gateway-certificates"]
     action = await gateway_certificates.units[0].run_action("get-ca-certificate")
     await action.wait()
     ca_certificate = action.results["ca-certificate"]
     ca_payload = base64.b64encode(ca_certificate.encode()).decode()
     host_line = f"{bridge_address} {AGENT_EXTERNAL_HOSTNAME}"
-    port_forward = await asyncio.create_subprocess_exec(
-        "sudo", "kubectl", "--kubeconfig", kube_config, "-n", model.name,
-        "port-forward", "--address", bridge_address,
-        f"pod/{GATEWAY_APPLICATION_NAME}-0", "443:443",
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-        start_new_session=True,
-    )
+    bridge: list[asyncio.subprocess.Process] = []
+    stop = asyncio.Event()
+    supervisor: asyncio.Task[None] | None = None
     try:
-        await _wait_for_gateway_forward(port_forward, bridge_address)
+        bridge.append(await _start_gateway_bridge(bridge_address, gateway_ip))
+        supervisor = asyncio.create_task(
+            _supervise_gateway_bridge(bridge, stop, bridge_address, gateway_ip)
+        )
         for unit in jenkins_machine_agents.units:
             await unit.ssh(
                 f"echo '{ca_payload}' | base64 -d | sudo tee "
@@ -287,23 +364,34 @@ async def gateway_agent_network_fixture(
                 f"sudo sh -c \"grep -qF '{host_line}' /etc/hosts || "
                 f"echo '{host_line}' >> /etc/hosts\""
             )
+            await unit.ssh(
+                "curl --fail --silent --show-error --connect-timeout 10 "
+                f"https://{AGENT_EXTERNAL_HOSTNAME}/jnlpJars/agent.jar -o /dev/null"
+            )
         yield
     finally:
-        if port_forward.returncode is None:
-            port_forward.terminate()
-        try:
-            await asyncio.wait_for(port_forward.wait(), timeout=5)
-        except asyncio.TimeoutError:
-            port_forward.kill()
-            await port_forward.wait()
+        stop.set()
+        if supervisor is not None:
+            supervisor.cancel()
+            await asyncio.gather(supervisor, return_exceptions=True)
+        if bridge:
+            process = bridge[0]
+            with contextlib.suppress(ProcessLookupError):
+                if process.returncode is None:
+                    process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
+            except ProcessLookupError:
+                pass
         for unit in jenkins_machine_agents.units:
             await unit.ssh(
                 "sudo rm -f /usr/local/share/ca-certificates/jenkins-gateway.crt "
                 "&& sudo update-ca-certificates"
             )
-            await unit.ssh(
-                f"sudo sed -i 's|.*{AGENT_EXTERNAL_HOSTNAME}.*||' /etc/hosts"
-            )
+            await unit.ssh(f"sudo sed -i 's|.*{AGENT_EXTERNAL_HOSTNAME}.*||' /etc/hosts")
 
 
 @pytest.mark.abort_on_fail
