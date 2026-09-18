@@ -3,7 +3,7 @@
 
 project: jenkins-k8s-operator
 path: /home/ubuntu/proj
-kill-timeout: 60m
+kill-timeout: 90m
 warn-timeout: 1m
 backends:
   integration-test:

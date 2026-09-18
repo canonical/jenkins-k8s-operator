@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+## 2026-09-16
+
+- Decouple `agent-discovery-ingress`, `ingress`, and `haproxy-route`.
+- Prefer the dedicated agent route, wait for pending ingress data, and block
+  unsafe direct-HAProxy agent topologies or conflicting non-root server paths.
+
 ## 2026-08-26
 
 - Remove the unsupported `auth-proxy` relation, OAuth2-proxy integration, and

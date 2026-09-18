@@ -24,7 +24,6 @@ providers:
       local-storage: {}
       network: {}
       dns: {}
-      gateway: {}
 
 host:
   packages:

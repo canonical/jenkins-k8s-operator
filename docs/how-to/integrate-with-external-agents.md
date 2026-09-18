@@ -13,6 +13,21 @@ juju integrate jenkins-k8s:agent-discovery-ingress traefik-k8s:ingress
 juju integrate jenkins-k8s:agent <offer-endpoint>
 ```
 
+## Route selection
+
+The `agent-discovery-ingress` relation is independent from the Jenkins server
+`ingress` relation. When both are related, the dedicated agent URL is preferred.
+If only `ingress` is related, it is used as the agent fallback and the charm
+warns that the route may be protected. A pending ingress endpoint puts the charm
+in `WaitingStatus` instead of publishing a pod address.
+
+The `haproxy-route` relation is a server/browser route and is never used as an
+agent endpoint. If agents are related, direct HAProxy routing requires either a
+dedicated `agent-discovery-ingress` route or a server `ingress` fallback. A
+related `haproxy-route` also requires `external-hostname`. A non-root server
+ingress path cannot be combined with `haproxy-route`; the charm enters
+`BlockedStatus` rather than exposing a mismatched Jenkins prefix.
+
 ## Networking considerations
 The charm assumes that:
 1. There are connectivity between the Juju controller of the `jenkins-k8s` charm and the Juju controller of the agent charm trying to connect with the `jenkins-k8s` charm.

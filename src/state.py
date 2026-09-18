@@ -4,10 +4,12 @@
 """Jenkins States."""
 
 import dataclasses
+import json
 import logging
 import os
 import re
 import typing
+from urllib.parse import urlparse
 
 import ops
 import yaml
@@ -44,6 +46,14 @@ class CharmConfigInvalidError(CharmStateBaseError):
         Args:
             msg: Explanation of the error.
         """
+        self.msg = msg
+
+
+class CharmRelationDataNotReadyError(CharmStateBaseError):
+    """Exception raised when a related endpoint has not published its URL yet."""
+
+    def __init__(self, msg: str):
+        """Initialize a relation-not-ready error."""
         self.msg = msg
 
 
@@ -224,18 +234,116 @@ def _parse_external_agent_nodes(charm: ops.CharmBase) -> frozenset[str]:
     return frozenset(names)
 
 
-def _validate_deployment_relations(charm: ops.CharmBase) -> None:
-    """Validate supported deployment topology and required integrations."""
+def _get_ingress_path(relation: typing.Optional[ops.Relation]) -> typing.Optional[str]:
+    """Return a ready ingress relation path, or None while its data is pending."""
+    if not relation or not relation.app:
+        return None
+    try:
+        raw_data = relation.data[relation.app].get("ingress")
+    except (KeyError, ops.ModelError):
+        return None
+    if not raw_data:
+        return None
+    try:
+        ingress_data = json.loads(raw_data)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    url = ingress_data.get("url") if isinstance(ingress_data, dict) else None
+    if not url:
+        return None
+    return urlparse(str(url)).path.rstrip("/")
+
+
+def _validate_unit_count(charm: ops.CharmBase) -> None:
+    """Reject deployments with more than one Jenkins unit."""
     if charm.app.planned_units() > 1:
         raise CharmIllegalNumUnitsError("The Jenkins charm supports only 1 unit of deployment.")
 
+
+def _validate_haproxy_route_configuration(
+    server_ingress: typing.Optional[ops.Relation],
+    haproxy_route: typing.Optional[ops.Relation],
+    external_hostname: typing.Optional[str],
+) -> None:
+    """Validate HAProxy hostname and server-ingress path compatibility."""
+    if haproxy_route and not external_hostname:
+        raise CharmConfigInvalidError(
+            f"{HAPROXY_ROUTE_RELATION_NAME} requires external-hostname to be configured."
+        )
+    ingress_path = _get_ingress_path(server_ingress)
+    if haproxy_route and server_ingress and ingress_path:
+        raise CharmConfigInvalidError(
+            "ingress and haproxy-route cannot be combined when ingress uses a non-root path."
+        )
+
+
+def _validate_agent_route_path(
+    agent_discovery_ingress: typing.Optional[ops.Relation],
+    server_ingress: typing.Optional[ops.Relation],
+) -> None:
+    """Reject dedicated agent routes that cannot preserve a server prefix."""
+    if agent_discovery_ingress and server_ingress and _get_ingress_path(server_ingress):
+        raise CharmConfigInvalidError(
+            "agent-discovery-ingress and ingress cannot be combined when ingress uses a non-root path."
+        )
+
+
+def _validate_agent_ingress_readiness(
+    charm: ops.CharmBase,
+    agent_discovery_ingress: typing.Optional[ops.Relation],
+    server_ingress: typing.Optional[ops.Relation],
+) -> None:
+    """Wait for the selected agent ingress before agent reconciliation."""
+    if not charm.model.relations[AGENT_RELATION]:
+        return
+    if agent_discovery_ingress and _get_ingress_path(agent_discovery_ingress) is None:
+        raise CharmRelationDataNotReadyError(
+            "Waiting for the dedicated agent ingress endpoint to become available."
+        )
+    if (
+        not agent_discovery_ingress
+        and server_ingress
+        and _get_ingress_path(server_ingress) is None
+    ):
+        raise CharmRelationDataNotReadyError(
+            "Waiting for the server ingress endpoint to become available."
+        )
+
+
+def _validate_agent_route_configuration(
+    charm: ops.CharmBase,
+    agent_discovery_ingress: typing.Optional[ops.Relation],
+    server_ingress: typing.Optional[ops.Relation],
+    haproxy_route: typing.Optional[ops.Relation],
+    external_hostname: typing.Optional[str],
+) -> None:
+    """Require a non-HAProxy route for agents using direct HAProxy service."""
+    if (
+        charm.model.relations[AGENT_RELATION]
+        and haproxy_route
+        and external_hostname
+        and not agent_discovery_ingress
+        and not server_ingress
+    ):
+        raise CharmConfigInvalidError(
+            f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME} is required for agents when "
+            f"{HAPROXY_ROUTE_RELATION_NAME} is the server route."
+        )
+
+
+def _validate_deployment_relations(charm: ops.CharmBase) -> None:
+    """Validate deployment size and the independent route contracts."""
+    _validate_unit_count(charm)
     agent_discovery_ingress = charm.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME)
     server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
-    if agent_discovery_ingress and not server_ingress:
-        raise CharmConfigInvalidError(
-            f"{INGRESS_RELATION_NAME} integration is required when using "
-            f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME}"
-        )
+    haproxy_route = charm.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
+    external_hostname = _parse_external_hostname(charm)
+    _validate_haproxy_route_configuration(server_ingress, haproxy_route, external_hostname)
+    _validate_agent_route_path(agent_discovery_ingress, server_ingress)
+    _validate_agent_ingress_readiness(charm, agent_discovery_ingress, server_ingress)
+    _validate_agent_route_configuration(
+        charm, agent_discovery_ingress, server_ingress, haproxy_route, external_hostname
+    )
 
 
 def _parse_jcasc_config(
