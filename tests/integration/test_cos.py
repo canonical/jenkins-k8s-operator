@@ -10,12 +10,18 @@ import typing
 import pytest
 import pytest_asyncio
 import requests
+import tenacity
 from juju.action import Action
 from juju.application import Application
 from juju.model import Model
 from kubernetes.client import CoreV1Api
 
-from .helpers import get_model_unit_addresses, wait_for
+from .helpers import (
+    _log_retry,
+    _raise_retry_timeout,
+    get_model_unit_addresses,
+    wait_for,
+)
 from .types_ import UnitWebClient
 
 logger = logging.getLogger(__name__)
@@ -97,6 +103,13 @@ async def test_prometheus_integration(
         assert len(query_targets["data"]["activeTargets"])
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def log_files_exist(
     unit_address: str, application_name: str, filenames: typing.Iterable[str]
 ) -> bool:
@@ -143,15 +156,7 @@ async def test_loki_integration(
     unit_ips = await get_model_unit_addresses(model=model, app_name=loki_related.name)
     assert unit_ips, f"Unit IP address not found for {loki_related.name}"
     for ip in unit_ips:
-        await wait_for(
-            functools.partial(
-                log_files_exist,
-                ip,
-                application.name,
-                ("/var/lib/jenkins/logs/jenkins.log",),
-            ),
-            timeout=10 * 60,
-        )
+        log_files_exist(ip, application.name, ("/var/lib/jenkins/logs/jenkins.log",))
 
     kube_log = kube_core_client.read_namespaced_pod_log(
         name=f"{application.name}-0", namespace=model.name, container="jenkins"
