@@ -4,26 +4,43 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import logging
+from typing import AsyncGenerator
 
 import jenkinsapi.jenkins
+import pytest_asyncio
 import requests
 from juju.application import Application
 from juju.model import Model
 
 import state
 
-from .fixture_modules.k8s_agent import extra_jenkins_k8s_agents_fixture  # noqa: F401
 from .helpers import assert_job_success, ensure_relation
 
 logger = logging.getLogger(__name__)
 
 
-async def test_jenkins_wizard_bypass(web_address: str):
-    """Verify Jenkins wizard is bypassed and login is shown.  # noqa: F401
+@pytest_asyncio.fixture(scope="function", name="extra_jenkins_k8s_agents")
+async def extra_jenkins_k8s_agents_fixture(
+    model: Model,
+) -> AsyncGenerator[Application, None]:
+    """The Jenkins k8s agent."""
+    agent_app: Application = await model.deploy(
+        "jenkins-agent-k8s",
+        base="ubuntu@24.04",
+        config={"jenkins_agent_labels": "k8s-extra"},
+        channel="latest/edge",
+        application_name="jenkins-agent-k8s-extra",
+    )
+    await model.wait_for_idle(apps=[agent_app.name], status="blocked")
+    yield agent_app
 
-    arrange: given an active Jenkins charm's unit ip.  # noqa: F401
-    act: when web application is accessed  # noqa: F401
-    assert: wizard is bypassed and a login screen is shown.  # noqa: F401
+
+async def test_jenkins_wizard_bypass(web_address: str):
+    """Verify Jenkins wizard is bypassed and login is shown.
+
+    arrange: given an active Jenkins charm's unit ip.
+    act: when web application is accessed
+    assert: wizard is bypassed and a login screen is shown.
     """
     response = requests.get(f"{web_address}/login", params={"from": "/"}, timeout=10)
 

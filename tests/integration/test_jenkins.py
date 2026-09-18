@@ -8,10 +8,12 @@ import os
 import typing
 from pathlib import Path
 from secrets import token_hex
+from typing import Iterable
 from urllib.parse import quote
 
 import jenkinsapi
 import pytest
+import pytest_asyncio
 import requests
 import yaml
 from juju.action import Action
@@ -19,19 +21,52 @@ from juju.application import Application
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
-from .fixture_modules.jenkins import (
-    app_with_restart_time_range_fixture,  # noqa: F401
-    freeze_time_fixture,  # noqa: F401
-    libfaketime_env_fixture,  # noqa: F401
-    libfaketime_unit_fixture,  # noqa: F401
-    test_jcasc_repository_fixture,  # noqa: F401
-)
 from .helpers import gen_test_job_xml, install_plugins
 from .types_ import UnitWebClient
 
 JENKINS_UID = "2000"
 JENKINS_GID = "2000"
+DEFAULT_TEST_JCASC_REPOSITORY = "https://github.com/canonical/jenkins-k8s-operator.git"
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="module", name="test_jcasc_repository")
+def test_jcasc_repository_fixture() -> str:
+    """Return the trusted repository used by the JCasC integration test."""
+    return os.environ.get("TEST_JCASC_REPOSITORY", DEFAULT_TEST_JCASC_REPOSITORY)
+
+
+@pytest.fixture(scope="module", name="freeze_time")
+def freeze_time_fixture() -> str:
+    """The time string to freeze the charm time."""
+    return "2022-01-01 15:00:00"
+
+
+@pytest_asyncio.fixture(scope="function", name="app_with_restart_time_range")
+async def app_with_restart_time_range_fixture(application: Application):
+    """Application with restart-time-range configured."""
+    await application.set_config({"restart-time-range": "03-05"})
+    yield application
+    await application.reset_config(["restart-time-range"])
+
+
+@pytest_asyncio.fixture(scope="function", name="libfaketime_unit")
+async def libfaketime_unit_fixture(ops_test: OpsTest, unit: Unit) -> Unit:
+    """Unit with libfaketime installed."""
+    await ops_test.juju("run", "--unit", f"{unit.name}", "--", "apt", "update")
+    await ops_test.juju(
+        "run", "--unit", f"{unit.name}", "--", "apt", "install", "-y", "libfaketime"
+    )
+    return unit
+
+
+@pytest.fixture(scope="function", name="libfaketime_env")
+def libfaketime_env_fixture(freeze_time: str) -> Iterable[str]:
+    """The environment variables for using libfaketime."""
+    return (
+        'LD_PRELOAD="/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1"',
+        f'FAKETIME="@{freeze_time}"',
+    )
 
 
 async def test_jenkins_update_ui_disabled(

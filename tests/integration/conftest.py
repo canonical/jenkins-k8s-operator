@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 
 KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
 DATA_DIR = Path(__file__).parent / "data"
-DEFAULT_TEST_JCASC_REPOSITORY = "https://github.com/canonical/jenkins-k8s-operator.git"
 
 
 async def charm_exec(ops_test: OpsTest, unit_name: str, cmd: str) -> None:
