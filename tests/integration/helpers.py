@@ -63,6 +63,13 @@ def _jenkins_available(web: str) -> bool:
         return False
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def _plugins_are_active(client: jenkinsapi.jenkins.Jenkins, plugins: tuple[str, ...]) -> bool:
     """Return whether all requested Jenkins plugins are active and enabled."""
     try:
@@ -122,7 +129,7 @@ async def install_plugins(
     _jenkins_available(web)
     logger.info("phase=plugin_install jenkins_available plugins=%s", plugins)
 
-    await wait_for(lambda: _plugins_are_active(client, plugins), timeout=60 * 10)
+    _plugins_are_active(client, plugins)
     logger.info("phase=plugin_install active plugins=%s", plugins)
 
 
