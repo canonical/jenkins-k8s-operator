@@ -160,6 +160,18 @@ async def _has_plugin_delay_log(ops_test: OpsTest) -> bool:
     return "Plugins being downloaded, waiting until further actions." in stdout
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(300),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+def _all_plugins_active(unit_web_client: UnitWebClient, plugins: typing.Iterable[str]) -> bool:
+    """Return whether all requested plugins are active in Jenkins."""
+    return all(unit_web_client.client.has_plugin(plugin) for plugin in plugins)
+
+
 @pytest.mark.usefixtures("app_with_allowed_plugins")
 async def test_plugins_remove_delay(
     ops_test: OpsTest,
@@ -204,9 +216,7 @@ async def test_plugins_remove_delay(
     await _has_plugin_delay_log(ops_test)
     unit_web_client.client.safe_restart()
 
-    await wait_for(
-        lambda: all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
-    )
+    _all_plugins_active(unit_web_client, ALLOWED_PLUGINS)
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
