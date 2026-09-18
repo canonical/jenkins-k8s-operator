@@ -19,6 +19,27 @@ EXTERNAL_HOSTNAME = "jenkins.internal"
 SPOE_EXTERNAL_HOSTNAME = "jenkins-spoe.internal"
 HAPROXY_ROUTE_RELATION = "haproxy-route"
 SELF_SIGNED_CERTIFICATES_APP_NAME = "self-signed-certificates"
+AGENT_TRAEFIK_APPLICATION_NAME = "agent-discovery-traefik"
+
+
+@pytest_asyncio.fixture(scope="module", name="traefik_agent_ingress")
+async def traefik_agent_ingress_fixture(model: Model) -> Application:
+    """Deploy the pinned Traefik used by the PS7 agent-ingress topology."""
+    traefik = await model.deploy(
+        "traefik-k8s",
+        channel="latest/stable",
+        revision=378,
+        trust=True,
+        config={"routing_mode": "path"},
+        application_name=AGENT_TRAEFIK_APPLICATION_NAME,
+    )
+    await model.wait_for_idle(
+        apps=[traefik.name],
+        status="active",
+        timeout=20 * 60,
+        raise_on_error=True,
+    )
+    return traefik
 
 
 @pytest_asyncio.fixture(scope="module", name="self_signed_certificates")
@@ -291,14 +312,13 @@ async def test_haproxy_server_and_traefik_agent_discovery(
     model: Model,
     application: Application,
     haproxy_with_spoe: Application,
-    traefik_application_and_unit_ip: tuple[Application, str],
+    traefik_agent_ingress: Application,
     jenkins_machine_agents: Application,
     jenkins_client: jenkinsapi.jenkins.Jenkins,
     machine_model: Model,
     ca_cert_path: str,
 ):
     """Verify HAProxy serves Jenkins while Traefik serves machine agents."""
-    traefik, _ = traefik_application_and_unit_ip
     await application.set_config({"external-hostname": SPOE_EXTERNAL_HOSTNAME})
 
     related_endpoints = {
@@ -315,7 +335,7 @@ async def test_haproxy_server_and_traefik_agent_discovery(
     if "agent-discovery-ingress" not in related_endpoints:
         await model.integrate(
             f"{application.name}:agent-discovery-ingress",
-            f"{traefik.name}:ingress",
+            f"{traefik_agent_ingress.name}:ingress",
         )
     if "agent" not in related_endpoints:
         await model.integrate(
