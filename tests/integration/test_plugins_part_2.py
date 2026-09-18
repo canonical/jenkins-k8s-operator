@@ -396,6 +396,7 @@ async def test_kubernetes_plugin(
         _log_build_timeout_diagnostics(queue_item, unit_web_client, kube_core_client)
         raise TimeoutError("Kubernetes plugin build did not complete within 600 seconds") from exc
 
+    assert build is not None, "Jenkins build did not complete"
     build_status = build.get_status()
     log_stream = build.stream_logs()
     logs = "".join(log_stream)
