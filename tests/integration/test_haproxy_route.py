@@ -22,6 +22,24 @@ SELF_SIGNED_CERTIFICATES_APP_NAME = "self-signed-certificates"
 AGENT_TRAEFIK_APPLICATION_NAME = "agent-discovery-traefik"
 
 
+def _has_relation(application: Application, endpoint_name: str) -> bool:
+    """Return whether the application already has a relation at an endpoint."""
+    return any(
+        endpoint.name == endpoint_name
+        for relation in application.relations
+        for endpoint in relation.endpoints
+        if endpoint.application_name == application.name
+    )
+
+
+async def _ensure_relation(
+    model: Model, application: Application, endpoint_name: str, target: str
+) -> None:
+    """Create a relation when absent, making each test self-contained."""
+    if not _has_relation(application, endpoint_name):
+        await model.integrate(f"{application.name}:{endpoint_name}", target)
+
+
 @pytest_asyncio.fixture(scope="module", name="traefik_agent_ingress")
 async def traefik_agent_ingress_fixture(model: Model) -> Application:
     """Deploy the pinned Traefik used by the PS7 agent-ingress topology."""
@@ -210,9 +228,11 @@ async def test_haproxy_route_serves_jenkins(
     """
     await application.set_config({"external-hostname": EXTERNAL_HOSTNAME})
 
-    # Cross-model relation: k8s model (jenkins) -> machine model (haproxy)
-    await model.integrate(
-        f"{application.name}:{HAPROXY_ROUTE_RELATION}",
+    # Cross-model relation: k8s model (jenkins) -> machine model (haproxy).
+    await _ensure_relation(
+        model,
+        application,
+        HAPROXY_ROUTE_RELATION,
         f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
     )
     await machine_model.wait_for_idle(apps=[haproxy.name], wait_for_active=True, timeout=20 * 60)
@@ -262,19 +282,12 @@ async def test_haproxy_spoe_redirects_to_oidc(
     await application.set_config({"external-hostname": SPOE_EXTERNAL_HOSTNAME})
 
     # Cross-model relation: k8s model (jenkins) -> machine model (haproxy).
-    # Already established by test_haproxy_route_serves_jenkins (shared haproxy/
-    # application fixtures), so only integrate if it's not there yet.
-    existing_endpoints = {
-        endpoint.name
-        for relation in application.relations
-        for endpoint in relation.endpoints
-        if endpoint.application_name == application.name
-    }
-    if HAPROXY_ROUTE_RELATION not in existing_endpoints:
-        await model.integrate(
-            f"{application.name}:{HAPROXY_ROUTE_RELATION}",
-            f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
-        )
+    await _ensure_relation(
+        model,
+        application,
+        HAPROXY_ROUTE_RELATION,
+        f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
+    )
     await machine_model.wait_for_idle(
         apps=[haproxy_with_spoe.name], wait_for_active=True, timeout=20 * 60
     )
@@ -326,28 +339,18 @@ async def test_haproxy_server_and_traefik_agent_discovery(
     """Verify HAProxy serves Jenkins while Traefik serves machine agents."""
     await application.set_config({"external-hostname": SPOE_EXTERNAL_HOSTNAME})
 
-    related_endpoints = {
-        endpoint.name
-        for relation in application.relations
-        for endpoint in relation.endpoints
-        if endpoint.application_name == application.name
-    }
-    if HAPROXY_ROUTE_RELATION not in related_endpoints:
-        await model.integrate(
-            f"{application.name}:{HAPROXY_ROUTE_RELATION}",
-            f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
-        )
-    if "agent-discovery-ingress" not in related_endpoints:
-        await model.integrate(
-            f"{application.name}:agent-discovery-ingress",
-            f"{traefik_agent_ingress.name}:ingress",
-        )
-    if "agent" not in related_endpoints:
-        await model.integrate(
-            f"{application.name}:agent",
-            f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.agent",
-        )
-        await model.wait_for_idle(apps=[application.name], timeout=20 * 60)
+    await _ensure_relation(
+        model,
+        application,
+        HAPROXY_ROUTE_RELATION,
+        f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
+    )
+    await _ensure_relation(
+        model, application, "agent-discovery-ingress", f"{traefik_agent_ingress.name}:ingress"
+    )
+    await _ensure_relation(
+        model, application, "agent", f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.agent"
+    )
 
     await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
     await machine_model.wait_for_idle(
