@@ -243,6 +243,29 @@ def gen_test_job_xml(node_label: str):
         """)
 
 
+@tenacity.retry(
+    wait=tenacity.wait_fixed(5),
+    stop=tenacity.stop_after_delay(10 * 60),
+    reraise=True,
+)
+def _wait_for_job_completion(queue_item: typing.Any, agent_name: str) -> jenkinsapi.build.Build:
+    """Wait for a Jenkins queue item to produce a completed build."""
+    try:
+        queue_item.poll()
+        build: jenkinsapi.build.Build = queue_item.get_build()
+    except NotBuiltYet as exc:
+        raise AssertionError(
+            f"Jenkins job did not complete: agent={agent_name}, "
+            f"why={queue_item.why!r}, queue={queue_item._data!r}"
+        ) from exc
+    if build.is_running():
+        raise AssertionError(
+            f"Jenkins job did not complete: agent={agent_name}, "
+            f"why={queue_item.why!r}, queue={queue_item._data!r}"
+        )
+    return build
+
+
 def assert_job_success(
     client: jenkinsapi.jenkins.Jenkins, agent_name: str, test_target_label: str
 ):
@@ -253,13 +276,9 @@ def assert_job_success(
         agent_name: The registered Jenkins agent node to check.
         test_target_label: The Jenkins agent node label.
     """
-    node_names = list(client.nodes.iterkeys())
-    node_name = next((key for key in node_names if agent_name in key), None)
-    assert node_name is not None, f"Jenkins {agent_name} node not registered."
-
     deadline = time.monotonic() + 10 * 60
     while True:
-        node = client.get_node(node_name)
+        node = client.get_node(agent_name)
         online = node.is_online()
         offline_reason = "" if online else node.offline_reason()
         logger.info(
@@ -279,21 +298,7 @@ def assert_job_success(
 
     job = client.create_job(agent_name, gen_test_job_xml(test_target_label))
     queue_item = job.invoke()
-    deadline = time.monotonic() + 10 * 60
-    while True:
-        try:
-            queue_item.poll()
-            build: jenkinsapi.build.Build = queue_item.get_build()
-        except NotBuiltYet:
-            build = None  # type: ignore[assignment]
-        if build is not None and not build.is_running():
-            break
-        if time.monotonic() >= deadline:
-            raise AssertionError(
-                f"Jenkins job did not complete: agent={agent_name}, "
-                f"why={queue_item.why!r}, queue={queue_item._data!r}"
-            )
-        time.sleep(5)
+    build = _wait_for_job_completion(queue_item, agent_name)
     assert build.get_status() == "SUCCESS"
 
 
