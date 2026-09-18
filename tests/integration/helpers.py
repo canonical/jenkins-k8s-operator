@@ -253,12 +253,13 @@ def assert_job_success(
         agent_name: The registered Jenkins agent node to check.
         test_target_label: The Jenkins agent node label.
     """
-    nodes = client.nodes.iterkeys()
-    assert any(agent_name in key for key in nodes), f"Jenkins {agent_name} node not registered."
+    node_names = list(client.nodes.iterkeys())
+    node_name = next((key for key in node_names if agent_name in key), None)
+    assert node_name is not None, f"Jenkins {agent_name} node not registered."
 
     deadline = time.monotonic() + 10 * 60
     while True:
-        node = client.get_node(agent_name)
+        node = client.get_node(node_name)
         online = node.is_online()
         offline_reason = "" if online else node.offline_reason()
         logger.info(

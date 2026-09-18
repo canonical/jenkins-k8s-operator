@@ -121,6 +121,7 @@ dependency_groups = ["coverage-report"]
 
 [env.integration]
 description = "Run integration tests"
+base_python = ["/usr/bin/python3.12"]
 # pytest-rerunfailures retries tests that hit the known python-libjuju
 # kubernetes port-forward proxy flake (ConnectionClosedError /
 # ProxyNotConnectedError on the controller WebSocket). Scoped via
