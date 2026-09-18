@@ -24,6 +24,12 @@ from .constants import (
     INSTALLED_PLUGINS,
     REMOVED_PLUGINS,
 )
+from .fixture_modules.plugins1 import (
+    app_with_allowed_plugins_fixture,  # noqa: F401
+    ldap_server_fixture,  # noqa: F401
+    ldap_server_ip_fixture,  # noqa: F401
+    ldap_settings_fixture,  # noqa: F401
+)
 from .helpers import (
     gen_git_test_job_xml,
     gen_test_job_xml,

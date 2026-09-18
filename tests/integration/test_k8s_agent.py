@@ -12,17 +12,18 @@ from juju.model import Model
 
 import state
 
+from .fixture_modules.k8s_agent import extra_jenkins_k8s_agents_fixture  # noqa: F401
 from .helpers import assert_job_success, ensure_relation
 
 logger = logging.getLogger(__name__)
 
 
 async def test_jenkins_wizard_bypass(web_address: str):
-    """Verify Jenkins wizard is bypassed and login is shown.
+    """Verify Jenkins wizard is bypassed and login is shown.  # noqa: F401
 
-    arrange: given an active Jenkins charm's unit ip.
-    act: when web application is accessed
-    assert: wizard is bypassed and a login screen is shown.
+    arrange: given an active Jenkins charm's unit ip.  # noqa: F401
+    act: when web application is accessed  # noqa: F401
+    assert: wizard is bypassed and a login screen is shown.  # noqa: F401
     """
     response = requests.get(f"{web_address}/login", params={"from": "/"}, timeout=10)
 

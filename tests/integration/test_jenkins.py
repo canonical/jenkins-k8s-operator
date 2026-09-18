@@ -19,6 +19,13 @@ from juju.application import Application
 from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
+from .fixture_modules.jenkins import (
+    app_with_restart_time_range_fixture,  # noqa: F401
+    freeze_time_fixture,  # noqa: F401
+    libfaketime_env_fixture,  # noqa: F401
+    libfaketime_unit_fixture,  # noqa: F401
+    test_jcasc_repository_fixture,  # noqa: F401
+)
 from .helpers import gen_test_job_xml, install_plugins
 from .types_ import UnitWebClient
 

@@ -5,6 +5,17 @@
 
 import jenkinsapi
 
+from .fixture_modules.proxy import (
+    jenkins_with_proxy_client_fixture,  # noqa: F401
+    jenkins_with_proxy_fixture,  # noqa: F401
+    model_with_proxy_fixture,  # noqa: F401
+    proxy_jenkins_unit_ip_fixture,  # noqa: F401
+    proxy_jenkins_web_address_fixture,  # noqa: F401
+    tiny_proxy_daemonset_fixture,  # noqa: F401
+    tinyproxy_ip_fixture,  # noqa: F401
+    tinyproxy_port_fixture,  # noqa: F401
+)
+
 
 async def test_jenkins_ui_proxy_config(
     jenkins_with_proxy_client: jenkinsapi.jenkins.Jenkins,

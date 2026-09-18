@@ -14,6 +14,11 @@ from juju.application import Application
 from juju.model import Model
 from kubernetes.client import CoreV1Api
 
+from .fixture_modules.cos import (
+    grafana_related_fixture,  # noqa: F401
+    loki_related_fixture,  # noqa: F401
+    prometheus_related_fixture,  # noqa: F401
+)
 from .helpers import get_model_unit_addresses, wait_for
 from .types_ import UnitWebClient
 

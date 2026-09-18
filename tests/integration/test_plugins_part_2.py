@@ -16,6 +16,7 @@ import pytest
 import requests
 from jenkinsapi.custom_exceptions import NotBuiltYet
 
+from .fixture_modules.plugins2 import jenkins_kube_config_fixture  # noqa: F401
 from .helpers import (
     create_kubernetes_cloud,
     create_secret_file_credentials,
@@ -32,10 +33,10 @@ logger = logging.getLogger(__name__)
 
 
 async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
-    """
-    arrange: given a Jenkins charm with docker-build-publish plugin installed.
-    act: when a job configuration page is accessed.
-    assert: docker-build-publish plugin option exists.
+    """# noqa: F401
+    arrange: given a Jenkins charm with docker-build-publish plugin installed.  # noqa: F401
+    act: when a job configuration page is accessed.  # noqa: F401
+    assert: docker-build-publish plugin option exists.  # noqa: F401
     """
     await install_plugins(unit_web_client, ("docker-build-publish",))
     unit_web_client.client.create_job("docker_plugin_test", gen_test_job_xml("k8s"))

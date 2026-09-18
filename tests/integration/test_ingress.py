@@ -11,6 +11,7 @@ from juju.application import Application
 from juju.model import Model
 from pytest_operator.plugin import OpsTest
 
+from .fixture_modules.ingress import traefik_application_fixture  # noqa: F401
 from .helpers import ensure_relation
 
 
