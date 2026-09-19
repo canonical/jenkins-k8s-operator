@@ -3,7 +3,6 @@
 
 """Helpers for Jenkins-k8s-operator charm integration tests."""
 
-import inspect
 import logging
 import textwrap
 import time
@@ -84,6 +83,21 @@ def _plugins_are_active(client: jenkinsapi.jenkins.Jenkins, plugins: tuple[str, 
 
 
 @tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+def _plugins_download_complete(client: jenkinsapi.jenkins.Jenkins, web: str) -> bool:
+    """Return whether Jenkins has finished downloading plugin updates."""
+    return "Pending" not in str(
+        client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
+        encoding="utf-8",
+    )
+
+
+@tenacity.retry(
     wait=tenacity.wait_exponential(multiplier=2, max=60),
     reraise=True,
     stop=tenacity.stop_after_attempt(5),
@@ -117,16 +131,7 @@ async def install_plugins(
     assert res.status_code == 200, "Failed to request plugins install"
 
     logger.info("phase=plugin_install waiting_for_download plugins=%s", plugins)
-    await wait_for(
-        lambda: (
-            "Pending"
-            not in str(
-                client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
-                encoding="utf-8",
-            )
-        ),
-        timeout=60 * 10,
-    )
+    _plugins_download_complete(client, web)
     logger.info("phase=plugin_install download_complete plugins=%s", plugins)
 
     client.safe_restart()
@@ -406,45 +411,6 @@ async def get_pod_ip(model: Model, kube_core_client: kubernetes.client.CoreV1Api
     await model.block_until(get_ready_pod_ip, timeout=300, wait_period=5)
 
     return typing.cast(str, get_ready_pod_ip())
-
-
-async def wait_for(
-    func: typing.Callable[[], typing.Union[typing.Awaitable, typing.Any]],
-    timeout: int = 300,
-    check_interval: int = 10,
-) -> typing.Any:
-    """Wait for function execution to become truthy.
-
-    Args:
-        func: A callback function to wait to return a truthy value.
-        timeout: Time in seconds to wait for function result to become truthy.
-        check_interval: Time in seconds to wait between ready checks.
-
-    Raises:
-        TimeoutError: if the callback function did not return a truthy value within timeout.
-
-    Returns:
-        The result of the function if any.
-    """
-    deadline = time.time() + timeout
-    is_awaitable = inspect.iscoroutinefunction(func)
-    while time.time() < deadline:
-        if is_awaitable:
-            if result := await func():
-                return result
-        else:
-            if result := func():
-                return result
-        time.sleep(check_interval)
-
-    # final check before raising TimeoutError.
-    if is_awaitable:
-        if result := await func():
-            return result
-    else:
-        if result := func():
-            return result
-    raise TimeoutError()
 
 
 async def ensure_relation(
@@ -780,6 +746,13 @@ def declarative_pipeline_script() -> str:
         }""")
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def create_secret_file_credentials(
     unit_web_client: UnitWebClient, kube_config: str
 ) -> typing.Optional[str]:
@@ -836,6 +809,13 @@ def create_secret_file_credentials(
             return None
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def create_kubernetes_cloud(
     unit_web_client: UnitWebClient, kube_config_credentials_id: str
 ) -> typing.Optional[str]:

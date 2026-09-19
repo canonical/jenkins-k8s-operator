@@ -37,7 +37,6 @@ from .helpers import (
     get_job_invoked_unit,
     get_pod_ip,
     install_plugins,
-    wait_for,
 )
 from .types_ import LDAPSettings, UnitWebClient
 
@@ -124,6 +123,13 @@ async def ldap_server_ip_fixture(
     return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def _install_plugins_via_web_api(
     unit_web_client: UnitWebClient, plugins: typing.Iterable[str]
 ) -> bool:
@@ -202,10 +208,7 @@ async def test_plugins_remove_delay(
     act: when update_status_hook is fired.
     assert: the plugin removal delayed warning is logged until plugin installation is settled.
     """
-    post_data = {f"plugin.{plugin}.default": "on" for plugin in ALLOWED_PLUGINS}
-    post_data["dynamic_load"] = ""
-
-    await wait_for(lambda: _install_plugins_via_web_api(unit_web_client, ALLOWED_PLUGINS))
+    _install_plugins_via_web_api(unit_web_client, ALLOWED_PLUGINS)
 
     await _has_plugin_temp_files(ops_test, unit_web_client.unit.name)
     ret_code, _, stderr = await ops_test.juju(
