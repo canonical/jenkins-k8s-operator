@@ -1115,7 +1115,7 @@ integration = [
     { name = "juju", specifier = ">=3,<4" },
     { name = "lightkube", specifier = "==1.0.1" },
     { name = "macaroonbakery" },
-    { name = "opcli", marker = "python_full_version >= '3.12'", git = "https://github.com/canonical/charm-ci.git?tag=v1.0.0" },
+    { name = "opcli", marker = "python_full_version >= '3.12'", git = "https://github.com/canonical/charm-ci.git?tag=v1.0.1" },
     { name = "pyotp", specifier = "==2.10.0" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1566,7 +1566,7 @@ wheels = [
 [[package]]
 name = "opcli"
 version = "1.0.0"
-source = { git = "https://github.com/canonical/charm-ci.git?tag=v1.0.0#0eef5b8cbef3ee74907850f790cab64bcf0499e5" }
+source = { git = "https://github.com/canonical/charm-ci.git?tag=v1.0.1#58ae6614a3b143d4e57eff0fd1770e97d8c30fab" }
 dependencies = [
     { name = "pydantic" },
     { name = "ruamel-yaml" },
