@@ -855,7 +855,7 @@ def create_kubernetes_cloud(
     try:
         if (
             kubernetes_test_cloud_name
-            in unit_web_client.client.requester.get_url(cloud_page_url, timeout=30).text
+            in unit_web_client.client.requester.get_url(cloud_page_url).text
         ):
             return kubernetes_test_cloud_name
     except requests.RequestException:
