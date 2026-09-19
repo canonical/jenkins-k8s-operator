@@ -8,6 +8,7 @@ rocks:
 charms:
   - name: jenkins-k8s
     charmcraft-yaml: charmcraft.yaml
+    channel: latest/edge
     resources:
       jenkins-image:
         type: oci-image
