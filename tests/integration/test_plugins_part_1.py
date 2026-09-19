@@ -140,6 +140,26 @@ async def _has_plugin_temp_files(ops_test: OpsTest, unit_name: str) -> bool:
     return "tmp" in stdout
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(300),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+async def _has_plugin_delay_log(ops_test: OpsTest) -> bool:
+    """Return whether plugin cleanup was delayed while downloads were active."""
+    ret_code, stdout, stderr = await ops_test.juju(
+        "debug-log",
+        "--replay",
+        "--no-tail",
+        "--level",
+        "WARNING",
+    )
+    assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
+    return "Plugins being downloaded, waiting until further actions." in stdout
+
+
 @pytest.mark.usefixtures("app_with_allowed_plugins")
 async def test_plugins_remove_delay(
     ops_test: OpsTest,
@@ -181,23 +201,7 @@ async def test_plugins_remove_delay(
     )
     assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
 
-    async def has_delay_log():
-        """Check if juju log contains plugin cleanup delayed log.
-
-        Returns:
-            True if plugin cleanup delayed log exists. False otherwise.
-        """
-        ret_code, stdout, stderr = await ops_test.juju(
-            "debug-log",
-            "--replay",
-            "--no-tail",
-            "--level",
-            "WARNING",
-        )
-        assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
-        return "Plugins being downloaded, waiting until further actions." in stdout
-
-    await wait_for(has_delay_log)
+    await _has_plugin_delay_log(ops_test)
     unit_web_client.client.safe_restart()
 
     await wait_for(
