@@ -5,7 +5,6 @@
 
 import inspect
 import logging
-import secrets
 import textwrap
 import time
 import typing
@@ -796,7 +795,12 @@ def create_secret_file_credentials(
         The id of the created credential, or None in case of error.
     """
     url = f"{unit_web_client.web}/credentials/store/system/domain/_/createCredentials"
-    credentials_id = f"kube-config-{secrets.token_hex(4)}"
+    credentials_id = "kube-config"
+    try:
+        if credentials_id in unit_web_client.client.credentials_by_id:
+            return credentials_id
+    except (JenkinsAPIException, requests.RequestException):
+        logger.debug("Could not query existing Jenkins credentials", exc_info=True)
     payload = {
         "json": f"""{{
             "": "4",
@@ -819,8 +823,17 @@ def create_secret_file_credentials(
         res = unit_web_client.client.requester.post_url(
             url=url, headers=headers, data=payload, files=files, timeout=30
         )
-        logger.debug("Credential created, %s", res.status_code)
-        return credentials_id if res.status_code == 200 else None
+        logger.debug("Credential create response, %s", res.status_code)
+        if res.status_code == 200:
+            return credentials_id
+        try:
+            return (
+                credentials_id
+                if credentials_id in unit_web_client.client.credentials_by_id
+                else None
+            )
+        except (JenkinsAPIException, requests.RequestException):
+            return None
 
 
 def create_kubernetes_cloud(
@@ -838,6 +851,15 @@ def create_kubernetes_cloud(
         The created kubernetes cloud name or None in case of error.
     """
     kubernetes_test_cloud_name = "kubernetes"
+    cloud_page_url = f"{unit_web_client.web}/cloud/"
+    try:
+        if (
+            kubernetes_test_cloud_name
+            in unit_web_client.client.requester.get_url(cloud_page_url).text
+        ):
+            return kubernetes_test_cloud_name
+    except requests.RequestException:
+        logger.debug("Could not query existing Jenkins clouds", exc_info=True)
 
     url = f"{unit_web_client.web}/manage/cloud/doCreate"
 
@@ -875,6 +897,15 @@ def create_kubernetes_cloud(
     res = unit_web_client.client.requester.post_url(
         url=url, headers=headers, data=payload, timeout=60 * 5
     )
-    logger.debug("Cloud created, status=%s body=%s", res.status_code, res.text)
-
-    return kubernetes_test_cloud_name if res.status_code == 200 else None
+    logger.debug("Cloud create response, status=%s body=%s", res.status_code, res.text)
+    if res.status_code == 200:
+        return kubernetes_test_cloud_name
+    try:
+        return (
+            kubernetes_test_cloud_name
+            if kubernetes_test_cloud_name
+            in unit_web_client.client.requester.get_url(cloud_page_url, timeout=30).text
+            else None
+        )
+    except requests.RequestException:
+        return None

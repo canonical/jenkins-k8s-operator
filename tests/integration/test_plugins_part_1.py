@@ -124,6 +124,25 @@ async def ldap_server_ip_fixture(
     return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
 
 
+def _install_plugins_via_web_api(
+    unit_web_client: UnitWebClient, plugins: typing.Iterable[str]
+) -> bool:
+    """Request plugin installation only when a requested plugin is missing."""
+    plugins = tuple(plugins)
+    if all(unit_web_client.client.has_plugin(plugin) for plugin in plugins):
+        return True
+    post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
+    post_data["dynamic_load"] = ""
+    try:
+        response = unit_web_client.client.requester.post_url(
+            f"{unit_web_client.web}/manage/pluginManager/install", data=post_data
+        )
+        return response.ok
+    except (requests.exceptions.RequestException, urllib3.exceptions.HTTPError):
+        logger.exception("Failed to post plugin installations.")
+        return False
+
+
 @tenacity.retry(
     retry=tenacity.retry_if_result(lambda result: not result),
     wait=tenacity.wait_fixed(10),
@@ -186,22 +205,7 @@ async def test_plugins_remove_delay(
     post_data = {f"plugin.{plugin}.default": "on" for plugin in ALLOWED_PLUGINS}
     post_data["dynamic_load"] = ""
 
-    def _install_plugins_via_web_api() -> bool:
-        """Install plugins via pluginManager API.
-
-        Returns:
-            Whether the plugin installation request has succeeded.
-        """
-        try:
-            res = unit_web_client.client.requester.post_url(
-                f"{unit_web_client.web}/manage/pluginManager/install", data=post_data
-            )
-            return res.ok
-        except (requests.exceptions.RequestException, urllib3.exceptions.HTTPError):
-            logger.exception("Failed to post plugin installations.")
-            return False
-
-    await wait_for(_install_plugins_via_web_api)
+    await wait_for(lambda: _install_plugins_via_web_api(unit_web_client, ALLOWED_PLUGINS))
 
     await _has_plugin_temp_files(ops_test, unit_web_client.unit.name)
     ret_code, _, stderr = await ops_test.juju(
