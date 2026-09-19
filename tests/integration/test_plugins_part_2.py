@@ -15,10 +15,13 @@ import kubernetes.client
 import kubernetes.config
 import pytest
 import requests
+import tenacity
 import yaml
 from jenkinsapi.custom_exceptions import NotBuiltYet
 
 from .helpers import (
+    _log_retry,
+    _raise_retry_timeout,
     create_kubernetes_cloud,
     create_secret_file_credentials,
     declarative_pipeline_script,
@@ -298,6 +301,13 @@ async def test_openid_connect_plugin(
     assert res.status_code == 200, "Failed to load Jenkins native login UI."
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: result is None),
+    wait=tenacity.wait_fixed(5),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def _get_completed_build(
     queue_item: jenkinsapi.queue.QueueItem,
 ) -> "jenkinsapi.build.Build | None":
@@ -381,15 +391,12 @@ async def test_kubernetes_plugin(
     queue_item = job.invoke()
 
     try:
-        build = await wait_for(
-            functools.partial(_get_completed_build, queue_item),
-            timeout=10 * 60,
-            check_interval=5,
-        )
+        build = _get_completed_build(queue_item)
     except TimeoutError as exc:
         _log_build_timeout_diagnostics(queue_item, unit_web_client, kube_core_client)
         raise TimeoutError("Kubernetes plugin build did not complete within 600 seconds") from exc
 
+    assert build is not None, "Jenkins build did not complete"
     build_status = build.get_status()
     log_stream = build.stream_logs()
     logs = "".join(log_stream)
