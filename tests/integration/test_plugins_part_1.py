@@ -55,6 +55,7 @@ async def app_with_allowed_plugins_fixture(
     )
     yield application
     await application.reset_config(to_default=["allowed-plugins"])
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
 
 
 @pytest.fixture(scope="module", name="ldap_settings")
