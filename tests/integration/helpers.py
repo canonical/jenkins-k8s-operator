@@ -3,9 +3,7 @@
 
 """Helpers for Jenkins-k8s-operator charm integration tests."""
 
-import inspect
 import logging
-import secrets
 import textwrap
 import time
 import typing
@@ -16,7 +14,7 @@ import jenkinsapi.jenkins
 import kubernetes.client
 import requests
 import tenacity
-from jenkinsapi.custom_exceptions import JenkinsAPIException
+from jenkinsapi.custom_exceptions import JenkinsAPIException, NotBuiltYet
 from juju.application import Application
 from juju.client._definitions import ApplicationStatus, FullStatus, UnitStatus
 from juju.model import Model
@@ -30,6 +28,31 @@ from .types_ import UnitWebClient
 logger = logging.getLogger(__name__)
 
 
+def _log_retry(retry_state: tenacity.RetryCallState) -> None:
+    """Log a retry before sleeping."""
+    function = getattr(retry_state.fn, "__name__", "integration_poll")
+    sleep = retry_state.next_action.sleep if retry_state.next_action else 0
+    logger.info(
+        "Retrying integration poll function=%s attempt=%d sleep=%ss",
+        function,
+        retry_state.attempt_number,
+        sleep,
+    )
+
+
+def _raise_retry_timeout(retry_state: tenacity.RetryCallState) -> typing.NoReturn:
+    """Convert a Tenacity result timeout to the existing TimeoutError contract."""
+    function = getattr(retry_state.fn, "__name__", "integration_poll")
+    raise TimeoutError(f"Timed out waiting for {function}")
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def _jenkins_available(web: str) -> bool:
     """Return whether Jenkins is responding after a restart."""
     try:
@@ -38,9 +61,14 @@ def _jenkins_available(web: str) -> bool:
         return False
 
 
-def _plugins_are_active(
-    client: jenkinsapi.jenkins.Jenkins, plugins: tuple[str, ...]
-) -> bool:
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+def _plugins_are_active(client: jenkinsapi.jenkins.Jenkins, plugins: tuple[str, ...]) -> bool:
     """Return whether all requested Jenkins plugins are active and enabled."""
     try:
         plugin_map = client.get_plugins(depth=1).get_plugins_dict()
@@ -51,6 +79,21 @@ def _plugins_are_active(
         and getattr(plugin, "active", False)
         and getattr(plugin, "enabled", False)
         for name in plugins
+    )
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+def _plugins_download_complete(client: jenkinsapi.jenkins.Jenkins, web: str) -> bool:
+    """Return whether Jenkins has finished downloading plugin updates."""
+    return "Pending" not in str(
+        client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
+        encoding="utf-8",
     )
 
 
@@ -78,28 +121,26 @@ async def install_plugins(
     post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
     post_data["dynamic_load"] = ""
     res = client.requester.post_url(f"{web}/manage/pluginManager/install", data=post_data)
+    if res.status_code != 200:
+        logger.error(
+            "phase=plugin_install_request_failed status=%s content_type=%s body_bytes=%s",
+            res.status_code,
+            res.headers.get("Content-Type"),
+            len(res.content),
+        )
     assert res.status_code == 200, "Failed to request plugins install"
 
     logger.info("phase=plugin_install waiting_for_download plugins=%s", plugins)
-    await wait_for(
-        lambda: (
-            "Pending"
-            not in str(
-                client.requester.post_url(f"{web}/manage/pluginManager/updates/body").content,
-                encoding="utf-8",
-            )
-        ),
-        timeout=60 * 10,
-    )
+    _plugins_download_complete(client, web)
     logger.info("phase=plugin_install download_complete plugins=%s", plugins)
 
     client.safe_restart()
     logger.info("phase=plugin_install restart_requested plugins=%s", plugins)
 
-    await wait_for(lambda: _jenkins_available(web), timeout=60 * 10)
+    _jenkins_available(web)
     logger.info("phase=plugin_install jenkins_available plugins=%s", plugins)
 
-    await wait_for(lambda: _plugins_are_active(client, plugins), timeout=60 * 10)
+    _plugins_are_active(client, plugins)
     logger.info("phase=plugin_install active plugins=%s", plugins)
 
 
@@ -146,28 +187,6 @@ def _is_juju_proxy_error(exc: BaseException) -> bool:
         "ProxyNotConnectedError",
         "BrokenPipeError",
     }
-
-
-async def _model_reconnect_on_proxy_error(exc: Exception, attempt: int) -> None:
-    """On proxy error, force model reconnect before retry.
-
-    Args:
-        exc: The exception that triggered this callback
-        attempt: Current attempt number (1-indexed by tenacity)
-    """
-    if not _is_juju_proxy_error(exc):
-        return
-    name = type(exc).__name__
-    logger.warning(
-        "model.get_status() transient failure (attempt %d): %s: %s",
-        attempt,
-        name,
-        exc,
-    )
-    # Note: This is called by tenacity after the exception is caught but
-    # before sleeping/retrying. We need the model reference, but tenacity
-    # doesn't pass the original coroutine args. We'll disconnect/reconnect
-    # in the retry wrapper instead.
 
 
 @tenacity.retry(
@@ -243,6 +262,29 @@ def gen_test_job_xml(node_label: str):
         """)
 
 
+@tenacity.retry(
+    wait=tenacity.wait_fixed(5),
+    stop=tenacity.stop_after_delay(10 * 60),
+    reraise=True,
+)
+def _wait_for_job_completion(queue_item: typing.Any, agent_name: str) -> jenkinsapi.build.Build:
+    """Wait for a Jenkins queue item to produce a completed build."""
+    try:
+        queue_item.poll()
+        build: jenkinsapi.build.Build = queue_item.get_build()
+    except NotBuiltYet as exc:
+        raise AssertionError(
+            f"Jenkins job did not complete: agent={agent_name}, "
+            f"why={queue_item.why!r}, queue={queue_item._data!r}"
+        ) from exc
+    if build.is_running():
+        raise AssertionError(
+            f"Jenkins job did not complete: agent={agent_name}, "
+            f"why={queue_item.why!r}, queue={queue_item._data!r}"
+        )
+    return build
+
+
 def assert_job_success(
     client: jenkinsapi.jenkins.Jenkins, agent_name: str, test_target_label: str
 ):
@@ -253,13 +295,33 @@ def assert_job_success(
         agent_name: The registered Jenkins agent node to check.
         test_target_label: The Jenkins agent node label.
     """
-    nodes = client.nodes.iterkeys()
-    assert any(agent_name in key for key in nodes), f"Jenkins {agent_name} node not registered."
+    node_names = list(client.nodes.iterkeys())
+    node_name = next((key for key in node_names if agent_name in key), None)
+    assert node_name is not None, f"Jenkins {agent_name} node not registered."
+
+    deadline = time.monotonic() + 10 * 60
+    while True:
+        node = client.get_node(node_name)
+        online = node.is_online()
+        offline_reason = "" if online else node.offline_reason()
+        logger.info(
+            "phase=jenkins_agent_readiness agent=%s online=%s offline_reason=%r",
+            agent_name,
+            online,
+            offline_reason,
+        )
+        if online:
+            break
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"Jenkins agent did not come online: agent={agent_name}, "
+                f"offline_reason={offline_reason!r}"
+            )
+        time.sleep(5)
 
     job = client.create_job(agent_name, gen_test_job_xml(test_target_label))
     queue_item = job.invoke()
-    queue_item.block_until_complete()
-    build: jenkinsapi.build.Build = queue_item.get_build()
+    build = _wait_for_job_completion(queue_item, agent_name)
     assert build.get_status() == "SUCCESS"
 
 
@@ -349,45 +411,6 @@ async def get_pod_ip(model: Model, kube_core_client: kubernetes.client.CoreV1Api
     await model.block_until(get_ready_pod_ip, timeout=300, wait_period=5)
 
     return typing.cast(str, get_ready_pod_ip())
-
-
-async def wait_for(
-    func: typing.Callable[[], typing.Union[typing.Awaitable, typing.Any]],
-    timeout: int = 300,
-    check_interval: int = 10,
-) -> typing.Any:
-    """Wait for function execution to become truthy.
-
-    Args:
-        func: A callback function to wait to return a truthy value.
-        timeout: Time in seconds to wait for function result to become truthy.
-        check_interval: Time in seconds to wait between ready checks.
-
-    Raises:
-        TimeoutError: if the callback function did not return a truthy value within timeout.
-
-    Returns:
-        The result of the function if any.
-    """
-    deadline = time.time() + timeout
-    is_awaitable = inspect.iscoroutinefunction(func)
-    while time.time() < deadline:
-        if is_awaitable:
-            if result := await func():
-                return result
-        else:
-            if result := func():
-                return result
-        time.sleep(check_interval)
-
-    # final check before raising TimeoutError.
-    if is_awaitable:
-        if result := await func():
-            return result
-    else:
-        if result := func():
-            return result
-    raise TimeoutError()
 
 
 async def ensure_relation(
@@ -723,73 +746,13 @@ def declarative_pipeline_script() -> str:
         }""")
 
 
-def _raise_timeout(_: tenacity.RetryCallState) -> None:
-    """Raise the timeout used when a tenacity polling retry expires."""
-    raise TimeoutError()
-
-
-def get_coredns_config_map(
-    kube_core_client: kubernetes.client.CoreV1Api,
-) -> kubernetes.client.V1ConfigMap:
-    """Find the CoreDNS ConfigMap installed by Canonical Kubernetes."""
-    config_maps = kube_core_client.list_namespaced_config_map(
-        namespace="kube-system",
-        label_selector="app.kubernetes.io/instance=ck-dns",
-    ).items
-    config_maps = [
-        config_map
-        for config_map in config_maps
-        if config_map.data and "Corefile" in config_map.data
-    ]
-    names = [
-        config_map.metadata.name
-        for config_map in config_maps
-        if config_map.metadata and config_map.metadata.name
-    ]
-    assert len(config_maps) == 1, f"Expected one CoreDNS ConfigMap, found {names}"
-    config_map = config_maps[0]
-    assert config_map.metadata and config_map.metadata.name
-    return config_map
-
-
 @tenacity.retry(
-    retry=tenacity.retry_any(
-        tenacity.retry_if_result(lambda result: not result),
-        tenacity.retry_if_exception_type(kubernetes.client.exceptions.ApiException),
-    ),
-    stop=tenacity.stop_after_delay(5 * 60),
-    wait=tenacity.wait_fixed(5),
-    reraise=True,
-    retry_error_callback=_raise_timeout,
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
 )
-def _wait_for_coredns_pods_ready(
-    kube_core_client: kubernetes.client.CoreV1Api, selector: str
-) -> bool:
-    """Return True when all CoreDNS pods with the given selector are running and ready."""
-    current_pods = kube_core_client.list_namespaced_pod(
-        namespace="kube-system", label_selector=selector
-    ).items
-    return bool(current_pods) and all(
-        pod.status
-        and pod.status.phase == "Running"
-        and pod.status.container_statuses
-        and all(container.ready for container in pod.status.container_statuses)
-        and not (pod.metadata and pod.metadata.deletion_timestamp)
-        for pod in current_pods
-    )
-
-
-def restart_coredns(kube_core_client: kubernetes.client.CoreV1Api) -> None:
-    """Restart CoreDNS and wait until its replacement pods are ready."""
-    selector = "app.kubernetes.io/name=coredns"
-    pods = kube_core_client.list_namespaced_pod(namespace="kube-system", label_selector=selector)
-    for pod in pods.items:
-        if pod.metadata and pod.metadata.name:
-            logger.info("Deleting pod for DNS restart: %s", pod.metadata.name)
-            kube_core_client.delete_namespaced_pod(name=pod.metadata.name, namespace="kube-system")
-    _wait_for_coredns_pods_ready(kube_core_client, selector)
-
-
 def create_secret_file_credentials(
     unit_web_client: UnitWebClient, kube_config: str
 ) -> typing.Optional[str]:
@@ -805,7 +768,12 @@ def create_secret_file_credentials(
         The id of the created credential, or None in case of error.
     """
     url = f"{unit_web_client.web}/credentials/store/system/domain/_/createCredentials"
-    credentials_id = f"kube-config-{secrets.token_hex(4)}"
+    credentials_id = "kube-config"
+    try:
+        if credentials_id in unit_web_client.client.credentials_by_id:
+            return credentials_id
+    except (JenkinsAPIException, requests.RequestException):
+        logger.debug("Could not query existing Jenkins credentials", exc_info=True)
     payload = {
         "json": f"""{{
             "": "4",
@@ -828,10 +796,26 @@ def create_secret_file_credentials(
         res = unit_web_client.client.requester.post_url(
             url=url, headers=headers, data=payload, files=files, timeout=30
         )
-        logger.debug("Credential created, %s", res.status_code)
-        return credentials_id if res.status_code == 200 else None
+        logger.debug("Credential create response, %s", res.status_code)
+        if res.status_code == 200:
+            return credentials_id
+        try:
+            return (
+                credentials_id
+                if credentials_id in unit_web_client.client.credentials_by_id
+                else None
+            )
+        except (JenkinsAPIException, requests.RequestException):
+            return None
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def create_kubernetes_cloud(
     unit_web_client: UnitWebClient, kube_config_credentials_id: str
 ) -> typing.Optional[str]:
@@ -847,6 +831,15 @@ def create_kubernetes_cloud(
         The created kubernetes cloud name or None in case of error.
     """
     kubernetes_test_cloud_name = "kubernetes"
+    cloud_page_url = f"{unit_web_client.web}/cloud/"
+    try:
+        if (
+            kubernetes_test_cloud_name
+            in unit_web_client.client.requester.get_url(cloud_page_url).text
+        ):
+            return kubernetes_test_cloud_name
+    except requests.RequestException:
+        logger.debug("Could not query existing Jenkins clouds", exc_info=True)
 
     url = f"{unit_web_client.web}/manage/cloud/doCreate"
 
@@ -884,6 +877,15 @@ def create_kubernetes_cloud(
     res = unit_web_client.client.requester.post_url(
         url=url, headers=headers, data=payload, timeout=60 * 5
     )
-    logger.debug("Cloud created, status=%s body=%s", res.status_code, res.text)
-
-    return kubernetes_test_cloud_name if res.status_code == 200 else None
+    logger.debug("Cloud create response, status=%s body=%s", res.status_code, res.text)
+    if res.status_code == 200:
+        return kubernetes_test_cloud_name
+    try:
+        return (
+            kubernetes_test_cloud_name
+            if kubernetes_test_cloud_name
+            in unit_web_client.client.requester.get_url(cloud_page_url, timeout=30).text
+            else None
+        )
+    except requests.RequestException:
+        return None

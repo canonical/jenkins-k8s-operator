@@ -38,6 +38,7 @@ from state import (
     CharmConfigInvalidError,
     CharmIllegalNumUnitsError,
     CharmRelationDataInvalidError,
+    CharmRelationDataNotReadyError,
     State,
 )
 
@@ -89,6 +90,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self,
             relation_name=AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             port=jenkins.WEB_PORT,
+            strip_prefix=True,
         )
         self.server_ingress = IngressPerAppRequirer(
             self,
@@ -144,6 +146,28 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
 
+    def _retract_invalid_haproxy_route(self) -> None:
+        """Clear stale routing before validation can stop normal reconciliation.
+
+        Invalid state would otherwise skip the normal HAProxy reconciler and leave
+        a previously published route active.
+        """
+        relation = self.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
+        if not relation or not self.unit.is_leader():
+            return
+
+        external_hostname = str(self.config.get("external-hostname") or "").strip()
+        non_root_ingress = bool(
+            self.server_ingress.url and urlparse(self.server_ingress.url).path.rstrip("/")
+        )
+        agents_without_route = bool(
+            self.model.get_relation(AGENT_RELATION)
+            and self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is None
+            and self.model.get_relation(INGRESS_RELATION_NAME) is None
+        )
+        if not external_hostname or non_root_ingress or agents_without_route:
+            relation.data[self.app].clear()
+
     def _get_state(self) -> typing.Optional[State]:
         """Derive the charm state fresh from current config and relation data.
 
@@ -158,6 +182,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return State.from_charm(self)
         except (CharmConfigInvalidError, CharmIllegalNumUnitsError) as exc:
             self.unit.status = ops.BlockedStatus(exc.msg)
+            return None
+        except CharmRelationDataNotReadyError as exc:
+            self.unit.status = ops.WaitingStatus(exc.msg)
             return None
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
@@ -213,6 +240,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The triggering Juju event (unused, present for observe callback compatibility).
 
         """
+        self._retract_invalid_haproxy_route()
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
         if not check_result.success:
@@ -369,6 +397,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             logger.error(message)
             raise ReconcileBlockedError(message)
 
+        agent_discovery_url = self._agent_discovery_url if state.agent_relation_meta else None
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
         agent_node_names = [node.name for node in agent_nodes]
@@ -378,6 +407,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 agent_relation=state.agent_relation_meta,
                 agent_node_names=agent_node_names,
                 api_client=client,
+                agent_discovery_url=typing.cast(str, agent_discovery_url),
             )
             self._update_agent_nodes_from_relation(
                 agent_relation=state.agent_relation_meta,
@@ -501,36 +531,42 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The charm's agent discovery url.
         """
-        if ingress_url := self.agent_discovery_ingress.url:
-            pass
-        elif ingress_url := self.server_ingress.url:
+        if self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) and (
+            ingress_url := self.agent_discovery_ingress.url
+        ):
+            return ingress_url.rstrip("/")
+        if self.model.get_relation(INGRESS_RELATION_NAME) and (
+            ingress_url := self.server_ingress.url
+        ):
             logger.warning(
                 "Using server ingress without a dedicated agent route may"
                 " result in agent discovery failure. Use %s for agents discovery.",
                 AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             )
-        else:
-            # Fallback to pod IP
-            if binding := self.model.get_binding("juju-info"):
-                try:
-                    unit_ip = str(binding.network.bind_address)
-                    ipaddress.ip_address(unit_ip)
-                    return f"http://{unit_ip}:{jenkins.WEB_PORT}{self._jenkins_prefix}"
-                except ValueError as exc:
-                    logger.error(
-                        "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
-                        exc,
-                    )
+            return ingress_url.rstrip("/")
 
-            # Fallback to using socket.fqdn
-            return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
+        # Fallback to pod IP
+        if binding := self.model.get_binding("juju-info"):
+            try:
+                unit_ip = str(binding.network.bind_address)
+                ipaddress.ip_address(unit_ip)
+                return f"http://{unit_ip}:{jenkins.WEB_PORT}{self._jenkins_prefix}"
+            except ValueError as exc:
+                logger.error(
+                    "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
+                    exc,
+                )
 
-        return ingress_url.rstrip("/")
+        # Fallback to using socket.fqdn
+        return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
 
     @property
     def _agent_status_message(self) -> str:
         """Status message regarding agent discovery ingress configuration."""
-        if self.server_ingress.url and not self.agent_discovery_ingress.url:
+        if (
+            self.server_ingress.url
+            and self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is None
+        ):
             return (
                 f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
             )
@@ -541,6 +577,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
         agent_node_names: list[str],
         api_client: jenkins.Jenkins,
+        agent_discovery_url: str,
     ) -> None:
         """Add agent nodes from relation data.
 
@@ -548,6 +585,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             agent_relation: Mapping of agent relation to agent metadata.
             agent_node_names: The node names of agents.
             api_client: The Jenkins API client.
+            agent_discovery_url: The resolved URL for agent connections.
 
         Raises:
             JenkinsError: if there was an error while registering agent nodes to Jenkins.
@@ -563,7 +601,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     logger.exception("Failed to register agent node: %s", unregistered_agent)
                     raise
 
-            agent_relation_data: dict[str, str] = {"url": self._agent_discovery_url}
+            agent_relation_data: dict[str, str] = {"url": agent_discovery_url}
             for meta in agents:
                 try:
                     agent_relation_data[f"{meta.name}_secret"] = api_client.get_node_secret(

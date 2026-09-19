@@ -3,6 +3,7 @@
 
 """Integration tests for the jenkins-k8s haproxy-route relation."""
 
+import jenkinsapi.jenkins
 import pytest
 import pytest_asyncio
 import requests
@@ -11,13 +12,57 @@ from juju.model import Model
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
 from .constants import MACHINE_CONTROLLER_NAME
-from .helpers import get_model_unit_addresses
+from .helpers import assert_job_success, get_model_unit_addresses
 from .types_ import KeycloakOIDCMetadata
 
 EXTERNAL_HOSTNAME = "jenkins.internal"
 SPOE_EXTERNAL_HOSTNAME = "jenkins-spoe.internal"
 HAPROXY_ROUTE_RELATION = "haproxy-route"
 SELF_SIGNED_CERTIFICATES_APP_NAME = "self-signed-certificates"
+AGENT_TRAEFIK_APPLICATION_NAME = "agent-discovery-traefik"
+
+
+def _has_relation(application: Application, endpoint_name: str) -> bool:
+    """Return whether the application already has a relation at an endpoint."""
+    return any(
+        endpoint.name == endpoint_name
+        for relation in application.relations
+        for endpoint in relation.endpoints
+        if endpoint.application_name == application.name
+    )
+
+
+async def _ensure_relation(
+    model: Model, application: Application, endpoint_name: str, target: str
+) -> None:
+    """Create a relation when absent, making each test self-contained."""
+    if not _has_relation(application, endpoint_name):
+        await model.integrate(f"{application.name}:{endpoint_name}", target)
+
+
+@pytest_asyncio.fixture(scope="module", name="traefik_agent_ingress")
+async def traefik_agent_ingress_fixture(model: Model) -> Application:
+    """Deploy the pinned Traefik used by the PS7 agent-ingress topology."""
+    traefik = await model.deploy(
+        "traefik-k8s",
+        channel="latest/stable",
+        revision=377,
+        trust=True,
+        config={"routing_mode": "path"},
+        application_name=AGENT_TRAEFIK_APPLICATION_NAME,
+    )
+    await model.wait_for_idle(
+        apps=[traefik.name],
+        status="active",
+        timeout=20 * 60,
+        raise_on_error=False,
+    )
+    unit_ips = await get_model_unit_addresses(model=model, app_name=traefik.name)
+    assert unit_ips, f"Unit IP address not found for {traefik.name}"
+    # Concierge does not provide a LoadBalancer address. Publish the unit
+    # address explicitly so Traefik can provide a usable ingress URL to agents.
+    await traefik.set_config({"external_hostname": unit_ips[0]})
+    return traefik
 
 
 @pytest_asyncio.fixture(scope="module", name="self_signed_certificates")
@@ -183,9 +228,11 @@ async def test_haproxy_route_serves_jenkins(
     """
     await application.set_config({"external-hostname": EXTERNAL_HOSTNAME})
 
-    # Cross-model relation: k8s model (jenkins) -> machine model (haproxy)
-    await model.integrate(
-        f"{application.name}:{HAPROXY_ROUTE_RELATION}",
+    # Cross-model relation: k8s model (jenkins) -> machine model (haproxy).
+    await _ensure_relation(
+        model,
+        application,
+        HAPROXY_ROUTE_RELATION,
         f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
     )
     await machine_model.wait_for_idle(apps=[haproxy.name], wait_for_active=True, timeout=20 * 60)
@@ -235,19 +282,12 @@ async def test_haproxy_spoe_redirects_to_oidc(
     await application.set_config({"external-hostname": SPOE_EXTERNAL_HOSTNAME})
 
     # Cross-model relation: k8s model (jenkins) -> machine model (haproxy).
-    # Already established by test_haproxy_route_serves_jenkins (shared haproxy/
-    # application fixtures), so only integrate if it's not there yet.
-    existing_endpoints = {
-        endpoint.name
-        for relation in application.relations
-        for endpoint in relation.endpoints
-        if endpoint.application_name == application.name
-    }
-    if HAPROXY_ROUTE_RELATION not in existing_endpoints:
-        await model.integrate(
-            f"{application.name}:{HAPROXY_ROUTE_RELATION}",
-            f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
-        )
+    await _ensure_relation(
+        model,
+        application,
+        HAPROXY_ROUTE_RELATION,
+        f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
+    )
     await machine_model.wait_for_idle(
         apps=[haproxy_with_spoe.name], wait_for_active=True, timeout=20 * 60
     )
@@ -283,3 +323,60 @@ async def test_haproxy_spoe_redirects_to_oidc(
     assert keycloak_oidc_meta.realm in location or "openid-connect/auth" in location, (
         f"Expected redirect to Keycloak OIDC, got Location: {location}"
     )
+
+
+@pytest.mark.abort_on_fail
+async def test_haproxy_server_and_traefik_agent_discovery(
+    model: Model,
+    application: Application,
+    haproxy_with_spoe: Application,
+    traefik_agent_ingress: Application,
+    jenkins_machine_agents: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    machine_model: Model,
+    ca_cert_path: str,
+):
+    """Verify HAProxy serves Jenkins while Traefik serves machine agents."""
+    await application.set_config({"external-hostname": SPOE_EXTERNAL_HOSTNAME})
+
+    await _ensure_relation(
+        model,
+        application,
+        HAPROXY_ROUTE_RELATION,
+        f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{HAPROXY_ROUTE_RELATION}",
+    )
+    await _ensure_relation(
+        model, application, "agent-discovery-ingress", f"{traefik_agent_ingress.name}:ingress"
+    )
+    await _ensure_relation(
+        model, application, "agent", f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.agent"
+    )
+
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True, timeout=20 * 60)
+    await machine_model.wait_for_idle(
+        apps=[haproxy_with_spoe.name], wait_for_active=True, timeout=20 * 60
+    )
+    # The agent application can still be in maintenance while the CMR is
+    # established. Do not enqueue a Jenkins job until its units are active;
+    # otherwise Jenkins reports all nodes offline while the charm is installing.
+    await machine_model.wait_for_idle(
+        apps=[jenkins_machine_agents.name],
+        status="active",
+        idle_period=30,
+        timeout=20 * 60,
+        check_freq=5,
+    )
+
+    haproxy_ip = (await get_model_unit_addresses(machine_model, haproxy_with_spoe.name))[0]
+    session = requests.Session()
+    session.mount("https://", HostHeaderSSLAdapter())
+    server_response = session.get(
+        f"https://{haproxy_ip}",
+        headers={"Host": SPOE_EXTERNAL_HOSTNAME},
+        timeout=30,
+        allow_redirects=False,
+        verify=ca_cert_path,
+    )
+    assert server_response.status_code == 302
+
+    assert_job_success(jenkins_client, jenkins_machine_agents.name, "machine")

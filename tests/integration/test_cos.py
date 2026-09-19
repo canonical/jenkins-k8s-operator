@@ -3,21 +3,80 @@
 
 """Integration tests for jenkins-k8s-operator with COS."""
 
-import functools
 import logging
 import typing
 
 import pytest
+import pytest_asyncio
 import requests
+import tenacity
 from juju.action import Action
 from juju.application import Application
 from juju.model import Model
 from kubernetes.client import CoreV1Api
 
-from .helpers import get_model_unit_addresses, wait_for
+from .helpers import (
+    _log_retry,
+    _raise_retry_timeout,
+    get_model_unit_addresses,
+)
 from .types_ import UnitWebClient
 
 logger = logging.getLogger(__name__)
+
+
+@pytest_asyncio.fixture(scope="module", name="prometheus_related")
+async def prometheus_related_fixture(application: Application, model: Model):
+    """The prometheus-k8s application related to Jenkins via metrics-endpoint relation."""
+    prometheus = await model.deploy("prometheus-k8s", channel="1/stable", trust=True)
+    await model.wait_for_idle(
+        status="active", apps=[prometheus.name], raise_on_error=False, timeout=30 * 60
+    )
+    await model.add_relation(f"{application.name}:metrics-endpoint", prometheus.name)
+    await model.wait_for_idle(
+        status="active",
+        apps=[prometheus.name, application.name],
+        timeout=30 * 60,
+        idle_period=30,
+        raise_on_error=False,
+    )
+    return prometheus
+
+
+@pytest_asyncio.fixture(scope="module", name="loki_related")
+async def loki_related_fixture(application: Application, model: Model):
+    """The loki-k8s application related to Jenkins via logging relation."""
+    loki = await model.deploy("loki-k8s", channel="1/stable", trust=True)
+    await model.wait_for_idle(
+        status="active", apps=[loki.name], raise_on_error=False, timeout=30 * 60
+    )
+    await model.add_relation(f"{application.name}:logging", loki.name)
+    await model.wait_for_idle(
+        status="active",
+        apps=[loki.name, application.name],
+        timeout=30 * 60,
+        idle_period=30,
+        raise_on_error=False,
+    )
+    return loki
+
+
+@pytest_asyncio.fixture(scope="module", name="grafana_related")
+async def grafana_related_fixture(application: Application, model: Model):
+    """The grafana-k8s application related to Jenkins via grafana-dashboard relation."""
+    grafana = await model.deploy("grafana-k8s", channel="1/stable", trust=True)
+    await model.wait_for_idle(
+        status="active", apps=[grafana.name], raise_on_error=False, timeout=30 * 60
+    )
+    await model.add_relation(f"{application.name}:grafana-dashboard", grafana.name)
+    await model.wait_for_idle(
+        status="active",
+        apps=[grafana.name, application.name],
+        timeout=30 * 60,
+        idle_period=30,
+        raise_on_error=False,
+    )
+    return grafana
 
 
 @pytest.mark.abort_on_fail
@@ -42,6 +101,13 @@ async def test_prometheus_integration(
         assert len(query_targets["data"]["activeTargets"])
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def log_files_exist(
     unit_address: str, application_name: str, filenames: typing.Iterable[str]
 ) -> bool:
@@ -88,15 +154,7 @@ async def test_loki_integration(
     unit_ips = await get_model_unit_addresses(model=model, app_name=loki_related.name)
     assert unit_ips, f"Unit IP address not found for {loki_related.name}"
     for ip in unit_ips:
-        await wait_for(
-            functools.partial(
-                log_files_exist,
-                ip,
-                application.name,
-                ("/var/lib/jenkins/logs/jenkins.log",),
-            ),
-            timeout=10 * 60,
-        )
+        log_files_exist(ip, application.name, ("/var/lib/jenkins/logs/jenkins.log",))
 
     kube_log = kube_core_client.read_namespaced_pod_log(
         name=f"{application.name}-0", namespace=model.name, container="jenkins"
@@ -126,6 +184,13 @@ def datasources_exist(
     return all(datasource in datasource_types for datasource in datasources)
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(20 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def dashboard_exist(loggedin_session: requests.Session, unit_address: str):
     """Checks if the Jenkins dashboard is registered in Grafana.
 
@@ -167,7 +232,4 @@ async def test_grafana_integration(
                 "password": password,
             },
         ).raise_for_status()
-        await wait_for(
-            functools.partial(dashboard_exist, loggedin_session=sess, unit_address=ip),
-            timeout=60 * 20,
-        )
+        dashboard_exist(loggedin_session=sess, unit_address=ip)
