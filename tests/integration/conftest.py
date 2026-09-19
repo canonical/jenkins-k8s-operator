@@ -4,7 +4,6 @@
 """Fixtures for Jenkins-k8s-operator charm integration tests."""
 
 import logging
-import os
 import random
 import secrets
 import string
@@ -35,26 +34,6 @@ from .helpers import (
 from .types_ import KeycloakOIDCMetadata, UnitWebClient
 
 logger = logging.getLogger(__name__)
-
-KUBECONFIG = os.environ.get("TESTING_KUBECONFIG", "~/.kube/config")
-DATA_DIR = Path(__file__).parent / "data"
-
-
-async def charm_exec(ops_test: OpsTest, unit_name: str, cmd: str) -> None:
-    """Execute a command in the charm container via juju ssh.
-
-    Args:
-        ops_test: OpsTest fixture for juju CLI access.
-        unit_name: Name of the unit (e.g., "jenkins-k8s/0").
-        cmd: Command to execute in the charm container.
-
-    Raises:
-        AssertionError: If the command fails (non-zero exit code).
-    """
-    ret, _, stderr = await ops_test.juju(
-        "ssh", "--container", "charm", unit_name, "bash", "-c", cmd
-    )
-    assert ret == 0, f"Command failed in charm container: {cmd}\nstderr: {stderr}"
 
 
 @pytest.fixture(scope="module", name="model")
