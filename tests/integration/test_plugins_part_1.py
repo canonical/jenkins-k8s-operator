@@ -493,6 +493,27 @@ async def test_blueocean_plugin(unit_web_client: UnitWebClient):
     )
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(300),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+async def _has_thinbackup_output(ops_test: OpsTest, unit_name: str, backup_path: str) -> bool:
+    """Return whether ThinBackup created a complete backup directory."""
+    ret, stdout, stderr = await ops_test.juju(
+        "ssh", "--container", "jenkins", unit_name, "ls", backup_path
+    )
+    logger.info(
+        "Run backup path ls result: code: %s stdout: %s, stderr: %s",
+        ret,
+        stdout,
+        stderr,
+    )
+    return ret == 0 and "FULL" in stdout
+
+
 async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with thinbackup plugin installed and backup configured.
@@ -522,31 +543,7 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     )
     res.raise_for_status()
 
-    async def has_backup() -> bool:
-        """Get whether the backup is created.
-
-        The backup folder of format FULL-<backup-date> should be created.
-
-        Returns:
-            Whether the backup file has successfully been created.
-        """
-        ret, stdout, stderr = await ops_test.juju(
-            "ssh",
-            "--container",
-            "jenkins",
-            unit_web_client.unit.name,
-            "ls",
-            backup_path,
-        )
-        logger.info(
-            "Run backup path ls result: code: %s stdout: %s, stderr: %s",
-            ret,
-            stdout,
-            stderr,
-        )
-        return ret == 0 and "FULL" in stdout
-
-    await wait_for(has_backup)
+    await _has_thinbackup_output(ops_test, unit_web_client.unit.name, backup_path)
 
 
 async def test_bzr_plugin(unit_web_client: UnitWebClient):
