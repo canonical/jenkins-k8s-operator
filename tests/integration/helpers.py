@@ -108,6 +108,13 @@ async def install_plugins(
     post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
     post_data["dynamic_load"] = ""
     res = client.requester.post_url(f"{web}/manage/pluginManager/install", data=post_data)
+    if res.status_code != 200:
+        logger.error(
+            "phase=plugin_install_request_failed status=%s content_type=%s body_bytes=%s",
+            res.status_code,
+            res.headers.get("Content-Type"),
+            len(res.content),
+        )
     assert res.status_code == 200, "Failed to request plugins install"
 
     logger.info("phase=plugin_install waiting_for_download plugins=%s", plugins)
