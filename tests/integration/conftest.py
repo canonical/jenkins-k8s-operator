@@ -9,7 +9,7 @@ import random
 import secrets
 import string
 from pathlib import Path
-from typing import Any, AsyncGenerator, Iterable, Optional
+from typing import Any, AsyncGenerator, Iterable
 
 import jenkinsapi.jenkins
 import kubernetes.config
@@ -32,7 +32,7 @@ from .helpers import (
     get_model_unit_addresses,
     get_pod_ip,
 )
-from .types_ import KeycloakOIDCMetadata, ModelAppUnit, UnitWebClient
+from .types_ import KeycloakOIDCMetadata, UnitWebClient
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +62,6 @@ def model_fixture(ops_test: OpsTest) -> Model:
     """The testing model."""
     assert ops_test.model
     return ops_test.model
-
-
-@pytest.fixture(scope="module", name="cloud")
-def cloud_fixture(ops_test: OpsTest) -> Optional[str]:
-    """The cloud the k8s model is running on."""
-    return ops_test.cloud_name
 
 
 @pytest.fixture(scope="module", name="jenkins_image")
@@ -141,12 +135,6 @@ async def application_fixture(
 def unit_fixture(application: Application) -> Unit:
     """The Jenkins-k8s charm application unit."""
     return application.units[0]
-
-
-@pytest.fixture(scope="module", name="model_app_unit")
-def model_app_unit_fixture(model: Model, application: Application, unit: Unit):
-    """The packaged model, application, unit of Jenkins to reduce number of parameters in tests."""
-    return ModelAppUnit(model=model, app=application, unit=unit)
 
 
 @pytest_asyncio.fixture(scope="function", name="unit_ip")
@@ -331,26 +319,6 @@ async def jenkins_machine_agents_fixture(
     yield app
 
 
-@pytest_asyncio.fixture(scope="function", name="machine_agent_related_app")
-async def machine_agent_related_app_fixture(
-    jenkins_machine_agents: Application, application: Application, model: Model
-):
-    """The Jenkins-k8s server charm related to Jenkins agent charm through agent relation."""
-    machine_model: Model = jenkins_machine_agents.model
-    await machine_model.wait_for_idle(
-        apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5
-    )
-    await model.integrate(
-        f"{application.name}:{state.AGENT_RELATION}",
-        f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{state.AGENT_RELATION}",
-    )
-    await machine_model.wait_for_idle(
-        apps=[jenkins_machine_agents.name], wait_for_active=True, check_freq=5
-    )
-    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
-    yield application
-
-
 @pytest.fixture(scope="function", name="update_status_env")
 def update_status_env_fixture(model: Model, unit: Unit) -> Iterable[str]:
     """The environment variables for executing Juju hooks."""
@@ -511,9 +479,3 @@ async def keycloak_oidc_meta_fixture(
         client_secret=client_secret,
         well_known_endpoint=f"{server_url}/realms/{realm}/.well-known/openid-configuration",
     )
-
-
-@pytest_asyncio.fixture(scope="module", name="external_hostname")
-def external_hostname_fixture() -> str:
-    """Return the external hostname for ingress-related tests."""
-    return "juju.test"
