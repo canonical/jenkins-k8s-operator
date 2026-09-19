@@ -30,6 +30,31 @@ from .types_ import UnitWebClient
 logger = logging.getLogger(__name__)
 
 
+def _log_retry(retry_state: tenacity.RetryCallState) -> None:
+    """Log a retry before sleeping."""
+    function = getattr(retry_state.fn, "__name__", "integration_poll")
+    sleep = retry_state.next_action.sleep if retry_state.next_action else 0
+    logger.info(
+        "Retrying integration poll function=%s attempt=%d sleep=%ss",
+        function,
+        retry_state.attempt_number,
+        sleep,
+    )
+
+
+def _raise_retry_timeout(retry_state: tenacity.RetryCallState) -> typing.NoReturn:
+    """Convert a Tenacity result timeout to the existing TimeoutError contract."""
+    function = getattr(retry_state.fn, "__name__", "integration_poll")
+    raise TimeoutError(f"Timed out waiting for {function}")
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def _jenkins_available(web: str) -> bool:
     """Return whether Jenkins is responding after a restart."""
     try:
@@ -94,7 +119,7 @@ async def install_plugins(
     client.safe_restart()
     logger.info("phase=plugin_install restart_requested plugins=%s", plugins)
 
-    await wait_for(lambda: _jenkins_available(web), timeout=60 * 10)
+    _jenkins_available(web)
     logger.info("phase=plugin_install jenkins_available plugins=%s", plugins)
 
     await wait_for(lambda: _plugins_are_active(client, plugins), timeout=60 * 10)
