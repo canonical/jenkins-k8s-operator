@@ -57,12 +57,6 @@ def jenkins_image_fixture(request: FixtureRequest) -> str:
     return jenkins_image
 
 
-@pytest.fixture(scope="module", name="num_units")
-def num_units_fixture(request: FixtureRequest) -> int:
-    """The OCI image for Jenkins charm."""
-    return int(request.config.getoption("--num-units"))
-
-
 def _select_charm_path(paths: Any) -> str:
     """Return the charm path, choosing the newest base when several are built."""
     if len(paths) == 1:
@@ -213,14 +207,6 @@ def unit_web_client_fixture(
     return UnitWebClient(unit=unit, web=web_address, client=jenkins_client)
 
 
-@pytest.fixture(scope="function", name="app_suffix")
-def app_suffix_fixture():
-    """Get random 4 char length application suffix."""
-    # secrets random hex cannot be used because it has chances to generate numeric only suffix
-    # which will return "<application-name> is not a valid application tag"
-    return "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
-
-
 @pytest_asyncio.fixture(scope="module", name="jenkins_k8s_agents")
 async def jenkins_k8s_agents_fixture(model: Model):
     """The Jenkins k8s agent."""
@@ -279,9 +265,11 @@ async def machine_model_fixture(
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_machine_agents")
 async def jenkins_machine_agents_fixture(
-    machine_model: Model, num_units: int, app_suffix: str
+    machine_model: Model, request: FixtureRequest
 ) -> AsyncGenerator[Application, None]:
-    """The jenkins machine agent with 3 units to be used for new agent relation."""
+    """The Jenkins machine agent used for the cross-model relation tests."""
+    num_units = int(request.config.getoption("--num-units"))
+    app_suffix = "".join(random.choices(string.ascii_lowercase, k=4))  # nosec
     # 2023-06-02 use the edge version of jenkins agent until the changes have been promoted to
     # stable.
     app: Application = await machine_model.deploy(
