@@ -161,7 +161,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.server_ingress.url and urlparse(self.server_ingress.url).path.rstrip("/")
         )
         agents_without_route = bool(
-            self.model.get_relation(AGENT_RELATION)
+            self.model.relations.get(AGENT_RELATION)
             and self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is None
             and self.model.get_relation(INGRESS_RELATION_NAME) is None
         )
