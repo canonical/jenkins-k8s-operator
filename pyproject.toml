@@ -19,7 +19,7 @@ dependencies = [
   "cosl==1.10.3",
   "jenkinsapi==0.3.23",
   "jsonschema==4.26.0",
-  "ops==3.8.1",
+  "ops==3.8.2",
   "pydantic==2.13.4",
   "requests==2.34.2",
   "validators==0.35.0",
