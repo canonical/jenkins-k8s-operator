@@ -12,6 +12,8 @@ from juju.model import Model
 
 import state
 
+from .constants import MACHINE_CONTROLLER_NAME
+
 
 @dataclass
 class _IngressTraefiks:
@@ -19,11 +21,9 @@ class _IngressTraefiks:
 
     Attributes:
         agent_discovery: The ingress application for agent discovery.
-        server: The ingress application for Jenkins server.
     """
 
     agent_discovery: Application
-    server: Application
 
 
 @pytest_asyncio.fixture(scope="module", name="ingress_traefik")
@@ -36,21 +36,14 @@ async def ingress_traefik_fixture(model: Model):
         config={"routing_mode": "path"},
         application_name="agent-discovery-traefik",
     )
-    server_traefik = await model.deploy(
-        "traefik-k8s",
-        channel="edge",
-        trust=True,
-        config={"routing_mode": "path"},
-        application_name="server-traefik",
-    )
     await model.wait_for_idle(
         status="active",
-        apps=[agent_discovery_traefik.name, server_traefik.name],
+        apps=[agent_discovery_traefik.name],
         timeout=20 * 60,
         idle_period=30,
         raise_on_error=False,
     )
-    return _IngressTraefiks(agent_discovery=agent_discovery_traefik, server=server_traefik)
+    return _IngressTraefiks(agent_discovery=agent_discovery_traefik)
 
 
 # This will only work on microk8s !!
@@ -61,7 +54,7 @@ async def test_agent_discovery_ingress_integration(
     jenkins_machine_agents: Application,
 ):
     """
-    arrange: deploy the Jenkins charm, ingress, and a machine agent.
+    arrange: deploy the Jenkins charm, dedicated agent ingress, and a machine agent.
     act: integrate the charms with each other.
     assert: All units should be in active status.
     """
@@ -72,11 +65,9 @@ async def test_agent_discovery_ingress_integration(
         state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
         f"{ingress_traefik.agent_discovery.name}:ingress",
     )
-    await application.relate(state.INGRESS_RELATION_NAME, f"{ingress_traefik.server.name}:ingress")
-
     await model.relate(
         f"{application.name}:{state.AGENT_RELATION}",
-        f"localhost:admin/{machine_model.name}.{state.AGENT_RELATION}",
+        f"{MACHINE_CONTROLLER_NAME}:admin/{machine_model.name}.{state.AGENT_RELATION}",
     )
     await machine_model.wait_for_idle(
         apps=[jenkins_machine_agents.name], wait_for_active=True, raise_on_error=False

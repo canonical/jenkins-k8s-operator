@@ -9,9 +9,10 @@ headers are passed to Jenkins — this is edge access control only.
 
     jenkins-k8s ──haproxy-route──> haproxy ──spoe-auth──> haproxy-spoe-auth ──oauth──> <OIDC provider>
 
-The traefik `ingress` and `agent-discovery-ingress` relations are unaffected.
-Agent connections must NOT go through SPOE (agents cannot perform browser OIDC);
-keep agents on traefik or direct discovery.
+The `ingress`, `agent-discovery-ingress`, and `haproxy-route` relations are
+independent. Agent connections must NOT go through SPOE because agents cannot
+perform browser OIDC; use the dedicated agent route or the server-ingress
+fallback. A non-root `ingress` path cannot be combined with `haproxy-route`.
 
 ## Prerequisites
 

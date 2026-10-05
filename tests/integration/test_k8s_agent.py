@@ -4,17 +4,35 @@
 """Integration tests for jenkins-k8s-operator charm."""
 
 import logging
+from typing import AsyncGenerator
 
 import jenkinsapi.jenkins
+import pytest_asyncio
 import requests
 from juju.application import Application
 from juju.model import Model
 
 import state
 
-from .helpers import assert_job_success
+from .helpers import assert_job_success, ensure_relation
 
 logger = logging.getLogger(__name__)
+
+
+@pytest_asyncio.fixture(scope="function", name="extra_jenkins_k8s_agents")
+async def extra_jenkins_k8s_agents_fixture(
+    model: Model,
+) -> AsyncGenerator[Application, None]:
+    """The Jenkins k8s agent."""
+    agent_app: Application = await model.deploy(
+        "jenkins-agent-k8s",
+        base="ubuntu@24.04",
+        config={"jenkins_agent_labels": "k8s-extra"},
+        channel="latest/edge",
+        application_name="jenkins-agent-k8s-extra",
+    )
+    await model.wait_for_idle(apps=[agent_app.name], status="blocked")
+    yield agent_app
 
 
 async def test_jenkins_wizard_bypass(web_address: str):
@@ -50,11 +68,15 @@ async def test_jenkins_k8s_agent_relation(
         2. the k8s agent is deregistered from Jenkins.
     """
     # 1. Relate jenkins-k8s charm to the jenkins-k8s-agent charm.
-    await application.relate(state.AGENT_RELATION, jenkins_k8s_agents.name)
-    await application.relate(state.AGENT_RELATION, extra_jenkins_k8s_agents.name)
-    await model.wait_for_idle(
-        apps=[application.name, jenkins_k8s_agents.name, extra_jenkins_k8s_agents.name],
-        wait_for_active=True,
+    await ensure_relation(
+        model=model,
+        application=application,
+        other_application=jenkins_k8s_agents,
+    )
+    await ensure_relation(
+        model=model,
+        application=application,
+        other_application=extra_jenkins_k8s_agents,
     )
 
     # Agent relation metadata uses unit names with slashes replaced by hyphens.
@@ -97,3 +119,47 @@ async def test_jenkins_k8s_agent_relation(
     )
     assert jenkins_k8s_agent_node not in node_names
     assert extra_jenkins_k8s_agent_node not in node_names
+
+
+async def test_manually_managed_node_survives_agent_relation(
+    model: Model,
+    application: Application,
+    jenkins_k8s_agents: Application,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
+):
+    """Preserve a manually created node through agent relation reconciliation."""
+    node_name = "manual-external-agent"
+    jenkins_client.create_node(
+        name=node_name,
+        num_executors=1,
+        node_description="Created outside Juju",
+        remote_fs="/var/lib/jenkins",
+        labels="external",
+    )
+
+    try:
+        await application.set_config({"external-agent-nodes": node_name})
+        await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+
+        await ensure_relation(
+            model=model,
+            application=application,
+            other_application=jenkins_k8s_agents,
+            renew=True,
+        )
+
+        assert jenkins_client.get_node(node_name).get_config_element("description") == (
+            "Created outside Juju"
+        )
+
+        await application.remove_relation(
+            state.AGENT_RELATION, f"{jenkins_k8s_agents.name}:{state.AGENT_RELATION}"
+        )
+        await model.wait_for_idle(
+            apps=[application.name, jenkins_k8s_agents.name], wait_for_active=False
+        )
+        assert any(node_name == key for key in jenkins_client.nodes.iterkeys())
+    finally:
+        await application.reset_config(["external-agent-nodes"])
+        if any(node_name == key for key in jenkins_client.nodes.iterkeys()):
+            jenkins_client.delete_node(node_name)

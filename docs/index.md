@@ -11,7 +11,7 @@ For DevOps or SRE teams this charm will make operating Jenkins simple and straig
 | | |
 |--|--|
 |  [Tutorials](https://charmhub.io/jenkins-k8s/docs/tutorial-getting-started)</br>  Get started - a hands-on introduction to using the charm for new users </br> |  [How-to guides](https://charmhub.io/jenkins-k8s/docs/how-to-configure-restart-time-range) </br> Step-by-step guides covering key operations and common tasks |
-| [Reference](https://charmhub.io/jenkins-k8s/docs/reference-actions) </br> Technical information - specifications, APIs, architecture | [Explanation]() </br> Concepts - discussion and clarification of key topics  |
+| [Reference](https://charmhub.io/jenkins-k8s/docs/reference-actions) </br> Technical information - specifications, APIs, architecture | [Explanation](reference/charm-architecture.md) </br> Concepts - discussion and clarification of key topics  |
 
 ## Contributing to this documentation
 
@@ -49,7 +49,6 @@ Thinking about using the Jenkins-k8s Operator for your next project? [Get in tou
   1. [Integrate with machine agents](how-to/integrate-with-machine-agents.md)
   1. [Resize Jenkins storage](how-to/resize-jenkins-storage.md)
   1. [Rotate credentials](how-to/rotate-credentials.md)
-  1. [Integrate with IAM](how-to/integrate-with-iam.md)
   1. [Backup and restore](how-to/backup-and-restore-jenkins.md)
   1. [Upgrade](how-to/upgrade.md)
   1. [Redeploy](how-to/redeploy.md)

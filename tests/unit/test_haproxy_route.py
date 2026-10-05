@@ -9,8 +9,7 @@ import pytest
 from ops.testing import Harness
 
 import jenkins
-from charm import JenkinsK8sOperatorCharm
-from state import State
+from state import CharmConfigInvalidError, State
 
 
 @pytest.mark.parametrize(
@@ -22,13 +21,12 @@ from state import State
         pytest.param("   ", None, id="whitespace-only"),
     ],
 )
-def test_external_hostname_parsing(config_value: str, expected):
+def test_external_hostname_parsing(harness: Harness, config_value: str, expected):
     """
     arrange: given a charm with external-hostname config set to a value.
     act: when State.from_charm parses the config.
     assert: external_hostname holds the stripped hostname or None when empty.
     """
-    harness = Harness(JenkinsK8sOperatorCharm)
     harness.update_config({"external-hostname": config_value})
     harness.begin()
 
@@ -37,13 +35,12 @@ def test_external_hostname_parsing(config_value: str, expected):
     assert state.external_hostname == expected
 
 
-def test_external_hostname_defaults_to_none():
+def test_external_hostname_defaults_to_none(harness: Harness):
     """
     arrange: given a charm with no external-hostname config set.
     act: when State.from_charm parses the config.
     assert: external_hostname defaults to None.
     """
-    harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
 
     state = State.from_charm(harness.charm)
@@ -52,14 +49,13 @@ def test_external_hostname_defaults_to_none():
 
 
 def test_reconcile_haproxy_route_publishes_when_hostname_and_relation_present(
-    monkeypatch: pytest.MonkeyPatch,
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
 ):
     """
     arrange: given a charm with a haproxy-route relation and external-hostname set.
     act: when _reconcile_haproxy_route runs.
     assert: haproxy-route requirements are published with the configured hostname.
     """
-    harness = Harness(JenkinsK8sOperatorCharm)
     harness.update_config({"external-hostname": "jenkins.example.com"})
     harness.add_relation("haproxy-route", "haproxy")
     harness.begin()
@@ -78,13 +74,12 @@ def test_reconcile_haproxy_route_publishes_when_hostname_and_relation_present(
     )
 
 
-def test_reconcile_haproxy_route_retracts_when_hostname_cleared():
+def test_reconcile_haproxy_route_retracts_when_hostname_cleared(harness: Harness):
     """
     arrange: given a charm with a haproxy-route relation and external-hostname set.
     act: when _reconcile_haproxy_route runs after the hostname is cleared.
     assert: the published haproxy-route application relation data is cleared.
     """
-    harness = Harness(JenkinsK8sOperatorCharm)
     harness.update_config({"external-hostname": "jenkins.example.com"})
     relation_id = harness.add_relation("haproxy-route", "haproxy")
     harness.add_relation_unit(relation_id, "haproxy/0")
@@ -97,38 +92,52 @@ def test_reconcile_haproxy_route_retracts_when_hostname_cleared():
     assert published_data
 
     harness.update_config({"external-hostname": ""})
-    harness.charm._reconcile_haproxy_route(State.from_charm(harness.charm))
+    harness.charm._retract_invalid_haproxy_route()
+
+    assert harness.charm._get_state() is None
+    assert harness.charm.unit.status.name == "blocked"
+    assert harness.get_relation_data(relation_id, harness.charm.app) == {}
+
+
+def test_reconcile_haproxy_route_clears_missing_hostname_data(harness: Harness):
+    """
+    arrange: given a leader with published HAProxy route data.
+    act: when route reconciliation receives no hostname.
+    assert: application route data is cleared.
+    """
+    relation_id = harness.add_relation("haproxy-route", "haproxy")
+    harness.add_relation_unit(relation_id, "haproxy/0")
+    harness.set_leader(True)
+    harness.begin()
+    relation = harness.charm.model.relations["haproxy-route"][0]
+    relation.data[harness.charm.app].update({"hostname": "jenkins.example.com"})
+
+    harness.charm._reconcile_haproxy_route(MagicMock(external_hostname=None))
 
     assert harness.get_relation_data(relation_id, harness.charm.app) == {}
 
 
-def test_reconcile_haproxy_route_noop_without_hostname(monkeypatch: pytest.MonkeyPatch):
+def test_haproxy_route_without_hostname_blocks(harness: Harness):
     """
-    arrange: given a charm with a haproxy-route relation but no external-hostname.
-    act: when _reconcile_haproxy_route runs.
-    assert: no haproxy-route requirements are published.
+    arrange: given a related haproxy-route without external-hostname.
+    act: when State.from_charm validates the topology.
+    assert: CharmConfigInvalidError is raised.
     """
-    harness = Harness(JenkinsK8sOperatorCharm)
     harness.add_relation("haproxy-route", "haproxy")
     harness.begin()
 
-    provide_mock = MagicMock()
-    monkeypatch.setattr(
-        harness.charm._haproxy_route, "provide_haproxy_route_requirements", provide_mock
-    )
-
-    harness.charm._reconcile_haproxy_route(State.from_charm(harness.charm))
-
-    provide_mock.assert_not_called()
+    with pytest.raises(CharmConfigInvalidError, match="requires external-hostname"):
+        State.from_charm(harness.charm)
 
 
-def test_reconcile_haproxy_route_noop_without_relation(monkeypatch: pytest.MonkeyPatch):
+def test_haproxy_route_without_relation_does_not_publish(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+):
     """
-    arrange: given a charm with external-hostname set but no haproxy-route relation.
+    arrange: given external-hostname without a haproxy-route relation.
     act: when _reconcile_haproxy_route runs.
     assert: no haproxy-route requirements are published.
     """
-    harness = Harness(JenkinsK8sOperatorCharm)
     harness.update_config({"external-hostname": "jenkins.example.com"})
     harness.begin()
 

@@ -4,10 +4,12 @@
 """Jenkins States."""
 
 import dataclasses
+import json
 import logging
 import os
 import re
 import typing
+from urllib.parse import urlparse
 
 import ops
 import yaml
@@ -18,7 +20,6 @@ from timerange import InvalidTimeRangeError, Range
 logger = logging.getLogger(__name__)
 
 AGENT_RELATION = "agent"
-AUTH_PROXY_RELATION = "auth-proxy"
 JENKINS_SERVICE_NAME = "jenkins"
 JENKINS_HOME_STORAGE_NAME = "jenkins-home"
 INGRESS_RELATION_NAME = "ingress"
@@ -45,6 +46,14 @@ class CharmConfigInvalidError(CharmStateBaseError):
         Args:
             msg: Explanation of the error.
         """
+        self.msg = msg
+
+
+class CharmRelationDataNotReadyError(CharmStateBaseError):
+    """Exception raised when a related endpoint has not published its URL yet."""
+
+    def __init__(self, msg: str):
+        """Initialize a relation-not-ready error."""
         self.msg = msg
 
 
@@ -165,19 +174,6 @@ def _get_agent_meta_map_from_relation(
     return relation_agents_map
 
 
-def _is_auth_proxy_integrated(relation: typing.Optional[ops.Relation]) -> bool:
-    """Check if there is an auth proxy integration..
-
-    Args:
-        relation: The auth-proxy relation.
-
-    Returns:
-        True if an integration for atuh proxy exists.
-    """
-    # No relation data is written by the provider, so checking the existence suffices.
-    return bool(relation)
-
-
 def _parse_restart_time_range(charm: ops.CharmBase) -> typing.Optional[Range]:
     """Parse restart-time-range from charm config."""
     try:
@@ -190,19 +186,13 @@ def _parse_restart_time_range(charm: ops.CharmBase) -> typing.Optional[Range]:
 
 def _get_relation_state(
     charm: ops.CharmBase,
-) -> tuple[
-    typing.Optional[typing.Mapping[ops.Relation, list[AgentMeta]]],
-    bool,
-]:
+) -> typing.Optional[typing.Mapping[ops.Relation, list[AgentMeta]]]:
     """Build relation-derived state used by the charm."""
     try:
         agent_relation_meta_map = _get_agent_meta_map_from_relation(
             charm.model.relations[AGENT_RELATION]
         )
-        is_auth_proxy_integrated = _is_auth_proxy_integrated(
-            charm.model.get_relation(AUTH_PROXY_RELATION)
-        )
-        return agent_relation_meta_map, is_auth_proxy_integrated
+        return agent_relation_meta_map
     except ValidationError as exc:
         logger.error("Invalid agent relation data received, %s", exc)
         raise CharmRelationDataInvalidError(f"Invalid {AGENT_RELATION} relation data.") from exc
@@ -235,18 +225,125 @@ def _parse_system_properties(charm: ops.CharmBase) -> list[str]:
     return system_properties
 
 
-def _validate_deployment_relations(charm: ops.CharmBase) -> None:
-    """Validate supported deployment topology and required integrations."""
+def _parse_external_agent_nodes(charm: ops.CharmBase) -> frozenset[str]:
+    """Parse names of Jenkins nodes managed outside Juju."""
+    raw_nodes = typing.cast(str, charm.config.get("external-agent-nodes") or "")
+    names = [name.strip() for name in raw_nodes.split(",") if name.strip()]
+    if len(names) != len(set(names)):
+        raise CharmConfigInvalidError("external-agent-nodes contains duplicate node names.")
+    return frozenset(names)
+
+
+def _get_ingress_path(relation: typing.Optional[ops.Relation]) -> typing.Optional[str]:
+    """Return a ready ingress relation path, or None while its data is pending."""
+    if not relation or not relation.app:
+        return None
+    try:
+        raw_data = relation.data[relation.app].get("ingress")
+    except (KeyError, ops.ModelError):
+        return None
+    if not raw_data:
+        return None
+    try:
+        ingress_data = json.loads(raw_data)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    url = ingress_data.get("url") if isinstance(ingress_data, dict) else None
+    if not url:
+        return None
+    return urlparse(str(url)).path.rstrip("/")
+
+
+def _validate_unit_count(charm: ops.CharmBase) -> None:
+    """Reject deployments with more than one Jenkins unit."""
     if charm.app.planned_units() > 1:
         raise CharmIllegalNumUnitsError("The Jenkins charm supports only 1 unit of deployment.")
 
+
+def _validate_haproxy_route_configuration(
+    server_ingress: typing.Optional[ops.Relation],
+    haproxy_route: typing.Optional[ops.Relation],
+    external_hostname: typing.Optional[str],
+) -> None:
+    """Validate HAProxy hostname and server-ingress path compatibility."""
+    if haproxy_route and not external_hostname:
+        raise CharmConfigInvalidError(
+            f"{HAPROXY_ROUTE_RELATION_NAME} requires external-hostname to be configured."
+        )
+    ingress_path = _get_ingress_path(server_ingress)
+    if haproxy_route and server_ingress and ingress_path:
+        raise CharmConfigInvalidError(
+            "ingress and haproxy-route cannot be combined when ingress uses a non-root path."
+        )
+
+
+def _validate_agent_route_path(
+    agent_discovery_ingress: typing.Optional[ops.Relation],
+    server_ingress: typing.Optional[ops.Relation],
+) -> None:
+    """Reject dedicated agent routes that cannot preserve a server prefix."""
+    if agent_discovery_ingress and server_ingress and _get_ingress_path(server_ingress):
+        raise CharmConfigInvalidError(
+            "agent-discovery-ingress and ingress cannot be combined when ingress uses a non-root path."
+        )
+
+
+def _validate_agent_ingress_readiness(
+    charm: ops.CharmBase,
+    agent_discovery_ingress: typing.Optional[ops.Relation],
+    server_ingress: typing.Optional[ops.Relation],
+) -> None:
+    """Wait for the selected agent ingress before agent reconciliation."""
+    if not charm.model.relations[AGENT_RELATION]:
+        return
+    if agent_discovery_ingress and _get_ingress_path(agent_discovery_ingress) is None:
+        raise CharmRelationDataNotReadyError(
+            "Waiting for the dedicated agent ingress endpoint to become available."
+        )
+    if (
+        not agent_discovery_ingress
+        and server_ingress
+        and _get_ingress_path(server_ingress) is None
+    ):
+        raise CharmRelationDataNotReadyError(
+            "Waiting for the server ingress endpoint to become available."
+        )
+
+
+def _validate_agent_route_configuration(
+    charm: ops.CharmBase,
+    agent_discovery_ingress: typing.Optional[ops.Relation],
+    server_ingress: typing.Optional[ops.Relation],
+    haproxy_route: typing.Optional[ops.Relation],
+    external_hostname: typing.Optional[str],
+) -> None:
+    """Require a non-HAProxy route for agents using direct HAProxy service."""
+    if (
+        charm.model.relations[AGENT_RELATION]
+        and haproxy_route
+        and external_hostname
+        and not agent_discovery_ingress
+        and not server_ingress
+    ):
+        raise CharmConfigInvalidError(
+            f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME} is required for agents when "
+            f"{HAPROXY_ROUTE_RELATION_NAME} is the server route."
+        )
+
+
+def _validate_deployment_relations(charm: ops.CharmBase) -> None:
+    """Validate deployment size and the independent route contracts."""
+    _validate_unit_count(charm)
     agent_discovery_ingress = charm.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME)
     server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
-    if agent_discovery_ingress and not server_ingress:
-        raise CharmConfigInvalidError(
-            f"{INGRESS_RELATION_NAME} integration is required when using "
-            f"{AGENT_DISCOVERY_INGRESS_RELATION_NAME}"
-        )
+    haproxy_route = charm.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
+    external_hostname = _parse_external_hostname(charm)
+    _validate_haproxy_route_configuration(server_ingress, haproxy_route, external_hostname)
+    _validate_agent_route_path(agent_discovery_ingress, server_ingress)
+    _validate_agent_ingress_readiness(charm, agent_discovery_ingress, server_ingress)
+    _validate_agent_route_configuration(
+        charm, agent_discovery_ingress, server_ingress, haproxy_route, external_hostname
+    )
 
 
 def _parse_jcasc_config(
@@ -432,13 +529,13 @@ class State:
         agent_relation_meta: Metadata of all agents from units related through agent relation.
         proxy_config: Proxy configuration to access Jenkins upstream through.
         plugins: The list of allowed plugins to install.
-        auth_proxy_integrated: if an auth proxy integrated has been set.
         jcasc_config: Raw JCasC YAML content from charm config.
         jcasc_repository: Git repository URL for JCasC YAML files.
         jcasc_repository_token: (username, token) tuple for private repos, or None.
         jcasc_repository_config_path: Path within repository containing JCasC YAML files.
         system_properties: Additional JVM system properties as -D flags.
         external_hostname: Public hostname for HAProxy-route based routing, or None.
+        external_agent_nodes: Names of Jenkins nodes managed outside Juju.
 
     """
 
@@ -446,7 +543,6 @@ class State:
     agent_relation_meta: typing.Optional[typing.Mapping[ops.Relation, list[AgentMeta]]]
     proxy_config: typing.Optional[ProxyConfig]
     plugins: typing.Optional[typing.Iterable[str]]
-    auth_proxy_integrated: bool
     jcasc_config: typing.Optional[typing.Dict[str, typing.Any]]
     jcasc_repository: typing.Optional[str] = None
     jcasc_repository_token: typing.Optional[typing.Tuple[str, str]] = None
@@ -455,6 +551,7 @@ class State:
     system_properties: typing.List[str] = dataclasses.field(default_factory=list)
     admin_password: typing.Optional[str] = None
     external_hostname: typing.Optional[str] = None
+    external_agent_nodes: frozenset[str] = frozenset()
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -472,7 +569,7 @@ class State:
             CharmIllegalNumUnitsError: if more than 1 unit of Jenkins charm is deployed.
         """
         restart_time_range = _parse_restart_time_range(charm)
-        agent_relation_meta_map, is_auth_proxy_integrated = _get_relation_state(charm)
+        agent_relation_meta_map = _get_relation_state(charm)
         proxy_config = _parse_proxy_config()
 
         plugins_str = typing.cast(str, charm.config.get("allowed-plugins"))
@@ -494,13 +591,13 @@ class State:
         jcasc_environment_secrets = _parse_jcasc_environment_secrets(charm)
         admin_password = _get_admin_password(charm)
         external_hostname = _parse_external_hostname(charm)
+        external_agent_nodes = _parse_external_agent_nodes(charm)
 
         return cls(
             restart_time_range=restart_time_range,
             agent_relation_meta=agent_relation_meta_map,
             plugins=plugins,
             proxy_config=proxy_config,
-            auth_proxy_integrated=is_auth_proxy_integrated,
             jcasc_config=jcasc_config,
             jcasc_repository=jcasc_repository,
             jcasc_repository_token=jcasc_repository_token,
@@ -509,4 +606,5 @@ class State:
             system_properties=system_properties,
             admin_password=admin_password,
             external_hostname=external_hostname,
+            external_agent_nodes=external_agent_nodes,
         )

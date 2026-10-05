@@ -39,32 +39,15 @@ JCASC_WITH_SECURITY_REALM = {
 }
 
 
-def test_build_jcasc_config_auth_proxy_bypasses_security():
-    """
-    arrange: given user jcasc config and auth-proxy integrated.
-    act: when build_jcasc_config is called.
-    assert: securityRealm and authorizationStrategy are set as siblings for auth-proxy bypass.
-    """
-    result = jenkins.build_jcasc_config(
-        VALID_JCASC_CONFIG,
-        proxy_config=None,
-        auth_proxy=True,
-    )
-
-    assert result["jenkins"]["securityRealm"] == "none"
-    assert result["jenkins"]["authorizationStrategy"] == "unsecured"
-
-
 def test_build_jcasc_config_default_injects_admin_realm():
     """
-    arrange: given user jcasc config and auth-proxy not integrated.
+    arrange: given user jcasc config without a security realm.
     act: when build_jcasc_config is called.
     assert: admin securityRealm with local users is injected.
     """
     result = jenkins.build_jcasc_config(
         VALID_JCASC_CONFIG,
         proxy_config=None,
-        auth_proxy=False,
     )
 
     assert result["jenkins"]["securityRealm"]["local"]["users"][0]["id"] == "admin"
@@ -79,30 +62,9 @@ def test_build_jcasc_config_preserves_existing_security_realm_without_mutation()
     result = jenkins.build_jcasc_config(
         JCASC_WITH_SECURITY_REALM,
         proxy_config=None,
-        auth_proxy=False,
     )
 
     assert result["jenkins"]["securityRealm"]["local"]["users"][0]["id"] == "custom"
-
-
-def test_build_jcasc_config_auth_proxy_preserves_user_security_realm_and_warns():
-    """
-    arrange: given user config already defines securityRealm and auth-proxy is integrated.
-    act: when build_jcasc_config is called.
-    assert: user securityRealm is preserved and warning branch is logged.
-    """
-    with patch.object(jenkins.logger, "warning") as warning_mock:
-        result = jenkins.build_jcasc_config(
-            JCASC_WITH_SECURITY_REALM,
-            proxy_config=None,
-            auth_proxy=True,
-        )
-
-    assert result["jenkins"]["securityRealm"]["local"]["users"][0]["id"] == "custom"
-    warning_mock.assert_called_once_with(
-        "Jenkins security is managed by user-provided jcasc-config; "
-        "auth-proxy bypass not injected."
-    )
 
 
 def test_build_jcasc_config_injects_proxy_settings():
@@ -121,7 +83,6 @@ def test_build_jcasc_config_injects_proxy_settings():
     result = jenkins.build_jcasc_config(
         VALID_JCASC_CONFIG,
         proxy_config=proxy,
-        auth_proxy=False,
     )
 
     assert result["jenkins"]["proxy"] == {"name": "proxy.example.com", "port": "3128"}
@@ -143,7 +104,6 @@ def test_build_jcasc_config_injects_proxy_name_without_port():
     result = jenkins.build_jcasc_config(
         VALID_JCASC_CONFIG,
         proxy_config=proxy,
-        auth_proxy=False,
     )
 
     assert result["jenkins"]["proxy"] == {"name": "proxy-no-port.example.com"}
@@ -163,7 +123,6 @@ def test_reconcile_jcasc_config_skips_when_no_config(
     charm_state = MagicMock(spec=state.State)
     charm_state.jcasc_config = None
     charm_state.proxy_config = None
-    charm_state.auth_proxy_integrated = False
     charm_state.jcasc_repository = None
     charm_state.jcasc_repository_token = None
     charm_state.jcasc_repository_config_path = None
@@ -193,7 +152,6 @@ def test_reconcile_jcasc_config_serialization_error_raises_blocked(
     charm_state = MagicMock(spec=state.State)
     charm_state.jcasc_config = VALID_JCASC_CONFIG
     charm_state.proxy_config = None
-    charm_state.auth_proxy_integrated = False
     charm_state.jcasc_repository = None
     charm_state.jcasc_repository_token = None
     charm_state.jcasc_repository_config_path = None
@@ -222,7 +180,6 @@ def test_reconcile_jcasc_config_calls_sync_with_rendered_yaml(
     charm_state = MagicMock(spec=state.State)
     charm_state.jcasc_config = VALID_JCASC_CONFIG
     charm_state.proxy_config = None
-    charm_state.auth_proxy_integrated = False
     charm_state.jcasc_repository = None
     charm_state.jcasc_repository_token = None
 
@@ -250,7 +207,6 @@ def test_reconcile_jcasc_config_jenkins_error_raises_blocked(
     charm_state = MagicMock(spec=state.State)
     charm_state.jcasc_config = VALID_JCASC_CONFIG
     charm_state.proxy_config = None
-    charm_state.auth_proxy_integrated = False
     charm_state.jcasc_repository = None
     charm_state.jcasc_repository_token = None
     charm_state.jcasc_repository_config_path = None
@@ -358,7 +314,7 @@ def test_build_jcasc_config_handles_empty_jenkins_section(jcasc_input: dict):
     act: when build_jcasc_config is called.
     assert: no crash and admin securityRealm is injected.
     """
-    result = jenkins.build_jcasc_config(jcasc_input, proxy_config=None, auth_proxy=False)
+    result = jenkins.build_jcasc_config(jcasc_input, proxy_config=None)
 
     assert "jenkins" in result
     assert "securityRealm" in result["jenkins"]
@@ -381,7 +337,6 @@ def test_reconcile_jcasc_config_with_no_admin_password(
     charm_state = MagicMock(spec=state.State)
     charm_state.jcasc_config = {}
     charm_state.proxy_config = None
-    charm_state.auth_proxy_integrated = False
     charm_state.jcasc_repository = None
     charm_state.jcasc_repository_token = None
     charm_state.jcasc_repository_config_path = None
@@ -412,7 +367,6 @@ def test_reconcile_jcasc_config_with_repository(
     charm_state = MagicMock(spec=state.State)
     charm_state.jcasc_config = VALID_JCASC_CONFIG
     charm_state.proxy_config = None
-    charm_state.auth_proxy_integrated = False
     charm_state.jcasc_repository = "https://github.com/example/jcasc-repo"
     charm_state.jcasc_repository_token = None
     charm_state.jcasc_repository_config_path = "jcasc"
@@ -465,7 +419,6 @@ def test_reconcile_jcasc_config_repository_fetch_error_raises_blocked(
     charm_state = MagicMock(spec=state.State)
     charm_state.jcasc_config = None
     charm_state.proxy_config = None
-    charm_state.auth_proxy_integrated = False
     charm_state.jcasc_repository = "https://github.com/example/jcasc-repo"
     charm_state.jcasc_repository_token = None
     charm_state.jcasc_repository_config_path = "jcasc"

@@ -5,12 +5,17 @@
 
 import json
 import logging
+import secrets
 import typing
+from typing import AsyncGenerator
 
 import jenkinsapi.plugin
 import kubernetes
+import kubernetes.client
 import pytest
+import pytest_asyncio
 import requests
+import tenacity
 import urllib3.exceptions
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
@@ -25,15 +30,171 @@ from .constants import (
     REMOVED_PLUGINS,
 )
 from .helpers import (
+    _log_retry,
+    _raise_retry_timeout,
     gen_git_test_job_xml,
     gen_test_job_xml,
     get_job_invoked_unit,
+    get_pod_ip,
     install_plugins,
-    wait_for,
 )
 from .types_ import LDAPSettings, UnitWebClient
 
 logger = logging.getLogger(__name__)
+
+
+@pytest_asyncio.fixture(scope="function", name="app_with_allowed_plugins")
+async def app_with_allowed_plugins_fixture(
+    application: Application, web_address: str, model: Model
+) -> AsyncGenerator[Application, None]:
+    """Jenkins charm with plugins configured."""
+    await application.set_config({"allowed-plugins": ",".join(ALLOWED_PLUGINS)})
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+    await model.block_until(
+        lambda: requests.get(web_address, timeout=10).status_code == 403,
+        timeout=60 * 10,
+        wait_period=10,
+    )
+    yield application
+    await application.reset_config(to_default=["allowed-plugins"])
+    await model.wait_for_idle(apps=[application.name], wait_for_active=True)
+
+
+@pytest.fixture(scope="module", name="ldap_settings")
+def ldap_settings_fixture() -> LDAPSettings:
+    """LDAP user for testing."""
+    return LDAPSettings(
+        container_ports=[389, 636],
+        username="customuser",
+        password=secrets.token_hex(16),
+    )
+
+
+@pytest_asyncio.fixture(scope="module", name="ldap_server")
+async def ldap_server_fixture(
+    model: Model,
+    kube_apps_client: kubernetes.client.AppsV1Api,
+    ldap_settings: LDAPSettings,
+):
+    """Testing LDAP server pod."""
+    container = kubernetes.client.V1Container(
+        name="ldap",
+        image="osixia/openldap",
+        image_pull_policy="IfNotPresent",
+        ports=[
+            kubernetes.client.V1ContainerPort(container_port=container_port)
+            for container_port in ldap_settings.container_ports
+        ],
+        env=[
+            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_USERNAME", value=ldap_settings.username),
+            kubernetes.client.V1EnvVar(name="LDAP_ADMIN_PASSWORD", value=ldap_settings.password),
+        ],
+    )
+    template = kubernetes.client.V1PodTemplateSpec(
+        metadata=kubernetes.client.V1ObjectMeta(labels={"app": "ldap"}),
+        spec=kubernetes.client.V1PodSpec(containers=[container]),
+    )
+    spec = kubernetes.client.V1DeploymentSpec(
+        selector=kubernetes.client.V1LabelSelector(match_labels={"app": "ldap"}),
+        template=template,
+    )
+    deployment = kubernetes.client.V1Deployment(
+        api_version="apps/v1",
+        kind="Deployment",
+        metadata=kubernetes.client.V1ObjectMeta(name="ldap", namespace=model.name),
+        spec=spec,
+    )
+    return kube_apps_client.create_namespaced_deployment(namespace=model.name, body=deployment)
+
+
+@pytest_asyncio.fixture(scope="module", name="ldap_server_ip")
+async def ldap_server_ip_fixture(
+    model: Model,
+    kube_core_client: kubernetes.client.CoreV1Api,
+    ldap_server: kubernetes.client.V1Deployment,
+) -> str:
+    """The LDAP deployment pod ip.
+
+    Localhost is, by default, added to NO_PROXY by juju, hence the pod ip has to be used.
+    """
+    spec: kubernetes.client.V1DeploymentSpec = ldap_server.spec
+    template: kubernetes.client.V1PodTemplateSpec = spec.template
+    metadata: kubernetes.client.V1ObjectMeta = template.metadata
+    return await get_pod_ip(model, kube_core_client, metadata.labels["app"])
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+def _install_plugins_via_web_api(
+    unit_web_client: UnitWebClient, plugins: typing.Iterable[str]
+) -> bool:
+    """Request plugin installation only when a requested plugin is missing."""
+    plugins = tuple(plugins)
+    if all(unit_web_client.client.has_plugin(plugin) for plugin in plugins):
+        return True
+    post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
+    post_data["dynamic_load"] = ""
+    try:
+        response = unit_web_client.client.requester.post_url(
+            f"{unit_web_client.web}/manage/pluginManager/install", data=post_data
+        )
+        return response.ok
+    except (requests.exceptions.RequestException, urllib3.exceptions.HTTPError):
+        logger.exception("Failed to post plugin installations.")
+        return False
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(300),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+async def _has_plugin_temp_files(ops_test: OpsTest, unit_name: str) -> bool:
+    """Return whether Jenkins still has plugin download temporary files."""
+    ret_code, stdout, stderr = await ops_test.juju(
+        "exec", "--unit", unit_name, "ls /var/lib/jenkins/plugins"
+    )
+    assert not ret_code, f"Failed to check for tmp files, {stderr}"
+    return "tmp" in stdout
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(300),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+async def _has_plugin_delay_log(ops_test: OpsTest) -> bool:
+    """Return whether plugin cleanup was delayed while downloads were active."""
+    ret_code, stdout, stderr = await ops_test.juju(
+        "debug-log",
+        "--replay",
+        "--no-tail",
+        "--level",
+        "WARNING",
+    )
+    assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
+    return "Plugins being downloaded, waiting until further actions." in stdout
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(300),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+def _all_plugins_active(unit_web_client: UnitWebClient, plugins: typing.Iterable[str]) -> bool:
+    """Return whether all requested plugins are active in Jenkins."""
+    return all(unit_web_client.client.has_plugin(plugin) for plugin in plugins)
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -47,39 +208,9 @@ async def test_plugins_remove_delay(
     act: when update_status_hook is fired.
     assert: the plugin removal delayed warning is logged until plugin installation is settled.
     """
-    post_data = {f"plugin.{plugin}.default": "on" for plugin in ALLOWED_PLUGINS}
-    post_data["dynamic_load"] = ""
+    _install_plugins_via_web_api(unit_web_client, ALLOWED_PLUGINS)
 
-    def _install_plugins_via_web_api() -> bool:
-        """Install plugins via pluginManager API.
-
-        Returns:
-            Whether the plugin installation request has succeeded.
-        """
-        try:
-            res = unit_web_client.client.requester.post_url(
-                f"{unit_web_client.web}/manage/pluginManager/install", data=post_data
-            )
-            return res.ok
-        except (requests.exceptions.RequestException, urllib3.exceptions.HTTPError):
-            logger.exception("Failed to post plugin installations.")
-            return False
-
-    await wait_for(_install_plugins_via_web_api)
-
-    async def has_temp_files():
-        """Check if tempfiles exist in Jenkins plugins directory.
-
-        Returns:
-            True if .tmp file exists, False otherwise.
-        """
-        ret_code, stdout, stderr = await ops_test.juju(
-            "exec", "--unit", unit_web_client.unit.name, "ls /var/lib/jenkins/plugins"
-        )
-        assert not ret_code, f"Failed to check for tmp files, {stderr}"
-        return "tmp" in stdout
-
-    await wait_for(has_temp_files)
+    await _has_plugin_temp_files(ops_test, unit_web_client.unit.name)
     ret_code, _, stderr = await ops_test.juju(
         "exec",
         "--unit",
@@ -89,28 +220,10 @@ async def test_plugins_remove_delay(
     )
     assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
 
-    async def has_delay_log():
-        """Check if juju log contains plugin cleanup delayed log.
-
-        Returns:
-            True if plugin cleanup delayed log exists. False otherwise.
-        """
-        ret_code, stdout, stderr = await ops_test.juju(
-            "debug-log",
-            "--replay",
-            "--no-tail",
-            "--level",
-            "WARNING",
-        )
-        assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
-        return "Plugins being downloaded, waiting until further actions." in stdout
-
-    await wait_for(has_delay_log)
+    await _has_plugin_delay_log(ops_test)
     unit_web_client.client.safe_restart()
 
-    await wait_for(
-        lambda: all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
-    )
+    _all_plugins_active(unit_web_client, ALLOWED_PLUGINS)
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -176,6 +289,7 @@ def seed_ldap_user_fixture(
     model: Model,
     kube_core_client: kubernetes.client.CoreV1Api,
     ldap_settings: LDAPSettings,
+    ldap_server: kubernetes.client.V1Deployment,
 ):
     """Seed user into ldap server."""
     command = [
@@ -386,6 +500,27 @@ async def test_blueocean_plugin(unit_web_client: UnitWebClient):
     )
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(300),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+async def _has_thinbackup_output(ops_test: OpsTest, unit_name: str, backup_path: str) -> bool:
+    """Return whether ThinBackup created a complete backup directory."""
+    ret, stdout, stderr = await ops_test.juju(
+        "ssh", "--container", "jenkins", unit_name, "ls", backup_path
+    )
+    logger.info(
+        "Run backup path ls result: code: %s stdout: %s, stderr: %s",
+        ret,
+        stdout,
+        stderr,
+    )
+    return ret == 0 and "FULL" in stdout
+
+
 async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
     """
     arrange: given a Jenkins charm with thinbackup plugin installed and backup configured.
@@ -415,31 +550,7 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
     )
     res.raise_for_status()
 
-    async def has_backup() -> bool:
-        """Get whether the backup is created.
-
-        The backup folder of format FULL-<backup-date> should be created.
-
-        Returns:
-            Whether the backup file has successfully been created.
-        """
-        ret, stdout, stderr = await ops_test.juju(
-            "ssh",
-            "--container",
-            "jenkins",
-            unit_web_client.unit.name,
-            "ls",
-            backup_path,
-        )
-        logger.info(
-            "Run backup path ls result: code: %s stdout: %s, stderr: %s",
-            ret,
-            stdout,
-            stderr,
-        )
-        return ret == 0 and "FULL" in stdout
-
-    await wait_for(has_backup)
+    await _has_thinbackup_output(ops_test, unit_web_client.unit.name, backup_path)
 
 
 async def test_bzr_plugin(unit_web_client: UnitWebClient):

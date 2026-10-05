@@ -130,11 +130,6 @@ def test_install_config(harness_container: HarnessWithContainer):
     "installer, expected_security_snippet",
     [
         pytest.param(
-            jenkins.install_auth_proxy_config,
-            "<useSecurity>false</useSecurity>",
-            id="auth-proxy-config",
-        ),
-        pytest.param(
             jenkins.install_default_config,
             "<useSecurity>true</useSecurity>",
             id="default-config",
@@ -163,7 +158,6 @@ def test_install_security_configs(
             (jenkins.DEFAULT_JENKINS_CONFIG,),
             id="install-config",
         ),
-        pytest.param(jenkins.install_auth_proxy_config, (), id="install-auth-proxy-config"),
         pytest.param(jenkins.install_default_config, (), id="install-default-config"),
     ],
 )

@@ -20,7 +20,6 @@ import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.haproxy.v2.haproxy_route import HaproxyRouteRequirer
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
-from charms.oauth2_proxy_k8s.v0.auth_proxy import AuthProxyConfig, AuthProxyRequirer
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
@@ -32,7 +31,6 @@ import timerange
 from state import (
     AGENT_DISCOVERY_INGRESS_RELATION_NAME,
     AGENT_RELATION,
-    AUTH_PROXY_RELATION,
     HAPROXY_ROUTE_RELATION_NAME,
     INGRESS_RELATION_NAME,
     JENKINS_SERVICE_NAME,
@@ -40,6 +38,7 @@ from state import (
     CharmConfigInvalidError,
     CharmIllegalNumUnitsError,
     CharmRelationDataInvalidError,
+    CharmRelationDataNotReadyError,
     State,
 )
 
@@ -91,6 +90,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self,
             relation_name=AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             port=jenkins.WEB_PORT,
+            strip_prefix=True,
         )
         self.server_ingress = IngressPerAppRequirer(
             self,
@@ -117,7 +117,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             ],
         )
         self._grafana = GrafanaDashboardProvider(self)
-        self._auth_proxy = AuthProxyRequirer(self)
         self._haproxy_route = HaproxyRouteRequirer(
             self,
             relation_name=HAPROXY_ROUTE_RELATION_NAME,
@@ -138,8 +137,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.agent_discovery_ingress.on.revoked,
             self.server_ingress.on.ready,
             self.server_ingress.on.revoked,
-            self.on[AUTH_PROXY_RELATION].relation_joined,
-            self.on[AUTH_PROXY_RELATION].relation_departed,
             self._haproxy_route.on.ready,
             self._haproxy_route.on.removed,
             self.on.update_status,
@@ -148,6 +145,28 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.framework.observe(self.on.secret_changed, self._on_secret_changed)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
+
+    def _retract_invalid_haproxy_route(self) -> None:
+        """Clear stale routing before validation can stop normal reconciliation.
+
+        Invalid state would otherwise skip the normal HAProxy reconciler and leave
+        a previously published route active.
+        """
+        relation = self.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
+        if not relation or not self.unit.is_leader():
+            return
+
+        external_hostname = str(self.config.get("external-hostname") or "").strip()
+        non_root_ingress = bool(
+            self.server_ingress.url and urlparse(self.server_ingress.url).path.rstrip("/")
+        )
+        agents_without_route = bool(
+            self.model.relations.get(AGENT_RELATION)
+            and self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is None
+            and self.model.get_relation(INGRESS_RELATION_NAME) is None
+        )
+        if not external_hostname or non_root_ingress or agents_without_route:
+            relation.data[self.app].clear()
 
     def _get_state(self) -> typing.Optional[State]:
         """Derive the charm state fresh from current config and relation data.
@@ -163,6 +182,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return State.from_charm(self)
         except (CharmConfigInvalidError, CharmIllegalNumUnitsError) as exc:
             self.unit.status = ops.BlockedStatus(exc.msg)
+            return None
+        except CharmRelationDataNotReadyError as exc:
+            self.unit.status = ops.WaitingStatus(exc.msg)
             return None
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
@@ -218,6 +240,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The triggering Juju event (unused, present for observe callback compatibility).
 
         """
+        self._retract_invalid_haproxy_route()
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
         if not check_result.success:
@@ -257,8 +280,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._reconcile_agents(charm_state, client=admin_client)
             logger.info("Reconciling agent discovery")
             self._reconcile_agent_discovery()
-            logger.info("Reconciling auth proxy")
-            self._reconcile_auth_proxy(charm_state)
             logger.info("Reconciling haproxy route")
             self._reconcile_haproxy_route(charm_state)
             logger.info("Reconciling plugins")
@@ -362,28 +383,70 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             state: The current charm state.
             client: Jenkins API client.
         """
-        if not state.agent_relation_meta:
-            return
+        relation_agent_names = {
+            agent.name for agents in (state.agent_relation_meta or {}).values() for agent in agents
+        }
+        external_agent_nodes = state.external_agent_nodes
+        name_collisions = relation_agent_names & external_agent_nodes
+        if name_collisions:
+            names = ", ".join(sorted(name_collisions))
+            message = (
+                f"Duplicate agent node names found: {names}. Remove these names from "
+                "external-agent-nodes or rename the relation-managed agents."
+            )
+            logger.error(message)
+            raise ReconcileBlockedError(message)
 
+        agent_discovery_url = self._agent_discovery_url if state.agent_relation_meta else None
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
         agent_node_names = [node.name for node in agent_nodes]
 
-        self._add_agent_nodes_from_relation(
-            agent_relation=state.agent_relation_meta,
+        if state.agent_relation_meta:
+            self._add_agent_nodes_from_relation(
+                agent_relation=state.agent_relation_meta,
+                agent_node_names=agent_node_names,
+                api_client=client,
+                agent_discovery_url=typing.cast(str, agent_discovery_url),
+            )
+            self._update_agent_nodes_from_relation(
+                agent_relation=state.agent_relation_meta,
+                agent_nodes=agent_nodes,
+                api_client=client,
+            )
+
+        self._remove_unmanaged_agents(
             agent_node_names=agent_node_names,
+            relation_agent_names=relation_agent_names,
+            external_agent_nodes=external_agent_nodes,
             api_client=client,
         )
-        self._update_agent_nodes_from_relation(
-            agent_relation=state.agent_relation_meta,
-            agent_nodes=agent_nodes,
-            api_client=client,
-        )
-        self._remove_agent_nodes_not_in_relation(
-            agent_relation=state.agent_relation_meta,
-            agent_node_names=agent_node_names,
-            api_client=client,
-        )
+
+    def _remove_unmanaged_agents(
+        self,
+        agent_node_names: list[str],
+        relation_agent_names: set[str],
+        external_agent_nodes: frozenset[str],
+        api_client: jenkins.Jenkins,
+    ) -> None:
+        """Remove agents not in a relation or the external agent definitions.
+
+        Args:
+            agent_node_names: The agents registered on the Jenkins server.
+            relation_agent_names: Names of agents from current relation data.
+            external_agent_nodes: Nodes managed outside Juju and protected from deletion.
+            api_client: The Jenkins API client.
+
+        Raises:
+            JenkinsError: if there was an error while removing agent nodes from Jenkins.
+        """
+        unmanaged_agents = set(agent_node_names) - relation_agent_names - external_agent_nodes
+        for agent_name in unmanaged_agents:
+            try:
+                api_client.remove_agent_node(agent_name=agent_name)
+            except jenkins.JenkinsError:
+                logger.exception("Failed to remove unmanaged agent node: %s", agent_name)
+                raise
 
     def _reconcile_agent_discovery(self) -> None:
         """Update the agent discovery URL in all connected agent relations."""
@@ -392,27 +455,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             if relation_discovery_url and relation_discovery_url == self._agent_discovery_url:
                 continue
             relation.data[self.model.unit].update({"url": self._agent_discovery_url})
-
-    def _reconcile_auth_proxy(self, state: State) -> None:
-        """Reconcile auth proxy configuration.
-
-        Args:
-            state: The current charm state.
-        """
-        if state.auth_proxy_integrated:
-            if self.server_ingress.url:
-                auth_proxy_config = AuthProxyConfig(
-                    protected_urls=[self.server_ingress.url],
-                    allowed_endpoints=[],
-                    headers=["X-Auth-Request-User"],
-                )
-            else:
-                auth_proxy_config = AuthProxyConfig(
-                    protected_urls=[],
-                    allowed_endpoints=[],
-                    headers=["X-Auth-Request-User"],
-                )
-            self._auth_proxy.update_auth_proxy_config(auth_proxy_config=auth_proxy_config)
 
     def _reconcile_haproxy_route(self, state: State) -> None:
         """Publish or retract haproxy-route requirements.
@@ -489,36 +531,42 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Returns:
             The charm's agent discovery url.
         """
-        if ingress_url := self.agent_discovery_ingress.url:
-            pass
-        elif ingress_url := self.server_ingress.url:
+        if self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) and (
+            ingress_url := self.agent_discovery_ingress.url
+        ):
+            return ingress_url.rstrip("/")
+        if self.model.get_relation(INGRESS_RELATION_NAME) and (
+            ingress_url := self.server_ingress.url
+        ):
             logger.warning(
-                "Using public ingress with protected endpoints (e.g. oathkeeper)"
-                "will result in agent discovery failure. Use %s for agents discovery.",
+                "Using server ingress without a dedicated agent route may"
+                " result in agent discovery failure. Use %s for agents discovery.",
                 AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             )
-        else:
-            # Fallback to pod IP
-            if binding := self.model.get_binding("juju-info"):
-                try:
-                    unit_ip = str(binding.network.bind_address)
-                    ipaddress.ip_address(unit_ip)
-                    return f"http://{unit_ip}:{jenkins.WEB_PORT}{self._jenkins_prefix}"
-                except ValueError as exc:
-                    logger.error(
-                        "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
-                        exc,
-                    )
+            return ingress_url.rstrip("/")
 
-            # Fallback to using socket.fqdn
-            return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
+        # Fallback to pod IP
+        if binding := self.model.get_binding("juju-info"):
+            try:
+                unit_ip = str(binding.network.bind_address)
+                ipaddress.ip_address(unit_ip)
+                return f"http://{unit_ip}:{jenkins.WEB_PORT}{self._jenkins_prefix}"
+            except ValueError as exc:
+                logger.error(
+                    "IP from juju-info is not valid: %s, we can still fall back to using fqdn",
+                    exc,
+                )
 
-        return ingress_url.rstrip("/")
+        # Fallback to using socket.fqdn
+        return f"http://{socket.getfqdn()}:{jenkins.WEB_PORT}"
 
     @property
     def _agent_status_message(self) -> str:
         """Status message regarding agent discovery ingress configuration."""
-        if self.server_ingress.url and not self.agent_discovery_ingress.url:
+        if (
+            self.server_ingress.url
+            and self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is None
+        ):
             return (
                 f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
             )
@@ -529,6 +577,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
         agent_node_names: list[str],
         api_client: jenkins.Jenkins,
+        agent_discovery_url: str,
     ) -> None:
         """Add agent nodes from relation data.
 
@@ -536,6 +585,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             agent_relation: Mapping of agent relation to agent metadata.
             agent_node_names: The node names of agents.
             api_client: The Jenkins API client.
+            agent_discovery_url: The resolved URL for agent connections.
 
         Raises:
             JenkinsError: if there was an error while registering agent nodes to Jenkins.
@@ -551,7 +601,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                     logger.exception("Failed to register agent node: %s", unregistered_agent)
                     raise
 
-            agent_relation_data: dict[str, str] = {"url": self._agent_discovery_url}
+            agent_relation_data: dict[str, str] = {"url": agent_discovery_url}
             for meta in agents:
                 try:
                     agent_relation_data[f"{meta.name}_secret"] = api_client.get_node_secret(
@@ -591,33 +641,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 logger.exception("Failed to update agent node: %s", agent_meta)
                 raise
 
-    def _remove_agent_nodes_not_in_relation(
-        self,
-        agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
-        agent_node_names: list[str],
-        api_client: jenkins.Jenkins,
-    ) -> None:
-        """Remove agent nodes not found in relation data.
-
-        Args:
-            agent_relation: Mapping of agent relation to agent metadata.
-            agent_node_names: The agents registered on Jenkins server.
-            api_client: The Jenkins API client.
-
-        Raises:
-            JenkinsError: if there was an error while removing agent nodes from Jenkins.
-        """
-        all_agent_names_from_relation = {
-            agent.name for agents in agent_relation.values() for agent in agents
-        }
-        agents_not_in_relation = set(agent_node_names) - all_agent_names_from_relation
-        for agent_name in agents_not_in_relation:
-            try:
-                api_client.remove_agent_node(agent_name=agent_name)
-            except jenkins.JenkinsError:
-                logger.exception("Failed to remove registered node: %s", agent_name)
-                raise
-
     def _reconcile_pre_startup_configurations(
         self, container: ops.Container, charm_state: State
     ) -> str:
@@ -654,7 +677,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """Reconcile JCasC configuration to desired state.
 
         Builds the desired JCasC config by merging user-provided config with
-        charm-managed sections (admin credentials, auth proxy), then delegates
+        charm-managed sections (admin credentials), then delegates
         file I/O, validation, and reload to jenkins.sync_jcasc_config.
 
         If jcasc-repository is set, fetches and merges YAML files from the repository.
@@ -726,7 +749,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         desired_config = jenkins.build_jcasc_config(
             jcasc_config,
             charm_state.proxy_config,
-            charm_state.auth_proxy_integrated,
         )
         try:
             desired_yaml = yaml.dump(desired_config, default_flow_style=False, sort_keys=False)

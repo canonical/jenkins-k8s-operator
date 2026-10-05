@@ -10,13 +10,11 @@ import pytest
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.testing import Harness
 
-import jenkins
 from charm import JenkinsK8sOperatorCharm
 
 
 def _patch_reconcile_dependencies(monkeypatch: pytest.MonkeyPatch):
     """Patch non-ingress reconcile paths for focused ingress event tests."""
-    monkeypatch.setattr(jenkins, "is_storage_ready", MagicMock(return_value=True))
     monkeypatch.setattr(
         JenkinsK8sOperatorCharm, "_reconcile_storage", MagicMock(return_value=None)
     )
@@ -40,30 +38,30 @@ def _patch_reconcile_dependencies(monkeypatch: pytest.MonkeyPatch):
         MagicMock(return_value=None),
     )
     monkeypatch.setattr(
-        JenkinsK8sOperatorCharm, "_reconcile_auth_proxy", MagicMock(return_value=None)
-    )
-    monkeypatch.setattr(
         JenkinsK8sOperatorCharm, "_reconcile_plugins", MagicMock(return_value=None)
     )
 
 
-def test_get_ingress_path():
+@pytest.mark.parametrize(
+    "ingress_url, expected_path",
+    [
+        pytest.param("https://host:8080/path", "/path", id="path"),
+        pytest.param("https://host:8080/", "", id="root"),
+        pytest.param(None, "", id="unset"),
+    ],
+)
+def test_get_ingress_path(harness: Harness, ingress_url: str | None, expected_path: str):
     """
-    arrange: given a charm with an ingress URL set.
+    arrange: given a server ingress URL variant.
     act: when _get_ingress_path is called.
-    assert: it returns the URL path.
+    assert: the expected Jenkins path is returned.
     """
-    harness = Harness(JenkinsK8sOperatorCharm)
     harness.begin()
     ingress_per_app = MagicMock(spec=IngressPerAppRequirer)
+    ingress_per_app.url = ingress_url
     harness.charm.server_ingress = ingress_per_app
 
-    ingress_per_app.url = "https://host:8080/path"
-    assert harness.charm._get_ingress_path() == "/path"
-    ingress_per_app.url = "https://host:8080/"
-    assert harness.charm._get_ingress_path() == ""
-    ingress_per_app.url = None
-    assert harness.charm._get_ingress_path() == ""
+    assert harness.charm._get_ingress_path() == expected_path
 
 
 def test_traefik_integration_added_replans_jenkins(
@@ -79,40 +77,6 @@ def test_traefik_integration_added_replans_jenkins(
 
     harness.add_storage("jenkins-home", attach=True)
     harness.begin()
-    harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
-
-    container = harness.model.unit.containers["jenkins"]
-    replan_mock = MagicMock()
-    monkeypatch.setattr(container, "replan", replan_mock)
-
-    ingress_relation_id = harness.add_relation(
-        "ingress",
-        "traefik-k8s",
-        app_data={"ingress": json.dumps({"url": mock_ingress_url})},
-    )
-    harness.remove_relation(ingress_relation_id)
-
-    assert replan_mock.call_count == 2
-
-
-def test_traefik_integration_added_with_auth_proxy_replans_jenkins(
-    harness: Harness, monkeypatch: pytest.MonkeyPatch
-):
-    """
-    arrange: given a base jenkins charm with auth-proxy relation.
-    act: add an integration with traefik on :ingress endpoint and remove it.
-    assert: pebble replan should run twice, one for ingress ready, one for ingress revoked.
-    """
-    _patch_reconcile_dependencies(monkeypatch)
-    mock_ingress_url = "http://ingress.test/model-unit-0"
-    harness.add_storage("jenkins-home", attach=True)
-    harness.add_relation(
-        "auth-proxy",
-        "oathkeeper",
-        app_data={},
-    )
-    harness.begin()
-
     harness.set_can_connect(harness.model.unit.containers["jenkins"], True)
 
     container = harness.model.unit.containers["jenkins"]
