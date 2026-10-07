@@ -14,6 +14,7 @@ import json
 import logging
 import re
 import secrets
+import shlex
 import textwrap
 import time
 import typing
@@ -40,6 +41,7 @@ JENKINS_PLUGIN_MANAGER_VERSION = "2.13.2"
 LOGIN_PATH = "/login?from=%2F"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 JENKINS_HOME_PATH = Path("/var/lib/jenkins")
+SSH_PROXY_CONFIG_PATH = Path("/etc/ssh/ssh_config.d/00-jenkins-proxy.conf")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
 # Path to Jenkins admin API token
@@ -1038,6 +1040,39 @@ def _set_jenkins_system_message(message: str, client: jenkinsapi.jenkins.Jenkins
     except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
         logger.error("Failed to set system message, %s", exc)
         raise JenkinsError("Failed to set system message.") from exc
+
+
+def reconcile_ssh_proxy_config(
+    container: ops.Container, proxy_config: state.ProxyConfig | None
+) -> None:
+    """Reconcile the charm-managed OpenSSH HTTP CONNECT proxy drop-in.
+
+    Args:
+        container: The Jenkins workload container.
+        proxy_config: The Juju model proxy settings.
+
+    Raises:
+        JenkinsBootstrapError: if the selected proxy is unsupported by the CONNECT helper.
+    """
+    proxy = (proxy_config.https_proxy or proxy_config.http_proxy) if proxy_config else None
+    if proxy is None:
+        container.remove_path(SSH_PROXY_CONFIG_PATH, recursive=True)
+        return
+
+    if proxy.scheme != "http" or proxy.username or proxy.password:
+        raise JenkinsBootstrapError(
+            "OpenSSH proxy configuration requires an unauthenticated HTTP CONNECT proxy."
+        )
+
+    endpoint = shlex.quote(f"{proxy.host}:{proxy.port}".replace("%", "%%"))
+    container.push(
+        SSH_PROXY_CONFIG_PATH,
+        f"Host *\n    ProxyCommand /usr/bin/nc -X connect -x {endpoint} %h %p\n",
+        make_dirs=True,
+        permissions=0o644,
+        user="root",
+        group="root",
+    )
 
 
 def unlock_wizard(container: ops.Container, version: str) -> None:
