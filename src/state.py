@@ -207,6 +207,19 @@ def _parse_proxy_config() -> typing.Optional["ProxyConfig"]:
         raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
 
 
+def _parse_ssh_proxy_config(charm: ops.CharmBase) -> typing.Optional["SshProxyConfig"]:
+    """Parse the optional SSH-only proxy configuration."""
+    address = typing.cast(str, charm.config.get("ssh-proxy-address") or "").strip()
+    if not address:
+        return None
+    try:
+        return SshProxyConfig.from_address(address)
+    except ValueError as exc:
+        raise CharmConfigInvalidError(
+            "Invalid ssh-proxy-address; expected HOST:PORT without a scheme or credentials."
+        ) from exc
+
+
 def _parse_system_properties(charm: ops.CharmBase) -> list[str]:
     """Parse custom JVM system properties from charm config."""
     system_properties_cfg = typing.cast(str, charm.config.get("system-properties"))
@@ -487,6 +500,39 @@ def _parse_jcasc_environment_secrets(
     return dict(content)
 
 
+class SshProxyConfig(BaseModel):
+    """Configuration for the optional OpenSSH HTTP CONNECT proxy."""
+
+    host: str
+    port: int
+
+    @classmethod
+    def from_address(cls, address: str) -> "SshProxyConfig":
+        """Parse a credential-free HOST:PORT proxy address."""
+        parsed = urlparse(f"http://{address}")
+        if (
+            not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path not in ("", "/")
+            or parsed.params
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("invalid SSH proxy address")
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("invalid SSH proxy port") from exc
+        if (
+            port is None
+            or not 1 <= port <= 65535
+            or any(char.isspace() for char in parsed.hostname)
+        ):
+            raise ValueError("invalid SSH proxy address")
+        return cls(host=parsed.hostname, port=port)
+
+
 class ProxyConfig(BaseModel):
     """Configuration for accessing Jenkins through proxy.
 
@@ -552,6 +598,7 @@ class State:
     admin_password: typing.Optional[str] = None
     external_hostname: typing.Optional[str] = None
     external_agent_nodes: frozenset[str] = frozenset()
+    ssh_proxy_config: typing.Optional[SshProxyConfig] = None
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -571,6 +618,7 @@ class State:
         restart_time_range = _parse_restart_time_range(charm)
         agent_relation_meta_map = _get_relation_state(charm)
         proxy_config = _parse_proxy_config()
+        ssh_proxy_config = _parse_ssh_proxy_config(charm)
 
         plugins_str = typing.cast(str, charm.config.get("allowed-plugins"))
         plugins = (plugin.strip() for plugin in plugins_str.split(",")) if plugins_str else None
@@ -607,4 +655,5 @@ class State:
             admin_password=admin_password,
             external_hostname=external_hostname,
             external_agent_nodes=external_agent_nodes,
+            ssh_proxy_config=ssh_proxy_config,
         )

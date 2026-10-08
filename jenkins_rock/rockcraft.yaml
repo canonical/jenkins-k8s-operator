@@ -50,6 +50,7 @@ parts:
       - libfontconfig1
       - libfreetype6
       - libharfbuzz0b
+      - netcat-openbsd
       - openjdk-21-jre-headless
       - procps
       - ssh-client

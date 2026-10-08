@@ -18,6 +18,8 @@ from pytest_operator.plugin import OpsTest
 from .constants import TINYPROXY_PORT
 from .helpers import get_model_unit_addresses, get_pod_ip
 
+SSH_KEY_PATH = "/tmp/ssh-proxy-integration-key"  # nosec B108
+
 
 @pytest.fixture(scope="module", name="tiny_proxy_daemonset")
 def tiny_proxy_daemonset_fixture(
@@ -100,6 +102,79 @@ async def jenkins_with_proxy_fixture(
     await model_with_proxy.remove_application(application.name, block_until_done=True)
 
 
+@pytest_asyncio.fixture(scope="module", name="ssh_server_ip")
+async def ssh_server_ip_fixture(
+    model: Model,
+    kube_core_client: kubernetes.client.CoreV1Api,
+    jenkins_with_proxy: Application,
+    ops_test: OpsTest,
+) -> AsyncGenerator[str, None]:
+    """Create an SSH endpoint that can be reached through the HTTP proxy."""
+    jenkins_unit = jenkins_with_proxy.units[0]
+    key_path = SSH_KEY_PATH
+    ret, _, stderr = await ops_test.juju(
+        "ssh",
+        "--container",
+        "jenkins",
+        jenkins_unit.name,
+        "ssh-keygen",
+        "-q",
+        "-t",
+        "ed25519",
+        "-N",
+        "",
+        "-f",
+        key_path,
+    )
+    assert ret == 0, f"Failed to generate SSH test key: {stderr}"
+    ret, public_key, stderr = await ops_test.juju(
+        "ssh", "--container", "jenkins", jenkins_unit.name, "cat", f"{key_path}.pub"
+    )
+    assert ret == 0, f"Failed to read SSH test public key: {stderr}"
+
+    pod_name = "ssh-proxy-test-server"
+    pod = kubernetes.client.V1Pod(
+        metadata=kubernetes.client.V1ObjectMeta(
+            name=pod_name, labels={"app": "ssh-proxy-test-server"}
+        ),
+        spec=kubernetes.client.V1PodSpec(
+            restart_policy="Always",
+            containers=[
+                kubernetes.client.V1Container(
+                    name="sshd",
+                    image="lscr.io/linuxserver/openssh-server:latest",
+                    image_pull_policy="IfNotPresent",
+                    env=[
+                        kubernetes.client.V1EnvVar(name="USER_NAME", value="testuser"),
+                        kubernetes.client.V1EnvVar(name="PUBLIC_KEY", value=public_key.strip()),
+                        kubernetes.client.V1EnvVar(name="PASSWORD_ACCESS", value="false"),
+                        kubernetes.client.V1EnvVar(name="SUDO_ACCESS", value="false"),
+                    ],
+                    ports=[kubernetes.client.V1ContainerPort(container_port=2222)],
+                )
+            ],
+        ),
+    )
+    kube_core_client.create_namespaced_pod(namespace=model.name, body=pod)
+
+    try:
+        yield await get_pod_ip(model, kube_core_client, "ssh-proxy-test-server")
+    finally:
+        kube_core_client.delete_namespaced_pod(
+            name=pod_name, namespace=model.name, grace_period_seconds=0
+        )
+        await ops_test.juju(
+            "ssh",
+            "--container",
+            "jenkins",
+            jenkins_unit.name,
+            "rm",
+            "-f",
+            key_path,
+            f"{key_path}.pub",
+        )
+
+
 @pytest_asyncio.fixture(scope="module", name="proxy_jenkins_unit_ip")
 async def proxy_jenkins_unit_ip_fixture(model: Model, jenkins_with_proxy: Application):
     """Get Jenkins charm w/ proxy enabled unit IP."""
@@ -132,6 +207,71 @@ async def jenkins_with_proxy_client_fixture(
         password=password,
         timeout=60,
     )
+
+
+async def test_ssh_connection_uses_explicit_proxy(
+    model: Model,
+    ops_test: OpsTest,
+    jenkins_with_proxy: Application,
+    tinyproxy_ip: str,
+    ssh_server_ip: str,
+):
+    """An OpenSSH connection succeeds through the explicitly configured proxy."""
+    unit = jenkins_with_proxy.units[0]
+    await jenkins_with_proxy.set_config({"ssh-proxy-address": f"{tinyproxy_ip}:{TINYPROXY_PORT}"})
+    await model.wait_for_idle(
+        apps=[jenkins_with_proxy.name],
+        wait_for_active=True,
+        raise_on_blocked=True,
+        timeout=10 * 60,
+        idle_period=10,
+    )
+
+    try:
+        ret, proxy_config, stderr = await ops_test.juju(
+            "ssh",
+            "--container",
+            "jenkins",
+            unit.name,
+            "cat",
+            "/etc/ssh/ssh_config.d/00-jenkins-proxy.conf",
+        )
+        assert ret == 0, f"SSH proxy configuration was not written: {stderr}"
+        assert f"-x {tinyproxy_ip}:{TINYPROXY_PORT}" in proxy_config
+
+        ret, stdout, stderr = await ops_test.juju(
+            "ssh",
+            "--container",
+            "jenkins",
+            unit.name,
+            "ssh",
+            "-i",
+            SSH_KEY_PATH,
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=30",
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+            "-p",
+            "2222",
+            f"testuser@{ssh_server_ip}",
+            "printf",
+            "ssh-proxy-ok",
+        )
+        assert ret == 0, f"SSH through proxy failed: {stderr}"
+        assert stdout == "ssh-proxy-ok"
+    finally:
+        await jenkins_with_proxy.set_config({"ssh-proxy-address": ""})
+        await model.wait_for_idle(
+            apps=[jenkins_with_proxy.name],
+            wait_for_active=True,
+            raise_on_blocked=True,
+            timeout=10 * 60,
+            idle_period=10,
+        )
 
 
 async def test_jenkins_ui_proxy_config(
