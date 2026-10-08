@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+## 2026-10-07
+
+- Automatically configure OpenSSH in the Jenkins server container to tunnel through
+  the Juju model HTTPS proxy, falling back to the HTTP proxy.
+- Add `netcat-openbsd` to the Jenkins image for HTTP CONNECT tunneling.
+
 ## 2026-09-16
 
 - Decouple `agent-discovery-ingress`, `ingress`, and `haproxy-route`.

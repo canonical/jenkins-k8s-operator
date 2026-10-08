@@ -256,6 +256,11 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             logger.info("Reconciling storage")
             self._reconcile_storage(container)
 
+            try:
+                jenkins.reconcile_ssh_proxy_config(container, charm_state.proxy_config)
+            except jenkins.JenkinsBootstrapError as exc:
+                raise ReconcileBlockedError(str(exc)) from exc
+
             # Reconcile jenkins configuration filesystem
             configuration_hash = self._reconcile_pre_startup_configurations(container, charm_state)
             # pass in configuration hash to trigger pebble layer update

@@ -23,6 +23,88 @@ from .helpers import BLOCKED_STATUS_NAME, WAITING_STATUS_NAME
 from .types_ import Harness, HarnessWithContainer
 
 
+# Run once per variable to verify that either proxy setting alone enables SSH proxying.
+@pytest.mark.parametrize("proxy_variable", ["JUJU_CHARM_HTTP_PROXY", "JUJU_CHARM_HTTPS_PROXY"])
+def test_reconcile_ssh_proxy_config(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+    proxy_variable: str,
+):
+    """SSH config follows the model proxy and is removed when proxies are cleared."""
+    monkeypatch.delenv("JUJU_CHARM_HTTP_PROXY", raising=False)
+    monkeypatch.delenv("JUJU_CHARM_HTTPS_PROXY", raising=False)
+    monkeypatch.setenv(proxy_variable, "http://squid.example.com:3128")
+    harness = harness_container.harness
+    harness.begin()
+    charm_state = state.State.from_charm(harness.charm)
+    container = harness_container.container
+
+    jenkins.reconcile_ssh_proxy_config(container, charm_state.proxy_config)
+
+    assert container.pull(jenkins.SSH_PROXY_CONFIG_PATH).read() == (
+        "Host *\n    ProxyCommand /usr/bin/nc -X connect -x squid.example.com:3128 %h %p\n"
+    )
+    assert container.list_files(jenkins.SSH_PROXY_CONFIG_PATH)[0].permissions == 0o644
+
+    # Each hook derives fresh state; changing the model proxy must replace the old endpoint.
+    monkeypatch.setenv(proxy_variable, "http://new-squid.example.com:8080")
+    charm_state = state.State.from_charm(harness.charm)
+    jenkins.reconcile_ssh_proxy_config(container, charm_state.proxy_config)
+    assert "new-squid.example.com:8080" in container.pull(jenkins.SSH_PROXY_CONFIG_PATH).read()
+
+    monkeypatch.delenv(proxy_variable)
+    charm_state = state.State.from_charm(harness.charm)
+    jenkins.reconcile_ssh_proxy_config(container, charm_state.proxy_config)
+    assert not container.exists(jenkins.SSH_PROXY_CONFIG_PATH)
+    # Repeated hooks with no proxy must tolerate an already-absent drop-in.
+    jenkins.reconcile_ssh_proxy_config(container, None)
+
+
+def test_ssh_proxy_prefers_https_setting(
+    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
+):
+    """The HTTPS setting wins and no-proxy does not bypass the SSH tunnel."""
+    monkeypatch.setenv("JUJU_CHARM_HTTP_PROXY", "http://http-proxy.example.com:3128")
+    # HTTPS names the traffic being proxied, not the transport to the proxy itself.
+    monkeypatch.setenv("JUJU_CHARM_HTTPS_PROXY", "http://https-proxy.example.com:8080")
+    monkeypatch.setenv("JUJU_CHARM_NO_PROXY", "git.example.com")
+    harness = harness_container.harness
+    harness.begin()
+    charm_state = state.State.from_charm(harness.charm)
+    jenkins.reconcile_ssh_proxy_config(harness_container.container, charm_state.proxy_config)
+    # Host * deliberately tunnels even the destination listed in no-proxy.
+    assert harness_container.container.pull(jenkins.SSH_PROXY_CONFIG_PATH).read() == (
+        "Host *\n    ProxyCommand /usr/bin/nc -X connect -x https-proxy.example.com:8080 %h %p\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "proxy_url",
+    [
+        # nc supports plain HTTP CONNECT, not TLS to the proxy; SSH remains encrypted.
+        "https://squid.example.com:3128",
+        # The helper cannot supply proxy credentials non-interactively.
+        "http://user:password@squid.example.com:3128",
+    ],
+)
+def test_ssh_proxy_rejects_unsupported_endpoints(
+    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch, proxy_url: str
+):
+    """Unsupported proxy endpoints produce an actionable validation error."""
+    monkeypatch.setenv("JUJU_CHARM_HTTPS_PROXY", proxy_url)
+    harness = harness_container.harness
+    harness.begin()
+    charm_state = state.State.from_charm(harness.charm)
+    with pytest.raises(jenkins.JenkinsBootstrapError, match="unauthenticated HTTP CONNECT"):
+        jenkins.reconcile_ssh_proxy_config(harness_container.container, charm_state.proxy_config)
+    # Isolate storage work so this checks that the SSH error becomes a blocked unit status.
+    with patch.object(harness.charm, "_reconcile_storage"):
+        harness.charm._reconcile(MagicMock(spec=ops.ConfigChangedEvent))
+    assert harness.charm.unit.status == ops.BlockedStatus(
+        "OpenSSH proxy configuration requires an unauthenticated HTTP CONNECT proxy."
+    )
+
+
 @pytest.mark.parametrize(
     "charm_config",
     [pytest.param({"restart-time-range": "-2"}, id="invalid restart-time-range")],
@@ -248,7 +330,9 @@ def test_reconcile_sets_blocked_status_on_reconcile_blocked_error(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
 
     with (
-        patch.object(jenkins_charm, "_get_state", return_value=MagicMock(spec=state.State)),
+        patch.object(
+            jenkins_charm, "_get_state", return_value=state.State.from_charm(jenkins_charm)
+        ),
         patch.object(jenkins_charm, "_reconcile_storage"),
         patch.object(
             jenkins_charm,
