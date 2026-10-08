@@ -119,9 +119,9 @@ config:
       type: string
       default: ""
       description: >
-        Optional HTTP CONNECT proxy for OpenSSH connections from the Jenkins container.
-        Set to HOST:PORT to enable the feature. Leave empty to disable it.
-        URI schemes and credentials are not supported.
+        [EXPERIMENTAL] Optional HTTP CONNECT proxy for OpenSSH connections from the Jenkins
+        container. Set to HOST:PORT to enable the feature. Leave empty to disable it. URI
+        schemes and credentials are not supported.
     system-properties:
       type: string
       default: ""

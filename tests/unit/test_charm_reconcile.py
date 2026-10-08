@@ -72,28 +72,20 @@ def test_reconcile_ssh_proxy_config_brackets_ipv6_endpoint(
     )
 
 
+@pytest.mark.parametrize(
+    "model_proxy",
+    [
+        "http://model-proxy.example.com:3128",
+        "http://user:password@model-proxy.example.com:3128",
+    ],
+)
 def test_model_proxy_does_not_enable_ssh_proxy_config(
-    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+    model_proxy: str,
 ):
     """The model proxy remains independent from the optional SSH proxy."""
-    monkeypatch.setenv("JUJU_CHARM_HTTPS_PROXY", "http://model-proxy.example.com:3128")
-    harness = harness_container.harness
-    harness.begin()
-    charm_state = state.State.from_charm(harness.charm)
-
-    assert charm_state.proxy_config is not None
-    assert charm_state.ssh_proxy_config is None
-    jenkins.reconcile_ssh_proxy_config(harness_container.container, charm_state.ssh_proxy_config)
-    assert not harness_container.container.exists(jenkins.SSH_PROXY_CONFIG_PATH)
-
-
-def test_ssh_proxy_does_not_use_model_proxy_credentials(
-    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
-):
-    """Model proxy credentials do not implicitly configure OpenSSH."""
-    monkeypatch.setenv(
-        "JUJU_CHARM_HTTPS_PROXY", "http://user:password@model-proxy.example.com:3128"
-    )
+    monkeypatch.setenv("JUJU_CHARM_HTTPS_PROXY", model_proxy)
     harness = harness_container.harness
     harness.begin()
     charm_state = state.State.from_charm(harness.charm)

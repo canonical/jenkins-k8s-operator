@@ -8,7 +8,7 @@ See [Configurations](https://charmhub.io/jenkins-k8s/configure).
 
 By default Jenkins uses a built-in Java SSH client. Users may configure Jenkins
 to use the OpenSSH client included in the Jenkins server container. To route
-those SSH connections through an HTTP proxy, set the optional
+those SSH connections through an HTTP proxy, set the experimental
 `ssh-proxy-address` charm configuration:
 
 ```bash
@@ -25,3 +25,8 @@ The charm manages `/etc/ssh/ssh_config.d/00-jenkins-proxy.conf` using the
 the configured proxy when the feature is enabled. Proxy TLS and proxy
 authentication are not supported. Disable `ssh-proxy-address` when the proxy
 requires either.
+
+Changing this setting does not restart Jenkins. OpenSSH reads this configuration
+when each new SSH process starts, and the managed file is outside the Pebble
+service plan. Existing SSH processes keep their current connection settings; new
+processes use the updated proxy configuration.
