@@ -1043,28 +1043,21 @@ def _set_jenkins_system_message(message: str, client: jenkinsapi.jenkins.Jenkins
 
 
 def reconcile_ssh_proxy_config(
-    container: ops.Container, proxy_config: state.ProxyConfig | None
+    container: ops.Container, proxy_config: state.SshProxyConfig | None
 ) -> None:
     """Reconcile the charm-managed OpenSSH HTTP CONNECT proxy drop-in.
 
     Args:
         container: The Jenkins workload container.
-        proxy_config: The Juju model proxy settings.
+        proxy_config: The optional SSH proxy settings.
 
-    Raises:
-        JenkinsBootstrapError: if the selected proxy is unsupported by the CONNECT helper.
     """
-    proxy = (proxy_config.https_proxy or proxy_config.http_proxy) if proxy_config else None
-    if proxy is None:
+    if proxy_config is None:
         container.remove_path(SSH_PROXY_CONFIG_PATH, recursive=True)
         return
 
-    if proxy.scheme != "http" or proxy.username or proxy.password:
-        raise JenkinsBootstrapError(
-            "OpenSSH proxy configuration requires an unauthenticated HTTP CONNECT proxy."
-        )
-
-    endpoint = shlex.quote(f"{proxy.host}:{proxy.port}".replace("%", "%%"))
+    host = f"[{proxy_config.host}]" if ":" in proxy_config.host else proxy_config.host
+    endpoint = shlex.quote(f"{host}:{proxy_config.port}".replace("%", "%%"))
     container.push(
         SSH_PROXY_CONFIG_PATH,
         f"Host *\n    ProxyCommand /usr/bin/nc -X connect -x {endpoint} %h %p\n",

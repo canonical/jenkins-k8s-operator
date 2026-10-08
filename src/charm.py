@@ -256,10 +256,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             logger.info("Reconciling storage")
             self._reconcile_storage(container)
 
-            try:
-                jenkins.reconcile_ssh_proxy_config(container, charm_state.proxy_config)
-            except jenkins.JenkinsBootstrapError as exc:
-                raise ReconcileBlockedError(str(exc)) from exc
+            jenkins.reconcile_ssh_proxy_config(container, charm_state.ssh_proxy_config)
 
             # Reconcile jenkins configuration filesystem
             configuration_hash = self._reconcile_pre_startup_configurations(container, charm_state)
