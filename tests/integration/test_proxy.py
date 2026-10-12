@@ -5,7 +5,7 @@
 
 import re
 import shlex
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Awaitable, Callable
 
 import jenkinsapi
 import kubernetes.client
@@ -118,7 +118,7 @@ def tinyproxy_log(
     )
 
 
-async def set_ssh_proxy_address(model: Model, application: Application, address: str) -> None:
+async def _set_ssh_proxy_address(model: Model, application: Application, address: str) -> None:
     """Set the SSH proxy address and wait for the charm to settle."""
     await application.set_config({"ssh-proxy-address": address})
     await model.wait_for_idle(
@@ -128,6 +128,19 @@ async def set_ssh_proxy_address(model: Model, application: Application, address:
         timeout=10 * 60,
         idle_period=10,
     )
+
+
+@pytest_asyncio.fixture(name="set_ssh_proxy_address")
+async def set_ssh_proxy_address_fixture(
+    model: Model, jenkins_with_proxy: Application
+) -> AsyncGenerator[Callable[[str], Awaitable[None]], None]:
+    """Configure the SSH proxy address of the Jenkins application, resetting it after the test."""
+
+    async def set_address(address: str) -> None:
+        await _set_ssh_proxy_address(model, jenkins_with_proxy, address)
+
+    yield set_address
+    await _set_ssh_proxy_address(model, jenkins_with_proxy, "")
 
 
 @pytest.fixture(scope="module", name="tiny_proxy_daemonset")
@@ -310,46 +323,44 @@ async def test_ssh_connection_uses_explicit_proxy(
     jenkins_with_proxy: Application,
     tinyproxy_ip: str,
     ssh_server_ip: str,
+    set_ssh_proxy_address: Callable[[str], Awaitable[None]],
 ):
     """An OpenSSH connection from the Jenkins container is tunnelled through the configured proxy."""
     proxy_address = f"{tinyproxy_ip}:{TINYPROXY_PORT}"
-    await set_ssh_proxy_address(model, jenkins_with_proxy, proxy_address)
+    await set_ssh_proxy_address(proxy_address)
 
-    try:
-        exit_code, output = exec_in_jenkins(
-            kube_core_client, model, jenkins_with_proxy, f"cat {SSH_PROXY_CONFIG_PATH}"
-        )
-        assert exit_code == 0, f"SSH proxy configuration was not written: {output}"
-        assert f"-x {proxy_address}" in output
+    exit_code, output = exec_in_jenkins(
+        kube_core_client, model, jenkins_with_proxy, f"cat {SSH_PROXY_CONFIG_PATH}"
+    )
+    assert exit_code == 0, f"SSH proxy configuration was not written: {output}"
+    assert f"-x {proxy_address}" in output
 
-        exit_code, output = exec_in_jenkins(
-            kube_core_client,
-            model,
-            jenkins_with_proxy,
-            f"ssh -G -p {SSHD_CONTAINER_PORT} testuser@{ssh_server_ip}",
-        )
-        assert exit_code == 0, f"ssh -G failed: {output}"
-        assert re.search(
-            rf"^proxycommand .*-x {re.escape(proxy_address)}\b", output, re.MULTILINE
-        ), f"OpenSSH does not apply the charm-managed proxy configuration: {output}"
+    exit_code, output = exec_in_jenkins(
+        kube_core_client,
+        model,
+        jenkins_with_proxy,
+        f"ssh -G -p {SSHD_CONTAINER_PORT} testuser@{ssh_server_ip}",
+    )
+    assert exit_code == 0, f"ssh -G failed: {output}"
+    assert re.search(rf"^proxycommand .*-x {re.escape(proxy_address)}\b", output, re.MULTILINE), (
+        f"OpenSSH does not apply the charm-managed proxy configuration: {output}"
+    )
 
-        log_before = tinyproxy_log(kube_core_client, model, tinyproxy_ip)
-        exit_code, output = exec_in_jenkins(
-            kube_core_client, model, jenkins_with_proxy, f"{ssh_command(ssh_server_ip)} 2>&1"
-        )
-        assert exit_code == 0, f"SSH through proxy failed: {output}"
-        assert "ssh-proxy-ok" in output
-        assert (
-            "Executing proxy command: exec /usr/bin/nc -X connect "
-            f"-x {proxy_address} {ssh_server_ip} {SSHD_CONTAINER_PORT}"
-        ) in output, f"OpenSSH did not run the configured proxy command: {output}"
+    log_before = tinyproxy_log(kube_core_client, model, tinyproxy_ip)
+    exit_code, output = exec_in_jenkins(
+        kube_core_client, model, jenkins_with_proxy, f"{ssh_command(ssh_server_ip)} 2>&1"
+    )
+    assert exit_code == 0, f"SSH through proxy failed: {output}"
+    assert "ssh-proxy-ok" in output
+    assert (
+        "Executing proxy command: exec /usr/bin/nc -X connect "
+        f"-x {proxy_address} {ssh_server_ip} {SSHD_CONTAINER_PORT}"
+    ) in output, f"OpenSSH did not run the configured proxy command: {output}"
 
-        new_log = tinyproxy_log(kube_core_client, model, tinyproxy_ip)[len(log_before) :]
-        assert f"CONNECT {ssh_server_ip}:{SSHD_CONTAINER_PORT}" in new_log, (
-            f"The proxy did not serve the SSH connection: {new_log}"
-        )
-    finally:
-        await set_ssh_proxy_address(model, jenkins_with_proxy, "")
+    new_log = tinyproxy_log(kube_core_client, model, tinyproxy_ip)[len(log_before) :]
+    assert f"CONNECT {ssh_server_ip}:{SSHD_CONTAINER_PORT}" in new_log, (
+        f"The proxy did not serve the SSH connection: {new_log}"
+    )
 
 
 async def test_ssh_connection_fails_when_proxy_is_unreachable(
@@ -358,19 +369,17 @@ async def test_ssh_connection_fails_when_proxy_is_unreachable(
     jenkins_with_proxy: Application,
     tinyproxy_ip: str,
     ssh_server_ip: str,
+    set_ssh_proxy_address: Callable[[str], Awaitable[None]],
 ):
     """OpenSSH fails instead of connecting directly when the configured proxy is unreachable."""
     # Nothing listens on the port next to the proxy port, so the proxy command must fail.
-    await set_ssh_proxy_address(model, jenkins_with_proxy, f"{tinyproxy_ip}:{TINYPROXY_PORT + 1}")
+    await set_ssh_proxy_address(f"{tinyproxy_ip}:{TINYPROXY_PORT + 1}")
 
-    try:
-        exit_code, output = exec_in_jenkins(
-            kube_core_client, model, jenkins_with_proxy, f"{ssh_command(ssh_server_ip)} 2>&1"
-        )
-        assert exit_code != 0, f"SSH did not use the configured proxy: {output}"
-        assert "ssh-proxy-ok" not in output
-    finally:
-        await set_ssh_proxy_address(model, jenkins_with_proxy, "")
+    exit_code, output = exec_in_jenkins(
+        kube_core_client, model, jenkins_with_proxy, f"{ssh_command(ssh_server_ip)} 2>&1"
+    )
+    assert exit_code != 0, f"SSH did not use the configured proxy: {output}"
+    assert "ssh-proxy-ok" not in output
 
 
 async def test_jenkins_ui_proxy_config(
