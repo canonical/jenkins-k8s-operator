@@ -30,3 +30,16 @@ Changing this setting does not restart Jenkins. OpenSSH reads this configuration
 when each new SSH process starts, and the managed file is outside the Pebble
 service plan. Existing SSH processes keep their current connection settings; new
 processes use the updated proxy configuration.
+
+### Security
+
+The charm contacts the proxy with a plain HTTP `CONNECT` request that carries no
+authentication. Use an internal or otherwise trusted proxy, and do not expose it
+to the public internet. The proxy can see which SSH destination is contacted and
+can drop or delay connections, but it cannot read or change the SSH session:
+OpenSSH encrypts and authenticates the session end to end between the Jenkins
+container and the SSH server.
+
+Keep OpenSSH host key verification enabled. Host key verification is what stops
+a hostile proxy or network from redirecting a connection to a different SSH
+server.
