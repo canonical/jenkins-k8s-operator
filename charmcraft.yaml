@@ -122,6 +122,14 @@ config:
         [EXPERIMENTAL] Optional HTTP CONNECT proxy for OpenSSH connections from the Jenkins
         container. Set to HOST:PORT to enable the feature. Leave empty to disable it. URI
         schemes and credentials are not supported.
+    ssh-known-hosts:
+      type: string
+      default: ""
+      description: >
+        [EXPERIMENTAL] Known host keys for the OpenSSH client in the Jenkins container, in
+        known_hosts format with one entry per line. Use [HOST]:PORT for non-standard ports.
+        OpenSSH verifies hosts listed here, and rejects unknown host keys in non-interactive
+        sessions. Leave empty to disable the feature.
     system-properties:
       type: string
       default: ""

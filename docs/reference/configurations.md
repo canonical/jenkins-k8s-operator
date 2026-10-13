@@ -42,4 +42,36 @@ container and the SSH server.
 
 Keep OpenSSH host key verification enabled. Host key verification is what stops
 a hostile proxy or network from redirecting a connection to a different SSH
-server.
+server. Use the `ssh-known-hosts` configuration to provide the host keys of the
+servers that Jenkins connects to.
+
+## OpenSSH Known Hosts Configuration
+
+To let the Jenkins container verify the host keys of the SSH servers it connects
+to, provide them with the experimental `ssh-known-hosts` charm configuration:
+
+```bash
+juju config jenkins-k8s ssh-known-hosts="git.example.com ssh-ed25519 AAAA..."
+```
+
+Provide one entry per line, in `known_hosts` format. Use `HOST` to cover the
+default port 22, or `[HOST]:PORT` for a server that listens on another port.
+Comment lines are ignored. Hashed entries and the `@cert-authority` and
+`@revoked` markers are accepted. Malformed entries block the charm.
+
+The charm writes the entries to `/etc/ssh/jenkins_known_hosts` and points
+`GlobalKnownHostsFile` at that file from
+`/etc/ssh/ssh_config.d/00-jenkins-known-hosts.conf`. The file applies to every
+user in the container and is managed by the charm, so manual edits are removed on
+the next reconcile. Hosts that are not listed keep the OpenSSH default behaviour,
+which rejects unknown host keys in non-interactive sessions. Leaving the
+configuration empty removes both files.
+
+This setting is independent of `ssh-proxy-address`, and like it, it only affects
+processes that use the OpenSSH client, such as job steps that run `ssh`, `git`
+over SSH, or `rsync`. Jenkins plugins that use their own SSH implementation keep
+their own host key settings. Changing the setting does not restart Jenkins,
+because OpenSSH reads it for each new process.
+
+Pin the servers that Jenkins connects to instead of disabling host key
+verification.

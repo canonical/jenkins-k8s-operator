@@ -42,6 +42,10 @@ LOGIN_PATH = "/login?from=%2F"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 JENKINS_HOME_PATH = Path("/var/lib/jenkins")
 SSH_PROXY_CONFIG_PATH = Path("/etc/ssh/ssh_config.d/00-jenkins-proxy.conf")
+SSH_KNOWN_HOSTS_PATH = Path("/etc/ssh/jenkins_known_hosts")
+SSH_KNOWN_HOSTS_CONFIG_PATH = Path("/etc/ssh/ssh_config.d/00-jenkins-known-hosts.conf")
+# OpenSSH reads the system-wide known hosts files from GlobalKnownHostsFile.
+SSH_DEFAULT_KNOWN_HOSTS_PATHS = ("/etc/ssh/ssh_known_hosts", "/etc/ssh/ssh_known_hosts2")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
 # Path to Jenkins admin API token
@@ -1061,6 +1065,40 @@ def reconcile_ssh_proxy_config(
     container.push(
         SSH_PROXY_CONFIG_PATH,
         f"Host *\n    ProxyCommand /usr/bin/nc -X connect -x {endpoint} %h %p\n",
+        make_dirs=True,
+        permissions=0o644,
+        user="root",
+        group="root",
+    )
+
+
+def reconcile_ssh_known_hosts_config(
+    container: ops.Container, known_hosts: state.SshKnownHosts | None
+) -> None:
+    """Reconcile the charm-managed OpenSSH known hosts file and its configuration drop-in.
+
+    Args:
+        container: The Jenkins workload container.
+        known_hosts: The optional known hosts entries.
+
+    """
+    if known_hosts is None:
+        container.remove_path(SSH_KNOWN_HOSTS_CONFIG_PATH, recursive=True)
+        container.remove_path(SSH_KNOWN_HOSTS_PATH, recursive=True)
+        return
+
+    container.push(
+        SSH_KNOWN_HOSTS_PATH,
+        known_hosts.content,
+        make_dirs=True,
+        permissions=0o644,
+        user="root",
+        group="root",
+    )
+    global_known_hosts = " ".join([str(SSH_KNOWN_HOSTS_PATH), *SSH_DEFAULT_KNOWN_HOSTS_PATHS])
+    container.push(
+        SSH_KNOWN_HOSTS_CONFIG_PATH,
+        f"Host *\n    GlobalKnownHostsFile {global_known_hosts}\n",
         make_dirs=True,
         permissions=0o644,
         user="root",

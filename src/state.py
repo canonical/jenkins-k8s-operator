@@ -3,6 +3,8 @@
 
 """Jenkins States."""
 
+import base64
+import binascii
 import dataclasses
 import json
 import logging
@@ -217,6 +219,20 @@ def _parse_ssh_proxy_config(charm: ops.CharmBase) -> typing.Optional["SshProxyCo
     except ValueError as exc:
         raise CharmConfigInvalidError(
             "Invalid ssh-proxy-address; expected HOST:PORT without a scheme or credentials."
+        ) from exc
+
+
+def _parse_ssh_known_hosts(charm: ops.CharmBase) -> typing.Optional["SshKnownHosts"]:
+    """Parse the optional OpenSSH known hosts configuration."""
+    known_hosts = typing.cast(str, charm.config.get("ssh-known-hosts") or "")
+    if not known_hosts.strip():
+        return None
+    try:
+        return SshKnownHosts.from_config(known_hosts)
+    except ValueError as exc:
+        raise CharmConfigInvalidError(
+            "Invalid ssh-known-hosts; expected known_hosts entries such as "
+            "'host ssh-ed25519 AAAA...' or '[host]:port ssh-ed25519 AAAA...'."
         ) from exc
 
 
@@ -533,6 +549,84 @@ class SshProxyConfig(BaseModel):
         return cls(host=parsed.hostname, port=port)
 
 
+KNOWN_HOSTS_MARKERS = ("@cert-authority", "@revoked")
+KNOWN_HOSTS_HASHED_HOST_PATTERN = re.compile(r"^\|1\|[A-Za-z0-9+/=]+\|[A-Za-z0-9+/=]+$")
+KNOWN_HOSTS_BRACKETED_HOST_PATTERN = re.compile(r"^\[([0-9A-Fa-f:.]+)\]:(\d{1,5})$")
+KNOWN_HOSTS_PLAIN_HOST_PATTERN = re.compile(r"^[!]?[A-Za-z0-9_.*?-]+$")
+
+
+def _is_valid_known_host(host: str) -> bool:
+    """Check whether a known_hosts host pattern is valid."""
+    if KNOWN_HOSTS_HASHED_HOST_PATTERN.match(host):
+        return True
+    bracketed = KNOWN_HOSTS_BRACKETED_HOST_PATTERN.match(host)
+    if bracketed:
+        return 0 < int(bracketed.group(2)) <= 65535
+    return bool(KNOWN_HOSTS_PLAIN_HOST_PATTERN.match(host))
+
+
+def _validate_known_hosts_entry(entry: str) -> None:
+    """Validate a single known_hosts entry.
+
+    Args:
+        entry: A single non-empty, non-comment known_hosts line.
+
+    Raises:
+        ValueError: if the entry is malformed.
+
+    """
+    fields = entry.split()
+    if fields[0] in KNOWN_HOSTS_MARKERS:
+        fields = fields[1:]
+    if len(fields) < 3:
+        raise ValueError(f"incomplete known hosts entry: {entry}")
+    # The key type is not checked: OpenSSH ignores entries with unknown key types, and a fixed
+    # allowlist would reject new key types.
+    host_field, _, key = fields[:3]
+    if not all(_is_valid_known_host(host) for host in host_field.split(",")):
+        raise ValueError(f"invalid known host: {host_field}")
+    try:
+        base64.b64decode(key, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError(f"invalid host key material: {key}") from exc
+
+
+class SshKnownHosts(BaseModel):
+    """Known host keys for the OpenSSH client in the Jenkins container.
+
+    Attributes:
+        content: The validated known hosts file content.
+
+    """
+
+    content: str
+
+    @classmethod
+    def from_config(cls, configured: str) -> "SshKnownHosts":
+        """Parse and validate known_hosts entries from charm configuration.
+
+        Args:
+            configured: The raw `ssh-known-hosts` configuration value.
+
+        Returns:
+            The validated known hosts entries.
+
+        Raises:
+            ValueError: if there is no entry or an entry is malformed.
+
+        """
+        entries = []
+        for line in configured.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            _validate_known_hosts_entry(stripped)
+            entries.append(stripped)
+        if not entries:
+            raise ValueError("no known hosts entries")
+        return cls(content="\n".join(entries) + "\n")
+
+
 class ProxyConfig(BaseModel):
     """Configuration for accessing Jenkins through proxy.
 
@@ -582,6 +676,8 @@ class State:
         system_properties: Additional JVM system properties as -D flags.
         external_hostname: Public hostname for HAProxy-route based routing, or None.
         external_agent_nodes: Names of Jenkins nodes managed outside Juju.
+        ssh_proxy_config: Optional OpenSSH HTTP CONNECT proxy configuration.
+        ssh_known_hosts: Optional OpenSSH known hosts entries.
 
     """
 
@@ -599,6 +695,7 @@ class State:
     external_hostname: typing.Optional[str] = None
     external_agent_nodes: frozenset[str] = frozenset()
     ssh_proxy_config: typing.Optional[SshProxyConfig] = None
+    ssh_known_hosts: typing.Optional[SshKnownHosts] = None
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -619,6 +716,7 @@ class State:
         agent_relation_meta_map = _get_relation_state(charm)
         proxy_config = _parse_proxy_config()
         ssh_proxy_config = _parse_ssh_proxy_config(charm)
+        ssh_known_hosts = _parse_ssh_known_hosts(charm)
 
         plugins_str = typing.cast(str, charm.config.get("allowed-plugins"))
         plugins = (plugin.strip() for plugin in plugins_str.split(",")) if plugins_str else None
@@ -656,4 +754,5 @@ class State:
             external_hostname=external_hostname,
             external_agent_nodes=external_agent_nodes,
             ssh_proxy_config=ssh_proxy_config,
+            ssh_known_hosts=ssh_known_hosts,
         )
