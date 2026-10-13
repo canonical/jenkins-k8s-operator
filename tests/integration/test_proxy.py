@@ -24,6 +24,8 @@ from .helpers import get_model_unit_addresses, get_pod_ip
 SSH_KEY_PATH = "/tmp/ssh-proxy-integration-key"  # nosec B108
 SSH_PROXY_CONFIG_PATH = "/etc/ssh/ssh_config.d/00-jenkins-proxy.conf"
 JENKINS_CONTAINER_NAME = "jenkins"
+TINYPROXY_CONTAINER_NAME = "tinyproxy"
+TINYPROXY_LOG_PATH = "/var/log/tinyproxy/tinyproxy.log"
 SSHD_CONTAINER_PORT = 2222
 EXEC_TIMEOUT_SECONDS = 10 * 60
 _EXIT_CODE_MARKER = "__exit_code__"
@@ -42,13 +44,14 @@ def jenkins_pod_name(
     return pod_name
 
 
-def exec_in_jenkins(
+def exec_in_container(
     kube_core_client: kubernetes.client.CoreV1Api,
     model: Model,
-    application: Application,
+    pod_name: str,
+    container: str,
     script: str,
 ) -> tuple[int, str]:
-    """Run a shell script in the Jenkins container and return its exit code and output.
+    """Run a shell script in a pod container and return its exit code and output.
 
     The Kubernetes exec API is used directly: on Kubernetes models `juju ssh --container` does not
     run OpenSSH, it joins its arguments into a `sh -c` command executed in the pod, which also drops
@@ -58,9 +61,9 @@ def exec_in_jenkins(
     wrapped = f"( {script}\n); printf '\\n{_EXIT_CODE_MARKER}%s\\n' \"$?\""
     exec_session = stream(
         kube_core_client.connect_get_namespaced_pod_exec,
-        name=jenkins_pod_name(kube_core_client, model, application),
+        name=pod_name,
         namespace=model.name,
-        container=JENKINS_CONTAINER_NAME,
+        container=container,
         command=["sh", "-c", wrapped],
         stderr=True,
         stdin=False,
@@ -79,8 +82,27 @@ def exec_in_jenkins(
     return int(exit_code.strip()), command_output
 
 
+def exec_in_jenkins(
+    kube_core_client: kubernetes.client.CoreV1Api,
+    model: Model,
+    application: Application,
+    script: str,
+) -> tuple[int, str]:
+    """Run a shell script in the Jenkins workload container."""
+    return exec_in_container(
+        kube_core_client,
+        model,
+        jenkins_pod_name(kube_core_client, model, application),
+        JENKINS_CONTAINER_NAME,
+        script,
+    )
+
+
 def ssh_command(target_ip: str) -> str:
     """OpenSSH command relying on the charm-managed drop-in for the proxy."""
+    # Host key verification is disabled for this throwaway test server only: its host key is
+    # generated when the test module starts, and the connection stays inside the test model.
+    # Do not copy these options into production configurations.
     return shlex.join(
         [
             "ssh",
@@ -107,15 +129,25 @@ def ssh_command(target_ip: str) -> str:
 def tinyproxy_log(
     kube_core_client: kubernetes.client.CoreV1Api, model: Model, proxy_ip: str
 ) -> str:
-    """Return the access log of the tinyproxy pod serving the given IP."""
+    """Return the access log of the tinyproxy pod serving the given IP.
+
+    The log file is read inside the pod. The image tees it with `tail -f`, and that output is not
+    delivered to the container log stream while the test runs.
+    """
     pods = kube_core_client.list_namespaced_pod(
         namespace=model.name, label_selector="app=tinyproxy"
     )
     pod = next((pod for pod in pods.items if pod.status.pod_ip == proxy_ip), None)
     assert pod is not None, f"No tinyproxy pod found with IP {proxy_ip}."
-    return kube_core_client.read_namespaced_pod_log(
-        name=pod.metadata.name, namespace=model.name, container="tinyproxy"
+    exit_code, output = exec_in_container(
+        kube_core_client,
+        model,
+        pod.metadata.name,
+        TINYPROXY_CONTAINER_NAME,
+        f"cat {TINYPROXY_LOG_PATH}",
     )
+    assert exit_code == 0, f"Could not read the proxy access log: {output}"
+    return output
 
 
 async def _set_ssh_proxy_address(model: Model, application: Application, address: str) -> None:
