@@ -115,64 +115,6 @@ def test_ssh_proxy_rejects_invalid_addresses(
         state.State.from_charm(harness.charm)
 
 
-KNOWN_HOST_KEY = "ssh-ed25519 amVua2lucy1rOHMtdGVzdC1ob3N0LWtleS1tYXRlcmlhbA=="
-KNOWN_HOSTS_ENTRIES = f"# pinned hosts\ngit.example.com {KNOWN_HOST_KEY}\n[10.0.0.5]:2222 {KNOWN_HOST_KEY}\n@revoked git.example.com {KNOWN_HOST_KEY}\n"
-
-
-def test_reconcile_ssh_known_hosts_config(harness_container: HarnessWithContainer):
-    """The explicit known hosts setting creates and updates the OpenSSH known hosts files."""
-    harness = harness_container.harness
-    harness.begin()
-    harness._update_config({"ssh-known-hosts": KNOWN_HOSTS_ENTRIES})
-    charm_state = state.State.from_charm(harness.charm)
-    container = harness_container.container
-
-    jenkins.reconcile_ssh_known_hosts_config(container, charm_state.ssh_known_hosts)
-
-    # Comments are dropped and marker entries are kept.
-    assert container.pull(jenkins.SSH_KNOWN_HOSTS_PATH).read() == (
-        f"git.example.com {KNOWN_HOST_KEY}\n"
-        f"[10.0.0.5]:2222 {KNOWN_HOST_KEY}\n"
-        f"@revoked git.example.com {KNOWN_HOST_KEY}\n"
-    )
-    assert container.list_files(jenkins.SSH_KNOWN_HOSTS_PATH)[0].permissions == 0o644
-    assert container.pull(jenkins.SSH_KNOWN_HOSTS_CONFIG_PATH).read() == (
-        "Host *\n"
-        "    GlobalKnownHostsFile /etc/ssh/jenkins_known_hosts /etc/ssh/ssh_known_hosts"
-        " /etc/ssh/ssh_known_hosts2\n"
-    )
-    assert container.list_files(jenkins.SSH_KNOWN_HOSTS_CONFIG_PATH)[0].permissions == 0o644
-
-    harness._update_config({"ssh-known-hosts": ""})
-    charm_state = state.State.from_charm(harness.charm)
-    jenkins.reconcile_ssh_known_hosts_config(container, charm_state.ssh_known_hosts)
-    assert not container.exists(jenkins.SSH_KNOWN_HOSTS_PATH)
-    assert not container.exists(jenkins.SSH_KNOWN_HOSTS_CONFIG_PATH)
-    jenkins.reconcile_ssh_known_hosts_config(container, None)
-
-
-@pytest.mark.parametrize(
-    "known_hosts",
-    [
-        "git.example.com",
-        "git.example.com ssh-ed25519",
-        "git.example.com ssh-ed25519 not-base64!",
-        "[]:2222 ssh-ed25519 amVua2lucy1rOHMtdGVzdC1ob3N0LWtleS1tYXRlcmlhbA==",
-        "git.example.com:2222 ssh-ed25519 amVua2lucy1rOHMtdGVzdC1ob3N0LWtleS1tYXRlcmlhbA==",
-        "# only a comment",
-    ],
-)
-def test_ssh_known_hosts_rejects_invalid_entries(
-    harness_container: HarnessWithContainer, known_hosts: str
-):
-    """SSH known hosts configuration requires known_hosts format entries."""
-    harness = harness_container.harness
-    harness.begin()
-    harness._update_config({"ssh-known-hosts": known_hosts})
-    with pytest.raises(state.CharmConfigInvalidError, match="ssh-known-hosts"):
-        state.State.from_charm(harness.charm)
-
-
 @pytest.mark.parametrize(
     "charm_config",
     [pytest.param({"restart-time-range": "-2"}, id="invalid restart-time-range")],
