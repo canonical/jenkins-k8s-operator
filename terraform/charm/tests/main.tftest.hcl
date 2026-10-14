@@ -14,6 +14,8 @@ run "basic_deploy" {
     channel    = "latest/edge"
     # renovate: depName="jenkins-k8s"
     revision = 360
+    # Exposing a k8s application requires juju-external-hostname, which the CI controller lacks.
+    expose = null
   }
 
   assert {
