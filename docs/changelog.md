@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+## 2026-10-14
+
+- Migrated the `terraform/charm` and `terraform/product` Terraform modules to
+  the CC008 Charm Terraform Module standard: renamed `versions.tf` to
+  `terraform.tf`, split charm deployment into `model_uuid`/`units` variables,
+  added the `provides`/`requires` endpoint-object outputs, added a `risk`
+  input to the product module, added `terraform/MAJOR_VERSION` (symlinked
+  into both modules), and added the `terraform_modules_compliance`,
+  `test_terraform_modules`, `terraform_modules_release`, and
+  `generate_terraform_docs` CI workflows. Note the following default changes:
+  the charm module's `base` now defaults to `null` (the charm's own base
+  default applies) instead of `ubuntu@24.04`, `constraints` now defaults to
+  `null` instead of `""`, and `config` is now a flat `map(string)` keyed by
+  the charmcraft.yaml option names (e.g. `"jcasc-repository"`) instead of a
+  typed object with underscore-named attributes.
+
 ## 2026-09-16
 
 - Decouple `agent-discovery-ingress`, `ingress`, and `haproxy-route`.

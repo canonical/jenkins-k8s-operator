@@ -1,40 +1,56 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+locals {
+  jenkins_k8s_channel       = coalesce(var.jenkins_k8s.channel, "latest/${var.risk}")
+  jenkins_agent_k8s_channel = coalesce(var.jenkins_agent_k8s.channel, "latest/${var.risk}")
+}
 
 module "jenkins_k8s" {
   source      = "../charm"
   app_name    = var.jenkins_k8s.app_name
-  channel     = var.jenkins_k8s.channel
+  channel     = local.jenkins_k8s_channel
   config      = var.jenkins_k8s.config
   constraints = var.jenkins_k8s.constraints
-  model       = var.model
+  model_uuid  = var.model_uuid
   revision    = var.jenkins_k8s.revision
   base        = var.jenkins_k8s.base
+  units       = var.jenkins_k8s.units
 }
 
-module "jenkins_agent_k8s" {
-  source      = "git::https://github.com/canonical/jenkins-agent-k8s-operator//terraform/charm?ref=rev55&depth=1"
-  app_name    = var.jenkins_agent_k8s.app_name
-  channel     = var.jenkins_agent_k8s.channel
+# jenkins-agent-k8s-operator's own terraform/charm module (pinned at rev55,
+# the latest available tag at migration time) has not migrated to CC008 and
+# still declares the juju_application `model` argument that was replaced by
+# `model_uuid` in juju/juju provider 1.0.0 (required by this module's own
+# terraform.tf per CC008). Composing that module here would therefore break
+# at plan time for any provider version this module can declare. Deploy the
+# jenkins-agent-k8s charm directly instead of through that module; see the
+# final report for this deviation.
+resource "juju_application" "jenkins_agent_k8s" {
+  name       = var.jenkins_agent_k8s.app_name
+  model_uuid = var.model_uuid
+
+  charm {
+    name     = "jenkins-agent-k8s"
+    channel  = local.jenkins_agent_k8s_channel
+    revision = var.jenkins_agent_k8s.revision
+    base     = var.jenkins_agent_k8s.base
+  }
+
   config      = var.jenkins_agent_k8s.config
   constraints = var.jenkins_agent_k8s.constraints
-  model       = var.model
-  revision    = var.jenkins_agent_k8s.revision
-  base        = var.jenkins_agent_k8s.base
   units       = var.jenkins_agent_k8s.units
 }
 
 resource "null_resource" "wait_for_jenkins_up" {
   provisioner "local-exec" {
-    command = "juju wait-for application ${module.jenkins_k8s.app_name}"
+    command = "juju wait-for application ${module.jenkins_k8s.application.name}"
   }
 }
 
-
 resource "juju_application" "public_ingress" {
-  name  = var.public_ingress.app_name
-  model = var.model
+  name       = var.public_ingress.app_name
+  model_uuid = var.model_uuid
 
   charm {
     name     = "traefik-k8s"
@@ -51,13 +67,13 @@ resource "juju_application" "public_ingress" {
 }
 
 resource "juju_integration" "jenkins_k8s_public_ingress" {
-  model = var.model
+  model_uuid = var.model_uuid
 
   depends_on = [null_resource.wait_for_jenkins_up]
 
   application {
-    name     = module.jenkins_k8s.app_name
-    endpoint = module.jenkins_k8s.requires.ingress
+    name     = module.jenkins_k8s.requires.ingress.name
+    endpoint = module.jenkins_k8s.requires.ingress.endpoint
   }
 
   application {
@@ -67,8 +83,8 @@ resource "juju_integration" "jenkins_k8s_public_ingress" {
 }
 
 resource "juju_application" "agent_discovery_ingress" {
-  name  = var.agent_discovery_ingress.app_name
-  model = var.model
+  name       = var.agent_discovery_ingress.app_name
+  model_uuid = var.model_uuid
 
   charm {
     name     = "traefik-k8s"
@@ -85,13 +101,13 @@ resource "juju_application" "agent_discovery_ingress" {
 }
 
 resource "juju_integration" "jenkins_k8s_agent_discovery_ingress" {
-  model = var.model
+  model_uuid = var.model_uuid
 
   depends_on = [null_resource.wait_for_jenkins_up]
 
   application {
-    name     = module.jenkins_k8s.app_name
-    endpoint = module.jenkins_k8s.requires.agent_discovery_ingress
+    name     = module.jenkins_k8s.requires.agent_discovery_ingress.name
+    endpoint = module.jenkins_k8s.requires.agent_discovery_ingress.endpoint
   }
   application {
     name     = juju_application.agent_discovery_ingress.name
@@ -100,17 +116,25 @@ resource "juju_integration" "jenkins_k8s_agent_discovery_ingress" {
 }
 
 resource "juju_integration" "jenkins_k8s_jenkins_agent_k8s_agent" {
-  model = var.model
+  model_uuid = var.model_uuid
 
   depends_on = [null_resource.wait_for_jenkins_up]
 
   application {
-    name     = module.jenkins_k8s.app_name
-    endpoint = module.jenkins_k8s.requires.agent
+    name     = module.jenkins_k8s.requires.agent.name
+    endpoint = module.jenkins_k8s.requires.agent.endpoint
   }
 
   application {
-    name     = module.jenkins_agent_k8s.app_name
-    endpoint = module.jenkins_agent_k8s.provides.agent
+    name     = juju_application.jenkins_agent_k8s.name
+    endpoint = "agent"
+  }
+}
+
+resource "terraform_data" "deployed_at" {
+  input = timestamp()
+
+  lifecycle {
+    ignore_changes = [input]
   }
 }

@@ -6,11 +6,7 @@ terraform {
   required_providers {
     juju = {
       source  = "juju/juju"
-      version = ">= 0.22.0"
-    }
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.2"
+      version = "> 1.0.0, < 2.0.0"
     }
   }
 }

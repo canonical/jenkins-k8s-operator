@@ -1,29 +1,9 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-locals {
-  # Map the typed config object attributes onto their charmcraft.yaml option
-  # names, then drop any attribute left unset so the charm-provided default
-  # applies instead of overriding it with an empty value.
-  config = {
-    for key, value in {
-      "restart-time-range"           = var.config.restart_time_range
-      "allowed-plugins"              = var.config.allowed_plugins
-      "system-properties"            = var.config.system_properties
-      "jcasc-config"                 = var.config.jcasc_config
-      "jcasc-repository"             = var.config.jcasc_repository
-      "jcasc-repository-token"       = var.config.jcasc_repository_token
-      "jcasc-repository-config-path" = var.config.jcasc_repository_config_path
-      "jcasc-repository-branch"      = var.config.jcasc_repository_branch
-      "jcasc-environment-secrets"    = var.config.jcasc_environment_secrets
-      "external-agent-nodes"         = var.config.external_agent_nodes
-    } : key => value if value != null
-  }
-}
-
 resource "juju_application" "jenkins_k8s" {
-  name  = var.app_name
-  model = var.model
+  name       = var.app_name
+  model_uuid = var.model_uuid
 
   charm {
     name     = "jenkins-k8s"
@@ -32,7 +12,20 @@ resource "juju_application" "jenkins_k8s" {
     base     = var.base
   }
 
-  config      = local.config
-  constraints = var.constraints
-  units       = 1
+  dynamic "expose" {
+    for_each = var.expose == null ? [] : [var.expose]
+
+    content {
+      cidrs     = expose.value.cidrs
+      endpoints = expose.value.endpoints
+      spaces    = expose.value.spaces
+    }
+  }
+
+  config             = var.config
+  constraints        = var.constraints
+  endpoint_bindings  = var.endpoint_bindings
+  resources          = var.resources
+  storage_directives = var.storage_directives
+  units              = var.units
 }
