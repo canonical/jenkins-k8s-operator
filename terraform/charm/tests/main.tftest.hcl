@@ -22,8 +22,8 @@ run "basic_deploy" {
   }
 
   assert {
-    condition     = output.provides.value.endpoint == "grafana-dashboard"
-    error_message = "jenkins-k8s module should provide 'provides.value' output"
+    condition     = output.provides.grafana_dashboard.endpoint == "grafana-dashboard"
+    error_message = "jenkins-k8s module should provide 'provides.grafana_dashboard' output"
   }
 
   assert {
@@ -32,8 +32,8 @@ run "basic_deploy" {
   }
 
   assert {
-    condition     = output.requires.value.endpoint == "agent"
-    error_message = "jenkins-k8s module should provide 'requires.value' output"
+    condition     = output.requires.agent.endpoint == "agent"
+    error_message = "jenkins-k8s module should provide 'requires.agent' output"
   }
 
   assert {
