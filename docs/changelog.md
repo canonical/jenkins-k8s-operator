@@ -22,6 +22,11 @@ Each revision is versioned by the date of the revision.
   the charmcraft.yaml option names (e.g. `"jcasc-repository"`) instead of a
   typed object with underscore-named attributes.
 
+## 2026-10-07
+
+- Add optional OpenSSH proxy configuration using an explicit `ssh-proxy-address`.
+- Add `netcat-openbsd` to the Jenkins image for HTTP CONNECT tunneling.
+
 ## 2026-09-16
 
 - Decouple `agent-discovery-ingress`, `ingress`, and `haproxy-route`.

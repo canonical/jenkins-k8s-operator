@@ -23,6 +23,98 @@ from .helpers import BLOCKED_STATUS_NAME, WAITING_STATUS_NAME
 from .types_ import Harness, HarnessWithContainer
 
 
+def test_reconcile_ssh_proxy_config(
+    harness_container: HarnessWithContainer, monkeypatch: pytest.MonkeyPatch
+):
+    """The explicit SSH proxy setting creates and updates the OpenSSH drop-in."""
+    monkeypatch.setenv("JUJU_CHARM_HTTP_PROXY", "http://model-proxy.example.com:3128")
+    harness = harness_container.harness
+    harness.begin()
+    harness._update_config({"ssh-proxy-address": "squid.example.com:3128"})
+    charm_state = state.State.from_charm(harness.charm)
+    container = harness_container.container
+
+    assert charm_state.ssh_proxy_config == state.SshProxyConfig(
+        host="squid.example.com", port=3128
+    )
+    jenkins.reconcile_ssh_proxy_config(container, charm_state.ssh_proxy_config)
+
+    assert container.pull(jenkins.SSH_PROXY_CONFIG_PATH).read() == (
+        "Host *\n    ProxyCommand /usr/bin/nc -X connect -x squid.example.com:3128 %h %p\n"
+    )
+    assert container.list_files(jenkins.SSH_PROXY_CONFIG_PATH)[0].permissions == 0o644
+
+    harness._update_config({"ssh-proxy-address": "new-squid.example.com:8080"})
+    charm_state = state.State.from_charm(harness.charm)
+    jenkins.reconcile_ssh_proxy_config(container, charm_state.ssh_proxy_config)
+    assert "new-squid.example.com:8080" in container.pull(jenkins.SSH_PROXY_CONFIG_PATH).read()
+
+    harness._update_config({"ssh-proxy-address": ""})
+    charm_state = state.State.from_charm(harness.charm)
+    jenkins.reconcile_ssh_proxy_config(container, charm_state.ssh_proxy_config)
+    assert not container.exists(jenkins.SSH_PROXY_CONFIG_PATH)
+    jenkins.reconcile_ssh_proxy_config(container, None)
+
+
+def test_reconcile_ssh_proxy_config_brackets_ipv6_endpoint(
+    harness_container: HarnessWithContainer,
+):
+    """IPv6 proxy addresses are rendered in the form expected by netcat."""
+    harness = harness_container.harness
+    harness.begin()
+    harness._update_config({"ssh-proxy-address": "[::1]:3128"})
+    charm_state = state.State.from_charm(harness.charm)
+
+    jenkins.reconcile_ssh_proxy_config(harness_container.container, charm_state.ssh_proxy_config)
+
+    assert (
+        "-x '[::1]:3128'" in harness_container.container.pull(jenkins.SSH_PROXY_CONFIG_PATH).read()
+    )
+
+
+@pytest.mark.parametrize(
+    "model_proxy",
+    [
+        "http://model-proxy.example.com:3128",
+        "http://user:password@model-proxy.example.com:3128",
+    ],
+)
+def test_model_proxy_does_not_enable_ssh_proxy_config(
+    harness_container: HarnessWithContainer,
+    monkeypatch: pytest.MonkeyPatch,
+    model_proxy: str,
+):
+    """The model proxy remains independent from the optional SSH proxy."""
+    monkeypatch.setenv("JUJU_CHARM_HTTPS_PROXY", model_proxy)
+    harness = harness_container.harness
+    harness.begin()
+    charm_state = state.State.from_charm(harness.charm)
+
+    assert charm_state.proxy_config is not None
+    assert charm_state.ssh_proxy_config is None
+    jenkins.reconcile_ssh_proxy_config(harness_container.container, charm_state.ssh_proxy_config)
+    assert not harness_container.container.exists(jenkins.SSH_PROXY_CONFIG_PATH)
+
+
+@pytest.mark.parametrize(
+    "proxy_address",
+    [
+        "http://squid.example.com:3128",
+        "squid.example.com",
+        "user:password@squid.example.com:3128",
+    ],
+)
+def test_ssh_proxy_rejects_invalid_addresses(
+    harness_container: HarnessWithContainer, proxy_address: str
+):
+    """SSH proxy configuration requires a credential-free HOST:PORT address."""
+    harness = harness_container.harness
+    harness.begin()
+    harness._update_config({"ssh-proxy-address": proxy_address})
+    with pytest.raises(state.CharmConfigInvalidError, match="ssh-proxy-address"):
+        state.State.from_charm(harness.charm)
+
+
 @pytest.mark.parametrize(
     "charm_config",
     [pytest.param({"restart-time-range": "-2"}, id="invalid restart-time-range")],
@@ -248,7 +340,9 @@ def test_reconcile_sets_blocked_status_on_reconcile_blocked_error(
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
 
     with (
-        patch.object(jenkins_charm, "_get_state", return_value=MagicMock(spec=state.State)),
+        patch.object(
+            jenkins_charm, "_get_state", return_value=state.State.from_charm(jenkins_charm)
+        ),
         patch.object(jenkins_charm, "_reconcile_storage"),
         patch.object(
             jenkins_charm,
