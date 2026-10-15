@@ -45,7 +45,7 @@ lint = [
   "pytest-playwright==0.9.0",
   "python-keycloak==7.1.1",
   "ruff",
-  "tenacity==9.1.4",
+  "tenacity==9.2.1",
   "toml",
   "types-pyyaml",
   "types-requests",
@@ -77,7 +77,7 @@ integration = [
   "pytest-rerunfailures==16.7",
   "python-keycloak==7.1.1",
   "requests-toolbelt>=1.0.0",
-  "tenacity==9.1.4",
+  "tenacity==9.2.1",
 ]
 static = [
   "bandit[toml]",
