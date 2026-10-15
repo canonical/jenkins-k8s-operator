@@ -468,5 +468,3 @@ def secret_id_fixture() -> str:
         A secret ID string in the format 'secret:xxxxxxxx'.
     """
     return f"secret:{token_hex(4)}"
-
-

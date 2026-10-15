@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+## 2026-10-07
+
+- Add optional OpenSSH proxy configuration using an explicit `ssh-proxy-address`.
+- Add `netcat-openbsd` to the Jenkins image for HTTP CONNECT tunneling.
+
 ## 2026-09-16
 
 - Decouple `agent-discovery-ingress`, `ingress`, and `haproxy-route`.
