@@ -7,7 +7,7 @@ Jenkins-k8s charm.
 
 The module uses the 
 [Terraform Juju provider](https://registry.terraform.io/providers/juju/juju/latest/docs) to model 
-the charm deployment onto any Kubernetes environment managed by [Juju](http://juju.is/).
+the charm deployment onto any Kubernetes environment managed by [Juju](https://canonical.com/juju).
 
 ## Module structure
 
@@ -70,7 +70,7 @@ The complete list of available integrations can be found [in the Integrations ta
 
 [Terraform]: https://www.terraform.io/
 [Terraform Juju provider]: https://registry.terraform.io/providers/juju/juju/latest
-[Juju]: https://juju.is
+[Juju]: https://canonical.com/juju
 [jenkins-k8s-integrations]: https://charmhub.io/jenkins-k8s/integrations
 
 <!-- vale off -->
