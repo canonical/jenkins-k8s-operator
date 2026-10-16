@@ -36,6 +36,7 @@ header:
     - "LICENSE"
     - "trivy.yaml"
     - "zap_rules.tsv"
+    - "**/MAJOR_VERSION"
     - "lib/**"
     - tests/integration/files/dex.yaml
     - tests/integration/files/identity-bundle-edge-patched.yaml
