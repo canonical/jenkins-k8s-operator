@@ -52,6 +52,8 @@ Thinking about using the Jenkins-k8s Operator for your next project? [Get in tou
   1. [Backup and restore](how-to/backup-and-restore-jenkins.md)
   1. [Upgrade](how-to/upgrade.md)
   1. [Redeploy](how-to/redeploy.md)
+1. [Architectural design records](adr)
+  1. [ADR-001 Agent ingress path prefix](adr/001_agent_ingress_path_prefix.md)
 1. [Reference](reference)
   1. [Actions](reference/actions.md)
   1. [Charm architecture](reference/charm-architecture.md)
