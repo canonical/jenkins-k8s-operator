@@ -188,19 +188,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
 
-    def _get_ingress_path(self) -> str:
-        """Return the path in which Jenkins is expected to be listening.
-
-        Returns:
-            the path for the ingress URL.
-        """
-        if not self.server_ingress.url:
-            return ""
-        path = urlparse(self.server_ingress.url).path
-        if path == "/":
-            return ""
-        return path
-
     def calculate_env(
         self,
         config_hash: str,
@@ -516,22 +503,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
     def _jenkins_prefix(self) -> str:
         """Return the single path prefix Jenkins serves under.
 
-        Jenkins has one global prefix. The server ingress owns it when related,
-        because that route serves the UI. A dedicated agent route may define it
-        only when no server ingress is related, so that path-routed agent
-        traffic still reaches the prefix Jenkins serves.
+        The server ingress owns the prefix. A dedicated agent route defines it
+        only when no server ingress is related.
 
         Returns:
-            The path prefix for Jenkins, or an empty string for the root.
+            The path prefix, or an empty string for the root.
         """
-        return self._get_ingress_path() or self._agent_discovery_path
-
-    @property
-    def _agent_discovery_path(self) -> str:
-        """Return the ready path published by the agent discovery ingress."""
-        if not self.agent_discovery_ingress.url:
-            return ""
-        return urlparse(self.agent_discovery_ingress.url).path.rstrip("/")
+        url = self.server_ingress.url or self.agent_discovery_ingress.url
+        return urlparse(url).path.rstrip("/") if url else ""
 
     @property
     def _agent_discovery_url(self) -> str:

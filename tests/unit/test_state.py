@@ -401,7 +401,7 @@ def test_deployment_topology_is_valid(
                 ),
             ),
             {},
-            "must expose the same path as ingress",
+            "must match the Jenkins prefix",
             id="subdomain-agent-route-with-non-root-ingress",
         ),
         pytest.param(
@@ -416,7 +416,7 @@ def test_deployment_topology_is_valid(
                 ),
             ),
             {},
-            "must expose the same path as ingress",
+            "must match the Jenkins prefix",
             id="mismatched-path-agent-route",
         ),
         pytest.param(
@@ -431,7 +431,7 @@ def test_deployment_topology_is_valid(
                 ),
             ),
             {},
-            "must expose the same path as ingress",
+            "must match the Jenkins prefix",
             id="path-agent-route-with-root-ingress",
         ),
     ],

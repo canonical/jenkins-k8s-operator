@@ -181,8 +181,7 @@ def test_calculate_env(harness: Harness):
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
     admin_password = token_hex(8)
-    with patch.object(jenkins_charm, "_get_ingress_path", return_value=""):
-        env = jenkins_charm.calculate_env(config_hash="hash123", admin_password=admin_password)
+    env = jenkins_charm.calculate_env(config_hash="hash123", admin_password=admin_password)
 
     assert env == {
         "JENKINS_HOME": str(jenkins.JENKINS_HOME_PATH),

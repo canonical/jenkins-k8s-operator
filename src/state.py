@@ -305,15 +305,12 @@ def _validate_agent_route_path(
         return
     server_path = _get_ingress_path(server_ingress)
     agent_path = _get_ingress_path(agent_discovery_ingress)
-    if server_path is None or agent_path is None:
+    if None in (server_path, agent_path) or agent_path == server_path:
         return
-    if agent_path != server_path:
-        raise CharmConfigInvalidError(
-            "agent-discovery-ingress must expose the same path as ingress "
-            f"({server_path or '/'}); got {agent_path or '/'}. Jenkins serves both "
-            "routes under one prefix, so use path routing on both ingresses or "
-            "subdomain routing on both."
-        )
+    raise CharmConfigInvalidError(
+        f"agent-discovery-ingress path ({agent_path or '/'}) must match the "
+        f"Jenkins prefix ({server_path or '/'})."
+    )
 
 
 def _validate_agent_ingress_readiness(

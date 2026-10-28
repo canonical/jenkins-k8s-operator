@@ -8,15 +8,9 @@ Each revision is versioned by the date of the revision.
 
 ## 2026-10-28
 
-- Serve `agent-discovery-ingress` traffic under the Jenkins prefix instead of
-  stripping it. In path routing mode the prefix was removed before reaching
-  Jenkins, so the agent JNLP advertised a root URL that no ingress route serves
-  and agents retried forever. The agent route now forwards its path unchanged.
-- Let the dedicated agent route define the Jenkins prefix when no server
-  `ingress` is related, so path-routed agent-only deployments work.
-- Block `agent-discovery-ingress` when its ready path differs from the ready
-  server `ingress` path. Jenkins serves both routes from one global prefix, so
-  mismatched paths (including mixed path and subdomain routing) cannot work.
+- `agent-discovery-ingress` forwards the Jenkins path prefix instead of
+  stripping it, so path-routed agents connect. Mismatched server and agent
+  paths are blocked. See [ADR-001](adr/001_agent_ingress_path_prefix.md).
 
 ## 2026-10-14
 
