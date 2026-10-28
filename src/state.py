@@ -294,10 +294,25 @@ def _validate_agent_route_path(
     agent_discovery_ingress: typing.Optional[ops.Relation],
     server_ingress: typing.Optional[ops.Relation],
 ) -> None:
-    """Reject dedicated agent routes that cannot preserve a server prefix."""
-    if agent_discovery_ingress and server_ingress and _get_ingress_path(server_ingress):
+    """Reject dedicated agent routes that do not carry the Jenkins prefix.
+
+    Jenkins serves the UI and the agent protocol under a single global prefix,
+    taken from the server ingress. A dedicated agent route must therefore expose
+    that same path, otherwise agents reach a path Jenkins does not serve and the
+    JNLP endpoint advertises an unreachable URL.
+    """
+    if not agent_discovery_ingress or not server_ingress:
+        return
+    server_path = _get_ingress_path(server_ingress)
+    agent_path = _get_ingress_path(agent_discovery_ingress)
+    if server_path is None or agent_path is None:
+        return
+    if agent_path != server_path:
         raise CharmConfigInvalidError(
-            "agent-discovery-ingress and ingress cannot be combined when ingress uses a non-root path."
+            "agent-discovery-ingress must expose the same path as ingress "
+            f"({server_path or '/'}); got {agent_path or '/'}. Jenkins serves both "
+            "routes under one prefix, so use path routing on both ingresses or "
+            "subdomain routing on both."
         )
 
 

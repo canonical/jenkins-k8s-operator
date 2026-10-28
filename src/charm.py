@@ -90,7 +90,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self,
             relation_name=AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             port=jenkins.WEB_PORT,
-            strip_prefix=True,
         )
         self.server_ingress = IngressPerAppRequirer(
             self,
@@ -107,7 +106,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self,
             jobs=[
                 {
-                    "metrics_path": f"{self._get_ingress_path()}/prometheus",
+                    "metrics_path": f"{self._jenkins_prefix}/prometheus",
                     "static_configs": [{"targets": [f"*:{jenkins.WEB_PORT}"]}],
                 }
             ],
@@ -220,7 +219,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """
         jenkins_environment = jenkins.Environment(
             JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
-            JENKINS_PREFIX=self._get_ingress_path(),
+            JENKINS_PREFIX=self._jenkins_prefix,
             CASC_JENKINS_CONFIG=str(jenkins.JCASC_CONFIG_PATH),
             JENKINS_ADMIN_PASSWORD=admin_password,
             CONFIGURATION_HASH=config_hash,
@@ -515,12 +514,24 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
     @property
     def _jenkins_prefix(self) -> str:
-        """Return the path prefix for Jenkins.
+        """Return the single path prefix Jenkins serves under.
+
+        Jenkins has one global prefix. The server ingress owns it when related,
+        because that route serves the UI. A dedicated agent route may define it
+        only when no server ingress is related, so that path-routed agent
+        traffic still reaches the prefix Jenkins serves.
 
         Returns:
-            The path prefix for Jenkins.
+            The path prefix for Jenkins, or an empty string for the root.
         """
-        return self._get_ingress_path()
+        return self._get_ingress_path() or self._agent_discovery_path
+
+    @property
+    def _agent_discovery_path(self) -> str:
+        """Return the ready path published by the agent discovery ingress."""
+        if not self.agent_discovery_ingress.url:
+            return ""
+        return urlparse(self.agent_discovery_ingress.url).path.rstrip("/")
 
     @property
     def _agent_discovery_url(self) -> str:

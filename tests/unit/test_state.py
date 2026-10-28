@@ -320,6 +320,30 @@ def test_ingress_path_returns_none_when_relation_data_is_unavailable():
             {"external-hostname": "jenkins.example.com"},
             id="all-routes",
         ),
+        pytest.param(
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://agents.example.com/jenkins"})},
+                ),
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
+                ),
+            ),
+            {},
+            id="matching-non-root-paths",
+        ),
+        pytest.param(
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://agents.example.com/jenkins"})},
+                ),
+            ),
+            {},
+            id="dedicated-only-non-root-path",
+        ),
     ],
 )
 def test_deployment_topology_is_valid(
@@ -377,8 +401,38 @@ def test_deployment_topology_is_valid(
                 ),
             ),
             {},
-            "agent-discovery-ingress and ingress",
-            id="non-root-ingress-with-agent-route",
+            "must expose the same path as ingress",
+            id="subdomain-agent-route-with-non-root-ingress",
+        ),
+        pytest.param(
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://agents.example.com/agents"})},
+                ),
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
+                ),
+            ),
+            {},
+            "must expose the same path as ingress",
+            id="mismatched-path-agent-route",
+        ),
+        pytest.param(
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://agents.example.com/agents"})},
+                ),
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/"})},
+                ),
+            ),
+            {},
+            "must expose the same path as ingress",
+            id="path-agent-route-with-root-ingress",
         ),
     ],
 )

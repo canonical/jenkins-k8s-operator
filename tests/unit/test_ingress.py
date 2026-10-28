@@ -91,3 +91,50 @@ def test_traefik_integration_added_replans_jenkins(
     harness.remove_relation(ingress_relation_id)
 
     assert replan_mock.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "server_url, agent_url, expected_prefix",
+    [
+        pytest.param(
+            "https://jenkins.example.com/jenkins",
+            "https://agents.example.com/jenkins",
+            "/jenkins",
+            id="server-path-wins",
+        ),
+        pytest.param(
+            None,
+            "https://agents.example.com/jenkins",
+            "/jenkins",
+            id="agent-path-when-no-server-ingress",
+        ),
+        pytest.param(
+            "https://jenkins.example.com/",
+            "https://agents.example.com/",
+            "",
+            id="root-when-both-are-root",
+        ),
+        pytest.param(None, None, "", id="root-when-no-ingress"),
+    ],
+)
+def test_jenkins_prefix_follows_the_ingress_paths(
+    harness: Harness,
+    server_url: str | None,
+    agent_url: str | None,
+    expected_prefix: str,
+):
+    """
+    arrange: given server and agent ingress URLs.
+    act: when the Jenkins prefix is resolved.
+    assert: the server path wins, the agent path is the fallback, otherwise root.
+    """
+    harness.begin()
+    for attribute, url in (
+        ("server_ingress", server_url),
+        ("agent_discovery_ingress", agent_url),
+    ):
+        ingress_per_app = MagicMock(spec=IngressPerAppRequirer)
+        ingress_per_app.url = url
+        setattr(harness.charm, attribute, ingress_per_app)
+
+    assert harness.charm._jenkins_prefix == expected_prefix
