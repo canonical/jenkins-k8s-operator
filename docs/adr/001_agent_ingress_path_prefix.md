@@ -93,6 +93,9 @@ path rewrite. A browser therefore reaches Jenkins at
 - The two routes are separate addresses, not a security boundary. The UI route
   still proxies `/jnlpJars/agent.jar` and the agent JNLP. Isolation needs
   network policy or an authenticating proxy in front of the UI route.
+- The matrix is mirrored in `tests/integration/constants.py` as
+  `EXPECTED_JENKINS_PREFIX`, so integration tests assert the path this record
+  documents instead of inferring it from the deployment.
 
 ## Alternatives considered
 
