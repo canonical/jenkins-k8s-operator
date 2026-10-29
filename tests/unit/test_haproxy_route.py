@@ -3,6 +3,7 @@
 
 """Jenkins-k8s haproxy-route unit tests."""
 
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -71,7 +72,99 @@ def test_reconcile_haproxy_route_publishes_when_hostname_and_relation_present(
         service=harness.charm.app.name,
         ports=[jenkins.WEB_PORT],
         hostname="jenkins.example.com",
+        paths=None,
     )
+
+
+def test_reconcile_haproxy_route_publishes_the_jenkins_prefix_as_route_path(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given a path-routed server ingress and a haproxy-route relation.
+    act: when _reconcile_haproxy_route runs.
+    assert: the Jenkins prefix is published as the HAProxy route path.
+    """
+    harness.update_config({"external-hostname": "jenkins.example.com"})
+    harness.add_relation(
+        "ingress",
+        "traefik-k8s",
+        app_data={"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
+    )
+    harness.add_relation("haproxy-route", "haproxy")
+    harness.begin()
+
+    provide_mock = MagicMock()
+    monkeypatch.setattr(
+        harness.charm._haproxy_route, "provide_haproxy_route_requirements", provide_mock
+    )
+
+    harness.charm._reconcile_haproxy_route(State.from_charm(harness.charm))
+
+    provide_mock.assert_called_once_with(
+        service=harness.charm.app.name,
+        ports=[jenkins.WEB_PORT],
+        hostname="jenkins.example.com",
+        paths=["/jenkins"],
+    )
+
+
+def test_reconcile_haproxy_route_publishes_the_agent_route_prefix_as_route_path(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+):
+    """
+    arrange: given a path-routed agent route, no server ingress, and a haproxy-route relation.
+    act: when _reconcile_haproxy_route runs.
+    assert: the prefix taken from the agent route is published as the HAProxy route path.
+    """
+    harness.update_config({"external-hostname": "jenkins.example.com"})
+    harness.add_relation(
+        "agent-discovery-ingress",
+        "traefik-k8s-agent",
+        app_data={
+            "ingress": json.dumps({"url": "https://agents.example.com/testing-jenkins-k8s"})
+        },
+    )
+    harness.add_relation("haproxy-route", "haproxy")
+    harness.begin()
+
+    provide_mock = MagicMock()
+    monkeypatch.setattr(
+        harness.charm._haproxy_route, "provide_haproxy_route_requirements", provide_mock
+    )
+
+    harness.charm._reconcile_haproxy_route(State.from_charm(harness.charm))
+
+    provide_mock.assert_called_once_with(
+        service=harness.charm.app.name,
+        ports=[jenkins.WEB_PORT],
+        hostname="jenkins.example.com",
+        paths=["/testing-jenkins-k8s"],
+    )
+
+
+def test_non_root_ingress_does_not_retract_haproxy_route(harness: Harness):
+    """
+    arrange: given a published haproxy-route with a path-routed server ingress.
+    act: when stale-route retraction runs.
+    assert: the route is kept because HAProxy carries the same prefix.
+    """
+    harness.update_config({"external-hostname": "jenkins.example.com"})
+    harness.add_relation(
+        "ingress",
+        "traefik-k8s",
+        app_data={"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
+    )
+    relation_id = harness.add_relation("haproxy-route", "haproxy")
+    harness.add_relation_unit(relation_id, "haproxy/0")
+    harness.set_leader(True)
+    harness.begin()
+
+    harness.charm._reconcile_haproxy_route(State.from_charm(harness.charm))
+    assert harness.get_relation_data(relation_id, harness.charm.app)
+
+    harness.charm._retract_invalid_haproxy_route()
+
+    assert harness.get_relation_data(relation_id, harness.charm.app)
 
 
 def test_reconcile_haproxy_route_retracts_when_hostname_cleared(harness: Harness):

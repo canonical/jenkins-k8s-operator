@@ -274,19 +274,17 @@ def _validate_unit_count(charm: ops.CharmBase) -> None:
 
 
 def _validate_haproxy_route_configuration(
-    server_ingress: typing.Optional[ops.Relation],
     haproxy_route: typing.Optional[ops.Relation],
     external_hostname: typing.Optional[str],
 ) -> None:
-    """Validate HAProxy hostname and server-ingress path compatibility."""
+    """Validate HAProxy hostname requirements.
+
+    HAProxy routes on the Jenkins prefix, which the charm publishes as the route
+    path, so a non-root prefix is no longer incompatible with haproxy-route.
+    """
     if haproxy_route and not external_hostname:
         raise CharmConfigInvalidError(
             f"{HAPROXY_ROUTE_RELATION_NAME} requires external-hostname to be configured."
-        )
-    ingress_path = _get_ingress_path(server_ingress)
-    if haproxy_route and server_ingress and ingress_path:
-        raise CharmConfigInvalidError(
-            "ingress and haproxy-route cannot be combined when ingress uses a non-root path."
         )
 
 
@@ -363,7 +361,7 @@ def _validate_deployment_relations(charm: ops.CharmBase) -> None:
     server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
     haproxy_route = charm.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
     external_hostname = _parse_external_hostname(charm)
-    _validate_haproxy_route_configuration(server_ingress, haproxy_route, external_hostname)
+    _validate_haproxy_route_configuration(haproxy_route, external_hostname)
     _validate_agent_route_path(agent_discovery_ingress, server_ingress)
     _validate_agent_ingress_readiness(charm, agent_discovery_ingress, server_ingress)
     _validate_agent_route_configuration(

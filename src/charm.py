@@ -156,15 +156,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         external_hostname = str(self.config.get("external-hostname") or "").strip()
-        non_root_ingress = bool(
-            self.server_ingress.url and urlparse(self.server_ingress.url).path.rstrip("/")
-        )
         agents_without_route = bool(
             self.model.relations.get(AGENT_RELATION)
             and self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is None
             and self.model.get_relation(INGRESS_RELATION_NAME) is None
         )
-        if not external_hostname or non_root_ingress or agents_without_route:
+        if not external_hostname or agents_without_route:
             relation.data[self.app].clear()
 
     def _get_state(self) -> typing.Optional[State]:
@@ -453,7 +450,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         retracted so HAProxy stops routing the stale hostname.
 
         HAProxy performs hostname-based routing on this value; it is also the join
-        key for edge OIDC authentication via HAProxy SPOE.
+        key for edge OIDC authentication via HAProxy SPOE. The Jenkins prefix is
+        published as the route path so HAProxy forwards it unchanged, which is the
+        same contract the ingress relation uses.
 
         Args:
             state: The current charm state.
@@ -465,10 +464,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             if self.unit.is_leader():
                 relation.data[self.app].clear()
             return
+        prefix = self._jenkins_prefix
         self._haproxy_route.provide_haproxy_route_requirements(
             service=self.app.name,
             ports=[jenkins.WEB_PORT],
             hostname=state.external_hostname,
+            paths=[prefix] if prefix else None,
         )
 
     def _reconcile_plugins(

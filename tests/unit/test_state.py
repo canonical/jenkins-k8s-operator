@@ -344,6 +344,32 @@ def test_ingress_path_returns_none_when_relation_data_is_unavailable():
             {},
             id="dedicated-only-non-root-path",
         ),
+        pytest.param(
+            (
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
+                ),
+                (state.HAPROXY_ROUTE_RELATION_NAME, {}),
+            ),
+            {"external-hostname": "jenkins.example.com"},
+            id="non-root-ingress-with-haproxy",
+        ),
+        pytest.param(
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {
+                        "ingress": json.dumps(
+                            {"url": "https://agents.example.com/testing-jenkins-k8s"}
+                        )
+                    },
+                ),
+                (state.HAPROXY_ROUTE_RELATION_NAME, {}),
+            ),
+            {"external-hostname": "jenkins.example.com"},
+            id="agent-path-with-haproxy",
+        ),
     ],
 )
 def test_deployment_topology_is_valid(
@@ -376,18 +402,6 @@ def test_deployment_topology_is_valid(
             {"external-hostname": "jenkins.example.com"},
             "agent-discovery-ingress",
             id="agents-haproxy-only",
-        ),
-        pytest.param(
-            (
-                (
-                    state.INGRESS_RELATION_NAME,
-                    {"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
-                ),
-                (state.HAPROXY_ROUTE_RELATION_NAME, {}),
-            ),
-            {"external-hostname": "jenkins.example.com"},
-            "non-root path",
-            id="non-root-ingress-with-haproxy",
         ),
         pytest.param(
             (

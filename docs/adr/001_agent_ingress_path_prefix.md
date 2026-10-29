@@ -65,13 +65,23 @@ Jenkins has one prefix, so both routes must agree on it.
 3. `agent-discovery-ingress` is blocked when both relations are ready and their
    paths differ. Pending relation data keeps `WaitingStatus`.
 4. The metrics path and the pod-IP agent fallback use the same resolved prefix.
+5. `haproxy-route` publishes the resolved prefix as the route path, the same
+   contract the `ingress` relation uses. HAProxy forwards `/<prefix>/...`
+   unchanged, so a browser route can serve a Jenkins that runs under a prefix.
 
-| Server ingress | Agent ingress | Result |
+| Server route | Agent ingress | Result |
 |---|---|---|
-| root (subdomain) | root (subdomain) | works, Jenkins at the root |
-| `/x` (path) | `/x` (path) | works, Jenkins runs `--prefix=/x` |
+| `ingress` at root (subdomain) | root (subdomain) | works, Jenkins at the root |
+| `ingress` at `/x` (path) | `/x` (path) | works, Jenkins runs `--prefix=/x` |
 | not related | `/x` (path) | works, the agent route defines the prefix |
-| `/x` | root, or a different path | blocked, one prefix cannot serve both |
+| `ingress` at `/x` | root, or a different path | blocked, one prefix cannot serve both |
+| `haproxy-route` | `/x` (path) | works, HAProxy routes and forwards `/x`, Jenkins runs `--prefix=/x` |
+| `haproxy-route` | root (subdomain) | works, Jenkins at the root, HAProxy routes the whole host |
+
+The `haproxy-route` rows depend on the provider accepting `paths` from the
+`haproxy-route` v2 interface and rendering it as a `path_beg` ACL without a
+path rewrite. A browser therefore reaches Jenkins at
+`https://<hostname><prefix>`, not at the hostname root.
 
 ## Consequences
 

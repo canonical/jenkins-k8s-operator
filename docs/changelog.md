@@ -11,6 +11,10 @@ Each revision is versioned by the date of the revision.
 - `agent-discovery-ingress` forwards the Jenkins path prefix instead of
   stripping it, so path-routed agents connect. Mismatched server and agent
   paths are blocked. See [ADR-001](adr/001_agent_ingress_path_prefix.md).
+- `haproxy-route` publishes the resolved Jenkins prefix as the route path, so a
+  HAProxy-fronted deployment keeps serving Jenkins when the agent route defines
+  a path prefix. Non-root `ingress` paths can now be combined with
+  `haproxy-route`.
 
 ## 2026-10-14
 
