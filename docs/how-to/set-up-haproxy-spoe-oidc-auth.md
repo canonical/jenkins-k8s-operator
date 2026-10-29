@@ -12,7 +12,8 @@ headers are passed to Jenkins — this is edge access control only.
 The `ingress`, `agent-discovery-ingress`, and `haproxy-route` relations are
 independent. Agent connections must NOT go through SPOE because agents cannot
 perform browser OIDC; use the dedicated agent route or the server-ingress
-fallback. A non-root `ingress` path cannot be combined with `haproxy-route`.
+fallback. The charm publishes the Jenkins prefix as the `haproxy-route` path,
+so HAProxy forwards a non-root `ingress` path unchanged.
 
 ## Prerequisites
 

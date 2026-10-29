@@ -30,9 +30,10 @@ path-routed server ingress with a subdomain agent ingress, put the charm in
 The `haproxy-route` relation is a server/browser route and is never used as an
 agent endpoint. If agents are related, direct HAProxy routing requires either a
 dedicated `agent-discovery-ingress` route or a server `ingress` fallback. A
-related `haproxy-route` also requires `external-hostname`. A non-root server
-ingress path cannot be combined with `haproxy-route`; the charm enters
-`BlockedStatus` rather than exposing a mismatched Jenkins prefix.
+related `haproxy-route` also requires `external-hostname`. The charm publishes
+the Jenkins prefix as the HAProxy route path, so HAProxy forwards `/<prefix>/...`
+unchanged and a non-root server ingress path can be combined with
+`haproxy-route`.
 
 ## Networking considerations
 The charm assumes that:
