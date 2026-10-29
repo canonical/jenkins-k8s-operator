@@ -90,7 +90,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self,
             relation_name=AGENT_DISCOVERY_INGRESS_RELATION_NAME,
             port=jenkins.WEB_PORT,
-            strip_prefix=True,
         )
         self.server_ingress = IngressPerAppRequirer(
             self,
@@ -107,7 +106,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self,
             jobs=[
                 {
-                    "metrics_path": f"{self._get_ingress_path()}/prometheus",
+                    "metrics_path": f"{self._jenkins_prefix}/prometheus",
                     "static_configs": [{"targets": [f"*:{jenkins.WEB_PORT}"]}],
                 }
             ],
@@ -157,15 +156,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         external_hostname = str(self.config.get("external-hostname") or "").strip()
-        non_root_ingress = bool(
-            self.server_ingress.url and urlparse(self.server_ingress.url).path.rstrip("/")
-        )
         agents_without_route = bool(
             self.model.relations.get(AGENT_RELATION)
             and self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is None
             and self.model.get_relation(INGRESS_RELATION_NAME) is None
         )
-        if not external_hostname or non_root_ingress or agents_without_route:
+        if not external_hostname or agents_without_route:
             relation.data[self.app].clear()
 
     def _get_state(self) -> typing.Optional[State]:
@@ -189,19 +185,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except CharmRelationDataInvalidError as exc:
             raise RuntimeError("Invalid relation data received.") from exc
 
-    def _get_ingress_path(self) -> str:
-        """Return the path in which Jenkins is expected to be listening.
-
-        Returns:
-            the path for the ingress URL.
-        """
-        if not self.server_ingress.url:
-            return ""
-        path = urlparse(self.server_ingress.url).path
-        if path == "/":
-            return ""
-        return path
-
     def calculate_env(
         self,
         config_hash: str,
@@ -220,7 +203,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """
         jenkins_environment = jenkins.Environment(
             JENKINS_HOME=str(jenkins.JENKINS_HOME_PATH),
-            JENKINS_PREFIX=self._get_ingress_path(),
+            JENKINS_PREFIX=self._jenkins_prefix,
             CASC_JENKINS_CONFIG=str(jenkins.JCASC_CONFIG_PATH),
             JENKINS_ADMIN_PASSWORD=admin_password,
             CONFIGURATION_HASH=config_hash,
@@ -467,7 +450,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         retracted so HAProxy stops routing the stale hostname.
 
         HAProxy performs hostname-based routing on this value; it is also the join
-        key for edge OIDC authentication via HAProxy SPOE.
+        key for edge OIDC authentication via HAProxy SPOE. The Jenkins prefix is
+        published as the route path so HAProxy forwards it unchanged, which is the
+        same contract the ingress relation uses.
 
         Args:
             state: The current charm state.
@@ -479,10 +464,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             if self.unit.is_leader():
                 relation.data[self.app].clear()
             return
+        prefix = self._jenkins_prefix
         self._haproxy_route.provide_haproxy_route_requirements(
             service=self.app.name,
             ports=[jenkins.WEB_PORT],
             hostname=state.external_hostname,
+            paths=[prefix] if prefix else None,
         )
 
     def _reconcile_plugins(
@@ -515,12 +502,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
     @property
     def _jenkins_prefix(self) -> str:
-        """Return the path prefix for Jenkins.
+        """Return the single path prefix Jenkins serves under.
+
+        The server ingress owns the prefix. A dedicated agent route defines it
+        only when no server ingress is related.
 
         Returns:
-            The path prefix for Jenkins.
+            The path prefix, or an empty string for the root.
         """
-        return self._get_ingress_path()
+        url = self.server_ingress.url or self.agent_discovery_ingress.url
+        return urlparse(url).path.rstrip("/") if url else ""
 
     @property
     def _agent_discovery_url(self) -> str:

@@ -42,28 +42,6 @@ def _patch_reconcile_dependencies(monkeypatch: pytest.MonkeyPatch):
     )
 
 
-@pytest.mark.parametrize(
-    "ingress_url, expected_path",
-    [
-        pytest.param("https://host:8080/path", "/path", id="path"),
-        pytest.param("https://host:8080/", "", id="root"),
-        pytest.param(None, "", id="unset"),
-    ],
-)
-def test_get_ingress_path(harness: Harness, ingress_url: str | None, expected_path: str):
-    """
-    arrange: given a server ingress URL variant.
-    act: when _get_ingress_path is called.
-    assert: the expected Jenkins path is returned.
-    """
-    harness.begin()
-    ingress_per_app = MagicMock(spec=IngressPerAppRequirer)
-    ingress_per_app.url = ingress_url
-    harness.charm.server_ingress = ingress_per_app
-
-    assert harness.charm._get_ingress_path() == expected_path
-
-
 def test_traefik_integration_added_replans_jenkins(
     harness: Harness, monkeypatch: pytest.MonkeyPatch
 ):
@@ -91,3 +69,46 @@ def test_traefik_integration_added_replans_jenkins(
     harness.remove_relation(ingress_relation_id)
 
     assert replan_mock.call_count == 2
+
+
+def _requirer(url: str | None) -> MagicMock:
+    """Return an ingress requirer stub with the given URL."""
+    requirer = MagicMock(spec=IngressPerAppRequirer)
+    requirer.url = url
+    return requirer
+
+
+@pytest.mark.parametrize(
+    "server_url, agent_url, expected_prefix",
+    [
+        pytest.param(
+            "https://jenkins.example.com/jenkins",
+            "https://agents.example.com/jenkins",
+            "/jenkins",
+            id="server-path-wins",
+        ),
+        pytest.param(
+            None,
+            "https://agents.example.com/jenkins",
+            "/jenkins",
+            id="agent-path-when-no-server-ingress",
+        ),
+        pytest.param("https://jenkins.example.com/", None, "", id="root"),
+    ],
+)
+def test_jenkins_prefix_follows_the_ingress_paths(
+    harness: Harness,
+    server_url: str | None,
+    agent_url: str | None,
+    expected_prefix: str,
+):
+    """
+    arrange: given server and agent ingress URLs.
+    act: when the Jenkins prefix is resolved.
+    assert: the server path wins, the agent path is the fallback, otherwise root.
+    """
+    harness.begin()
+    harness.charm.server_ingress = _requirer(server_url)
+    harness.charm.agent_discovery_ingress = _requirer(agent_url)
+
+    assert harness.charm._jenkins_prefix == expected_prefix

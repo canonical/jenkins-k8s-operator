@@ -320,6 +320,56 @@ def test_ingress_path_returns_none_when_relation_data_is_unavailable():
             {"external-hostname": "jenkins.example.com"},
             id="all-routes",
         ),
+        pytest.param(
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://agents.example.com/jenkins"})},
+                ),
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
+                ),
+            ),
+            {},
+            id="matching-non-root-paths",
+        ),
+        pytest.param(
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://agents.example.com/jenkins"})},
+                ),
+            ),
+            {},
+            id="dedicated-only-non-root-path",
+        ),
+        pytest.param(
+            (
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
+                ),
+                (state.HAPROXY_ROUTE_RELATION_NAME, {}),
+            ),
+            {"external-hostname": "jenkins.example.com"},
+            id="non-root-ingress-with-haproxy",
+        ),
+        pytest.param(
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {
+                        "ingress": json.dumps(
+                            {"url": "https://agents.example.com/testing-jenkins-k8s"}
+                        )
+                    },
+                ),
+                (state.HAPROXY_ROUTE_RELATION_NAME, {}),
+            ),
+            {"external-hostname": "jenkins.example.com"},
+            id="agent-path-with-haproxy",
+        ),
     ],
 )
 def test_deployment_topology_is_valid(
@@ -356,18 +406,6 @@ def test_deployment_topology_is_valid(
         pytest.param(
             (
                 (
-                    state.INGRESS_RELATION_NAME,
-                    {"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
-                ),
-                (state.HAPROXY_ROUTE_RELATION_NAME, {}),
-            ),
-            {"external-hostname": "jenkins.example.com"},
-            "non-root path",
-            id="non-root-ingress-with-haproxy",
-        ),
-        pytest.param(
-            (
-                (
                     state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
                     {"ingress": json.dumps({"url": "https://agents.example.com/"})},
                 ),
@@ -377,8 +415,38 @@ def test_deployment_topology_is_valid(
                 ),
             ),
             {},
-            "agent-discovery-ingress and ingress",
-            id="non-root-ingress-with-agent-route",
+            "must match the Jenkins prefix",
+            id="subdomain-agent-route-with-non-root-ingress",
+        ),
+        pytest.param(
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://agents.example.com/agents"})},
+                ),
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/jenkins"})},
+                ),
+            ),
+            {},
+            "must match the Jenkins prefix",
+            id="mismatched-path-agent-route",
+        ),
+        pytest.param(
+            (
+                (
+                    state.AGENT_DISCOVERY_INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://agents.example.com/agents"})},
+                ),
+                (
+                    state.INGRESS_RELATION_NAME,
+                    {"ingress": json.dumps({"url": "https://jenkins.example.com/"})},
+                ),
+            ),
+            {},
+            "must match the Jenkins prefix",
+            id="path-agent-route-with-root-ingress",
         ),
     ],
 )

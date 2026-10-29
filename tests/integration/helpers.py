@@ -3,6 +3,7 @@
 
 """Helpers for Jenkins-k8s-operator charm integration tests."""
 
+import asyncio
 import logging
 import textwrap
 import time
@@ -26,6 +27,71 @@ import jenkins
 from .types_ import UnitWebClient
 
 logger = logging.getLogger(__name__)
+
+
+def _jenkins_api_status(address: str, credentials: tuple[str, str]) -> int | None:
+    """Return the status of the Jenkins API at an address, or None when unreachable.
+
+    Args:
+        address: The base address to probe, including any path prefix.
+        credentials: The Jenkins username and password or token.
+
+    Returns:
+        The response status code, or None when the request did not complete.
+    """
+    try:
+        response = requests.get(f"{address}/api/json", auth=credentials, timeout=10)
+    except requests.RequestException as exc:
+        logger.info("phase=jenkins_api_status probe_error address=%s exc=%r", address, exc)
+        return None
+    logger.info("phase=jenkins_api_status address=%s status=%s", address, response.status_code)
+    return response.status_code
+
+
+async def assert_jenkins_serves_at(
+    client: jenkinsapi.jenkins.Jenkins,
+    unit_ip: str,
+    expected_prefix: str,
+    timeout_s: int = 180,
+    interval_s: int = 5,
+) -> None:
+    """Assert Jenkins serves at the expected prefix and not at the root.
+
+    A prefix change restarts Jenkins, so the expected address is retried until the
+    API answers or the timeout expires. When a prefix is expected, the root must
+    stop answering: that is the half of the contract a plain status check misses.
+
+    Args:
+        client: A client created against the expected address, used for credentials.
+        unit_ip: The Jenkins unit IP address.
+        expected_prefix: The prefix Jenkins must serve under, empty for the root.
+        timeout_s: How long to wait for Jenkins to answer.
+        interval_s: Delay between probes.
+    """
+    credentials = (client.username, client.password)
+    root_address = f"http://{unit_ip}:8080"
+    expected_address = f"{root_address}{expected_prefix}"
+    deadline = time.monotonic() + timeout_s
+    while True:
+        status = _jenkins_api_status(expected_address, credentials)
+        if status == 200:
+            break
+        if time.monotonic() > deadline:
+            raise AssertionError(
+                f"Jenkins did not answer at {expected_address}/api/json within {timeout_s}s "
+                f"(status={status}, root status={_jenkins_api_status(root_address, credentials)}). "
+                "Check the prefix expectation for this topology and the charm's published route."
+            )
+        await asyncio.sleep(interval_s)
+
+    if not expected_prefix:
+        return
+
+    root_status = _jenkins_api_status(root_address, credentials)
+    assert root_status == 404, (
+        f"Jenkins still answers at the root {root_address}/api/json (status={root_status}) "
+        f"while the expected prefix is {expected_prefix!r}."
+    )
 
 
 def _log_retry(retry_state: tenacity.RetryCallState) -> None:

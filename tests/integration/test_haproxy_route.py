@@ -3,7 +3,6 @@
 
 """Integration tests for the jenkins-k8s haproxy-route relation."""
 
-import jenkinsapi.jenkins
 import pytest
 import pytest_asyncio
 import requests
@@ -11,7 +10,12 @@ from juju.application import Application
 from juju.model import Model
 from requests_toolbelt.adapters.host_header_ssl import HostHeaderSSLAdapter
 
-from .constants import MACHINE_CONTROLLER_NAME
+from .constants import (
+    MACHINE_CONTROLLER_NAME,
+    AgentRoute,
+    ServerRoute,
+    expected_jenkins_prefix,
+)
 from .helpers import assert_job_success, get_model_unit_addresses
 from .types_ import KeycloakOIDCMetadata
 
@@ -332,9 +336,9 @@ async def test_haproxy_server_and_traefik_agent_discovery(
     haproxy_with_spoe: Application,
     traefik_agent_ingress: Application,
     jenkins_machine_agents: Application,
-    jenkins_client: jenkinsapi.jenkins.Jenkins,
     machine_model: Model,
     ca_cert_path: str,
+    jenkins_client_for,
 ):
     """Verify HAProxy serves Jenkins while Traefik serves machine agents."""
     await application.set_config({"external-hostname": SPOE_EXTERNAL_HOSTNAME})
@@ -367,16 +371,33 @@ async def test_haproxy_server_and_traefik_agent_discovery(
         check_freq=5,
     )
 
+    # Jenkins serves the UI and the agent protocol from one global prefix. With
+    # haproxy-route as the server route and a path-routed agent route, the agent
+    # route defines that prefix, and the charm publishes it to haproxy-route so
+    # the server route still reaches Jenkins.
+    topology = (ServerRoute.HAPROXY, AgentRoute.PATH)
+    prefix = expected_jenkins_prefix(model.name, application.name, topology)
+
     haproxy_ip = (await get_model_unit_addresses(machine_model, haproxy_with_spoe.name))[0]
     session = requests.Session()
     session.mount("https://", HostHeaderSSLAdapter())
     server_response = session.get(
-        f"https://{haproxy_ip}",
+        f"https://{haproxy_ip}{prefix}",
         headers={"Host": SPOE_EXTERNAL_HOSTNAME},
         timeout=30,
         allow_redirects=False,
         verify=ca_cert_path,
     )
-    assert server_response.status_code == 302
+    assert server_response.status_code == 302, (
+        f"Expected 302 redirect to OIDC at {prefix}, got {server_response.status_code}: "
+        f"{server_response.text[:200]}"
+    )
+    location = server_response.headers.get("Location", "")
+    assert "openid-connect/auth" in location, (
+        f"Expected the SPOE OIDC redirect, got Location: {location}"
+    )
 
+    # The direct unit address carries the same prefix: Jenkins serves nothing at
+    # the root once a prefix is set, so a root-URL client would 404 on /computer.
+    jenkins_client = await jenkins_client_for(topology)
     assert_job_success(jenkins_client, jenkins_machine_agents.name, "machine")
