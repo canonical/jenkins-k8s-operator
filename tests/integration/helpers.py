@@ -25,7 +25,7 @@ from pytest_operator.plugin import OpsTest
 
 import jenkins
 
-from .types_ import AddressResolver, JenkinsSession
+from .types_ import AddressResolver, JenkinsSession, JenkinsTarget
 
 logger = logging.getLogger(__name__)
 
@@ -769,15 +769,15 @@ async def generate_jenkins_session_from_application(
         A Jenkins web client.
     """
     assert model
-    unit_ips = await get_model_unit_addresses(model, jenkins_app.name)
-    assert unit_ips, f"Unit IP address not found for {jenkins_app.name}"
-    address = f"http://{unit_ips[0]}:8080"
-    jenkins_client = await generate_jenkins_client(ops_test, jenkins_app, address)
 
-    async def client_factory() -> jenkinsapi.jenkins.Jenkins:
-        return await generate_jenkins_client(ops_test, jenkins_app, address)
+    async def connector(resolved_address: str) -> jenkinsapi.jenkins.Jenkins:
+        return await generate_jenkins_client(ops_test, jenkins_app, resolved_address)
 
-    return JenkinsSession(url=address, client=jenkins_client, _client_factory=client_factory)
+    target = JenkinsTarget(
+        address_resolver=unit_address_resolver(model, jenkins_app),
+        connector=connector,
+    )
+    return JenkinsSession(target=target, connection=await target.connect())
 
 
 def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Unit]) -> Unit | None:

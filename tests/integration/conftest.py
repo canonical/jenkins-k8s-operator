@@ -35,8 +35,9 @@ from .helpers import (
     generate_jenkins_client,
     get_model_unit_addresses,
     get_pod_ip,
+    unit_address_resolver,
 )
-from .types_ import JenkinsSession, KeycloakOIDCMetadata
+from .types_ import JenkinsSession, JenkinsTarget, KeycloakOIDCMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -153,60 +154,56 @@ async def jenkins_client_factory_fixture(ops_test: OpsTest, application: Applica
 @pytest_asyncio.fixture(scope="function", name="jenkins_session")
 async def jenkins_session_fixture(
     ops_test: OpsTest,
+    model: Model,
     application: Application,
-    web_address: str,
     jenkins_client_factory,
 ):
-    """The refreshable Jenkins connection for the unit web address."""
+    """The refreshable Jenkins connection for the current unit address."""
+    target = JenkinsTarget(
+        address_resolver=unit_address_resolver(model, application),
+        connector=jenkins_client_factory,
+    )
     logger.info(
-        "phase=jenkins_session start model=%s app=%s web_address=%s",
+        "phase=jenkins_session start model=%s app=%s",
         ops_test.model_name,
         application.name,
-        web_address,
     )
     try:
-        client = await jenkins_client_factory(web_address)
+        connection = await target.connect()
     except Exception as exc:
         logger.error(
-            "phase=jenkins_session failed model=%s app=%s web_address=%s exc_type=%s exc=%s",
+            "phase=jenkins_session failed model=%s app=%s exc_type=%s exc=%s",
             ops_test.model_name,
             application.name,
-            web_address,
             type(exc).__name__,
             exc,
         )
-        model = ops_test.model
-        if model is not None:
-            try:
-                status = await model.get_status()
-                app_status = status.applications.get(application.name)
-                unit_keys = sorted(app_status.units) if app_status and app_status.units else []
-                logger.error(
-                    "phase=jenkins_session model_snapshot app=%s app_status=%s app_message=%s units=%s",
-                    application.name,
-                    getattr(app_status, "status", None),
-                    getattr(app_status, "status_info", None),
-                    unit_keys,
-                )
-            except Exception as status_exc:
-                logger.error(
-                    "phase=jenkins_session model_snapshot_failed exc_type=%s exc=%s",
-                    type(status_exc).__name__,
-                    status_exc,
-                )
+        try:
+            status = await model.get_status()
+            app_status = status.applications.get(application.name)
+            unit_keys = sorted(app_status.units) if app_status and app_status.units else []
+            logger.error(
+                "phase=jenkins_session model_snapshot app=%s app_status=%s app_message=%s units=%s",
+                application.name,
+                getattr(app_status, "status", None),
+                getattr(app_status, "status_info", None),
+                unit_keys,
+            )
+        except Exception as status_exc:
+            logger.error(
+                "phase=jenkins_session model_snapshot_failed exc_type=%s exc=%s",
+                type(status_exc).__name__,
+                status_exc,
+            )
         raise
     logger.info(
-        "phase=jenkins_session success model=%s app=%s web_address=%s client_baseurl=%s",
+        "phase=jenkins_session success model=%s app=%s url=%s client_baseurl=%s",
         ops_test.model_name,
         application.name,
-        web_address,
-        client.baseurl,
+        connection.url,
+        connection.client.baseurl,
     )
-
-    async def refresh() -> jenkinsapi.jenkins.Jenkins:
-        return await jenkins_client_factory(web_address)
-
-    return JenkinsSession(url=web_address, client=client, _client_factory=refresh)
+    return JenkinsSession(target=target, connection=connection)
 
 
 @pytest.fixture(scope="function", name="jenkins_client")
