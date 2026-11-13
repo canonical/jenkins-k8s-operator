@@ -24,7 +24,7 @@ from pytest_operator.plugin import OpsTest
 
 import jenkins
 
-from .types_ import JenkinsSession, UnitWebClient
+from .types_ import JenkinsSession
 
 logger = logging.getLogger(__name__)
 
@@ -191,16 +191,16 @@ def _plugins_download_complete(client: jenkinsapi.jenkins.Jenkins, web: str) -> 
     stop=tenacity.stop_after_attempt(5),
 )
 async def install_plugins(
-    unit_web_client: UnitWebClient,
+    jenkins_session: JenkinsSession,
     plugins: typing.Iterable[str],
 ) -> None:
     """Install plugins to Jenkins unit.
 
     Args:
-        unit_web_client: The wrapper around unit, web_address and jenkins_client.
+        jenkins_session: The wrapper around unit, web_address and jenkins_client.
         plugins: Desired plugins to install.
     """
-    web, client = unit_web_client.web, unit_web_client.client
+    web, client = jenkins_session.web, jenkins_session.client
     plugins = tuple(plugin for plugin in plugins if not client.has_plugin(plugin))
     if not plugins:
         return
@@ -228,8 +228,8 @@ async def install_plugins(
     _jenkins_available(web)
     logger.info("phase=plugin_install jenkins_available plugins=%s", plugins)
 
-    await unit_web_client.refresh()
-    client = unit_web_client.client
+    await jenkins_session.refresh()
+    client = jenkins_session.client
     logger.info("phase=plugin_install client_refreshed plugins=%s", plugins)
     _jenkins_api_ready(web, client)
 
@@ -715,10 +715,10 @@ async def generate_jenkins_client(
         raise
 
 
-async def generate_unit_web_client_from_application(
+async def generate_jenkins_session_from_application(
     ops_test: OpsTest, model: Model, jenkins_app: Application
-) -> UnitWebClient:
-    """Generate a UnitWebClient client directly from the Juju application.
+) -> JenkinsSession:
+    """Generate a JenkinsSession client directly from the Juju application.
 
     Args:
         ops_test: OpsTest framework
@@ -732,14 +732,12 @@ async def generate_unit_web_client_from_application(
     unit_ips = await get_model_unit_addresses(model, jenkins_app.name)
     assert unit_ips, f"Unit IP address not found for {jenkins_app.name}"
     address = f"http://{unit_ips[0]}:8080"
-    jenkins_unit = jenkins_app.units[0]
     jenkins_client = await generate_jenkins_client(ops_test, jenkins_app, address)
 
     async def client_factory() -> jenkinsapi.jenkins.Jenkins:
         return await generate_jenkins_client(ops_test, jenkins_app, address)
 
-    session = JenkinsSession(url=address, client=jenkins_client, _client_factory=client_factory)
-    return UnitWebClient(unit=jenkins_unit, session=session)
+    return JenkinsSession(url=address, client=jenkins_client, _client_factory=client_factory)
 
 
 def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Unit]) -> Unit | None:
@@ -851,23 +849,23 @@ def declarative_pipeline_script() -> str:
     before_sleep=_log_retry,
 )
 def create_secret_file_credentials(
-    unit_web_client: UnitWebClient, kube_config: str
+    jenkins_session: JenkinsSession, kube_config: str
 ) -> typing.Optional[str]:
     """Use the jenkins client to create a new secretfile credential.
 
     plain-credentials plugin is required.
 
     Args:
-        unit_web_client: Client for Jenkins's remote access API.
+        jenkins_session: Client for Jenkins's remote access API.
         kube_config: path to the kube_config file.
 
     Returns:
         The id of the created credential, or None in case of error.
     """
-    url = f"{unit_web_client.web}/credentials/store/system/domain/_/createCredentials"
+    url = f"{jenkins_session.web}/credentials/store/system/domain/_/createCredentials"
     credentials_id = "kube-config"
     try:
-        if credentials_id in unit_web_client.client.credentials_by_id:
+        if credentials_id in jenkins_session.client.credentials_by_id:
             return credentials_id
     except (JenkinsAPIException, requests.RequestException):
         logger.debug("Could not query existing Jenkins credentials", exc_info=True)
@@ -890,7 +888,7 @@ def create_secret_file_credentials(
     with open(kube_config, "rb") as kube_config_file:
         files = [("file0", ("config", kube_config_file, "application/octet-stream"))]
         logger.debug("Creating jenkins credentials, params: %s %s %s", headers, files, payload)
-        res = unit_web_client.client.requester.post_url(
+        res = jenkins_session.client.requester.post_url(
             url=url, headers=headers, data=payload, files=files, timeout=30
         )
         logger.debug("Credential create response, %s", res.status_code)
@@ -899,7 +897,7 @@ def create_secret_file_credentials(
         try:
             return (
                 credentials_id
-                if credentials_id in unit_web_client.client.credentials_by_id
+                if credentials_id in jenkins_session.client.credentials_by_id
                 else None
             )
         except (JenkinsAPIException, requests.RequestException):
@@ -914,31 +912,31 @@ def create_secret_file_credentials(
     before_sleep=_log_retry,
 )
 def create_kubernetes_cloud(
-    unit_web_client: UnitWebClient, kube_config_credentials_id: str
+    jenkins_session: JenkinsSession, kube_config_credentials_id: str
 ) -> typing.Optional[str]:
     """Use the Jenkins client to add a Kubernetes cloud.
 
     For dynamic agent provisioning through pods.
 
     Args:
-        unit_web_client: Client for Jenkins's remote access API.
+        jenkins_session: Client for Jenkins's remote access API.
         kube_config_credentials_id: credential id stored in jenkins.
 
     Returns:
         The created kubernetes cloud name or None in case of error.
     """
     kubernetes_test_cloud_name = "kubernetes"
-    cloud_page_url = f"{unit_web_client.web}/cloud/"
+    cloud_page_url = f"{jenkins_session.web}/cloud/"
     try:
         if (
             kubernetes_test_cloud_name
-            in unit_web_client.client.requester.get_url(cloud_page_url).text
+            in jenkins_session.client.requester.get_url(cloud_page_url).text
         ):
             return kubernetes_test_cloud_name
     except requests.RequestException:
         logger.debug("Could not query existing Jenkins clouds", exc_info=True)
 
-    url = f"{unit_web_client.web}/manage/cloud/doCreate"
+    url = f"{jenkins_session.web}/manage/cloud/doCreate"
 
     payload = {
         "name": kubernetes_test_cloud_name,
@@ -947,7 +945,7 @@ def create_kubernetes_cloud(
         {{
             "name": "{kubernetes_test_cloud_name}",
             "credentialsId": "{kube_config_credentials_id}",
-            "jenkinsUrl": "{unit_web_client.web}",
+            "jenkinsUrl": "{jenkins_session.web}",
             "type": "org.csanchez.jenkins.plugins.kubernetes.KubernetesCloud",
             "webSocket":true,
             "connectTimeout": "300",
@@ -971,7 +969,7 @@ def create_kubernetes_cloud(
     }
 
     logger.debug("Creating jenkins kubernetes cloud, params: %s %s", headers, payload)
-    res = unit_web_client.client.requester.post_url(
+    res = jenkins_session.client.requester.post_url(
         url=url, headers=headers, data=payload, timeout=60 * 5
     )
     logger.debug("Cloud create response, status=%s body=%s", res.status_code, res.text)
@@ -981,7 +979,7 @@ def create_kubernetes_cloud(
         return (
             kubernetes_test_cloud_name
             if kubernetes_test_cloud_name
-            in unit_web_client.client.requester.get_url(cloud_page_url, timeout=30).text
+            in jenkins_session.client.requester.get_url(cloud_page_url, timeout=30).text
             else None
         )
     except requests.RequestException:

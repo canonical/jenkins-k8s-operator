@@ -15,7 +15,7 @@ from pytest_operator.plugin import OpsTest
 
 from .helpers import (
     gen_git_test_job_xml,
-    generate_unit_web_client_from_application,
+    generate_jenkins_session_from_application,
     get_model_unit_addresses,
 )
 
@@ -39,8 +39,8 @@ async def jenkins_upgrade_depl(ops_test: OpsTest, model: Model):
         channel="stable",
     )
     await model.wait_for_idle(status="active", timeout=10 * 60)
-    unit_web_client = await generate_unit_web_client_from_application(ops_test, model, application)
-    unit_web_client.client.create_job(JOB_NAME, gen_git_test_job_xml("k8s"))
+    jenkins_session = await generate_jenkins_session_from_application(ops_test, model, application)
+    jenkins_session.client.create_job(JOB_NAME, gen_git_test_job_xml("k8s"))
 
 
 @pytest.mark.usefixtures("jenkins_upgrade_depl")
@@ -67,8 +67,8 @@ async def test_jenkins_upgrade_check_job(
     address = f"http://{unit_ips[0]}:8080"
     response = requests.get(address, timeout=60)
     if old_version != response.headers["X-Jenkins"]:
-        unit_web_client = await generate_unit_web_client_from_application(
+        jenkins_session = await generate_jenkins_session_from_application(
             ops_test, model, application
         )
-        job = unit_web_client.client.get_job(JOB_NAME)
+        job = jenkins_session.client.get_job(JOB_NAME)
         assert job.name == JOB_NAME
