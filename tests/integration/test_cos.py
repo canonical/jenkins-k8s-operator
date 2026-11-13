@@ -20,7 +20,7 @@ from .helpers import (
     _raise_retry_timeout,
     get_model_unit_addresses,
 )
-from .types_ import UnitWebClient
+from .types_ import JenkinsSession
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ async def grafana_related_fixture(application: Application, model: Model):
 
 @pytest.mark.abort_on_fail
 async def test_prometheus_integration(
-    unit_web_client: UnitWebClient, prometheus_related: Application
+    jenkins_session: JenkinsSession, model: Model, prometheus_related: Application
 ):
     """
     arrange: deploy the Jenkins charm and establish relations with prometheus.
@@ -89,11 +89,10 @@ async def test_prometheus_integration(
     assert: prometheus metrics endpoint for prometheus is active and prometheus has active scrape
         targets.
     """
-    web_address = unit_web_client.web
+    web_address = jenkins_session.web
     res = requests.get(f"{web_address}/prometheus", timeout=10)
     assert res.status_code == 200
 
-    model: Model = unit_web_client.unit.model
     unit_ips = await get_model_unit_addresses(model=model, app_name=prometheus_related.name)
     assert unit_ips, f"Unit IP address not found for {prometheus_related.name}"
     for ip in unit_ips:
@@ -141,7 +140,8 @@ def log_files_exist(
 async def test_loki_integration(
     application: Application,
     loki_related: Application,
-    unit_web_client: UnitWebClient,
+    jenkins_session: JenkinsSession,
+    model: Model,
     kube_core_client: CoreV1Api,
 ):
     """
@@ -150,7 +150,6 @@ async def test_loki_integration(
     assert: loki joins relation successfully, logs are being output to container and to files for
         loki to scrape.
     """
-    model: Model = unit_web_client.unit.model
     unit_ips = await get_model_unit_addresses(model=model, app_name=loki_related.name)
     assert unit_ips, f"Unit IP address not found for {loki_related.name}"
     for ip in unit_ips:
