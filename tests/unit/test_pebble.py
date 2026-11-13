@@ -80,12 +80,12 @@ def test_get_pebble_layer_command(
     [
         pytest.param(
             "/prefix",
-            f"http://localhost:{jenkins.WEB_PORT}/prefix{jenkins.LOGIN_PATH}",
+            f"http://localhost:{jenkins.WEB_PORT}/prefix{jenkins.JENKINS_HEALTH_CHECK_PATH}",
             id="with-prefix",
         ),
         pytest.param(
             "",
-            f"http://localhost:{jenkins.WEB_PORT}{jenkins.LOGIN_PATH}",
+            f"http://localhost:{jenkins.WEB_PORT}{jenkins.JENKINS_HEALTH_CHECK_PATH}",
             id="without-prefix",
         ),
     ],
