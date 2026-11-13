@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 WEB_PORT = 8080
 JENKINS_PLUGIN_MANAGER_VERSION = "2.13.2"
 LOGIN_PATH = "/login?from=%2F"
+JENKINS_HEALTH_CHECK_PATH = "/health"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 JENKINS_HOME_PATH = Path("/var/lib/jenkins")
 SSH_PROXY_CONFIG_PATH = Path("/etc/ssh/ssh_config.d/00-jenkins-proxy.conf")
