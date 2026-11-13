@@ -126,12 +126,6 @@ description = "Run integration tests"
 # ProxyNotConnectedError on the controller WebSocket). Scoped via
 # --only-rerun so genuine test failures and assertion errors are NOT retried.
 commands = [
-  # GitHub-hosted ubuntu-latest can advance before Playwright recognizes the distro.
-  [
-    "playwright",
-    "install",
-    "chromium",
-  ],
   [
     "pytest",
     "--tb",
