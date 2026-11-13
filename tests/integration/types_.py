@@ -43,18 +43,24 @@ class JenkinsSession:
 
 @dataclasses.dataclass
 class UnitWebClient:
-    """The unit, web address, jenkins client wrapper dataclass.
-
-    Attributes:
-        unit: The jenkins application unit.
-        web: The jenkins unit web address.
-        client: The client connected to jenkins unit.
-    """
+    """Compatibility wrapper while tests migrate to ``JenkinsSession``."""
 
     unit: Unit
-    web: str
-    client: jenkinsapi.jenkins.Jenkins
-    client_factory: Callable[[], Awaitable[jenkinsapi.jenkins.Jenkins]] | None = None
+    session: JenkinsSession
+
+    @property
+    def web(self) -> str:
+        """The Jenkins endpoint."""
+        return self.session.url
+
+    @property
+    def client(self) -> jenkinsapi.jenkins.Jenkins:
+        """The current Jenkins client."""
+        return self.session.client
+
+    async def refresh(self) -> jenkinsapi.jenkins.Jenkins:
+        """Refresh the underlying Jenkins session."""
+        return await self.session.refresh()
 
 
 @dataclasses.dataclass

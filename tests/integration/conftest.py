@@ -254,12 +254,7 @@ def unit_web_client_fixture(
     unit: Unit, jenkins_session: JenkinsSession
 ):
     """Compatibility wrapper for tests not yet migrated to separate fixtures."""
-    return UnitWebClient(
-        unit=unit,
-        web=jenkins_session.url,
-        client=jenkins_session.client,
-        client_factory=jenkins_session.refresh,
-    )
+    return UnitWebClient(unit=unit, session=jenkins_session)
 
 
 @pytest_asyncio.fixture(scope="module", name="jenkins_k8s_agents")

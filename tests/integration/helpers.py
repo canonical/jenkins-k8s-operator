@@ -228,10 +228,9 @@ async def install_plugins(
     _jenkins_available(web)
     logger.info("phase=plugin_install jenkins_available plugins=%s", plugins)
 
-    if unit_web_client.client_factory is not None:
-        unit_web_client.client = await unit_web_client.client_factory()
-        client = unit_web_client.client
-        logger.info("phase=plugin_install client_refreshed plugins=%s", plugins)
+    await unit_web_client.refresh()
+    client = unit_web_client.client
+    logger.info("phase=plugin_install client_refreshed plugins=%s", plugins)
     _jenkins_api_ready(web, client)
 
     _plugins_are_active(client, plugins)
