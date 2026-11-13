@@ -28,6 +28,20 @@ class ModelAppUnit:
 
 
 @dataclasses.dataclass
+class JenkinsSession:
+    """A refreshable connection to one Jenkins endpoint."""
+
+    url: str
+    client: jenkinsapi.jenkins.Jenkins
+    _client_factory: Callable[[], Awaitable[jenkinsapi.jenkins.Jenkins]]
+
+    async def refresh(self) -> jenkinsapi.jenkins.Jenkins:
+        """Recreate the client after Jenkins restarts."""
+        self.client = await self._client_factory()
+        return self.client
+
+
+@dataclasses.dataclass
 class UnitWebClient:
     """The unit, web address, jenkins client wrapper dataclass.
 
