@@ -36,7 +36,7 @@ from .helpers import (
     get_model_unit_addresses,
     get_pod_ip,
 )
-from .types_ import KeycloakOIDCMetadata, UnitWebClient
+from .types_ import JenkinsSession, KeycloakOIDCMetadata, UnitWebClient
 
 logger = logging.getLogger(__name__)
 
@@ -137,24 +137,38 @@ def web_address_fixture(unit_ip: str):
     return address
 
 
-@pytest_asyncio.fixture(scope="function", name="jenkins_client")
-async def jenkins_client_fixture(
+@pytest_asyncio.fixture(scope="function", name="jenkins_client_factory")
+async def jenkins_client_factory_fixture(ops_test: OpsTest, application: Application):
+    """Create Jenkins clients for the application without duplicating setup."""
+
+    async def create(
+        address: str,
+        method: AuthMethod = AuthMethod.TOKEN,
+    ) -> jenkinsapi.jenkins.Jenkins:
+        return await generate_jenkins_client(ops_test, application, address, method=method)
+
+    return create
+
+
+@pytest_asyncio.fixture(scope="function", name="jenkins_session")
+async def jenkins_session_fixture(
     ops_test: OpsTest,
     application: Application,
     web_address: str,
-) -> jenkinsapi.jenkins.Jenkins:
-    """The Jenkins API client."""
+    jenkins_client_factory,
+):
+    """The refreshable Jenkins connection for the unit web address."""
     logger.info(
-        "phase=jenkins_client_fixture start model=%s app=%s web_address=%s",
+        "phase=jenkins_session start model=%s app=%s web_address=%s",
         ops_test.model_name,
         application.name,
         web_address,
     )
     try:
-        jenkins_client = await generate_jenkins_client(ops_test, application, web_address)
+        client = await jenkins_client_factory(web_address)
     except Exception as exc:
         logger.error(
-            "phase=jenkins_client_fixture failed model=%s app=%s web_address=%s exc_type=%s exc=%s",
+            "phase=jenkins_session failed model=%s app=%s web_address=%s exc_type=%s exc=%s",
             ops_test.model_name,
             application.name,
             web_address,
@@ -166,11 +180,9 @@ async def jenkins_client_fixture(
             try:
                 status = await model.get_status()
                 app_status = status.applications.get(application.name)
-                unit_keys = []
-                if app_status is not None and app_status.units:
-                    unit_keys = sorted(app_status.units.keys())
+                unit_keys = sorted(app_status.units) if app_status and app_status.units else []
                 logger.error(
-                    "phase=jenkins_client_fixture model_snapshot app=%s app_status=%s app_message=%s units=%s",
+                    "phase=jenkins_session model_snapshot app=%s app_status=%s app_message=%s units=%s",
                     application.name,
                     getattr(app_status, "status", None),
                     getattr(app_status, "status_info", None),
@@ -178,32 +190,36 @@ async def jenkins_client_fixture(
                 )
             except Exception as status_exc:
                 logger.error(
-                    "phase=jenkins_client_fixture model_snapshot_failed exc_type=%s exc=%s",
+                    "phase=jenkins_session model_snapshot_failed exc_type=%s exc=%s",
                     type(status_exc).__name__,
                     status_exc,
                 )
         raise
     logger.info(
-        "phase=jenkins_client_fixture success model=%s app=%s web_address=%s client_baseurl=%s",
+        "phase=jenkins_session success model=%s app=%s web_address=%s client_baseurl=%s",
         ops_test.model_name,
         application.name,
         web_address,
-        jenkins_client.baseurl,
+        client.baseurl,
     )
-    return jenkins_client
+
+    async def refresh() -> jenkinsapi.jenkins.Jenkins:
+        return await jenkins_client_factory(web_address)
+
+    return JenkinsSession(url=web_address, client=client, _client_factory=refresh)
+
+
+@pytest.fixture(scope="function", name="jenkins_client")
+def jenkins_client_fixture(jenkins_session: JenkinsSession) -> jenkinsapi.jenkins.Jenkins:
+    """The current Jenkins API client."""
+    return jenkins_session.client
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_client_for")
 async def jenkins_client_for_fixture(
-    ops_test: OpsTest, model: Model, application: Application, unit_ip: str
+    model: Model, application: Application, unit_ip: str, jenkins_client_factory
 ):
-    """Build a Jenkins client for a declared route topology.
-
-    The route topology decides the Jenkins prefix, so a test states which routes it
-    related and gets the address that topology must serve. The generated address is
-    logged before the client is built, so a failure is debuggable from the test log
-    alone.
-    """
+    """Build a Jenkins client for a declared route topology."""
 
     async def factory(topology: JenkinsRouteTopology) -> jenkinsapi.jenkins.Jenkins:
         prefix = expected_jenkins_prefix(model.name, application.name, topology)
@@ -215,7 +231,7 @@ async def jenkins_client_for_fixture(
             prefix,
             address,
         )
-        client = await generate_jenkins_client(ops_test, application, address)
+        client = await jenkins_client_factory(address)
         await assert_jenkins_serves_at(client, unit_ip, prefix)
         logger.info(
             "phase=jenkins_client_for ready address=%s client_baseurl=%s", address, client.baseurl
@@ -227,33 +243,22 @@ async def jenkins_client_for_fixture(
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_user_client")
 async def jenkins_user_client_fixture(
-    ops_test: OpsTest, application: Application, web_address: str
+    web_address: str, jenkins_client_factory
 ) -> jenkinsapi.jenkins.Jenkins:
     """The Jenkins user client for mocking web browsing behavior."""
-    # Use generic helper with admin password to reduce duplication and add retry.
-    return await generate_jenkins_client(
-        ops_test, application, web_address, method=AuthMethod.PASSWORD
-    )
+    return await jenkins_client_factory(web_address, method=AuthMethod.PASSWORD)
 
 
 @pytest.fixture(scope="function", name="unit_web_client")
 def unit_web_client_fixture(
-    ops_test: OpsTest,
-    application: Application,
-    unit: Unit,
-    web_address: str,
-    jenkins_client: jenkinsapi.jenkins.Jenkins,
+    unit: Unit, jenkins_session: JenkinsSession
 ):
-    """The wrapper around unit, web_address and a refreshable Jenkins client."""
-
-    async def client_factory() -> jenkinsapi.jenkins.Jenkins:
-        return await generate_jenkins_client(ops_test, application, web_address)
-
+    """Compatibility wrapper for tests not yet migrated to separate fixtures."""
     return UnitWebClient(
         unit=unit,
-        web=web_address,
-        client=jenkins_client,
-        client_factory=client_factory,
+        web=jenkins_session.url,
+        client=jenkins_session.client,
+        client_factory=jenkins_session.refresh,
     )
 
 
