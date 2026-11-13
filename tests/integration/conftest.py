@@ -36,7 +36,7 @@ from .helpers import (
     get_model_unit_addresses,
     get_pod_ip,
 )
-from .types_ import JenkinsSession, KeycloakOIDCMetadata, UnitWebClient
+from .types_ import JenkinsSession, KeycloakOIDCMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -247,14 +247,6 @@ async def jenkins_user_client_fixture(
 ) -> jenkinsapi.jenkins.Jenkins:
     """The Jenkins user client for mocking web browsing behavior."""
     return await jenkins_client_factory(web_address, method=AuthMethod.PASSWORD)
-
-
-@pytest.fixture(scope="function", name="unit_web_client")
-def unit_web_client_fixture(
-    unit: Unit, jenkins_session: JenkinsSession
-):
-    """Compatibility wrapper for tests not yet migrated to separate fixtures."""
-    return UnitWebClient(unit=unit, session=jenkins_session)
 
 
 @pytest_asyncio.fixture(scope="module", name="jenkins_k8s_agents")
