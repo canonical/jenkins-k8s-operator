@@ -73,6 +73,8 @@ class ReconcileBlockedError(Exception):
 class JenkinsK8sOperatorCharm(ops.CharmBase):
     """Charmed Jenkins."""
 
+    _storage_repair_state = ops.StoredState()
+
     def __init__(self, *args: typing.Any):
         """Initialize the charm and register event handlers.
 
@@ -85,6 +87,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         super().__init__(*args)
 
         self.storage = storage.Reconciler(charm=self)
+        self._storage_repair_state.set_default(pending=False)
         # Ingress dedicated to agent discovery
         self.agent_discovery_ingress = IngressPerAppRequirer(
             self,
@@ -234,9 +237,20 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                 event.defer()
             return
 
+        if self._storage_repair_state.pending and not storage_event:
+            self.unit.status = ops.WaitingStatus(self._storage_repair_waiting_message())
+            return
+
         if storage_event:
             logger.info("Reconciling storage")
-            self._reconcile_storage(container)
+            try:
+                self._reconcile_storage(container)
+            except (ops.pebble.ChangeError, ops.pebble.ExecError):
+                self._storage_repair_state.pending = True
+                self.unit.status = ops.WaitingStatus(self._storage_repair_waiting_message())
+                logger.exception("Failed to reconcile Jenkins home ownership")
+                return
+            self._storage_repair_state.pending = False
 
         charm_state = self._get_state()
         if charm_state is None:
@@ -278,6 +292,13 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             return
 
         self.unit.status = ops.ActiveStatus(self._agent_status_message)
+
+    def _storage_repair_waiting_message(self) -> str:
+        """Return the recovery instruction for a failed storage ownership repair."""
+        return (
+            "Jenkins home ownership repair is pending. "
+            f"Run `juju run {self.unit.name} reconcile-storage` to retry."
+        )
 
     def _reconcile_storage(
         self, container: ops.Container, timeout: int = storage.DEFAULT_RECONCILE_TIMEOUT
@@ -782,10 +803,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         try:
             self._reconcile_storage(container, timeout=timeout)
         except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
+            self._storage_repair_state.pending = True
+            self.unit.status = ops.WaitingStatus(self._storage_repair_waiting_message())
             logger.error("Failed to reconcile Jenkins home ownership: %s", exc)
             event.fail("Failed to reconcile Jenkins home ownership. See logs.")
             return
 
+        self._storage_repair_state.pending = False
+        self.unit.status = ops.WaitingStatus(
+            "Storage ownership repaired; waiting for the next reconciliation."
+        )
         event.set_results({"timeout": timeout})
 
     def _on_get_admin_password(self, event: ops.ActionEvent) -> None:

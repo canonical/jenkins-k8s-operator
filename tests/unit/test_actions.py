@@ -54,9 +54,11 @@ def test_on_reconcile_storage_action_uses_requested_timeout(
     event = MagicMock(spec=ops.ActionEvent)
     event.params = {"timeout": 900}
 
+    charm._storage_repair_state.pending = True
     with patch.object(charm.storage, "reconcile_storage") as reconcile_storage_mock:
         charm._on_reconcile_storage(event)
 
+    assert charm._storage_repair_state.pending is False
     reconcile_storage_mock.assert_called_once_with(
         container=harness_container.container,
         timeout=900,
@@ -117,6 +119,8 @@ def test_on_reconcile_storage_action_fails_when_chown_times_out(
     with patch.object(charm.storage, "reconcile_storage", side_effect=error):
         charm._on_reconcile_storage(event)
 
+    assert charm._storage_repair_state.pending is True
+    assert "reconcile-storage" in charm.unit.status.message
     event.fail.assert_called_once_with("Failed to reconcile Jenkins home ownership. See logs.")
     event.set_results.assert_not_called()
 

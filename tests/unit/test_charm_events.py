@@ -232,6 +232,40 @@ def test_storage_lifecycle_events_defer_when_preconditions_fail(
     event.defer.assert_called_once()
 
 
+def test_storage_reconciliation_timeout_keeps_unit_waiting_for_action(
+    harness_container: HarnessWithContainer,
+):
+    """A failed lifecycle repair is recoverable without leaving the unit errored."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    event = MagicMock(spec=ops.StorageAttachedEvent)
+    error = ops.pebble.ChangeError(err="timed out", change=MagicMock())
+
+    with patch.object(charm, "_reconcile_storage", side_effect=error):
+        charm._reconcile(event)
+
+    assert charm._storage_repair_state.pending is True
+    assert charm.unit.status.name == WAITING_STATUS_NAME
+    assert "reconcile-storage" in charm.unit.status.message
+    event.defer.assert_not_called()
+
+
+def test_pending_storage_repair_blocks_ordinary_reconciliation(
+    harness_container: HarnessWithContainer,
+):
+    """Normal events do not start Jenkins while ownership repair is pending."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    charm._storage_repair_state.pending = True
+
+    with patch.object(charm, "_get_state") as get_state_mock:
+        charm._reconcile(MagicMock(spec=ops.UpdateStatusEvent))
+
+    assert charm.unit.status.name == WAITING_STATUS_NAME
+    assert "reconcile-storage" in charm.unit.status.message
+    get_state_mock.assert_not_called()
+
+
 def test_storage_reconciliation_precedes_state_derivation(
     harness_container: HarnessWithContainer,
 ):
