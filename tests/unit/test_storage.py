@@ -3,6 +3,8 @@
 
 """Jenkins-k8s charm storage tests."""
 
+from unittest.mock import MagicMock, patch
+
 from ops import testing
 
 from charm import JenkinsK8sOperatorCharm
@@ -55,3 +57,33 @@ def test_reconcile_storage():
         out = container.exec(["stat", JENKINS_HOME_DIR]).stdout
         assert out, "No output from stat dir"
         assert JENKINS_USER in out.read()
+
+
+def test_reconcile_storage_uses_configured_timeout():
+    """The ownership command uses the caller-provided timeout."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = testing.State(
+        containers=[
+            testing.Container(
+                name=JENKINS_CONTAINER_NAME,
+                can_connect=True,  # type: ignore
+            )
+        ],
+        storages=[testing.Storage(name=JENKINS_STORAGE_NAME)],
+    )
+    with ctx(ctx.on.collect_unit_status(), state) as context:
+        container = context.charm.unit.get_container(JENKINS_CONTAINER_NAME)
+        process = MagicMock()
+        with patch.object(container, "exec", return_value=process) as exec_mock:
+            context.charm.storage.reconcile_storage(container=container, timeout=900)
+
+        exec_mock.assert_called_once_with(
+            [
+                "chown",
+                "-R",
+                f"{JENKINS_USER}:{JENKINS_USER}",
+                JENKINS_HOME_DIR,
+            ],
+            timeout=900,
+        )
+        process.wait.assert_called_once_with()

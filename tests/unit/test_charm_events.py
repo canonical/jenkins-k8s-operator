@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 import ops
 import pytest
 
+import precondition
 from charm import JenkinsK8sOperatorCharm
 
 from .helpers import WAITING_STATUS_NAME
@@ -174,6 +175,119 @@ def test__upgrade_charm_reconciles_storage_and_agents(
         jenkins_charm._reconcile(MagicMock(spec=ops.UpgradeCharmEvent))
 
     reconcile_storage_mock.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "event_type,should_reconcile_storage",
+    [
+        pytest.param(ops.StorageAttachedEvent, True, id="storage-attached"),
+        pytest.param(ops.UpgradeCharmEvent, True, id="upgrade-charm"),
+        pytest.param(ops.PebbleReadyEvent, False, id="pebble-ready"),
+        pytest.param(ops.UpdateStatusEvent, False, id="update-status"),
+        pytest.param(ops.ConfigChangedEvent, False, id="config-changed"),
+    ],
+)
+def test_storage_reconciliation_is_limited_to_storage_lifecycle_events(
+    harness_container: HarnessWithContainer,
+    event_type: type[ops.EventBase],
+    should_reconcile_storage: bool,
+):
+    """Storage ownership is reconciled only on attach and upgrade events."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+
+    with (
+        patch.object(charm, "_reconcile_storage") as reconcile_storage_mock,
+        patch.object(charm, "_get_state", return_value=None),
+    ):
+        charm._reconcile(MagicMock(spec=event_type))
+
+    if should_reconcile_storage:
+        reconcile_storage_mock.assert_called_once_with(harness_container.container)
+    else:
+        reconcile_storage_mock.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "event_type",
+    [
+        pytest.param(ops.StorageAttachedEvent, id="storage-attached"),
+        pytest.param(ops.UpgradeCharmEvent, id="upgrade-charm"),
+    ],
+)
+def test_storage_lifecycle_events_defer_when_preconditions_fail(
+    harness_container: HarnessWithContainer, event_type: type[ops.EventBase]
+):
+    """Storage lifecycle events wait for prerequisites instead of losing the repair."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    event = MagicMock(spec=event_type)
+
+    with patch(
+        "precondition.check",
+        return_value=precondition._CheckResult(success=False, reason="not ready"),
+    ):
+        charm._reconcile(event)
+
+    event.defer.assert_called_once()
+
+
+def test_storage_reconciliation_timeout_keeps_unit_waiting_for_action(
+    harness_container: HarnessWithContainer,
+):
+    """A failed lifecycle repair is recoverable without leaving the unit errored."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    event = MagicMock(spec=ops.StorageAttachedEvent)
+    error = ops.pebble.ChangeError(err="timed out", change=MagicMock())
+
+    with patch.object(charm, "_reconcile_storage", side_effect=error):
+        charm._reconcile(event)
+
+    assert charm._storage_repair_state.pending is True
+    assert charm.unit.status.name == WAITING_STATUS_NAME
+    assert "reconcile-storage" in charm.unit.status.message
+    event.defer.assert_not_called()
+
+
+def test_pending_storage_repair_blocks_ordinary_reconciliation(
+    harness_container: HarnessWithContainer,
+):
+    """Normal events do not start Jenkins while ownership repair is pending."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    charm._storage_repair_state.pending = True
+
+    with patch.object(charm, "_get_state") as get_state_mock:
+        charm._reconcile(MagicMock(spec=ops.UpdateStatusEvent))
+
+    assert charm.unit.status.name == WAITING_STATUS_NAME
+    assert "reconcile-storage" in charm.unit.status.message
+    get_state_mock.assert_not_called()
+
+
+def test_storage_reconciliation_precedes_state_derivation(
+    harness_container: HarnessWithContainer,
+):
+    """Storage repair is attempted even when state derivation is unavailable."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    calls: list[str] = []
+
+    def reconcile_storage(_container: ops.Container) -> None:
+        calls.append("storage")
+
+    def get_state() -> None:
+        calls.append("state")
+        return None
+
+    with (
+        patch.object(charm, "_reconcile_storage", side_effect=reconcile_storage),
+        patch.object(charm, "_get_state", side_effect=get_state),
+    ):
+        charm._reconcile(MagicMock(spec=ops.StorageAttachedEvent))
+
+    assert calls == ["storage", "state"]
 
 
 def test_secret_changed_observer_registered(harness: Harness):
