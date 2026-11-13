@@ -14,6 +14,7 @@ import pytest
 from ops.testing import Harness
 
 import jenkins
+import precondition
 from charm import JenkinsK8sOperatorCharm
 
 from .types_ import HarnessWithContainer
@@ -42,6 +43,82 @@ def test_workload_not_ready(harness: Harness, handler_name: str):
     handler_func(mock_event)
 
     mock_event.fail.assert_called_once()
+
+
+def test_on_reconcile_storage_action_uses_requested_timeout(
+    harness_container: HarnessWithContainer,
+):
+    """The storage action passes its configurable timeout to the reconciler."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    event = MagicMock(spec=ops.ActionEvent)
+    event.params = {"timeout": 900}
+
+    with patch.object(charm.storage, "reconcile_storage") as reconcile_storage_mock:
+        charm._on_reconcile_storage(event)
+
+    reconcile_storage_mock.assert_called_once_with(
+        container=harness_container.container,
+        timeout=900,
+    )
+    event.set_results.assert_called_once_with({"timeout": 900})
+    event.fail.assert_not_called()
+
+
+def test_on_reconcile_storage_action_rejects_non_positive_timeout(
+    harness_container: HarnessWithContainer,
+):
+    """The storage action rejects a timeout that cannot run the command."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    event = MagicMock(spec=ops.ActionEvent)
+    event.params = {"timeout": 0}
+
+    with patch.object(charm.storage, "reconcile_storage") as reconcile_storage_mock:
+        charm._on_reconcile_storage(event)
+
+    reconcile_storage_mock.assert_not_called()
+    event.fail.assert_called_once_with("Storage timeout must be a positive integer.")
+    event.set_results.assert_not_called()
+
+
+def test_on_reconcile_storage_action_fails_when_storage_not_ready(
+    harness_container: HarnessWithContainer,
+):
+    """The storage action fails when its prerequisites are unavailable."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    event = MagicMock(spec=ops.ActionEvent)
+
+    with (
+        patch(
+            "precondition.check",
+            return_value=precondition._CheckResult(success=False, reason="not ready"),
+        ),
+        patch.object(charm.storage, "reconcile_storage") as reconcile_storage_mock,
+    ):
+        charm._on_reconcile_storage(event)
+
+    reconcile_storage_mock.assert_not_called()
+    event.fail.assert_called_once_with("not ready")
+    event.set_results.assert_not_called()
+
+
+def test_on_reconcile_storage_action_fails_when_chown_times_out(
+    harness_container: HarnessWithContainer,
+):
+    """The storage action reports a failed ownership command."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    event = MagicMock(spec=ops.ActionEvent)
+    event.params = {"timeout": 900}
+    error = ops.pebble.ChangeError(err="timed out", change=MagicMock())
+
+    with patch.object(charm.storage, "reconcile_storage", side_effect=error):
+        charm._on_reconcile_storage(event)
+
+    event.fail.assert_called_once_with("Failed to reconcile Jenkins home ownership. See logs.")
+    event.set_results.assert_not_called()
 
 
 def test_on_get_admin_password_fails_when_storage_not_mounted(

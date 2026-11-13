@@ -144,6 +144,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.framework.observe(self.on.secret_changed, self._on_secret_changed)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
+        self.framework.observe(self.on.reconcile_storage_action, self._on_reconcile_storage)
 
     def _retract_invalid_haproxy_route(self) -> None:
         """Clear stale routing before validation can stop normal reconciliation.
@@ -223,22 +224,25 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The triggering Juju event (unused, present for observe callback compatibility).
 
         """
+        storage_event = isinstance(event, (ops.StorageAttachedEvent, ops.UpgradeCharmEvent))
         self._retract_invalid_haproxy_route()
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
         if not check_result.success:
             self.unit.status = ops.WaitingStatus(check_result.reason or "")
+            if storage_event:
+                event.defer()
             return
+
+        if storage_event:
+            logger.info("Reconciling storage")
+            self._reconcile_storage(container)
 
         charm_state = self._get_state()
         if charm_state is None:
             return
 
         try:
-            # Storage ownership only needs correction on attach/upgrade events
-            logger.info("Reconciling storage")
-            self._reconcile_storage(container)
-
             jenkins.reconcile_ssh_proxy_config(container, charm_state.ssh_proxy_config)
 
             # Reconcile jenkins configuration filesystem
@@ -275,13 +279,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.unit.status = ops.ActiveStatus(self._agent_status_message)
 
-    def _reconcile_storage(self, container: ops.Container) -> None:
+    def _reconcile_storage(
+        self, container: ops.Container, timeout: int = storage.DEFAULT_RECONCILE_TIMEOUT
+    ) -> None:
         """Ensure storage permissions are correct.
 
         Args:
             container: The Jenkins workload container.
+            timeout: Maximum seconds to wait for recursive ownership reconciliation.
         """
-        self.storage.reconcile_storage(container=container)
+        self.storage.reconcile_storage(container=container, timeout=timeout)
 
     def _reconcile_admin(self, container: ops.Container, charm_state: State) -> str:
         """Ensure the admin user is set up and return the admin password.
@@ -754,6 +761,32 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except jenkins.JenkinsError as exc:
             logger.error("Failed to sync JCasC config: %s", exc)
             raise ReconcileBlockedError("Failed to sync JCasC configuration.") from exc
+
+    def _on_reconcile_storage(self, event: ops.ActionEvent) -> None:
+        """Reconcile Jenkins home ownership with an operator-provided timeout.
+
+        Args:
+            event: The event fired from the reconcile-storage action.
+        """
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        if not check_result.success:
+            event.fail(check_result.reason or "Jenkins storage is not ready.")
+            return
+
+        timeout = event.params.get("timeout", storage.DEFAULT_RECONCILE_TIMEOUT)
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
+            event.fail("Storage timeout must be a positive integer.")
+            return
+
+        try:
+            self._reconcile_storage(container, timeout=timeout)
+        except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
+            logger.error("Failed to reconcile Jenkins home ownership: %s", exc)
+            event.fail("Failed to reconcile Jenkins home ownership. See logs.")
+            return
+
+        event.set_results({"timeout": timeout})
 
     def _on_get_admin_password(self, event: ops.ActionEvent) -> None:
         """Handle get-admin-password event.

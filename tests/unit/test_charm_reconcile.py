@@ -17,6 +17,7 @@ import charm
 import jenkins
 import precondition
 import state
+import storage
 from charm import JenkinsK8sOperatorCharm
 
 from .helpers import BLOCKED_STATUS_NAME, WAITING_STATUS_NAME
@@ -169,7 +170,10 @@ def test_reconcile_storage_delegates_to_storage_reconciler(
     with patch.object(charm.storage, "reconcile_storage") as reconcile_storage_mock:
         charm._reconcile_storage(harness_container.container)
 
-    reconcile_storage_mock.assert_called_once_with(container=harness_container.container)
+    reconcile_storage_mock.assert_called_once_with(
+        container=harness_container.container,
+        timeout=storage.DEFAULT_RECONCILE_TIMEOUT,
+    )
 
 
 def test_calculate_env(harness: Harness):
@@ -303,7 +307,7 @@ def test__on_config_changed_success_replans_and_restarts(
 
         add_layer_mock.assert_called_once()
         replan_mock.assert_called_once()
-        reconcile_storage_mock.assert_called_once_with(harness_container.container)
+        reconcile_storage_mock.assert_not_called()
 
 
 def test_get_state_waits_for_pending_ingress(
