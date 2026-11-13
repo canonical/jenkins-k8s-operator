@@ -15,6 +15,33 @@ backends:
     prepare: |
       snap install charmcraft --classic
       sudo -u ubuntu -H juju switch concierge-k8s:testing
+    # Spread runs backend debug-each immediately after a task fails. Keep
+    # this focused on the ephemeral Juju model and workload state that the
+    # outer workflow cannot inspect after the spread task has returned.
+    debug-each: |
+      set +e
+      echo "=== targeted Juju failure diagnostics ==="
+      sudo -u ubuntu bash <<'DIAGNOSTICS'
+      set +e
+      mapfile -t models < <(juju models --format json | jq -r '.models[]."short-name"' 2>/dev/null)
+      for model in "${models[@]}"; do
+        echo "=== model: $model ==="
+        juju status -m "$model" --relations --storage --color=false || true
+        status_json="$(juju status -m "$model" --format json --color=false 2>/dev/null || true)"
+        echo "$status_json" | jq -r '.applications | to_entries[] | "app=" + .key + " status=" + (.value.status // "unknown") + " message=" + (.value.status-info // "")' 2>/dev/null || true
+        while IFS= read -r unit; do
+          [ -z "$unit" ] && continue
+          echo "=== unit: $unit ==="
+          juju show-unit -m "$model" "$unit" || true
+          juju exec -m "$model" --unit "$unit" -- pebble services || true
+        done < <(echo "$status_json" | jq -r '.applications | to_entries[] | .value.units // {} | keys[]' 2>/dev/null)
+        while IFS= read -r app; do
+          [ -z "$app" ] && continue
+          echo "=== recent Juju log: $app ==="
+          juju debug-log -m "$model" --include "$app" --limit 120 || true
+        done < <(echo "$status_json" | jq -r '.applications | keys[] | select(test("jenkins"))' 2>/dev/null)
+      done
+      DIAGNOSTICS
 environment:
   CONCIERGE: '$(HOST: echo "${CONCIERGE:-concierge-juju3.yaml}")'
   OPCLI_GIT_REF: '$(HOST: echo "${OPCLI_GIT_REF:-main}")'
