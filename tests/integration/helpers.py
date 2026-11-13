@@ -24,7 +24,7 @@ from pytest_operator.plugin import OpsTest
 
 import jenkins
 
-from .types_ import UnitWebClient
+from .types_ import JenkinsSession, UnitWebClient
 
 logger = logging.getLogger(__name__)
 
@@ -738,13 +738,8 @@ async def generate_unit_web_client_from_application(
     async def client_factory() -> jenkinsapi.jenkins.Jenkins:
         return await generate_jenkins_client(ops_test, jenkins_app, address)
 
-    unit_web_client = UnitWebClient(
-        unit=jenkins_unit,
-        web=address,
-        client=jenkins_client,
-        client_factory=client_factory,
-    )
-    return unit_web_client
+    session = JenkinsSession(url=address, client=jenkins_client, _client_factory=client_factory)
+    return UnitWebClient(unit=jenkins_unit, session=session)
 
 
 def get_job_invoked_unit(job: jenkins.jenkinsapi.job.Job, units: typing.List[Unit]) -> Unit | None:
