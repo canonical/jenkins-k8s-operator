@@ -33,6 +33,11 @@ backends:
           [ -z "$unit" ] && continue
           echo "=== unit: $unit ==="
           juju show-unit -m "$model" "$unit" || true
+          # Sidecar workload state is not included in juju show-unit. Query
+          # Pebble through the charm container without printing the plan.
+          juju ssh -m "$model" "$unit" \
+            PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket \
+            /charm/bin/pebble services || true
           juju exec -m "$model" --unit "$unit" -- pebble services || true
         done < <(echo "$status_json" | jq -r '.applications | to_entries[] | .value.units // {} | keys[]' 2>/dev/null)
         while IFS= read -r app; do
@@ -40,6 +45,9 @@ backends:
           echo "=== recent Juju log: $app ==="
           juju debug-log -m "$model" --include "$app" --limit 120 || true
         done < <(echo "$status_json" | jq -r '.applications | keys[] | select(test("jenkins"))' 2>/dev/null)
+        echo "=== Kubernetes workload summary: $model ==="
+        sudo k8s kubectl get pods -n "$model" -o wide || true
+        sudo k8s kubectl get events -n "$model" --sort-by=.lastTimestamp | tail -80 || true
       done
       DIAGNOSTICS
 environment:
