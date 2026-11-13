@@ -27,6 +27,31 @@ class ModelAppUnit:
     unit: Unit
 
 
+AddressResolver = Callable[[], Awaitable[str]]
+JenkinsConnector = Callable[[str], Awaitable[jenkinsapi.jenkins.Jenkins]]
+
+
+@dataclasses.dataclass(frozen=True)
+class JenkinsConnection:
+    """A Jenkins client bound to the URL used to create it."""
+
+    url: str
+    client: jenkinsapi.jenkins.Jenkins
+
+
+@dataclasses.dataclass(frozen=True)
+class JenkinsTarget:
+    """The information needed to create a fresh Jenkins connection."""
+
+    address_resolver: AddressResolver
+    connector: JenkinsConnector
+
+    async def connect(self) -> JenkinsConnection:
+        """Resolve the current address and create a client for it."""
+        url = await self.address_resolver()
+        return JenkinsConnection(url=url, client=await self.connector(url))
+
+
 @dataclasses.dataclass
 class JenkinsSession:
     """A refreshable connection to one Jenkins endpoint."""
