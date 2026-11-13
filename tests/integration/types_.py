@@ -4,6 +4,7 @@
 """Types for integration tests module."""
 
 import dataclasses
+from collections.abc import Awaitable, Callable
 
 import jenkinsapi.jenkins
 from juju.application import Application
@@ -39,6 +40,7 @@ class UnitWebClient:
     unit: Unit
     web: str
     client: jenkinsapi.jenkins.Jenkins
+    client_factory: Callable[[], Awaitable[jenkinsapi.jenkins.Jenkins]] | None = None
 
 
 @dataclasses.dataclass
