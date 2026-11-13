@@ -1,0 +1,23 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: Terraform modules release
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform_modules_release.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform_modules_release.yaml"
+
+jobs:
+  terraform-release:
+    uses: canonical/operator-workflows/.github/workflows/terraform_modules_release.yaml@5445ca229f0dc6621e1bdab7e4f792a1dfb2a54b  # main
+    permissions:
+      contents: write

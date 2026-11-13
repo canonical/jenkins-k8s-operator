@@ -16,11 +16,11 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-  "cosl==1.10.3",
+  "cosl==1.11.3",
   "jenkinsapi==0.3.23",
   "jsonschema==4.26.0",
-  "ops==3.8.3",
-  "pydantic==2.13.5",
+  "ops==3.9.0",
+  "pydantic==2.14.3",
   "requests==2.34.2",
   "validators==0.35.0",
 ]
@@ -34,7 +34,7 @@ lint = [
   "httpx==0.28.1",
   "jinja2==3.1.6",
   "jubilant",
-  "lightkube==1.0.1",
+  "lightkube==1.0.2",
   "mypy",
   "ops[testing]",
   "pep8-naming",
@@ -42,10 +42,10 @@ lint = [
   "pytest",
   "pytest-asyncio",
   "pytest-operator",
-  "pytest-playwright==0.9.0",
+  "pytest-playwright==0.10.0",
   "python-keycloak==7.1.1",
   "ruff",
-  "tenacity==9.1.4",
+  "tenacity==9.2.1",
   "toml",
   "types-pyyaml",
   "types-requests",
@@ -67,17 +67,17 @@ integration = [
   "jinja2==3.1.6",
   "jubilant",
   "juju>=3,<4",
-  "lightkube==1.0.1",
+  "lightkube==1.0.2",
   "macaroonbakery",
   "pyotp==2.10.0",
   "pytest",
   "pytest-asyncio",
   "pytest-operator",
-  "pytest-playwright==0.9.0",
+  "pytest-playwright==0.10.0",
   "pytest-rerunfailures==16.7",
   "python-keycloak==7.1.1",
   "requests-toolbelt>=1.0.0",
-  "tenacity==9.1.4",
+  "tenacity==9.2.1",
 ]
 static = [
   "bandit[toml]",
@@ -89,7 +89,7 @@ package = false
 [tool.uv.sources]
 # opcli is published only from the charm-ci git repository, not PyPI.
 # v1.0.0 == 0eef5b8, matching the pinned canonical/charm-ci workflow.
-opcli = { git = "https://github.com/canonical/charm-ci.git", tag = "v1.0.1" }
+opcli = { git = "https://github.com/canonical/charm-ci.git", tag = "v1.0.2" }
 
 [tool.ruff]
 target-version = "py310"

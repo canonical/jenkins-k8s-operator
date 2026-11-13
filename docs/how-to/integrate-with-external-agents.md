@@ -21,12 +21,19 @@ If only `ingress` is related, it is used as the agent fallback and the charm
 warns that the route may be protected. A pending ingress endpoint puts the charm
 in `WaitingStatus` instead of publishing a pod address.
 
+Jenkins serves the UI and the agent connection from one URL prefix, so both
+relations must expose the same path. Both path routing mode and subdomain
+routing mode satisfy this when used on both relations. Mixed modes, such as a
+path-routed server ingress with a subdomain agent ingress, put the charm in
+`BlockedStatus`. See [ADR-001](../adr/001_agent_ingress_path_prefix.md).
+
 The `haproxy-route` relation is a server/browser route and is never used as an
 agent endpoint. If agents are related, direct HAProxy routing requires either a
 dedicated `agent-discovery-ingress` route or a server `ingress` fallback. A
-related `haproxy-route` also requires `external-hostname`. A non-root server
-ingress path cannot be combined with `haproxy-route`; the charm enters
-`BlockedStatus` rather than exposing a mismatched Jenkins prefix.
+related `haproxy-route` also requires `external-hostname`. The charm publishes
+the Jenkins prefix as the HAProxy route path, so HAProxy forwards `/<prefix>/...`
+unchanged and a non-root server ingress path can be combined with
+`haproxy-route`.
 
 ## Networking considerations
 The charm assumes that:

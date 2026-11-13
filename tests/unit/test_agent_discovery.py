@@ -121,7 +121,7 @@ def test_dedicated_agent_ingress_is_valid_without_server_ingress():
 
     with ctx(ctx.on.config_changed(), state) as mgr:
         assert mgr.charm._agent_discovery_url == "https://agents.example.com"
-        assert mgr.charm._get_ingress_path() == ""
+        assert mgr.charm._jenkins_prefix == ""
 
 
 def test_agent_status_message():

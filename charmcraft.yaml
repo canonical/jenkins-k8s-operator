@@ -115,6 +115,13 @@ config:
         Comma-separated names of Jenkins nodes managed outside Juju. These nodes are preserved and
         are not created, modified, or deleted by agent relation reconciliation.
       default: ""
+    ssh-proxy-address:
+      type: string
+      default: ""
+      description: >
+        [EXPERIMENTAL] Optional HTTP CONNECT proxy for OpenSSH connections from the Jenkins
+        container. Set to HOST:PORT to enable the feature. Leave empty to disable it. URI
+        schemes and credentials are not supported.
     system-properties:
       type: string
       default: ""

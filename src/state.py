@@ -207,6 +207,19 @@ def _parse_proxy_config() -> typing.Optional["ProxyConfig"]:
         raise CharmConfigInvalidError("Invalid model proxy configuration.") from exc
 
 
+def _parse_ssh_proxy_config(charm: ops.CharmBase) -> typing.Optional["SshProxyConfig"]:
+    """Parse the optional SSH-only proxy configuration."""
+    address = typing.cast(str, charm.config.get("ssh-proxy-address") or "").strip()
+    if not address:
+        return None
+    try:
+        return SshProxyConfig.from_address(address)
+    except ValueError as exc:
+        raise CharmConfigInvalidError(
+            "Invalid ssh-proxy-address; expected HOST:PORT without a scheme or credentials."
+        ) from exc
+
+
 def _parse_system_properties(charm: ops.CharmBase) -> list[str]:
     """Parse custom JVM system properties from charm config."""
     system_properties_cfg = typing.cast(str, charm.config.get("system-properties"))
@@ -261,19 +274,17 @@ def _validate_unit_count(charm: ops.CharmBase) -> None:
 
 
 def _validate_haproxy_route_configuration(
-    server_ingress: typing.Optional[ops.Relation],
     haproxy_route: typing.Optional[ops.Relation],
     external_hostname: typing.Optional[str],
 ) -> None:
-    """Validate HAProxy hostname and server-ingress path compatibility."""
+    """Validate HAProxy hostname requirements.
+
+    HAProxy routes on the Jenkins prefix, which the charm publishes as the route
+    path, so a non-root prefix is no longer incompatible with haproxy-route.
+    """
     if haproxy_route and not external_hostname:
         raise CharmConfigInvalidError(
             f"{HAPROXY_ROUTE_RELATION_NAME} requires external-hostname to be configured."
-        )
-    ingress_path = _get_ingress_path(server_ingress)
-    if haproxy_route and server_ingress and ingress_path:
-        raise CharmConfigInvalidError(
-            "ingress and haproxy-route cannot be combined when ingress uses a non-root path."
         )
 
 
@@ -281,11 +292,23 @@ def _validate_agent_route_path(
     agent_discovery_ingress: typing.Optional[ops.Relation],
     server_ingress: typing.Optional[ops.Relation],
 ) -> None:
-    """Reject dedicated agent routes that cannot preserve a server prefix."""
-    if agent_discovery_ingress and server_ingress and _get_ingress_path(server_ingress):
-        raise CharmConfigInvalidError(
-            "agent-discovery-ingress and ingress cannot be combined when ingress uses a non-root path."
-        )
+    """Reject dedicated agent routes that do not carry the Jenkins prefix.
+
+    Jenkins serves the UI and the agent protocol under a single global prefix,
+    taken from the server ingress. A dedicated agent route must therefore expose
+    that same path, otherwise agents reach a path Jenkins does not serve and the
+    JNLP endpoint advertises an unreachable URL.
+    """
+    if not agent_discovery_ingress or not server_ingress:
+        return
+    server_path = _get_ingress_path(server_ingress)
+    agent_path = _get_ingress_path(agent_discovery_ingress)
+    if None in (server_path, agent_path) or agent_path == server_path:
+        return
+    raise CharmConfigInvalidError(
+        f"agent-discovery-ingress path ({agent_path or '/'}) must match the "
+        f"Jenkins prefix ({server_path or '/'})."
+    )
 
 
 def _validate_agent_ingress_readiness(
@@ -338,7 +361,7 @@ def _validate_deployment_relations(charm: ops.CharmBase) -> None:
     server_ingress = charm.model.get_relation(INGRESS_RELATION_NAME)
     haproxy_route = charm.model.get_relation(HAPROXY_ROUTE_RELATION_NAME)
     external_hostname = _parse_external_hostname(charm)
-    _validate_haproxy_route_configuration(server_ingress, haproxy_route, external_hostname)
+    _validate_haproxy_route_configuration(haproxy_route, external_hostname)
     _validate_agent_route_path(agent_discovery_ingress, server_ingress)
     _validate_agent_ingress_readiness(charm, agent_discovery_ingress, server_ingress)
     _validate_agent_route_configuration(
@@ -487,6 +510,39 @@ def _parse_jcasc_environment_secrets(
     return dict(content)
 
 
+class SshProxyConfig(BaseModel):
+    """Configuration for the optional OpenSSH HTTP CONNECT proxy."""
+
+    host: str
+    port: int
+
+    @classmethod
+    def from_address(cls, address: str) -> "SshProxyConfig":
+        """Parse a credential-free HOST:PORT proxy address."""
+        parsed = urlparse(f"http://{address}")
+        if (
+            not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path not in ("", "/")
+            or parsed.params
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("invalid SSH proxy address")
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("invalid SSH proxy port") from exc
+        if (
+            port is None
+            or not 1 <= port <= 65535
+            or any(char.isspace() for char in parsed.hostname)
+        ):
+            raise ValueError("invalid SSH proxy address")
+        return cls(host=parsed.hostname, port=port)
+
+
 class ProxyConfig(BaseModel):
     """Configuration for accessing Jenkins through proxy.
 
@@ -552,6 +608,7 @@ class State:
     admin_password: typing.Optional[str] = None
     external_hostname: typing.Optional[str] = None
     external_agent_nodes: frozenset[str] = frozenset()
+    ssh_proxy_config: typing.Optional[SshProxyConfig] = None
 
     @classmethod
     def from_charm(cls, charm: ops.CharmBase) -> "State":
@@ -571,6 +628,7 @@ class State:
         restart_time_range = _parse_restart_time_range(charm)
         agent_relation_meta_map = _get_relation_state(charm)
         proxy_config = _parse_proxy_config()
+        ssh_proxy_config = _parse_ssh_proxy_config(charm)
 
         plugins_str = typing.cast(str, charm.config.get("allowed-plugins"))
         plugins = (plugin.strip() for plugin in plugins_str.split(",")) if plugins_str else None
@@ -607,4 +665,5 @@ class State:
             admin_password=admin_password,
             external_hostname=external_hostname,
             external_agent_nodes=external_agent_nodes,
+            ssh_proxy_config=ssh_proxy_config,
         )

@@ -24,9 +24,14 @@ from pytest_operator.plugin import OpsTest
 
 import state
 
-from .constants import MACHINE_CONTROLLER_NAME
+from .constants import (
+    MACHINE_CONTROLLER_NAME,
+    JenkinsRouteTopology,
+    expected_jenkins_prefix,
+)
 from .helpers import (
     AuthMethod,
+    assert_jenkins_serves_at,
     generate_jenkins_client,
     get_model_unit_addresses,
     get_pod_ip,
@@ -186,6 +191,38 @@ async def jenkins_client_fixture(
         jenkins_client.baseurl,
     )
     return jenkins_client
+
+
+@pytest_asyncio.fixture(scope="function", name="jenkins_client_for")
+async def jenkins_client_for_fixture(
+    ops_test: OpsTest, model: Model, application: Application, unit_ip: str
+):
+    """Build a Jenkins client for a declared route topology.
+
+    The route topology decides the Jenkins prefix, so a test states which routes it
+    related and gets the address that topology must serve. The generated address is
+    logged before the client is built, so a failure is debuggable from the test log
+    alone.
+    """
+
+    async def factory(topology: JenkinsRouteTopology) -> jenkinsapi.jenkins.Jenkins:
+        prefix = expected_jenkins_prefix(model.name, application.name, topology)
+        address = f"http://{unit_ip}:8080{prefix}"
+        logger.info(
+            "phase=jenkins_client_for server_route=%s agent_route=%s prefix=%r address=%s",
+            topology[0].value,
+            topology[1].value,
+            prefix,
+            address,
+        )
+        client = await generate_jenkins_client(ops_test, application, address)
+        await assert_jenkins_serves_at(client, unit_ip, prefix)
+        logger.info(
+            "phase=jenkins_client_for ready address=%s client_baseurl=%s", address, client.baseurl
+        )
+        return client
+
+    return factory
 
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_user_client")

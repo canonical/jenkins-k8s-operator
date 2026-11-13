@@ -5,70 +5,93 @@ variable "app_name" {
   description = "Name of the application in the Juju model."
   type        = string
   default     = "jenkins-k8s"
+  nullable    = false
+}
+
+variable "base" {
+  description = "The operating system on which to deploy. E.g. ubuntu@24.04. If null, the charm's default base is used."
+  type        = string
+  default     = null
 }
 
 variable "channel" {
   description = "The channel to use when deploying a charm."
   type        = string
   default     = "latest/stable"
+  nullable    = false
 }
 
 variable "config" {
   description = <<-EOT
-    Application configuration options for the jenkins-k8s charm. Each attribute
-    maps to a charm config option defined in charmcraft.yaml. Unset attributes
-    fall back to the charm-provided default.
+    Application configuration options for the jenkins-k8s charm, keyed by the
+    charm config option name as defined in charmcraft.yaml. Unset keys fall
+    back to the charm-provided default.
 
     Details about available options can be found at
     https://charmhub.io/jenkins-k8s/configurations
 
-    - restart_time_range: Preferred UTC time range in 24 hour format for
+    - restart-time-range: Preferred UTC time range in 24 hour format for
       restarting Jenkins (e.g. "03-05"). If empty, restart happens whenever
       Jenkins needs to restart.
-    - allowed_plugins: Comma-separated list of allowed plugin short names. If
+    - allowed-plugins: Comma-separated list of allowed plugin short names. If
       empty, any plugin can be installed.
-    - system_properties: Comma-separated JVM system properties (key=value,
+    - system-properties: Comma-separated JVM system properties (key=value,
       without the -D prefix) passed to the Jenkins process at startup.
-    - jcasc_config: Jenkins Configuration as Code (JCasC) YAML content. Mutually
-      exclusive with jcasc_repository.
-    - jcasc_repository: HTTPS URL of a public git repository containing JCasC
-      YAML files. Mutually exclusive with jcasc_config.
-    - jcasc_repository_token: A Juju user-secret URI granting access to a private
-      jcasc_repository. The secret must contain `username` and `token` keys.
-    - jcasc_repository_config_path: Path to the directory within
-      jcasc_repository containing YAML files. Defaults to "jcasc".
-    - jcasc_repository_branch: Git branch to check out when cloning
-      jcasc_repository. Defaults to "main".
-    - jcasc_environment_secrets: A Juju user-secret URI containing key-value
+    - jcasc-config: Jenkins Configuration as Code (JCasC) YAML content. Mutually
+      exclusive with jcasc-repository.
+    - jcasc-repository: HTTPS URL of a public git repository containing JCasC
+      YAML files. Mutually exclusive with jcasc-config.
+    - jcasc-repository-token: A Juju user-secret URI granting access to a private
+      jcasc-repository. The secret must contain `username` and `token` keys.
+    - jcasc-repository-config-path: Path to the directory within
+      jcasc-repository containing YAML files. Defaults to "jcasc".
+    - jcasc-repository-branch: Git branch to check out when cloning
+      jcasc-repository. Defaults to "main".
+    - jcasc-environment-secrets: A Juju user-secret URI containing key-value
       pairs to inject as environment variables for JCasC interpolation.
-    - external_agent_nodes: Comma-separated names of Jenkins nodes managed outside
+    - external-agent-nodes: Comma-separated names of Jenkins nodes managed outside
       Juju and preserved during agent relation reconciliation.
   EOT
-  type = object({
-    restart_time_range           = optional(string)
-    allowed_plugins              = optional(string)
-    system_properties            = optional(string)
-    jcasc_config                 = optional(string)
-    jcasc_repository             = optional(string)
-    jcasc_repository_token       = optional(string)
-    jcasc_repository_config_path = optional(string)
-    jcasc_repository_branch      = optional(string)
-    jcasc_environment_secrets    = optional(string)
-    external_agent_nodes         = optional(string)
-  })
-  default = {}
+  type        = map(string)
+  default     = {}
 }
 
 variable "constraints" {
   description = "Juju constraints to apply for this application."
   type        = string
-  default     = ""
+  default     = null
 }
 
-variable "model" {
-  description = "Reference to a `juju_model`."
+variable "endpoint_bindings" {
+  description = "Map for endpoint bindings."
+  type = set(object({
+    endpoint = optional(string)
+    space    = string
+  }))
+  default = []
+}
+
+variable "expose" {
+  description = "The expose block, restricting access to the application by CIDRs, endpoints or spaces. Defaults to exposed with no restrictions; pass `expose = null` to keep the application unexposed."
+  type = object({
+    cidrs     = optional(string)
+    endpoints = optional(string)
+    spaces    = optional(string)
+  })
+  default  = {}
+  nullable = true
+}
+
+variable "model_uuid" {
+  description = "UUID of the Juju model where the application will be deployed."
   type        = string
-  default     = ""
+  nullable    = false
+}
+
+variable "resources" {
+  description = "Resources to use with the application, keyed by resource name (e.g. jenkins-image)."
+  type        = map(string)
+  default     = {}
 }
 
 variable "revision" {
@@ -77,8 +100,14 @@ variable "revision" {
   default     = null
 }
 
-variable "base" {
-  description = "The operating system on which to deploy"
-  type        = string
-  default     = "ubuntu@24.04"
+variable "storage_directives" {
+  description = "Map of storage used by the application, keyed by storage name (e.g. jenkins-home)."
+  type        = map(string)
+  default     = {}
+}
+
+variable "units" {
+  description = "Unit count/scale."
+  type        = number
+  default     = 1
 }
