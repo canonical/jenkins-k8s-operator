@@ -9,6 +9,7 @@ import secrets
 import string
 from pathlib import Path
 from typing import Any, AsyncGenerator, Iterable
+from urllib.parse import urlparse
 
 import jenkinsapi.jenkins
 import kubernetes.config
@@ -35,6 +36,7 @@ from .helpers import (
     generate_jenkins_client,
     get_model_unit_addresses,
     get_pod_ip,
+    routed_unit_address_resolver,
     unit_address_resolver,
 )
 from .types_ import JenkinsSession, JenkinsTarget, KeycloakOIDCMetadata
@@ -214,13 +216,18 @@ def jenkins_client_fixture(jenkins_session: JenkinsSession) -> jenkinsapi.jenkin
 
 @pytest_asyncio.fixture(scope="function", name="jenkins_client_for")
 async def jenkins_client_for_fixture(
-    model: Model, application: Application, unit_ip: str, jenkins_client_factory
+    model: Model, application: Application, jenkins_client_factory
 ):
     """Build a Jenkins client for a declared route topology."""
 
     async def factory(topology: JenkinsRouteTopology) -> jenkinsapi.jenkins.Jenkins:
         prefix = expected_jenkins_prefix(model.name, application.name, topology)
-        address = f"http://{unit_ip}:8080{prefix}"
+        address_resolver = routed_unit_address_resolver(
+            model,
+            application,
+            lambda: prefix,
+        )
+        address = await address_resolver()
         logger.info(
             "phase=jenkins_client_for server_route=%s agent_route=%s prefix=%r address=%s",
             topology[0].value,
@@ -229,7 +236,9 @@ async def jenkins_client_for_fixture(
             address,
         )
         client = await jenkins_client_factory(address)
-        await assert_jenkins_serves_at(client, unit_ip, prefix)
+        current_unit_ip = urlparse(address).hostname
+        assert current_unit_ip
+        await assert_jenkins_serves_at(client, current_unit_ip, prefix)
         logger.info(
             "phase=jenkins_client_for ready address=%s client_baseurl=%s", address, client.baseurl
         )
