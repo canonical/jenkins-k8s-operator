@@ -35,6 +35,11 @@ class JenkinsSession:
     client: jenkinsapi.jenkins.Jenkins
     _client_factory: Callable[[], Awaitable[jenkinsapi.jenkins.Jenkins]]
 
+    @property
+    def web(self) -> str:
+        """Compatibility alias for the Jenkins endpoint."""
+        return self.url
+
     async def refresh(self) -> jenkinsapi.jenkins.Jenkins:
         """Recreate the client after Jenkins restarts."""
         self.client = await self._client_factory()

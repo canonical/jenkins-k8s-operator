@@ -29,7 +29,7 @@ from .helpers import (
     install_plugins,
     kubernetes_test_pipeline_script,
 )
-from .types_ import KeycloakOIDCMetadata, UnitWebClient
+from .types_ import JenkinsSession, KeycloakOIDCMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -105,15 +105,15 @@ def jenkins_kube_config_fixture(
     return rewritten_kube_config
 
 
-async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
+async def test_docker_build_publish_plugin(jenkins_session: JenkinsSession):
     """arrange: given a Jenkins charm with docker-build-publish plugin installed.
     act: when a job configuration page is accessed.
     assert: docker-build-publish plugin option exists.
     """
-    await install_plugins(unit_web_client, ("docker-build-publish",))
-    unit_web_client.client.create_job("docker_plugin_test", gen_test_job_xml("k8s"))
-    res = unit_web_client.client.requester.get_url(
-        f"{unit_web_client.web}/job/docker_plugin_test/configure"
+    await install_plugins(jenkins_session, ("docker-build-publish",))
+    jenkins_session.client.create_job("docker_plugin_test", gen_test_job_xml("k8s"))
+    res = jenkins_session.client.requester.get_url(
+        f"{jenkins_session.web}/job/docker_plugin_test/configure"
     )
     config_page = str(res.content, "utf-8")
     assert "Docker Build and Publish" in config_page, (
@@ -121,16 +121,16 @@ async def test_docker_build_publish_plugin(unit_web_client: UnitWebClient):
     )
 
 
-async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
+async def test_reverse_proxy_plugin(jenkins_session: JenkinsSession):
     """
     arrange: given a Jenkins charm with reverse-proxy-auth-plugin plugin installed.
     act: when the security configuration is accessed.
     assert: reverse-proxy-auth-plugin plugin option exists.
     """
-    await install_plugins(unit_web_client, ("reverse-proxy-auth-plugin",))
+    await install_plugins(jenkins_session, ("reverse-proxy-auth-plugin",))
 
-    res = unit_web_client.client.requester.get_url(
-        f"{unit_web_client.web}/manage/configureSecurity"
+    res = jenkins_session.client.requester.get_url(
+        f"{jenkins_session.web}/manage/configureSecurity"
     )
     config_page = str(res.content, "utf-8")
 
@@ -139,36 +139,36 @@ async def test_reverse_proxy_plugin(unit_web_client: UnitWebClient):
     )
 
 
-async def test_dependency_check_plugin(unit_web_client: UnitWebClient):
+async def test_dependency_check_plugin(jenkins_session: JenkinsSession):
     """
     arrange: given a Jenkins charm with dependency-check-jenkins-plugin plugin installed.
     act: when a job configuration page is accessed.
     assert: dependency-check-jenkins-plugin plugin option exists.
     """
-    await install_plugins(unit_web_client, ("dependency-check-jenkins-plugin",))
-    unit_web_client.client.create_job("deps_plugin_test", gen_test_job_xml("k8s"))
-    res = unit_web_client.client.requester.get_url(
-        f"{unit_web_client.web}/job/deps_plugin_test/configure"
+    await install_plugins(jenkins_session, ("dependency-check-jenkins-plugin",))
+    jenkins_session.client.create_job("deps_plugin_test", gen_test_job_xml("k8s"))
+    res = jenkins_session.client.requester.get_url(
+        f"{jenkins_session.web}/job/deps_plugin_test/configure"
     )
     job_page = str(res.content, "utf-8")
     assert "Invoke Dependency-Check" in job_page, (
         f"Dependency check job configuration option not found. {job_page}"
     )
-    res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configureTools/")
+    res = jenkins_session.client.requester.get_url(f"{jenkins_session.web}/manage/configureTools/")
     tools_page = str(res.content, "utf-8")
     assert "Dependency-Check installations" in tools_page, (
         f"Dependency check tool configuration option not found. {tools_page}"
     )
 
 
-async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
+async def test_groovy_libs_plugin(jenkins_session: JenkinsSession):
     """
     arrange: given a Jenkins charm with pipeline-groovy-lib plugin installed.
     act: when a job configuration page is accessed.
     assert: pipeline-groovy-lib plugin option exists.
     """
-    await install_plugins(unit_web_client, ("pipeline-groovy-lib",))
-    res = unit_web_client.client.requester.get_url(f"{unit_web_client.web}/manage/configure")
+    await install_plugins(jenkins_session, ("pipeline-groovy-lib",))
+    res = jenkins_session.client.requester.get_url(f"{jenkins_session.web}/manage/configure")
 
     config_page = str(res.content, "utf-8")
     # The string is now "Global Trusted Pipeline Libraries" and
@@ -179,36 +179,36 @@ async def test_groovy_libs_plugin(unit_web_client: UnitWebClient):
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
-async def test_rebuilder_plugin(unit_web_client: UnitWebClient):
+async def test_rebuilder_plugin(jenkins_session: JenkinsSession):
     """
     arrange: given a Jenkins charm with rebuilder plugin installed.
     act: when a job is built and a rebuild is triggered.
     assert: last job is rebuilt.
     """
-    await install_plugins(unit_web_client, ("rebuild",))
+    await install_plugins(jenkins_session, ("rebuild",))
 
     job_name = "rebuild_test"
-    job = unit_web_client.client.create_job(job_name, gen_test_job_xml("k8s"))
+    job = jenkins_session.client.create_job(job_name, gen_test_job_xml("k8s"))
     job.invoke().block_until_complete()
 
-    unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/job/{job_name}/lastCompletedBuild/rebuild/"
+    jenkins_session.client.requester.post_url(
+        f"{jenkins_session.web}/job/{job_name}/lastCompletedBuild/rebuild/"
     )
     job.get_last_build().block_until_complete()
 
     assert job.get_last_buildnumber() == 2, "Rebuild not triggered."
 
 
-async def test_openid_plugin(unit_web_client: UnitWebClient):
+async def test_openid_plugin(jenkins_session: JenkinsSession):
     """
     arrange: given a Jenkins charm with openid plugin installed.
     act: when an openid endpoint is validated using the plugin.
     assert: the response returns a 200 status code.
     """
-    await install_plugins(unit_web_client, ("openid",))
+    await install_plugins(jenkins_session, ("openid",))
 
-    res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/manage/descriptorByName/hudson.plugins.openid."
+    res = jenkins_session.client.requester.post_url(
+        f"{jenkins_session.web}/manage/descriptorByName/hudson.plugins.openid."
         "OpenIdSsoSecurityRealm/validate",
         data={"endpoint": "https://login.ubuntu.com/+openid"},
     )
@@ -217,7 +217,7 @@ async def test_openid_plugin(unit_web_client: UnitWebClient):
 
 
 async def test_openid_connect_plugin(
-    unit_web_client: UnitWebClient,
+    jenkins_session: JenkinsSession,
     keycloak_oidc_meta: KeycloakOIDCMetadata,
     keycloak_ip: str,
 ):
@@ -230,7 +230,7 @@ async def test_openid_connect_plugin(
         1. a redirection to Keycloak SSO is made.
         2. native Jenkins login ui is loaded.
     """
-    await install_plugins(unit_web_client, ("oic-auth",))
+    await install_plugins(jenkins_session, ("oic-auth",))
 
     # 1. when jenkins security realm is configured with oidc server and login page is requested.
     payload: dict = {
@@ -250,8 +250,8 @@ async def test_openid_connect_plugin(
         },
         "slaveAgentPort": {"type": "fixed", "value": "50000"},
     }
-    res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/manage/configureSecurity/configure",
+    res = jenkins_session.client.requester.post_url(
+        f"{jenkins_session.web}/manage/configureSecurity/configure",
         data=[
             (
                 "json",
@@ -260,7 +260,7 @@ async def test_openid_connect_plugin(
         ],
     )
     res = requests.get(
-        f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F",
+        f"{jenkins_session.web}/securityRealm/commenceLogin?from=%2F",
         allow_redirects=False,
         timeout=30,
     )
@@ -284,8 +284,8 @@ async def test_openid_connect_plugin(
         },
         "slaveAgentPort": {"type": "fixed", "value": "50000"},
     }
-    res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/manage/configureSecurity/configure",
+    res = jenkins_session.client.requester.post_url(
+        f"{jenkins_session.web}/manage/configureSecurity/configure",
         data=[
             (
                 "json",
@@ -293,9 +293,9 @@ async def test_openid_connect_plugin(
             )
         ],
     )
-    res = requests.get(f"{unit_web_client.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
+    res = requests.get(f"{jenkins_session.web}/securityRealm/commenceLogin?from=%2F", timeout=30)
     assert res.status_code == 404, "Security realm login not reset."
-    res = requests.get(f"{unit_web_client.web}/login?from=%2F", timeout=30)
+    res = requests.get(f"{jenkins_session.web}/login?from=%2F", timeout=30)
     assert res.status_code == 200, "Failed to load Jenkins native login UI."
 
 
@@ -320,7 +320,7 @@ def _get_completed_build(
 
 def _log_build_timeout_diagnostics(
     queue_item: jenkinsapi.queue.QueueItem,
-    unit_web_client: UnitWebClient,
+    jenkins_session: JenkinsSession,
     kube_core_client: kubernetes.client.CoreV1Api,
 ) -> None:
     """Log build console, Jenkins system log and agent pod state on build timeout."""
@@ -338,8 +338,8 @@ def _log_build_timeout_diagnostics(
         except requests.RequestException as console_exc:
             logger.warning("Could not fetch Kubernetes plugin build console: %s", console_exc)
     try:
-        system_log_resp = unit_web_client.client.requester.get_url(
-            f"{unit_web_client.web}/log/all/consoleText"
+        system_log_resp = jenkins_session.client.requester.get_url(
+            f"{jenkins_session.web}/log/all/consoleText"
         )
         logger.error(
             "Jenkins system log (last 10000 characters):\n%s",
@@ -351,7 +351,7 @@ def _log_build_timeout_diagnostics(
 
 
 async def test_kubernetes_plugin(
-    unit_web_client: UnitWebClient,
+    jenkins_session: JenkinsSession,
     jenkins_kube_config: Path,
     kube_core_client: kubernetes.client.CoreV1Api,
 ):
@@ -365,22 +365,22 @@ async def test_kubernetes_plugin(
     # kubernetes plugin declares it as an optional dependency only, so it is not installed
     # automatically.
     await install_plugins(
-        unit_web_client, ("kubernetes", "plain-credentials", "workflow-durable-task-step")
+        jenkins_session, ("kubernetes", "plain-credentials", "workflow-durable-task-step")
     )
 
-    plugins = unit_web_client.client.plugins
+    plugins = jenkins_session.client.plugins
     logger.info(
         "Installed plugins: %s",
         {name: plugin.version for name, plugin in plugins.iteritems()},
     )
 
-    logger.info("Jenkins version pre-build: %s", unit_web_client.client.version)
+    logger.info("Jenkins version pre-build: %s", jenkins_session.client.version)
 
-    credentials_id = create_secret_file_credentials(unit_web_client, str(jenkins_kube_config))
+    credentials_id = create_secret_file_credentials(jenkins_session, str(jenkins_kube_config))
     assert credentials_id, "Failed to create credentials id"
-    kubernetes_cloud_name = create_kubernetes_cloud(unit_web_client, credentials_id)
+    kubernetes_cloud_name = create_kubernetes_cloud(jenkins_session, credentials_id)
     assert kubernetes_cloud_name, "Failed to create kubernetes cloud"
-    job = unit_web_client.client.create_job(
+    job = jenkins_session.client.create_job(
         "kubernetes_plugin_test",
         gen_test_pipeline_with_custom_script_xml(kubernetes_test_pipeline_script()),
     )
@@ -390,7 +390,7 @@ async def test_kubernetes_plugin(
     try:
         build = _get_completed_build(queue_item)
     except TimeoutError as exc:
-        _log_build_timeout_diagnostics(queue_item, unit_web_client, kube_core_client)
+        _log_build_timeout_diagnostics(queue_item, jenkins_session, kube_core_client)
         raise TimeoutError("Kubernetes plugin build did not complete within 600 seconds") from exc
 
     assert build is not None, "Jenkins build did not complete"
@@ -400,8 +400,8 @@ async def test_kubernetes_plugin(
     logger.info("Build status: %s\nBuild logs:\n%s", build_status, logs)
 
     try:
-        system_log_resp = unit_web_client.client.requester.get_url(
-            f"{unit_web_client.web}/log/all"
+        system_log_resp = jenkins_session.client.requester.get_url(
+            f"{jenkins_session.web}/log/all"
         )
         logger.info("Jenkins system log:\n%s", system_log_resp.text)
     except Exception as exc:
@@ -463,15 +463,15 @@ def _log_k8s_agent_pods(kube_core_client: kubernetes.client.CoreV1Api) -> None:
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
-async def test_pipeline_model_definition_plugin(unit_web_client: UnitWebClient):
+async def test_pipeline_model_definition_plugin(jenkins_session: JenkinsSession):
     """
     arrange: given a Jenkins charm with declarative pipeline plugin installed.
     act: Run a job using a declarative pipeline script.
     assert: Job succeeds.
     """
-    await install_plugins(unit_web_client, ("pipeline-model-definition",))
+    await install_plugins(jenkins_session, ("pipeline-model-definition",))
 
-    job = unit_web_client.client.create_job(
+    job = jenkins_session.client.create_job(
         "pipeline_model_definition_plugin_test",
         gen_test_pipeline_with_custom_script_xml(declarative_pipeline_script()),
     )
