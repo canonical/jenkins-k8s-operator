@@ -93,7 +93,7 @@ async def application_fixture(
     # Plugin integration tests install large dependency trees. The charm's
     # default 1 GiB volume leaves Jenkins below its 2 GiB disk-space warning
     # threshold and causes plugin restarts to hang in the CI model.
-    storage = {"jenkins-home": "5GiB"}
+    storage = {"jenkins-home": "10GiB"}
     # Deploy the charm and wait for active/idle status
     application = await model.deploy(charm, resources=resources, storage=storage)
     await model.wait_for_idle(

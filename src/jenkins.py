@@ -702,7 +702,10 @@ class Jenkins:
         logger.debug("Removed %s", plugins_to_remove)
         top_level_plugins = _filter_dependent_plugins(plugins_to_remove, dependency_lookup)
         try:
-            self.safe_restart()
+            # Do not use Jenkins /safeRestart here. Removing the monitoring
+            # plugin can make its servlet-filter cleanup fail before Jenkins
+            # exits (JENKINS-70352), leaving the process stuck in Restarting.
+            container.restart(state.JENKINS_SERVICE_NAME)
             self.wait_ready()
         except (JenkinsError, TimeoutError) as exc:
             logger.error("Failed to restart Jenkins after removing plugins, %s", exc)
