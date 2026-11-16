@@ -221,7 +221,12 @@ async def test_plugins_remove_delay(
     assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
 
     await _has_plugin_delay_log(ops_test)
-    unit_web_client.client.safe_restart()
+    action = await unit_web_client.unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble restart jenkins"
+    )
+    await action.wait()
+    assert action.status == "completed", f"Failed to restart Jenkins: {action.data}"
 
     _all_plugins_active(unit_web_client, ALLOWED_PLUGINS)
 
