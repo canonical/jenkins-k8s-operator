@@ -333,16 +333,16 @@ def test__plugin_temporary_files_exist():
             id="delete-plugins-api-error",
         ),
         pytest.param(
-            "safe_restart",
+            "container_restart",
             jenkins.JenkinsError,
             jenkins.JenkinsError,
-            id="safe-restart-jenkins-error",
+            id="container-restart-jenkins-error",
         ),
         pytest.param(
-            "safe_restart",
+            "container_restart",
             TimeoutError,
             TimeoutError,
-            id="safe-restart-timeout",
+            id="container-restart-timeout",
         ),
     ],
 )
@@ -375,9 +375,8 @@ def test_remove_unlisted_plugins_exception_paths(
             mock_client.delete_plugins.side_effect = stage_exception
             stack.enter_context(patch.object(jenkins.Jenkins, "safe_restart"))
             stack.enter_context(patch.object(jenkins.Jenkins, "wait_ready"))
-        elif failure_stage == "safe_restart":
-            safe_restart_mock = stack.enter_context(patch.object(jenkins.Jenkins, "safe_restart"))
-            safe_restart_mock.side_effect = stage_exception
+        elif failure_stage == "container_restart":
+            monkeypatch.setattr(container, "restart", MagicMock(side_effect=stage_exception))
 
         with pytest.raises(expected_exception):
             _jenkins_instance(container).remove_unlisted_plugins(desired_plugins, container)
@@ -443,7 +442,7 @@ def test_remove_unlisted_plugins(
     _set_plugin_listing(mock_client, groovy_script_output)
 
     with (
-        patch.object(jenkins.Jenkins, "safe_restart"),
+        patch.object(container, "restart"),
         patch.object(jenkins.Jenkins, "wait_ready"),
         patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
     ):

@@ -605,9 +605,15 @@ class Jenkins:
         """Invalidate active Jenkins user sessions."""
         client = self._get_api_client()
         client.run_groovy_script("""
-    import net.bull.javamelody.*;
-    def sess = SessionListener.newInstance();
-    sess.invalidateAllSessions();""")
+    import jenkins.model.Jenkins;
+    import jenkins.security.seed.UserSeedProperty;
+    Jenkins.instance.getAllUsers().each { user ->
+        def seed = user.getProperty(UserSeedProperty.class);
+        if (seed != null) {
+            seed.renewSeed();
+            user.save();
+        }
+    }""")
 
     # This groovy script is tested in integration test.
     def _set_new_password(self, new_password: str) -> None:  # pragma: no cover
@@ -696,7 +702,10 @@ class Jenkins:
         logger.debug("Removed %s", plugins_to_remove)
         top_level_plugins = _filter_dependent_plugins(plugins_to_remove, dependency_lookup)
         try:
-            self.safe_restart()
+            # Do not use Jenkins /safeRestart here. Removing the monitoring
+            # plugin can make its servlet-filter cleanup fail before Jenkins
+            # exits (JENKINS-70352), leaving the process stuck in Restarting.
+            container.restart(state.JENKINS_SERVICE_NAME)
             self.wait_ready()
         except (JenkinsError, TimeoutError) as exc:
             logger.error("Failed to restart Jenkins after removing plugins, %s", exc)
