@@ -54,20 +54,29 @@ class JenkinsTarget:
 
 @dataclasses.dataclass
 class JenkinsSession:
-    """A refreshable connection to one Jenkins endpoint."""
+    """A live Jenkins connection that can be recreated from its target."""
 
-    url: str
-    client: jenkinsapi.jenkins.Jenkins
-    _client_factory: Callable[[], Awaitable[jenkinsapi.jenkins.Jenkins]]
+    target: JenkinsTarget
+    connection: JenkinsConnection
+
+    @property
+    def url(self) -> str:
+        """The URL used by the current client."""
+        return self.connection.url
 
     @property
     def web(self) -> str:
-        """Compatibility alias for the Jenkins endpoint."""
+        """Compatibility alias for the current Jenkins URL."""
         return self.url
 
+    @property
+    def client(self) -> jenkinsapi.jenkins.Jenkins:
+        """The current Jenkins client."""
+        return self.connection.client
+
     async def refresh(self) -> jenkinsapi.jenkins.Jenkins:
-        """Recreate the client after Jenkins restarts."""
-        self.client = await self._client_factory()
+        """Resolve the current target and recreate the client."""
+        self.connection = await self.target.connect()
         return self.client
 
 
