@@ -48,7 +48,6 @@ logger = logging.getLogger(__name__)
 REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
     "prometheus",  # required for COS integration
-    "monitoring",  # required for session invalidation
     "configuration-as-code",  # required for JCasC declarative config management
 ]
 

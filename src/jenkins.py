@@ -605,9 +605,15 @@ class Jenkins:
         """Invalidate active Jenkins user sessions."""
         client = self._get_api_client()
         client.run_groovy_script("""
-    import net.bull.javamelody.*;
-    def sess = SessionListener.newInstance();
-    sess.invalidateAllSessions();""")
+    import jenkins.model.Jenkins;
+    import jenkins.security.seed.UserSeedProperty;
+    Jenkins.instance.getAllUsers().each { user ->
+        def seed = user.getProperty(UserSeedProperty.class);
+        if (seed != null) {
+            seed.renewSeed();
+            user.save();
+        }
+    }""")
 
     # This groovy script is tested in integration test.
     def _set_new_password(self, new_password: str) -> None:  # pragma: no cover
