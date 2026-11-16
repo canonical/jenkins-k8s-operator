@@ -90,8 +90,12 @@ async def application_fixture(
 ) -> AsyncGenerator[Application, None]:
     """Deploy the charm using GitHub-hosted JCasC test data."""
     resources = {"jenkins-image": jenkins_image}
+    # Plugin integration tests install large dependency trees. The charm's
+    # default 1 GiB volume leaves Jenkins below its 2 GiB disk-space warning
+    # threshold and causes plugin restarts to hang in the CI model.
+    storage = {"jenkins-home": "5GiB"}
     # Deploy the charm and wait for active/idle status
-    application = await model.deploy(charm, resources=resources)
+    application = await model.deploy(charm, resources=resources, storage=storage)
     await model.wait_for_idle(
         apps=[application.name],
         raise_on_error=False,
