@@ -601,19 +601,49 @@ class Jenkins:
             raise JenkinsError("Failed to restart Jenkins safely.") from exc
 
     # This groovy script is tested in integration test.
-    def _invalidate_sessions(self) -> None:  # pragma: no cover
-        """Invalidate active Jenkins user sessions."""
+    def _invalidate_sessions(self) -> int:  # pragma: no cover
+        """Invalidate active Jenkins user sessions and return renewed user count."""
         client = self._get_api_client()
-        client.run_groovy_script("""
+        result = client.run_groovy_script("""
     import jenkins.model.Jenkins;
     import jenkins.security.seed.UserSeedProperty;
-    Jenkins.instance.getAllUsers().each { user ->
-        def seed = user.getProperty(UserSeedProperty.class);
-        if (seed != null) {
-            seed.renewSeed();
-            user.save();
+    def renewed = 0;
+    def skipped = 0;
+    if (UserSeedProperty.DISABLE_USER_SEED) {
+        println "session_seed_revocation_disabled=true renewed=0 skipped=0";
+    } else {
+        Jenkins.instance.getAllUsers().each { user ->
+            def seed = user.getProperty(UserSeedProperty.class);
+            if (seed != null) {
+                seed.renewSeed();
+                user.save();
+                renewed++;
+            } else {
+                skipped++;
+            }
         }
+        println "session_seed_revocation_disabled=false renewed=${renewed} skipped=${skipped}";
     }""")
+        result = (result or "").strip()
+        match = re.search(
+            r"session_seed_revocation_disabled=(true|false) renewed=(\d+) skipped=(\d+)",
+            result,
+        )
+        if match is None:
+            logger.warning("phase=session_seed_revocation unexpected_result=%s", result)
+            return 0
+        disabled = match.group(1) == "true"
+        renewed = int(match.group(2))
+        skipped = int(match.group(3))
+        if disabled:
+            logger.warning("phase=session_seed_revocation disabled=true")
+        logger.info(
+            "phase=session_seed_revocation disabled=%s renewed=%d skipped=%d",
+            disabled,
+            renewed,
+            skipped,
+        )
+        return renewed
 
     # This groovy script is tested in integration test.
     def _set_new_password(self, new_password: str) -> None:  # pragma: no cover
