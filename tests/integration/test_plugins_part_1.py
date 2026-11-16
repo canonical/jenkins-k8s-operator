@@ -194,7 +194,12 @@ async def _has_plugin_delay_log(ops_test: OpsTest) -> bool:
 )
 def _all_plugins_active(unit_web_client: UnitWebClient, plugins: typing.Iterable[str]) -> bool:
     """Return whether all requested plugins are active in Jenkins."""
-    return all(unit_web_client.client.has_plugin(plugin) for plugin in plugins)
+    try:
+        return all(unit_web_client.client.has_plugin(plugin) for plugin in plugins)
+    except (jenkinsapi.custom_exceptions.JenkinsAPIException, requests.RequestException):
+        # Jenkins can still return 503 while Pebble has started it but the API
+        # is completing plugin initialization. Let the bounded retry continue.
+        return False
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
