@@ -23,7 +23,7 @@ from juju.unit import Unit
 from pytest_operator.plugin import OpsTest
 
 from .helpers import gen_test_job_xml, install_plugins
-from .types_ import UnitWebClient
+from .types_ import JenkinsSession
 
 JENKINS_UID = "2000"
 JENKINS_GID = "2000"
@@ -88,8 +88,9 @@ async def test_jenkins_update_ui_disabled(
 @pytest.mark.usefixtures("app_with_restart_time_range", "libfaketime_unit")
 async def test_jenkins_automatic_update_out_of_range(
     libfaketime_env: typing.Iterable[str],
+    unit: Unit,
     update_status_env: typing.Iterable[str],
-    unit_web_client: UnitWebClient,
+    jenkins_session: JenkinsSession,
 ):
     """
     arrange: given jenkins charm with frozen time to 15:00 UTC.
@@ -97,8 +98,8 @@ async def test_jenkins_automatic_update_out_of_range(
     assert: the maintenance (plugins removal) does not take place.
     """
     extra_plugin = "oic-auth"
-    await install_plugins(unit_web_client, (extra_plugin,))
-    action: Action = await unit_web_client.unit.run(
+    await install_plugins(jenkins_session, (extra_plugin,))
+    action: Action = await unit.run(
         f"-- {' '.join(libfaketime_env)} {' '.join(update_status_env)} ./dispatch"
     )
     await action.wait()
@@ -106,7 +107,7 @@ async def test_jenkins_automatic_update_out_of_range(
         f"Failed to execute update-status-hook, {action.data['message']}"
     )
 
-    assert unit_web_client.client.has_plugin(extra_plugin), (
+    assert jenkins_session.client.has_plugin(extra_plugin), (
         "additionally installed plugin cleanedup."
     )
 

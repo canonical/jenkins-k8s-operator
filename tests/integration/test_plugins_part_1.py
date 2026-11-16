@@ -20,6 +20,7 @@ import urllib3.exceptions
 from jinja2 import Environment, FileSystemLoader
 from juju.application import Application
 from juju.model import Model
+from juju.unit import Unit
 from kubernetes.stream import stream
 from pytest_operator.plugin import OpsTest
 
@@ -38,7 +39,7 @@ from .helpers import (
     get_pod_ip,
     install_plugins,
 )
-from .types_ import LDAPSettings, UnitWebClient
+from .types_ import JenkinsSession, LDAPSettings
 
 logger = logging.getLogger(__name__)
 
@@ -131,17 +132,17 @@ async def ldap_server_ip_fixture(
     before_sleep=_log_retry,
 )
 def _install_plugins_via_web_api(
-    unit_web_client: UnitWebClient, plugins: typing.Iterable[str]
+    jenkins_session: JenkinsSession, plugins: typing.Iterable[str]
 ) -> bool:
     """Request plugin installation only when a requested plugin is missing."""
     plugins = tuple(plugins)
-    if all(unit_web_client.client.has_plugin(plugin) for plugin in plugins):
+    if all(jenkins_session.client.has_plugin(plugin) for plugin in plugins):
         return True
     post_data = {f"plugin.{plugin}.default": "on" for plugin in plugins}
     post_data["dynamic_load"] = ""
     try:
-        response = unit_web_client.client.requester.post_url(
-            f"{unit_web_client.web}/manage/pluginManager/install", data=post_data
+        response = jenkins_session.client.requester.post_url(
+            f"{jenkins_session.web}/manage/pluginManager/install", data=post_data
         )
         return response.ok
     except (requests.exceptions.RequestException, urllib3.exceptions.HTTPError):
@@ -192,44 +193,46 @@ async def _has_plugin_delay_log(ops_test: OpsTest) -> bool:
     retry_error_callback=_raise_retry_timeout,
     before_sleep=_log_retry,
 )
-def _all_plugins_active(unit_web_client: UnitWebClient, plugins: typing.Iterable[str]) -> bool:
+def _all_plugins_active(jenkins_session: JenkinsSession, plugins: typing.Iterable[str]) -> bool:
     """Return whether all requested plugins are active in Jenkins."""
-    return all(unit_web_client.client.has_plugin(plugin) for plugin in plugins)
+    return all(jenkins_session.client.has_plugin(plugin) for plugin in plugins)
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
 async def test_plugins_remove_delay(
     ops_test: OpsTest,
+    unit: Unit,
     update_status_env: typing.Iterable[str],
-    unit_web_client: UnitWebClient,
+    jenkins_session: JenkinsSession,
 ):
     """
     arrange: given a Jenkins with plugins being installed through UI.
     act: when update_status_hook is fired.
     assert: the plugin removal delayed warning is logged until plugin installation is settled.
     """
-    _install_plugins_via_web_api(unit_web_client, ALLOWED_PLUGINS)
+    _install_plugins_via_web_api(jenkins_session, ALLOWED_PLUGINS)
 
-    await _has_plugin_temp_files(ops_test, unit_web_client.unit.name)
+    await _has_plugin_temp_files(ops_test, unit.name)
     ret_code, _, stderr = await ops_test.juju(
         "exec",
         "--unit",
-        unit_web_client.unit.name,
+        unit.name,
         "--",
         f"{' '.join(update_status_env)} ./dispatch",
     )
     assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
 
     await _has_plugin_delay_log(ops_test)
-    unit_web_client.client.safe_restart()
+    jenkins_session.client.safe_restart()
 
-    _all_plugins_active(unit_web_client, ALLOWED_PLUGINS)
+    _all_plugins_active(jenkins_session, ALLOWED_PLUGINS)
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
 async def test_jenkins_plugins_config(
     ops_test: OpsTest,
-    unit_web_client: UnitWebClient,
+    unit: Unit,
+    jenkins_session: JenkinsSession,
     update_status_env: typing.Iterable[str],
 ):
     """
@@ -237,17 +240,17 @@ async def test_jenkins_plugins_config(
     act: when update_status_hook is fired.
     assert: the plugin is uninstalled and the system message is set on Jenkins.
     """
-    await install_plugins(unit_web_client, INSTALLED_PLUGINS)
+    await install_plugins(jenkins_session, INSTALLED_PLUGINS)
 
     ret_code, _, stderr = await ops_test.juju(
         "exec",
         "--unit",
-        unit_web_client.unit.name,
+        unit.name,
         "--",
         f"{' '.join(update_status_env)} ./dispatch",
     )
     assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
-    res = unit_web_client.client.requester.get_url(unit_web_client.web)
+    res = jenkins_session.client.requester.get_url(jenkins_session.web)
     page_content = str(res.content, encoding="utf-8")
 
     assert all(plugin in page_content for plugin in REMOVED_PLUGINS), page_content
@@ -256,23 +259,23 @@ async def test_jenkins_plugins_config(
         "To allow the plugins, please include them in the plugins configuration of the charm."
         in page_content
     )
-    assert all(unit_web_client.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
+    assert all(jenkins_session.client.has_plugin(plugin) for plugin in ALLOWED_PLUGINS)
 
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
-async def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
+async def test_git_plugin_k8s_agent(jenkins_session: JenkinsSession):
     """
     arrange: given a jenkins charm with git plugin installed.
     act: when a job is dispatched with a git workflow.
     assert: job completes successfully.
     """
-    await install_plugins(unit_web_client, INSTALLED_PLUGINS)
+    await install_plugins(jenkins_session, INSTALLED_PLUGINS)
 
     job_name = "git-plugin-test-k8s"
-    unit_web_client.client.create_job(job_name, gen_git_test_job_xml("k8s"))
+    jenkins_session.client.create_job(job_name, gen_git_test_job_xml("k8s"))
     # check that git plugin git repository validation works on Jenkins server
-    check_url_res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.client.baseurl}/job/{job_name}/descriptorByName/"
+    check_url_res = jenkins_session.client.requester.post_url(
+        f"{jenkins_session.client.baseurl}/job/{job_name}/descriptorByName/"
         "hudson.plugins.git.UserRemoteConfig/checkUrl",
         data={
             "value": "https://github.com/canonical/jenkins-k8s-operator",
@@ -332,7 +335,7 @@ EOF""",
 
 @pytest.mark.usefixtures("app_with_allowed_plugins", "seed_ldap_user")
 async def test_ldap_plugin(
-    unit_web_client: UnitWebClient,
+    jenkins_session: JenkinsSession,
     ldap_server_ip: str,
     ldap_settings: LDAPSettings,
 ):
@@ -341,7 +344,7 @@ async def test_ldap_plugin(
     act: when ldap plugin is configured and the user is queried.
     assert: the user is authenticated successfully.
     """
-    await install_plugins(unit_web_client, ("ldap",))
+    await install_plugins(jenkins_session, ("ldap",))
 
     # This is same as: Manage Jenkins > Configure Global Security > Authentication >
     # Security Realm > LDAP > Test LDAP Settings.
@@ -387,8 +390,8 @@ async def test_ldap_plugin(
         "testUser": ldap_settings.username,
         "testPassword": ldap_settings.password,
     }
-    res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.client.baseurl}/manage/descriptorByName/hudson.security"
+    res = jenkins_session.client.requester.post_url(
+        f"{jenkins_session.client.baseurl}/manage/descriptorByName/hudson.security"
         ".LDAPSecurityRealm/validate",
         json=data,
     )
@@ -399,17 +402,17 @@ async def test_ldap_plugin(
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
-async def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClient):
+async def test_matrix_combinations_parameter_plugin(jenkins_session: JenkinsSession):
     """
     arrange: given a jenkins server with matrix-combinations-parameter plugin installed.
     act: when a multi-configuration job is created.
     assert: a matrix based test is created.
     """
-    await install_plugins(unit_web_client, ("matrix-combinations-parameter",))
-    matrix_project_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
+    await install_plugins(jenkins_session, ("matrix-combinations-parameter",))
+    matrix_project_plugin: jenkinsapi.plugin.Plugin = jenkins_session.client.plugins[
         "matrix-project"
     ]
-    matrix_combinations_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
+    matrix_combinations_plugin: jenkinsapi.plugin.Plugin = jenkins_session.client.plugins[
         "matrix-combinations-parameter"
     ]
     environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
@@ -419,11 +422,11 @@ async def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClie
         matrix_combinations_plugin_version=matrix_combinations_plugin.version,
     )
     test_name = "matrix-combinations-parameter-test"
-    unit_web_client.client.create_job(test_name, job_xml)
+    jenkins_session.client.create_job(test_name, job_xml)
 
     test_page = str(
-        unit_web_client.client.requester.get_url(
-            f"{unit_web_client.client.baseurl}/job/{test_name}/"
+        jenkins_session.client.requester.get_url(
+            f"{jenkins_session.client.baseurl}/job/{test_name}/"
         ).content,
         encoding="utf-8",
     )
@@ -434,15 +437,15 @@ async def test_matrix_combinations_parameter_plugin(unit_web_client: UnitWebClie
 
 @pytest.mark.usefixtures("k8s_agent_related_app")
 async def test_postbuildscript_plugin(
-    ops_test: OpsTest, unit_web_client: UnitWebClient, jenkins_k8s_agents: Application
+    ops_test: OpsTest, jenkins_session: JenkinsSession, jenkins_k8s_agents: Application
 ):
     """
     arrange: given a jenkins charm with postbuildscript plugin installed and related to an agent.
     act: when a postbuildscript job that writes a file to a /tmp folder is dispatched.
     assert: the file is written on the /tmp folder of the job host.
     """
-    await install_plugins(unit_web_client, ("postbuildscript",))
-    postbuildscript_plugin: jenkinsapi.plugin.Plugin = unit_web_client.client.plugins[
+    await install_plugins(jenkins_session, ("postbuildscript",))
+    postbuildscript_plugin: jenkinsapi.plugin.Plugin = jenkins_session.client.plugins[
         "postbuildscript"
     ]
     environment = Environment(loader=FileSystemLoader("tests/integration/files/"), autoescape=True)
@@ -454,7 +457,7 @@ async def test_postbuildscript_plugin(
         postbuildscript_plugin_version=postbuildscript_plugin.version,
         postbuildscript_command=f'echo -n "{test_output}" > {test_output_path}',
     )
-    job = unit_web_client.client.create_job("postbuildscript-test-k8s", job_xml)
+    job = jenkins_session.client.create_job("postbuildscript-test-k8s", job_xml)
     job.invoke().block_until_complete()
 
     unit = get_job_invoked_unit(job, jenkins_k8s_agents.units)
@@ -466,33 +469,33 @@ async def test_postbuildscript_plugin(
     assert stdout == test_output
 
 
-async def test_ssh_agent_plugin(unit_web_client: UnitWebClient):
+async def test_ssh_agent_plugin(jenkins_session: JenkinsSession):
     """
     arrange: given jenkins charm with ssh_agent plugin installed.
     act: when a job is being configured.
     assert: ssh-agent configuration is visible.
     """
-    await install_plugins(unit_web_client, ("ssh-agent",))
-    unit_web_client.client.create_job("ssh_agent_test", gen_test_job_xml("k8s"))
+    await install_plugins(jenkins_session, ("ssh-agent",))
+    jenkins_session.client.create_job("ssh_agent_test", gen_test_job_xml("k8s"))
 
-    res = unit_web_client.client.requester.get_url(
-        f"{unit_web_client.web}/job/ssh_agent_test/configure"
+    res = jenkins_session.client.requester.get_url(
+        f"{jenkins_session.web}/job/ssh_agent_test/configure"
     )
 
     config_page = str(res.content, "utf-8")
     assert "SSH Agent" in config_page, f"SSH agent configuration not found. {config_page}"
 
 
-async def test_blueocean_plugin(unit_web_client: UnitWebClient):
+async def test_blueocean_plugin(jenkins_session: JenkinsSession):
     """
     arrange: given a jenkins charm with blueocean plugin installed.
     act: when blueocean frontend url is accessed.
     assert: 200 response is returned.
     """
-    await install_plugins(unit_web_client, ("blueocean",))
+    await install_plugins(jenkins_session, ("blueocean",))
 
-    res = unit_web_client.client.requester.get_url(
-        f"{unit_web_client.web}/blue/organizations/jenkins/"
+    res = jenkins_session.client.requester.get_url(
+        f"{jenkins_session.web}/blue/organizations/jenkins/"
     )
 
     assert res.status_code == 200, (
@@ -521,13 +524,13 @@ async def _has_thinbackup_output(ops_test: OpsTest, unit_name: str, backup_path:
     return ret == 0 and "FULL" in stdout
 
 
-async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClient):
+async def test_thinbackup_plugin(ops_test: OpsTest, unit: Unit, jenkins_session: JenkinsSession):
     """
     arrange: given a Jenkins charm with thinbackup plugin installed and backup configured.
     act: when a backup action is run.
     assert: the backup is made on a configured directory.
     """
-    await install_plugins(unit_web_client, ("thinBackup",))
+    await install_plugins(jenkins_session, ("thinBackup",))
     backup_path = "/srv/jenkins/backup/"
     payload = {
         **DEFAULT_SYSTEM_CONFIGURE_PAYLOAD,
@@ -535,8 +538,8 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
             "backupPath": backup_path,
         },
     }
-    res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/configSubmit",
+    res = jenkins_session.client.requester.post_url(
+        f"{jenkins_session.web}/configSubmit",
         data=[
             (
                 "json",
@@ -545,25 +548,25 @@ async def test_thinbackup_plugin(ops_test: OpsTest, unit_web_client: UnitWebClie
         ],
     )
     res.raise_for_status()
-    res = unit_web_client.client.requester.post_url(
-        f"{unit_web_client.web}/manage/thinBackup/backupManual"
+    res = jenkins_session.client.requester.post_url(
+        f"{jenkins_session.web}/manage/thinBackup/backupManual"
     )
     res.raise_for_status()
 
-    await _has_thinbackup_output(ops_test, unit_web_client.unit.name, backup_path)
+    await _has_thinbackup_output(ops_test, unit.name, backup_path)
 
 
-async def test_bzr_plugin(unit_web_client: UnitWebClient):
+async def test_bzr_plugin(jenkins_session: JenkinsSession):
     """
     arrange: given a Jenkins charm with bazaar plugin installed.
     act: when a job configuration page is accessed.
     assert: bazaar plugin option exists.
     """
-    await install_plugins(unit_web_client, ("bazaar",))
-    unit_web_client.client.create_job("bzr_plugin_test", gen_test_job_xml("k8s"))
+    await install_plugins(jenkins_session, ("bazaar",))
+    jenkins_session.client.create_job("bzr_plugin_test", gen_test_job_xml("k8s"))
 
-    res = unit_web_client.client.requester.get_url(
-        f"{unit_web_client.web}/job/bzr_plugin_test/configure"
+    res = jenkins_session.client.requester.get_url(
+        f"{jenkins_session.web}/job/bzr_plugin_test/configure"
     )
 
     config_page = str(res.content, "utf-8")
