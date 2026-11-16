@@ -8,6 +8,7 @@ import logging
 import textwrap
 import time
 import typing
+from collections.abc import Callable
 from enum import Enum
 from urllib.parse import urlparse
 
@@ -24,9 +25,48 @@ from pytest_operator.plugin import OpsTest
 
 import jenkins
 
-from .types_ import JenkinsSession
+from .types_ import AddressResolver, JenkinsSession
 
 logger = logging.getLogger(__name__)
+
+
+def fixed_address_resolver(address: str) -> AddressResolver:
+    """Return a resolver for a stable Service or ingress address."""
+
+    async def resolve() -> str:
+        return address
+
+    return resolve
+
+
+async def resolve_unit_address(model: Model, application: Application) -> str:
+    """Resolve the current unit address for direct pod/unit tests."""
+    unit_ips = await get_model_unit_addresses(model=model, app_name=application.name)
+    if not unit_ips:
+        raise RuntimeError(f"No unit address found for {application.name}")
+    return f"http://{unit_ips[0]}:8080"
+
+
+def unit_address_resolver(model: Model, application: Application) -> AddressResolver:
+    """Create a resolver that re-reads the current Jenkins unit address."""
+
+    async def resolve() -> str:
+        return await resolve_unit_address(model, application)
+
+    return resolve
+
+
+def routed_unit_address_resolver(
+    model: Model,
+    application: Application,
+    prefix_resolver: Callable[[], str],
+) -> AddressResolver:
+    """Create a resolver for a direct unit address with a route prefix."""
+
+    async def resolve() -> str:
+        return f"{await resolve_unit_address(model, application)}{prefix_resolver()}"
+
+    return resolve
 
 
 def _jenkins_api_status(address: str, credentials: tuple[str, str]) -> int | None:
