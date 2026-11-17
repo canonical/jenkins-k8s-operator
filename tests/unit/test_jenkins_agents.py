@@ -321,3 +321,36 @@ def test_is_managed_node(
     node.name = "agent-0"
     node._get_config_element_tree.return_value = ET.fromstring(xml)
     assert _jenkins_instance(container).is_managed_node(node) is expected
+
+
+@pytest.mark.parametrize(
+    "description_xml",
+    [
+        pytest.param("", id="absent"),
+        pytest.param("<description>agent_node_0</description>", id="legacy"),
+        pytest.param("<description></description>", id="empty"),
+    ],
+)
+def test_reconcile_agent_node_sets_managed_description(
+    container: ops.Container, mock_client: MagicMock, description_xml: str
+):
+    """
+    arrange: an existing relation node without the managed description.
+    act: call reconcile_agent_node.
+    assert: the managed description is uploaded and other values are unchanged.
+    """
+    node = MagicMock()
+    node.name = "agent_node_0"
+    node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
+        f"<node>{description_xml}<numExecutors>1</numExecutors><label>machine</label></node>"
+    )
+    agent_meta = state.AgentMeta(executors="1", labels="machine", name="agent_node_0")
+
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
+        _jenkins_instance(container).reconcile_agent_node(node, agent_meta)
+
+    node.upload_config.assert_called_once()
+    updated = ET.fromstring(node.upload_config.call_args.args[0])  # nosec B314 - trusted test fixture XML
+    assert updated.findtext("description") == jenkins.MANAGED_NODE_DESCRIPTION
+    assert updated.findtext("numExecutors") == "1"
+    assert updated.findtext("label") == "machine"
