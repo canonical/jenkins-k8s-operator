@@ -57,7 +57,8 @@ This configuration is an ownership declaration only. The charm does not create, 
 delete the listed nodes. Labels, executors, launch settings, workspace paths, and credentials
 remain managed by the external system.
 
-Relation-managed agent nodes are cleaned up when their relation departs. During reconciliation,
-any Jenkins node that is not present in a current agent relation is also removed unless its name is
-listed in `external-agent-nodes`. Ensure every externally managed node is listed before enabling
-this configuration, otherwise it will be treated as unmanaged and removed.
+Relation-managed agent nodes are cleaned up when their relation departs. Only nodes created by the
+charm (marked with the description "Managed by the jenkins-k8s charm", or, for nodes created by
+earlier revisions, a description equal to the node name) are removed. Nodes created by other means,
+such as cloud plugin agents (for example the EC2 plugin), are left untouched. List a node in
+`external-agent-nodes` if its description matches its name and it must be preserved.

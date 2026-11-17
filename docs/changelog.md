@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+## 2026-11-17
+
+- Agent reconciliation only removes nodes created by the charm. Nodes created by other
+  means, such as the EC2 plugin, are no longer deleted. Charm-created nodes are marked with a
+  node description; nodes from earlier revisions whose description equals their name are still
+  treated as charm-owned. Fixes #546.
+
 ## 2026-10-28
 
 - `agent-discovery-ingress` forwards the Jenkins path prefix instead of

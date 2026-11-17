@@ -164,7 +164,7 @@ def test_get_node_config_builds_websocket_enabled_node_config(
     assert node_kwargs["nodename"] == agent_meta.name
     assert node_kwargs["node_dict"] == {
         "num_executors": int(agent_meta.executors),
-        "node_description": agent_meta.name,
+        "node_description": jenkins.MANAGED_NODE_DESCRIPTION,
         "remote_fs": "/var/lib/jenkins",
         "labels": agent_meta.labels,
         "exclusive": False,
@@ -196,7 +196,7 @@ def test_reconcile_agent_node_changes_remote_fs(container: ops.Container, mock_c
     node = MagicMock()
     node.name = "agent_node_0"
     node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
-        "<node><numExecutors>2</numExecutors><label>old</label><remoteFS>/var/lib/jenkins</remoteFS></node>"
+        "<node><description>Managed by the jenkins-k8s charm</description><numExecutors>2</numExecutors><label>old</label><remoteFS>/var/lib/jenkins</remoteFS></node>"
     )
 
     agent_meta = state.AgentMeta(
@@ -220,7 +220,7 @@ def test_reconcile_agent_node_does_not_change_matching_remote_fs(
     node = MagicMock()
     node.name = "agent_node_0"
     node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
-        "<node><numExecutors>1</numExecutors><label>machine</label><remoteFS>/workspace/jenkins</remoteFS></node>"
+        "<node><description>Managed by the jenkins-k8s charm</description><numExecutors>1</numExecutors><label>machine</label><remoteFS>/workspace/jenkins</remoteFS></node>"
     )
 
     agent_meta = state.AgentMeta(
@@ -266,7 +266,7 @@ def test_reconcile_agent_node_ignores_trailing_slash_difference(
     node = MagicMock()
     node.name = "agent_node_0"
     node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
-        "<node><numExecutors>1</numExecutors><label>machine</label><remoteFS>/workspace/jenkins</remoteFS></node>"
+        "<node><description>Managed by the jenkins-k8s charm</description><numExecutors>1</numExecutors><label>machine</label><remoteFS>/workspace/jenkins</remoteFS></node>"
     )
 
     agent_meta = state.AgentMeta(
@@ -285,7 +285,7 @@ def test_reconcile_agent_node_preserves_ui_remote_fs_without_relation_value(
     node = MagicMock()
     node.name = "agent_node_0"
     node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
-        "<node><numExecutors>1</numExecutors><label>machine</label><remoteFS>/ui/configured/workspace</remoteFS></node>"
+        "<node><description>Managed by the jenkins-k8s charm</description><numExecutors>1</numExecutors><label>machine</label><remoteFS>/ui/configured/workspace</remoteFS></node>"
     )
     agent_meta = state.AgentMeta(executors="1", labels="machine", name="agent_node_0")
 
@@ -294,3 +294,30 @@ def test_reconcile_agent_node_preserves_ui_remote_fs_without_relation_value(
 
     node._get_config_element_tree.assert_called_once_with()
     node.upload_config.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "xml, expected",
+    [
+        pytest.param(
+            "<node><description>Managed by the jenkins-k8s charm</description></node>",
+            True,
+            id="marker",
+        ),
+        pytest.param("<node><description>agent-0</description></node>", True, id="legacy"),
+        pytest.param("<node><description>ubuntu ec2</description></node>", False, id="foreign"),
+        pytest.param("<node></node>", False, id="no description"),
+    ],
+)
+def test_is_managed_node(
+    container: ops.Container, mock_client: MagicMock, xml: str, expected: bool
+):
+    """
+    arrange: a node with the given description.
+    act: call is_managed_node.
+    assert: only charm-created nodes are reported as managed.
+    """
+    node = MagicMock()
+    node.name = "agent-0"
+    node._get_config_element_tree.return_value = ET.fromstring(xml)
+    assert _jenkins_instance(container).is_managed_node(node) is expected

@@ -401,7 +401,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             )
 
         self._remove_unmanaged_agents(
-            agent_node_names=agent_node_names,
+            agent_nodes=agent_nodes,
             relation_agent_names=relation_agent_names,
             external_agent_nodes=external_agent_nodes,
             api_client=client,
@@ -409,15 +409,17 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
     def _remove_unmanaged_agents(
         self,
-        agent_node_names: list[str],
+        agent_nodes: list[typing.Any],
         relation_agent_names: set[str],
         external_agent_nodes: frozenset[str],
         api_client: jenkins.Jenkins,
     ) -> None:
-        """Remove agents not in a relation or the external agent definitions.
+        """Remove charm-created agents that are no longer in a relation.
+
+        Nodes not created by the charm (e.g. cloud plugin agents) are never removed.
 
         Args:
-            agent_node_names: The agents registered on the Jenkins server.
+            agent_nodes: The agents registered on the Jenkins server.
             relation_agent_names: Names of agents from current relation data.
             external_agent_nodes: Nodes managed outside Juju and protected from deletion.
             api_client: The Jenkins API client.
@@ -425,12 +427,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Raises:
             JenkinsError: if there was an error while removing agent nodes from Jenkins.
         """
-        unmanaged_agents = set(agent_node_names) - relation_agent_names - external_agent_nodes
-        for agent_name in unmanaged_agents:
+        for node in agent_nodes:
+            if node.name in relation_agent_names or node.name in external_agent_nodes:
+                continue
             try:
-                api_client.remove_agent_node(agent_name=agent_name)
+                if not api_client.is_managed_node(node):
+                    continue
+                api_client.remove_agent_node(agent_name=node.name)
             except jenkins.JenkinsError:
-                logger.exception("Failed to remove unmanaged agent node: %s", agent_name)
+                logger.exception("Failed to remove unmanaged agent node: %s", node.name)
                 raise
 
     def _reconcile_agent_discovery(self) -> None:

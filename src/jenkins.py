@@ -37,6 +37,7 @@ import state
 logger = logging.getLogger(__name__)
 
 WEB_PORT = 8080
+MANAGED_NODE_DESCRIPTION = "Managed by the jenkins-k8s charm"
 JENKINS_PLUGIN_MANAGER_VERSION = "2.13.2"
 LOGIN_PATH = "/login?from=%2F"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
@@ -434,7 +435,7 @@ class Jenkins:
             nodename=agent_meta.name,
             node_dict={
                 "num_executors": int(agent_meta.executors),
-                "node_description": agent_meta.name,
+                "node_description": MANAGED_NODE_DESCRIPTION,
                 "remote_fs": agent_meta.remote_fs or "/var/lib/jenkins",
                 "labels": agent_meta.labels,
                 "exclusive": False,
@@ -485,6 +486,7 @@ class Jenkins:
         try:
             config_tree = node._get_config_element_tree()  # pylint: disable=protected-access
             desired_elements = {
+                "description": MANAGED_NODE_DESCRIPTION,
                 "numExecutors": str(agent_meta.executors),
                 "label": agent_meta.labels,
             }
@@ -511,6 +513,30 @@ class Jenkins:
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             logger.error("Failed to reconcile agent node configuration, %s", exc)
             raise JenkinsError("Failed to reconcile agent node configuration.") from exc
+
+    def is_managed_node(self, node: Node) -> bool:
+        """Check whether an agent node was created by this charm.
+
+        Nodes created by earlier charm revisions used the node name as description and are
+        treated as charm-owned for backwards compatibility.
+
+        Args:
+            node: The Jenkins agent node.
+
+        Raises:
+            JenkinsError: if the node configuration could not be read.
+
+        Returns:
+            True if the node is owned by the charm.
+        """
+        try:
+            config_tree = node._get_config_element_tree()  # pylint: disable=protected-access
+        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+            logger.error("Failed to read agent node configuration, %s", exc)
+            raise JenkinsError("Failed to read agent node configuration.") from exc
+        element = config_tree.find("description")
+        description = (element.text or "") if element is not None else ""
+        return description in (MANAGED_NODE_DESCRIPTION, node.name)
 
     def list_agent_nodes(self) -> list[jenkinsapi.node.Node]:
         """Get agent nodes from Jenkins.

@@ -76,6 +76,9 @@ class FakeJenkinsService:
         self.agents_secret_map.pop(agent_name)
         self.agents_remote_fs.pop(agent_name)
 
+    def is_managed_node(self, node: SimpleNamespace) -> bool:
+        return True
+
     def list_agent_nodes(self) -> list[SimpleNamespace]:
         return [SimpleNamespace(name=name) for name in self.agents_secret_map]
 
@@ -269,7 +272,31 @@ def test_reconcile_agents_propagates_unmanaged_delete_error():
         charm_state.external_agent_nodes = frozenset()
         client = MagicMock(spec=jenkins.Jenkins)
         client.list_agent_nodes.return_value = [SimpleNamespace(name="stale-0")]
+        client.is_managed_node.return_value = True
         client.remove_agent_node.side_effect = jenkins.JenkinsError("unavailable")
 
         with pytest.raises(jenkins.JenkinsError, match="unavailable"):
             mgr.charm._reconcile_agents(charm_state, client)
+
+
+def test_reconcile_agents_keeps_nodes_not_created_by_charm():
+    """Only charm-created nodes are pruned; e.g. EC2 plugin agents are kept."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), testing.State()) as mgr,
+    ):
+        charm_state = MagicMock(spec=State)
+        charm_state.agent_relation_meta = None
+        charm_state.external_agent_nodes = frozenset()
+        client = MagicMock(spec=jenkins.Jenkins)
+        client.list_agent_nodes.return_value = [
+            SimpleNamespace(name="ec2 (i-0abc)"),
+            SimpleNamespace(name="stale-0"),
+        ]
+        client.is_managed_node.side_effect = lambda node: node.name == "stale-0"
+
+        mgr.charm._reconcile_agents(charm_state, client)
+
+        client.remove_agent_node.assert_called_once_with(agent_name="stale-0")

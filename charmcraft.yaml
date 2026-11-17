@@ -113,7 +113,9 @@ config:
       type: string
       description: >
         Comma-separated names of Jenkins nodes managed outside Juju. These nodes are preserved and
-        are not created, modified, or deleted by agent relation reconciliation.
+        are not created, modified, or deleted by agent relation reconciliation. Nodes not created by
+        the charm are preserved automatically; this option protects nodes whose description equals
+        their name.
       default: ""
     ssh-proxy-address:
       type: string
