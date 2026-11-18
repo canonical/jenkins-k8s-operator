@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+## 2026-11-16
+
+- Removed the Jenkins `monitoring` plugin requirement. Session invalidation now
+  uses Jenkins core user-session seeds, and deployments with a non-empty
+  `allowed-plugins` setting may remove `monitoring` during reconciliation.
+
 ## 2026-10-28
 
 - `agent-discovery-ingress` forwards the Jenkins path prefix instead of

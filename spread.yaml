@@ -33,12 +33,39 @@ backends:
           [ -z "$unit" ] && continue
           echo "=== unit: $unit ==="
           juju show-unit -m "$model" "$unit" || true
+          # Sidecar workload state is not included in juju show-unit. Query
+          # Pebble through the charm container without printing the plan.
+          juju ssh -m "$model" "$unit" \
+            PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket \
+            /charm/bin/pebble services || true
         done < <(echo "$status_json" | jq -r '.applications | to_entries[] | .value.units // {} | keys[]' 2>/dev/null)
         while IFS= read -r app; do
           [ -z "$app" ] && continue
           echo "=== recent Juju log: $app ==="
           juju debug-log -m "$model" --include "$app" --limit 120 || true
         done < <(echo "$status_json" | jq -r '.applications | keys[] | select(test("jenkins"))' 2>/dev/null)
+        echo "=== Kubernetes workload summary: $model ==="
+        sudo k8s kubectl get pods -n "$model" -o wide || true
+        sudo k8s kubectl get events -n "$model" --sort-by=.lastTimestamp | tail -80 || true
+        # Capture the workload boundary that explains a readiness failure. Keep
+        # logs bounded and redact common credential-bearing fields.
+        pod_names="$(sudo k8s kubectl get pods -n "$model" -o json 2>/dev/null \
+          | jq -r '.items[] | select(.metadata.name | test("jenkins")) | .metadata.name' 2>/dev/null || true)"
+        while IFS= read -r pod; do
+          [ -z "$pod" ] && continue
+          echo "=== pod description: $pod ==="
+          sudo k8s kubectl describe pod -n "$model" "$pod" || true
+          containers="$(sudo k8s kubectl get pod -n "$model" "$pod" -o json \
+            | jq -r '.spec.containers[].name' 2>/dev/null || true)"
+          while IFS= read -r container; do
+            [ -z "$container" ] && continue
+            echo "=== recent container log: $pod/$container ==="
+            sudo k8s kubectl logs -n "$model" "$pod" -c "$container" \
+              --since=15m --tail=300 2>/dev/null \
+              | sed -E 's/((password|passwd|token|secret|authorization)[=:][[:space:]]*)[^[:space:]]+/\1<redacted>/Ig' \
+              | tail -300 || true
+          done <<< "$containers"
+        done <<< "$pod_names"
       done
       DIAGNOSTICS
 environment:

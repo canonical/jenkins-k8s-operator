@@ -222,7 +222,13 @@ async def install_plugins(
     _plugins_download_complete(client, web)
     logger.info("phase=plugin_install download_complete plugins=%s", plugins)
 
-    client.safe_restart()
+    action = await unit_web_client.unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble restart jenkins"
+    )
+    await action.wait()
+    if action.status != "completed":
+        raise RuntimeError(f"Failed to restart Jenkins: {action.data}")
     logger.info("phase=plugin_install restart_requested plugins=%s", plugins)
 
     _jenkins_available(web)
