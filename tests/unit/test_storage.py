@@ -32,7 +32,6 @@ def test_reconcile_storage():
                     testing.Exec(
                         [
                             "chown",
-                            "-R",
                             f"{JENKINS_USER}:{JENKINS_USER}",
                             JENKINS_HOME_DIR,
                         ],
@@ -75,7 +74,9 @@ def test_reconcile_storage_uses_configured_timeout():
         container = context.charm.unit.get_container(JENKINS_CONTAINER_NAME)
         process = MagicMock()
         with patch.object(container, "exec", return_value=process) as exec_mock:
-            context.charm.storage.reconcile_storage(container=container, timeout=900)
+            context.charm.storage.reconcile_storage(
+                container=container, recursive=True, timeout=900
+            )
 
         exec_mock.assert_called_once_with(
             [

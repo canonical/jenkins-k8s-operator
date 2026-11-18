@@ -52,7 +52,7 @@ def test_on_reconcile_storage_action_uses_requested_timeout(
     harness_container.harness.begin()
     charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
     event = MagicMock(spec=ops.ActionEvent)
-    event.params = {"timeout": 900}
+    event.params = {"recursive": True, "timeout": 900}
 
     charm._storage_repair_state.pending = True
     with patch.object(charm.storage, "reconcile_storage") as reconcile_storage_mock:
@@ -61,10 +61,48 @@ def test_on_reconcile_storage_action_uses_requested_timeout(
     assert charm._storage_repair_state.pending is False
     reconcile_storage_mock.assert_called_once_with(
         container=harness_container.container,
+        recursive=True,
         timeout=900,
     )
     event.set_results.assert_called_once_with({"timeout": 900})
     event.fail.assert_not_called()
+
+
+def test_on_reconcile_storage_action_defaults_to_non_recursive(
+    harness_container: HarnessWithContainer,
+):
+    """The storage action does not recursively walk the Jenkins home by default."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    event = MagicMock(spec=ops.ActionEvent)
+    event.params = {"timeout": 900}
+
+    with patch.object(charm.storage, "reconcile_storage") as reconcile_storage_mock:
+        charm._on_reconcile_storage(event)
+
+    reconcile_storage_mock.assert_called_once_with(
+        container=harness_container.container,
+        recursive=False,
+        timeout=900,
+    )
+    event.fail.assert_not_called()
+
+
+def test_on_reconcile_storage_action_rejects_non_boolean_recursive(
+    harness_container: HarnessWithContainer,
+):
+    """The storage action rejects an invalid recursive parameter."""
+    harness_container.harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness_container.harness.charm)
+    event = MagicMock(spec=ops.ActionEvent)
+    event.params = {"recursive": "true"}
+
+    with patch.object(charm.storage, "reconcile_storage") as reconcile_storage_mock:
+        charm._on_reconcile_storage(event)
+
+    reconcile_storage_mock.assert_not_called()
+    event.fail.assert_called_once_with("Recursive must be a boolean.")
+    event.set_results.assert_not_called()
 
 
 def test_on_reconcile_storage_action_rejects_non_positive_timeout(

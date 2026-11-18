@@ -37,7 +37,11 @@ class Reconciler(ops.Object):
         return container_meta.mounts["jenkins-home"].location
 
     def reconcile_storage(
-        self, *, container: ops.Container, timeout: int = DEFAULT_RECONCILE_TIMEOUT
+        self,
+        *,
+        container: ops.Container,
+        recursive: bool = False,
+        timeout: int = DEFAULT_RECONCILE_TIMEOUT,
     ) -> None:
         """Reconcile Jenkins home path from storage.
 
@@ -46,16 +50,15 @@ class Reconciler(ops.Object):
 
         Args:
             container: Active Jenkins workload container.
-            timeout: Maximum seconds to wait for recursive ownership reconciliation.
+            recursive: Whether to reconcile ownership below the storage mount.
+            timeout: Maximum seconds to wait for ownership reconciliation.
         """
         logger.info("Reconciling storage")
 
-        command = [
-            "chown",
-            "-R",
-            f"{jenkins.USER}:{jenkins.GROUP}",
-            str(self.storage_path),
-        ]
+        command = ["chown"]
+        if recursive:
+            command.append("-R")
+        command.extend([f"{jenkins.USER}:{jenkins.GROUP}", str(self.storage_path)])
         container.exec(
             command,
             timeout=timeout,

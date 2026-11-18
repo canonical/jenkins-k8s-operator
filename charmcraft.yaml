@@ -214,9 +214,14 @@ actions:
     description: |
       Reconcile ownership of the Jenkins home storage.
     params:
+      recursive:
+        type: boolean
+        description: Reconcile ownership recursively.
+        default: false
       timeout:
         type: integer
-        description: Maximum seconds to wait for recursive ownership reconciliation.
+        description: Maximum seconds to wait for ownership reconciliation.
+        minimum: 1
         default: 600
 
 charm-libs:

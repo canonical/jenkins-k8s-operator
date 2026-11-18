@@ -172,6 +172,7 @@ def test_reconcile_storage_delegates_to_storage_reconciler(
 
     reconcile_storage_mock.assert_called_once_with(
         container=harness_container.container,
+        recursive=False,
         timeout=storage.DEFAULT_RECONCILE_TIMEOUT,
     )
 

@@ -301,15 +301,19 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         )
 
     def _reconcile_storage(
-        self, container: ops.Container, timeout: int = storage.DEFAULT_RECONCILE_TIMEOUT
+        self,
+        container: ops.Container,
+        recursive: bool = False,
+        timeout: int = storage.DEFAULT_RECONCILE_TIMEOUT,
     ) -> None:
         """Ensure storage permissions are correct.
 
         Args:
             container: The Jenkins workload container.
-            timeout: Maximum seconds to wait for recursive ownership reconciliation.
+            recursive: Whether to reconcile ownership below the storage mount.
+            timeout: Maximum seconds to wait for ownership reconciliation.
         """
-        self.storage.reconcile_storage(container=container, timeout=timeout)
+        self.storage.reconcile_storage(container=container, recursive=recursive, timeout=timeout)
 
     def _reconcile_admin(self, container: ops.Container, charm_state: State) -> str:
         """Ensure the admin user is set up and return the admin password.
@@ -795,13 +799,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event.fail(check_result.reason or "Jenkins storage is not ready.")
             return
 
+        recursive = event.params.get("recursive", False)
+        if not isinstance(recursive, bool):
+            event.fail("Recursive must be a boolean.")
+            return
+
         timeout = event.params.get("timeout", storage.DEFAULT_RECONCILE_TIMEOUT)
         if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
             event.fail("Storage timeout must be a positive integer.")
             return
 
         try:
-            self._reconcile_storage(container, timeout=timeout)
+            self._reconcile_storage(container, recursive=recursive, timeout=timeout)
         except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
             self._storage_repair_state.pending = True
             self.unit.status = ops.WaitingStatus(self._storage_repair_waiting_message())
