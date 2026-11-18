@@ -47,7 +47,7 @@ A Jenkins node can be managed outside Juju, including through the Jenkins UI, RE
 external automation. These nodes do not need to be configured through JCasC or Git.
 
 Declare their names or shell-style patterns in the `external-agent-nodes` charm configuration so
-relation reconciliation can detect collisions and preserve them:
+relation reconciliation can preserve them:
 
 ```bash
 juju config jenkins-k8s external-agent-nodes="toronto-switch-backup,baremetal-ppc64el-*"
@@ -63,6 +63,9 @@ as before.
 
 Relation-managed agent nodes are cleaned up when their relation departs. During reconciliation,
 any Jenkins node that is not present in a current agent relation is also removed unless its name
-matches an entry in `external-agent-nodes`. A matching relation node conflicts with the external
-declaration and blocks reconciliation. Ensure every externally managed node matches an entry before
-enabling this configuration, otherwise it will be treated as unmanaged and removed.
+matches an entry in `external-agent-nodes`. Matching nodes are also excluded from relation
+reconciliation, so their labels, executors, workspace paths, and other settings are not changed. If
+an external node also appears in relation data, the charm keeps the relation data needed for
+connectivity but does not create or update the Jenkins node. Ensure every externally managed node
+matches an entry before enabling this configuration, otherwise it will be treated as unmanaged and
+removed.
