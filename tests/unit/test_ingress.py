@@ -10,7 +10,7 @@ import pytest
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.testing import Harness
 
-from charm import JenkinsK8sOperatorCharm
+from charm import AgentSyncResult, JenkinsK8sOperatorCharm
 
 
 def _patch_reconcile_dependencies(monkeypatch: pytest.MonkeyPatch):
@@ -31,7 +31,11 @@ def _patch_reconcile_dependencies(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         JenkinsK8sOperatorCharm, "_reconcile_api_token", MagicMock(return_value=None)
     )
-    monkeypatch.setattr(JenkinsK8sOperatorCharm, "_reconcile_agents", MagicMock(return_value=None))
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm,
+        "_reconcile_agents",
+        MagicMock(return_value=AgentSyncResult()),
+    )
     monkeypatch.setattr(
         JenkinsK8sOperatorCharm,
         "_reconcile_agent_discovery",
