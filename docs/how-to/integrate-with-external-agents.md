@@ -46,18 +46,23 @@ The charm assumes that:
 A Jenkins node can be managed outside Juju, including through the Jenkins UI, REST API, or
 external automation. These nodes do not need to be configured through JCasC or Git.
 
-Declare their names in the `external-agent-nodes` charm configuration so relation reconciliation
-can detect name collisions and preserve them:
+Declare their names or shell-style patterns in the `external-agent-nodes` charm configuration so
+relation reconciliation can detect collisions and preserve them:
 
 ```bash
-juju config jenkins-k8s external-agent-nodes="toronto-switch-backup,baremetal-ppc64el-1"
+juju config jenkins-k8s external-agent-nodes="toronto-switch-backup,baremetal-ppc64el-*"
 ```
 
+For example, if an external provider gives nodes names beginning with `ec2-`, protect them with
+`external-agent-nodes="ec2-*"`.
+
 This configuration is an ownership declaration only. The charm does not create, configure, or
-delete the listed nodes. Labels, executors, launch settings, workspace paths, and credentials
-remain managed by the external system.
+delete matching nodes. Labels, executors, launch settings, workspace paths, and credentials remain
+managed by the external system. Patterns use shell-style matching and exact names continue to work
+as before.
 
 Relation-managed agent nodes are cleaned up when their relation departs. During reconciliation,
-any Jenkins node that is not present in a current agent relation is also removed unless its name is
-listed in `external-agent-nodes`. Ensure every externally managed node is listed before enabling
-this configuration, otherwise it will be treated as unmanaged and removed.
+any Jenkins node that is not present in a current agent relation is also removed unless its name
+matches an entry in `external-agent-nodes`. A matching relation node conflicts with the external
+declaration and blocks reconciliation. Ensure every externally managed node matches an entry before
+enabling this configuration, otherwise it will be treated as unmanaged and removed.

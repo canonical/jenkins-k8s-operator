@@ -95,6 +95,20 @@ class FakeJenkinsService:
             {"external-agent-nodes": "external-0"},
             id="preserve configured external agent",
         ),
+        pytest.param(
+            ["external-0"],
+            [],
+            ["external-0"],
+            {"external-agent-nodes": "external-*"},
+            id="preserve external agent matching pattern",
+        ),
+        pytest.param(
+            ["worker[1]"],
+            [],
+            ["worker[1]"],
+            {"external-agent-nodes": "worker[1]"},
+            id="preserve exact external agent with pattern characters",
+        ),
     ],
 )
 def test_reconcile_agents(
@@ -273,3 +287,19 @@ def test_reconcile_agents_propagates_unmanaged_delete_error():
 
         with pytest.raises(jenkins.JenkinsError, match="unavailable"):
             mgr.charm._reconcile_agents(charm_state, client)
+
+
+def test_reconcile_agents_rejects_external_agent_pattern_collision():
+    """External patterns cannot claim a relation-managed node name."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = _state_with_agents(["external-0"], config={"external-agent-nodes": "external-*"})
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+
+        with pytest.raises(charm.ReconcileBlockedError, match="external-0"):
+            mgr.charm._reconcile_agents(state=charm_state, client=MagicMock(spec=jenkins.Jenkins))
