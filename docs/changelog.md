@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   mount point, avoiding recursive walks during charm hooks.
 - Add the `reconcile-storage` action with configurable recursive repair and
   timeout options for existing deployments.
+- Allow `external-agent-nodes` entries to use shell-style patterns while preserving exact-name
+  matching and relation-name collision protection.
 
 Each revision is versioned by the date of the revision.
 
