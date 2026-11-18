@@ -229,7 +229,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.unit.status = ops.WaitingStatus(check_result.reason or "")
             return
 
-        charm_state = self._get_state()
+        try:
+            charm_state = self._get_state()
+        except ops.ModelError as exc:
+            # Juju model data can be temporarily unavailable while the
+            # controller or Kubernetes API is recovering. Do not let a
+            # transient secret/relation lookup failure crash the hook.
+            self.unit.status = ops.WaitingStatus(
+                "Waiting for Juju model data to become available."
+            )
+            event.defer()
+            logger.warning("Juju model data unavailable; deferring reconciliation: %s", exc)
+            return
         if charm_state is None:
             return
 

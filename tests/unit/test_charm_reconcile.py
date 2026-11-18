@@ -155,6 +155,23 @@ def test__get_state_returns_none_on_invalid_config(harness: Harness):
     assert jenkins_charm.unit.status.message == "bad config"
 
 
+def test_reconcile_defers_when_model_data_is_unavailable(
+    harness_container: HarnessWithContainer,
+):
+    """Transient Juju model failures wait for a later reconciliation."""
+    harness = harness_container.harness
+    harness.begin()
+    charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+    event = MagicMock(spec=ops.ConfigChangedEvent)
+
+    with patch.object(charm, "_get_state", side_effect=ops.ModelError()):
+        charm._reconcile(event)
+
+    assert charm.unit.status.name == WAITING_STATUS_NAME
+    assert charm.unit.status.message == "Waiting for Juju model data to become available."
+    event.defer.assert_called_once()
+
+
 def test_reconcile_storage_delegates_to_storage_reconciler(
     harness_container: HarnessWithContainer,
 ):
