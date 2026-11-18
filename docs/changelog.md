@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2026-11-18
+
+- Limit automatic Jenkins home ownership reconciliation to the Jenkins home
+  mount point, avoiding recursive walks during charm hooks.
+- Add the `reconcile-storage` action with configurable recursive repair and
+  timeout options for existing deployments.
+
 Each revision is versioned by the date of the revision.
 
 ## 2026-11-16

@@ -210,6 +210,19 @@ actions:
   rotate-credentials:
     description: |
       Invalidate all current sessions and generate a new password for admin account.
+  reconcile-storage:
+    description: |
+      Reconcile ownership of the Jenkins home storage.
+    params:
+      recursive:
+        type: boolean
+        description: Reconcile ownership recursively.
+        default: false
+      timeout:
+        type: integer
+        description: Maximum seconds to wait for ownership reconciliation.
+        minimum: 1
+        default: 600
 
 charm-libs:
   - lib: traefik-k8s.ingress
