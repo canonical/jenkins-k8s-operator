@@ -37,7 +37,7 @@ Container_Boundary(charm, "Jenkins Operator") {
 This container runs the main workload of the charm. The OCI image is custom built and includes
 the [Jenkins WAR](https://www.jenkins.io/doc/book/installing/war-file/), Java and the [Jenkins plugin installation manager](https://github.com/jenkinsci/plugin-installation-manager-tool/).
 
-To facilitate monitoring of the Jenkins application via the COS, the [prometheus](https://plugins.jenkins.io/prometheus/) plugin is installed by default. The [instance-identity](https://plugins.jenkins.io/instance-identity/) plugin is also included to ensure seamless registration of agent nodes. Additionally, the [monitoring](https://plugins.jenkins.io/monitoring/) plugin is pre-installed to handle session invalidation.
+To facilitate monitoring of the Jenkins application via the COS, the [prometheus](https://plugins.jenkins.io/prometheus/) plugin is installed by default. The [instance-identity](https://plugins.jenkins.io/instance-identity/) plugin is also included to ensure seamless registration of agent nodes. Session invalidation uses Jenkins core user-session seeds, so no additional monitoring plugin is required.
 
 When a logging relation is joined, a promtail application is started via Pebble which starts
 pushing Jenkins logs at `/var/lib/jenkins/logs/jenkins.log` to Loki.

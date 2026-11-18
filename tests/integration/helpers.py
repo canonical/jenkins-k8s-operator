@@ -134,6 +134,28 @@ def _jenkins_available(web: str) -> bool:
     retry_error_callback=_raise_retry_timeout,
     before_sleep=_log_retry,
 )
+def _jenkins_api_ready(web: str, client: jenkinsapi.jenkins.Jenkins) -> bool:
+    """Return whether Jenkins accepts the current client's credentials after a restart."""
+    try:
+        response = requests.get(
+            f"{web}/api/json",
+            auth=(client.username, client.password),
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        logger.info("phase=jenkins_api_ready probe_error address=%s exc=%r", web, exc)
+        return False
+    logger.info("phase=jenkins_api_ready address=%s status=%s", web, response.status_code)
+    return response.status_code == 200
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
 def _plugins_are_active(client: jenkinsapi.jenkins.Jenkins, plugins: tuple[str, ...]) -> bool:
     """Return whether all requested Jenkins plugins are active and enabled."""
     try:
@@ -200,11 +222,26 @@ async def install_plugins(
     _plugins_download_complete(client, web)
     logger.info("phase=plugin_install download_complete plugins=%s", plugins)
 
-    client.safe_restart()
+    action = await unit_web_client.unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble restart jenkins"
+    )
+    await action.wait()
+    if action.status != "completed":
+        raise RuntimeError(f"Failed to restart Jenkins: {action.data}")
     logger.info("phase=plugin_install restart_requested plugins=%s", plugins)
 
     _jenkins_available(web)
     logger.info("phase=plugin_install jenkins_available plugins=%s", plugins)
+    # The Jenkins client constructor polls immediately. Gate the refresh with
+    # the existing client's credentials before constructing a new client.
+    _jenkins_api_ready(web, client)
+
+    if unit_web_client.client_factory is not None:
+        unit_web_client.client = await unit_web_client.client_factory()
+        client = unit_web_client.client
+        logger.info("phase=plugin_install client_refreshed plugins=%s", plugins)
+    _jenkins_api_ready(web, client)
 
     _plugins_are_active(client, plugins)
     logger.info("phase=plugin_install active plugins=%s", plugins)
@@ -707,7 +744,16 @@ async def generate_unit_web_client_from_application(
     address = f"http://{unit_ips[0]}:8080"
     jenkins_unit = jenkins_app.units[0]
     jenkins_client = await generate_jenkins_client(ops_test, jenkins_app, address)
-    unit_web_client = UnitWebClient(unit=jenkins_unit, web=address, client=jenkins_client)
+
+    async def client_factory() -> jenkinsapi.jenkins.Jenkins:
+        return await generate_jenkins_client(ops_test, jenkins_app, address)
+
+    unit_web_client = UnitWebClient(
+        unit=jenkins_unit,
+        web=address,
+        client=jenkins_client,
+        client_factory=client_factory,
+    )
     return unit_web_client
 
 

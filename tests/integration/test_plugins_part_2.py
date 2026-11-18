@@ -361,11 +361,12 @@ async def test_kubernetes_plugin(
     assert: Job succeeds.
     """
     # Use plain credentials to be able to create secret-file/secret-text credentials.
-    # workflow-durable-task-step provides the `node` step used by the pipeline below. The
-    # kubernetes plugin declares it as an optional dependency only, so it is not installed
-    # automatically.
+    # workflow-durable-task-step provides `node`, and pipeline-stage-step provides
+    # `stage`. The Kubernetes plugin declares these as optional dependencies, so
+    # install them explicitly for this pipeline.
     await install_plugins(
-        unit_web_client, ("kubernetes", "plain-credentials", "workflow-durable-task-step")
+        unit_web_client,
+        ("kubernetes", "plain-credentials", "workflow-durable-task-step", "pipeline-stage-step"),
     )
 
     plugins = unit_web_client.client.plugins

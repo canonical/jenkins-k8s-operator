@@ -194,7 +194,12 @@ async def _has_plugin_delay_log(ops_test: OpsTest) -> bool:
 )
 def _all_plugins_active(unit_web_client: UnitWebClient, plugins: typing.Iterable[str]) -> bool:
     """Return whether all requested plugins are active in Jenkins."""
-    return all(unit_web_client.client.has_plugin(plugin) for plugin in plugins)
+    try:
+        return all(unit_web_client.client.has_plugin(plugin) for plugin in plugins)
+    except (jenkinsapi.custom_exceptions.JenkinsAPIException, requests.RequestException):
+        # Jenkins can still return 503 while Pebble has started it but the API
+        # is completing plugin initialization. Let the bounded retry continue.
+        return False
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins")
@@ -221,7 +226,12 @@ async def test_plugins_remove_delay(
     assert not ret_code, f"Failed to execute update-status-hook, {stderr}"
 
     await _has_plugin_delay_log(ops_test)
-    unit_web_client.client.safe_restart()
+    action = await unit_web_client.unit.run(
+        "PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket "
+        "/charm/bin/pebble restart jenkins"
+    )
+    await action.wait()
+    assert action.status == "completed", f"Failed to restart Jenkins: {action.data}"
 
     _all_plugins_active(unit_web_client, ALLOWED_PLUGINS)
 
