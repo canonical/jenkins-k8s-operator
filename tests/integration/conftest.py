@@ -238,10 +238,23 @@ async def jenkins_user_client_fixture(
 
 @pytest.fixture(scope="function", name="unit_web_client")
 def unit_web_client_fixture(
-    unit: Unit, web_address: str, jenkins_client: jenkinsapi.jenkins.Jenkins
+    ops_test: OpsTest,
+    application: Application,
+    unit: Unit,
+    web_address: str,
+    jenkins_client: jenkinsapi.jenkins.Jenkins,
 ):
-    """The wrapper around unit, web_address and jenkins_client."""
-    return UnitWebClient(unit=unit, web=web_address, client=jenkins_client)
+    """The wrapper around unit, web_address and a refreshable Jenkins client."""
+
+    async def client_factory() -> jenkinsapi.jenkins.Jenkins:
+        return await generate_jenkins_client(ops_test, application, web_address)
+
+    return UnitWebClient(
+        unit=unit,
+        web=web_address,
+        client=jenkins_client,
+        client_factory=client_factory,
+    )
 
 
 @pytest_asyncio.fixture(scope="module", name="jenkins_k8s_agents")
