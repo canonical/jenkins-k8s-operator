@@ -7,6 +7,7 @@
 # pylint:disable=protected-access
 
 import base64
+import logging
 import re
 import secrets
 from functools import partial
@@ -193,7 +194,7 @@ def test_install_plugins_executes_plugin_manager_command():
     """install_plugins invokes jenkins plugin manager with expected command layout."""
     mock_container = MagicMock(spec=ops.Container)
     mock_process = MagicMock(spec=ops.pebble.ExecProcess)
-    mock_process.wait_output.return_value = ("Done", "")
+    mock_process.wait.return_value = None
     mock_container.exec.return_value = mock_process
 
     jenkins.install_plugins(mock_container, ["plugin-a", "plugin-b"])
@@ -213,16 +214,55 @@ def test_install_plugins_raises_bootstrap_error_on_exec_failure():
     """install_plugins raises JenkinsBootstrapError when command execution fails."""
     mock_container = MagicMock(spec=ops.Container)
     mock_process = MagicMock(spec=ops.pebble.ExecProcess)
-    mock_process.wait_output.side_effect = ops.pebble.ExecError(
+    mock_process.wait.side_effect = ops.pebble.ExecError(
         command=["java"],
         exit_code=1,
         stdout="",
         stderr="failed",
     )
-    mock_container.exec.return_value = mock_process
+    diagnostic_process = MagicMock(spec=ops.pebble.ExecProcess)
+    diagnostic_process.wait_output.return_value = (
+        "101 1 S 00:02 0.0 0.1 100 200 futex java\n",
+        "",
+    )
+
+    def exec_side_effect(command, **kwargs):
+        return mock_process if command[0] == "java" else diagnostic_process
+
+    mock_container.exec.side_effect = exec_side_effect
 
     with pytest.raises(jenkins.JenkinsBootstrapError):
         jenkins.install_plugins(mock_container, ["plugin-a"])
+
+
+def test_log_plugin_install_processes_logs_safe_metadata(caplog):
+    """Process diagnostics include state metadata without command arguments."""
+    mock_container = MagicMock(spec=ops.Container)
+    mock_process = MagicMock(spec=ops.pebble.ExecProcess)
+    mock_process.wait_output.return_value = ("101 1 S 00:02 java\n", "ignored")
+    mock_container.exec.return_value = mock_process
+
+    with caplog.at_level(logging.ERROR, logger=jenkins.__name__):
+        jenkins._log_plugin_install_processes(mock_container)
+
+    assert "process_count=1" in caplog.text
+    assert "101 1 S 00:02" in caplog.text
+    mock_container.exec.assert_called_once_with(
+        ["ps", "-eo", "pid=,ppid=,stat=,etime=,%cpu=,%mem=,rss=,vsz=,wchan=,comm="], timeout=10
+    )
+
+
+def test_log_plugin_install_processes_ignores_probe_failure(caplog):
+    """A failed diagnostic probe does not replace the original failure."""
+    mock_container = MagicMock(spec=ops.Container)
+    mock_container.exec.side_effect = ops.pebble.ExecError(
+        command=["ps"], exit_code=1, stdout="", stderr="unavailable"
+    )
+
+    with caplog.at_level(logging.WARNING, logger=jenkins.__name__):
+        jenkins._log_plugin_install_processes(mock_container)
+
+    assert "process_snapshot_failed" in caplog.text
 
 
 def test_get_java_proxy_args_with_auth_and_no_proxy(proxy_config):
