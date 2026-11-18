@@ -233,6 +233,9 @@ async def install_plugins(
 
     _jenkins_available(web)
     logger.info("phase=plugin_install jenkins_available plugins=%s", plugins)
+    # The Jenkins client constructor polls immediately. Gate the refresh with
+    # the existing client's credentials before constructing a new client.
+    _jenkins_api_ready(web, client)
 
     if unit_web_client.client_factory is not None:
         unit_web_client.client = await unit_web_client.client_factory()

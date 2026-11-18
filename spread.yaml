@@ -28,7 +28,7 @@ backends:
         echo "=== model: $model ==="
         juju status -m "$model" --relations --storage --color=false || true
         status_json="$(juju status -m "$model" --format json --color=false 2>/dev/null || true)"
-        echo "$status_json" | jq -r '.applications | to_entries[] | "app=" + .key + " status=" + (.value.status // "unknown") + " message=" + (.value.status-info // "")' 2>/dev/null || true
+        echo "$status_json" | jq -r '.applications | to_entries[] | "app=" + .key + " status=" + (.value["application-status"].current // "unknown") + " message=" + (.value["application-status"].message // "")' || true
         while IFS= read -r unit; do
           [ -z "$unit" ] && continue
           echo "=== unit: $unit ==="
@@ -38,7 +38,6 @@ backends:
           juju ssh -m "$model" "$unit" \
             PEBBLE_SOCKET=/charm/containers/jenkins/pebble.socket \
             /charm/bin/pebble services || true
-          juju exec -m "$model" --unit "$unit" -- pebble services || true
         done < <(echo "$status_json" | jq -r '.applications | to_entries[] | .value.units // {} | keys[]' 2>/dev/null)
         while IFS= read -r app; do
           [ -z "$app" ] && continue
