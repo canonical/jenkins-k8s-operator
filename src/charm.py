@@ -404,20 +404,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             agent.name for agents in (state.agent_relation_meta or {}).values() for agent in agents
         }
         external_agent_nodes = state.external_agent_nodes
-        name_collisions = {
+        external_relation_agents = frozenset(
             name
             for name in relation_agent_names
             if is_external_agent_node(name, external_agent_nodes)
-        }
-        if name_collisions:
-            names = ", ".join(sorted(name_collisions))
-            message = (
-                f"Duplicate agent node names found: {names}. Remove the matching entries from "
-                "external-agent-nodes or rename the relation-managed agents."
+        )
+        if external_relation_agents:
+            logger.warning(
+                "Skipping externally managed relation agent nodes: %s",
+                ", ".join(sorted(external_relation_agents)),
             )
-            logger.error(message)
-            raise ReconcileBlockedError(message)
-
         agent_discovery_url = self._agent_discovery_url if state.agent_relation_meta else None
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
@@ -427,12 +423,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self._add_agent_nodes_from_relation(
                 agent_relation=state.agent_relation_meta,
                 agent_node_names=agent_node_names,
+                external_agent_nodes=external_agent_nodes,
                 api_client=client,
                 agent_discovery_url=typing.cast(str, agent_discovery_url),
             )
             self._update_agent_nodes_from_relation(
                 agent_relation=state.agent_relation_meta,
                 agent_nodes=agent_nodes,
+                external_agent_nodes=external_agent_nodes,
                 api_client=client,
             )
 
@@ -610,6 +608,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self,
         agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
         agent_node_names: list[str],
+        external_agent_nodes: frozenset[str],
         api_client: jenkins.Jenkins,
         agent_discovery_url: str,
     ) -> None:
@@ -618,6 +617,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             agent_relation: Mapping of agent relation to agent metadata.
             agent_node_names: The node names of agents.
+            external_agent_nodes: Nodes managed outside Juju and skipped by reconciliation.
             api_client: The Jenkins API client.
             agent_discovery_url: The resolved URL for agent connections.
 
@@ -625,7 +625,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             JenkinsError: if there was an error while registering agent nodes to Jenkins.
         """
         for relation, agents in agent_relation.items():
-            unregistered_agents = [agent for agent in agents if agent.name not in agent_node_names]
+            unregistered_agents = [
+                agent
+                for agent in agents
+                if agent.name not in agent_node_names
+                and not is_external_agent_node(agent.name, external_agent_nodes)
+            ]
             for unregistered_agent in unregistered_agents:
                 try:
                     # AgentMeta includes remote_fs, which the Jenkins API wrapper
@@ -637,8 +642,19 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
             agent_relation_data: dict[str, str] = {"url": agent_discovery_url}
             for meta in agents:
+                secret_key = f"{meta.name}_secret"
+                if (
+                    is_external_agent_node(meta.name, external_agent_nodes)
+                    and meta.name not in agent_node_names
+                ):
+                    logger.warning(
+                        "External agent node %s is not registered; skipping secret publication.",
+                        meta.name,
+                    )
+                    relation.data[self.model.unit].pop(secret_key, None)
+                    continue
                 try:
-                    agent_relation_data[f"{meta.name}_secret"] = api_client.get_node_secret(
+                    agent_relation_data[secret_key] = api_client.get_node_secret(
                         node_name=meta.name
                     )
                 except jenkins.JenkinsError:
@@ -650,6 +666,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self,
         agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
         agent_nodes: list[typing.Any],
+        external_agent_nodes: frozenset[str],
         api_client: jenkins.Jenkins,
     ) -> None:
         """Update existing Jenkins agent nodes to match relation remote filesystems.
@@ -657,6 +674,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             agent_relation: Mapping of agent relation to agent metadata.
             agent_nodes: The agents currently registered on Jenkins.
+            external_agent_nodes: Names or patterns for nodes managed outside Juju.
             api_client: The Jenkins API client.
 
         Raises:
@@ -665,7 +683,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         agent_meta_by_name = {
             agent.name: agent for agents in agent_relation.values() for agent in agents
         }
-        nodes_to_update = tuple(node for node in agent_nodes if node.name in agent_meta_by_name)
+        nodes_to_update = tuple(
+            node
+            for node in agent_nodes
+            if node.name in agent_meta_by_name
+            and not is_external_agent_node(node.name, external_agent_nodes)
+        )
         for node in nodes_to_update:
             agent_meta = agent_meta_by_name[node.name]
             try:
