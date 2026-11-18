@@ -5,13 +5,13 @@
 [![Promote charm](https://github.com/canonical/jenkins-k8s-operator/actions/workflows/promote_charm.yaml/badge.svg)](https://github.com/canonical/jenkins-k8s-operator/actions/workflows/promote_charm.yaml)
 [![Discourse Status](https://img.shields.io/discourse/status?server=https%3A%2F%2Fdiscourse.charmhub.io&style=flat&label=CharmHub%20Discourse)](https://discourse.charmhub.io)
 
-A [Juju](https://juju.is/) [charm](https://documentation.ubuntu.com/juju/3.6/reference/charm/)
-deploying and managing [Jenkins](https://jenkins.io/) on Kubernetes. Jenkins is an open source
+A [Juju](https://canonical.com/juju) [charm](https://canonical.com/juju/docs/juju-cli/3.6/reference/charm/)
+deploying and managing [Jenkins](https://www.jenkins.io/) on Kubernetes. Jenkins is an open source
 automation server, providing plugins to support building, deploying and automating any project.
 
 Jenkins is an extendable continuous integration server that monitors executions of repeated jobs. 
 The focus of Jenkins is the building/testing of software projects continuously, and monitoring
-executions of externally-run jobs. More information at http://jenkins-ci.org/.
+executions of externally-run jobs. More information at https://www.jenkins.io/.
 
 This charm provides the Jenkins server service, and when paired with the
 Jenkins agent, provides an easy way to deploy Jenkins.
@@ -20,7 +20,7 @@ For DevOps and SRE teams, this charm will make operating Jenkins simple and stra
 through Juju's clean interface. Allowing both kubernetes and machine agent relations, it supports
 multiple environments for automation.
 
-For information about how to deploy, integrate, and manage this charm, see the Official [jenkins-k8s charm Documentation](https://charmhub.io/jenkins-k8s/docs).
+For information about how to deploy, integrate, and manage this charm, see the Official [jenkins-k8s charm Documentation](https://charmhub.io/jenkins-k8s).
 
 ## Get started
 
@@ -42,7 +42,7 @@ See the [how to integrate with external agents](https://charmhub.io/jenkins-k8s/
 
 ## Learn more
 
-- [Read more](https://charmhub.io/jenkins-k8s/docs)
+- [Read more](https://charmhub.io/jenkins-k8s)
 - [Official Webpage](https://www.jenkins.io/)
 - [Troubleshooting](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
 

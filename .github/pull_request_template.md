@@ -23,7 +23,7 @@ Applicable spec: <link>
 ### Checklist
 
 - [ ] The [charm style guide](https://canonical.com/juju/docs/ops/latest/) was applied
-- [ ] The [contributing guide](https://github.com/canonical/is-charms-contributing-guide) was applied
+- [ ] The [contributing guide](https://github.com/canonical/platform-engineering-contributing-guide) was applied
 - [ ] The changes are compliant with [ISD054 - Managing Charm Complexity](https://discourse.charmhub.io/t/specification-isd014-managing-charm-complexity/11619)
 - [ ] The documentation for charmhub is updated.
 - [ ] The PR is tagged with appropriate label (`urgent`, `trivial`, `complex`)

@@ -14,11 +14,11 @@ tutorial will walk through each step of deployment to get a basic Jenkins server
 
 - A machine with AMD64 architecture.
 - Juju 3 installed.
-- Juju MicroK8s controller created and active named `microk8s`. [MetalLB add-on](https://microk8s.io/docs/addon-metallb) should be enabled for traefik-k8s to work.
+- Juju MicroK8s controller created and active named `microk8s`. [MetalLB add-on](https://canonical.com/microk8s/docs/addon-metallb) should be enabled for traefik-k8s to work.
 - LXD controller created and active named `lxd` (optional).
-- All the requirements can be met using the [Set up your deployment - local testing and development](https://documentation.ubuntu.com/juju/3.6/howto/manage-your-juju-deployment/set-up-your-juju-deployment-local-testing-and-development/). Use the Multipass VM shell to run all commands in this tutorial.
+- All the requirements can be met using the [Set up your deployment - local testing and development](https://canonical.com/juju/docs/juju-cli/3.6/howto/manage-your-juju-deployment/set-up-your-juju-deployment-local-testing-and-development/). Use the Multipass VM shell to run all commands in this tutorial.
 
-For more information about how to install Juju, see [Get started with Juju](https://documentation.ubuntu.com/juju/3.6/tutorial/).
+For more information about how to install Juju, see [Get started with Juju](https://canonical.com/juju/docs/juju-cli/3.6/tutorial/).
 
 ### Set up the tutorial model
 

@@ -35,7 +35,7 @@ juju integrate jenkins-k8s:agent <controller-name>:<juju-user>/<agent-model>.jen
 
 An example of such command would look like the following, using a jenkins-agent deployed on a
 localhost
-[LXD controller](https://documentation.ubuntu.com/juju/3.6/tutorial/#prepare-your-cloud).
+[LXD controller](https://canonical.com/juju/docs/juju-cli/3.6/tutorial/#prepare-your-cloud).
 
 ```
 juju integrate jenkins-k8s:agent localhost:admin/jenkins-vm-model.jenkins-agent

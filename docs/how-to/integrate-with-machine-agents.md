@@ -6,7 +6,7 @@ This guide assumes the `jenkins-k8s` charm to already be deployed on a Kubernete
 
 To integrate machine (VM) agents, you'll need to have a bootstrapped machine model. Learn about
 bootstrapping different clouds
-[here](https://documentation.ubuntu.com/juju/3.6/tutorial/#prepare-your-cloud).
+[here](https://canonical.com/juju/docs/juju-cli/3.6/tutorial/#prepare-your-cloud).
 
 Use `juju bootstrap localhost localhost` to bootstrap a `lxd` machine controller with the name
 `localhost` for tutorial purposes.
