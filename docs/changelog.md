@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   timeout options for existing deployments.
 - Allow `external-agent-nodes` entries to use shell-style patterns while preserving exact-name
   matching and relation-name collision protection.
+- Allow external-agent nodes to opt out of relation reconciliation while retaining relation secret
+  publication for connectivity.
 
 Each revision is versioned by the date of the revision.
 
