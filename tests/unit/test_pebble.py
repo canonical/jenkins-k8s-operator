@@ -23,6 +23,7 @@ import pebble
             [
                 f"-D{jenkins.SYSTEM_PROPERTY_HEADLESS}",
                 f"-D{jenkins.SYSTEM_PROPERTY_LOGGING}",
+                pebble.JVM_SECURITY_WORKAROUND,
                 f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war",
                 "--prefix=/jenkins",
             ],

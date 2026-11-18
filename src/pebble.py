@@ -16,6 +16,8 @@ if typing.TYPE_CHECKING:
     from ops.pebble import LayerDict  # pragma: no cover
 
 JENKINS_WAR_PATH = Path("/srv/jenkins/jenkins.war")
+# Temporary mitigation for CVE-2026-114938; remove after the fixed JDK ships.
+JVM_SECURITY_WORKAROUND = "-XX:-UseBASE64Intrinsics"
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,7 @@ def compute_pebble_layer(jenkins_environment: dict[str, str], state: State) -> o
                 "command": f"java -D{jenkins.SYSTEM_PROPERTY_HEADLESS} "
                 f"-D{jenkins.SYSTEM_PROPERTY_LOGGING} "
                 f"{system_props}"
+                f"{JVM_SECURITY_WORKAROUND} "
                 "-XX:MaxRAMPercentage=50.0 -XX:InitialRAMPercentage=50.0 "
                 f"-jar {jenkins.EXECUTABLES_PATH}/jenkins.war "
                 f"--prefix={jenkins_environment['JENKINS_PREFIX']}",
