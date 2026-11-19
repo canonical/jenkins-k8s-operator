@@ -4,6 +4,7 @@
 """Jenkins States."""
 
 import dataclasses
+import fnmatch
 import json
 import logging
 import os
@@ -239,12 +240,20 @@ def _parse_system_properties(charm: ops.CharmBase) -> list[str]:
 
 
 def _parse_external_agent_nodes(charm: ops.CharmBase) -> frozenset[str]:
-    """Parse names of Jenkins nodes managed outside Juju."""
+    """Parse names or shell-style patterns for Jenkins nodes managed outside Juju."""
     raw_nodes = typing.cast(str, charm.config.get("external-agent-nodes") or "")
     names = [name.strip() for name in raw_nodes.split(",") if name.strip()]
     if len(names) != len(set(names)):
-        raise CharmConfigInvalidError("external-agent-nodes contains duplicate node names.")
+        raise CharmConfigInvalidError("external-agent-nodes contains duplicate entries.")
     return frozenset(names)
+
+
+def is_external_agent_node(node_name: str, configured_patterns: typing.Iterable[str]) -> bool:
+    """Return whether a Jenkins node name matches an external-agent pattern."""
+    return any(
+        node_name == pattern or fnmatch.fnmatchcase(node_name, pattern)
+        for pattern in configured_patterns
+    )
 
 
 def _get_ingress_path(relation: typing.Optional[ops.Relation]) -> typing.Optional[str]:
@@ -591,7 +600,7 @@ class State:
         jcasc_repository_config_path: Path within repository containing JCasC YAML files.
         system_properties: Additional JVM system properties as -D flags.
         external_hostname: Public hostname for HAProxy-route based routing, or None.
-        external_agent_nodes: Names of Jenkins nodes managed outside Juju.
+        external_agent_nodes: Names or shell-style patterns for Jenkins nodes managed outside Juju.
 
     """
 

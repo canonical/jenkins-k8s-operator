@@ -3,7 +3,7 @@
 The jenkins-k8s charm aims to provide core functionalities of Jenkins with horizontally
 scalable architecture, leveraging its flexible capabilities enhanced by plugins. Operational
 capabilities are enhanced through integration with the
-Canonical Observability Stack ([COS](https://charmhub.io/topics/canonical-observability-stack/))
+Canonical Observability Stack ([COS](https://canonical.com/observability/docs/track-3.1/))
 charms.
 
 
@@ -12,7 +12,7 @@ charms.
 The core component of jenkins-k8s charm consists of a jenkins-k8s main workload container. The
 services inside the container are driven by Pebble, a lightweight API-driven process supervisor
 that controls the lifecycle of a service.
-Learn more about Pebble and its layer configurations [in the Pebble documentation](https://documentation.ubuntu.com/pebble/).
+Learn more about Pebble and its layer configurations [in the Pebble documentation](https://ubuntu.com/docs/pebble/).
 
 ```mermaid
 C4Context
@@ -37,7 +37,7 @@ Container_Boundary(charm, "Jenkins Operator") {
 This container runs the main workload of the charm. The OCI image is custom built and includes
 the [Jenkins WAR](https://www.jenkins.io/doc/book/installing/war-file/), Java and the [Jenkins plugin installation manager](https://github.com/jenkinsci/plugin-installation-manager-tool/).
 
-To facilitate monitoring of the Jenkins application via the COS, the [prometheus](https://plugins.jenkins.io/prometheus/) plugin is installed by default. The [instance-identity](https://plugins.jenkins.io/instance-identity/) plugin is also included to ensure seamless registration of agent nodes. Additionally, the [monitoring](https://plugins.jenkins.io/monitoring/) plugin is pre-installed to handle session invalidation.
+To facilitate monitoring of the Jenkins application via the COS, the [prometheus](https://plugins.jenkins.io/prometheus/) plugin is installed by default. The [instance-identity](https://plugins.jenkins.io/instance-identity/) plugin is also included to ensure seamless registration of agent nodes. Session invalidation uses Jenkins core user-session seeds, so no additional monitoring plugin is required.
 
 When a logging relation is joined, a promtail application is started via Pebble which starts
 pushing Jenkins logs at `/var/lib/jenkins/logs/jenkins.log` to Loki.

@@ -42,6 +42,7 @@ LOGIN_PATH = "/login?from=%2F"
 JENKINS_HEALTH_CHECK_PATH = "/health"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 JENKINS_HOME_PATH = Path("/var/lib/jenkins")
+JENKINS_JNLP_SECRET_PATTERN = re.compile(r"[0-9a-fA-F]+")
 SSH_PROXY_CONFIG_PATH = Path("/etc/ssh/ssh_config.d/00-jenkins-proxy.conf")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
@@ -414,7 +415,10 @@ class Jenkins:
                 f"println(jenkins.model.Jenkins.getInstance()"
                 f'.getComputer("{node_name}").getJnlpMac())'
             )
-            return client.run_groovy_script(script).strip()
+            secret = client.run_groovy_script(script).strip()
+            if not JENKINS_JNLP_SECRET_PATTERN.fullmatch(secret):
+                raise JenkinsError(f"No valid JNLP secret for node {node_name}.")
+            return secret
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             logger.error("Failed to run get_node_secret groovy script, %s", exc)
             raise JenkinsError("Failed to run groovy script getting node secret.") from exc
@@ -602,13 +606,49 @@ class Jenkins:
             raise JenkinsError("Failed to restart Jenkins safely.") from exc
 
     # This groovy script is tested in integration test.
-    def _invalidate_sessions(self) -> None:  # pragma: no cover
-        """Invalidate active Jenkins user sessions."""
+    def _invalidate_sessions(self) -> int:  # pragma: no cover
+        """Invalidate active Jenkins user sessions and return renewed user count."""
         client = self._get_api_client()
-        client.run_groovy_script("""
-    import net.bull.javamelody.*;
-    def sess = SessionListener.newInstance();
-    sess.invalidateAllSessions();""")
+        result = client.run_groovy_script("""
+    import jenkins.model.Jenkins;
+    import jenkins.security.seed.UserSeedProperty;
+    def renewed = 0;
+    def skipped = 0;
+    if (UserSeedProperty.DISABLE_USER_SEED) {
+        println "session_seed_revocation_disabled=true renewed=0 skipped=0";
+    } else {
+        Jenkins.instance.getAllUsers().each { user ->
+            def seed = user.getProperty(UserSeedProperty.class);
+            if (seed != null) {
+                seed.renewSeed();
+                user.save();
+                renewed++;
+            } else {
+                skipped++;
+            }
+        }
+        println "session_seed_revocation_disabled=false renewed=${renewed} skipped=${skipped}";
+    }""")
+        result = (result or "").strip()
+        match = re.search(
+            r"session_seed_revocation_disabled=(true|false) renewed=(\d+) skipped=(\d+)",
+            result,
+        )
+        if match is None:
+            logger.warning("phase=session_seed_revocation unexpected_result=%s", result)
+            return 0
+        disabled = match.group(1) == "true"
+        renewed = int(match.group(2))
+        skipped = int(match.group(3))
+        if disabled:
+            logger.warning("phase=session_seed_revocation disabled=true")
+        logger.info(
+            "phase=session_seed_revocation disabled=%s renewed=%d skipped=%d",
+            disabled,
+            renewed,
+            skipped,
+        )
+        return renewed
 
     # This groovy script is tested in integration test.
     def _set_new_password(self, new_password: str) -> None:  # pragma: no cover
@@ -697,7 +737,10 @@ class Jenkins:
         logger.debug("Removed %s", plugins_to_remove)
         top_level_plugins = _filter_dependent_plugins(plugins_to_remove, dependency_lookup)
         try:
-            self.safe_restart()
+            # Do not use Jenkins /safeRestart here. Removing the monitoring
+            # plugin can make its servlet-filter cleanup fail before Jenkins
+            # exits (JENKINS-70352), leaving the process stuck in Restarting.
+            container.restart(state.JENKINS_SERVICE_NAME)
             self.wait_ready()
         except (JenkinsError, TimeoutError) as exc:
             logger.error("Failed to restart Jenkins after removing plugins, %s", exc)

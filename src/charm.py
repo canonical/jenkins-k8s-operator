@@ -40,6 +40,7 @@ from state import (
     CharmRelationDataInvalidError,
     CharmRelationDataNotReadyError,
     State,
+    is_external_agent_node,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,6 @@ logger = logging.getLogger(__name__)
 REQUIRED_PLUGINS = [
     "instance-identity",  # required to connect agent nodes to server
     "prometheus",  # required for COS integration
-    "monitoring",  # required for session invalidation
     "configuration-as-code",  # required for JCasC declarative config management
 ]
 
@@ -73,6 +73,8 @@ class ReconcileBlockedError(Exception):
 class JenkinsK8sOperatorCharm(ops.CharmBase):
     """Charmed Jenkins."""
 
+    _storage_repair_state = ops.StoredState()
+
     def __init__(self, *args: typing.Any):
         """Initialize the charm and register event handlers.
 
@@ -84,7 +86,9 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """
         super().__init__(*args)
 
+        self._external_agent_warning = ""
         self.storage = storage.Reconciler(charm=self)
+        self._storage_repair_state.set_default(pending=False)
         # Ingress dedicated to agent discovery
         self.agent_discovery_ingress = IngressPerAppRequirer(
             self,
@@ -144,6 +148,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.framework.observe(self.on.secret_changed, self._on_secret_changed)
         self.framework.observe(self.on.get_admin_password_action, self._on_get_admin_password)
         self.framework.observe(self.on.rotate_credentials_action, self._on_rotate_credentials)
+        self.framework.observe(self.on.reconcile_storage_action, self._on_reconcile_storage)
 
     def _retract_invalid_haproxy_route(self) -> None:
         """Clear stale routing before validation can stop normal reconciliation.
@@ -223,22 +228,36 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             event: The triggering Juju event (unused, present for observe callback compatibility).
 
         """
+        storage_event = isinstance(event, (ops.StorageAttachedEvent, ops.UpgradeCharmEvent))
         self._retract_invalid_haproxy_route()
         container = self.unit.get_container(JENKINS_SERVICE_NAME)
         check_result = precondition.check(container=container, storages=self.model.storages)
         if not check_result.success:
             self.unit.status = ops.WaitingStatus(check_result.reason or "")
+            if storage_event:
+                event.defer()
             return
+
+        if self._storage_repair_state.pending and not storage_event:
+            self.unit.status = ops.WaitingStatus(self._storage_repair_waiting_message())
+            return
+
+        if storage_event:
+            logger.info("Reconciling storage")
+            try:
+                self._reconcile_storage(container)
+            except (ops.pebble.ChangeError, ops.pebble.ExecError):
+                self._storage_repair_state.pending = True
+                self.unit.status = ops.WaitingStatus(self._storage_repair_waiting_message())
+                logger.exception("Failed to reconcile Jenkins home ownership")
+                return
+            self._storage_repair_state.pending = False
 
         charm_state = self._get_state()
         if charm_state is None:
             return
 
         try:
-            # Storage ownership only needs correction on attach/upgrade events
-            logger.info("Reconciling storage")
-            self._reconcile_storage(container)
-
             jenkins.reconcile_ssh_proxy_config(container, charm_state.ssh_proxy_config)
 
             # Reconcile jenkins configuration filesystem
@@ -275,13 +294,27 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.unit.status = ops.ActiveStatus(self._agent_status_message)
 
-    def _reconcile_storage(self, container: ops.Container) -> None:
+    def _storage_repair_waiting_message(self) -> str:
+        """Return the recovery instruction for a failed storage ownership repair."""
+        return (
+            "Jenkins home ownership repair is pending. "
+            f"Run `juju run {self.unit.name} reconcile-storage` to retry."
+        )
+
+    def _reconcile_storage(
+        self,
+        container: ops.Container,
+        recursive: bool = False,
+        timeout: int = storage.DEFAULT_RECONCILE_TIMEOUT,
+    ) -> None:
         """Ensure storage permissions are correct.
 
         Args:
             container: The Jenkins workload container.
+            recursive: Whether to reconcile ownership below the storage mount.
+            timeout: Maximum seconds to wait for ownership reconciliation.
         """
-        self.storage.reconcile_storage(container=container)
+        self.storage.reconcile_storage(container=container, recursive=recursive, timeout=timeout)
 
     def _reconcile_admin(self, container: ops.Container, charm_state: State) -> str:
         """Ensure the admin user is set up and return the admin password.
@@ -372,31 +405,41 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             agent.name for agents in (state.agent_relation_meta or {}).values() for agent in agents
         }
         external_agent_nodes = state.external_agent_nodes
-        name_collisions = relation_agent_names & external_agent_nodes
-        if name_collisions:
-            names = ", ".join(sorted(name_collisions))
-            message = (
-                f"Duplicate agent node names found: {names}. Remove these names from "
-                "external-agent-nodes or rename the relation-managed agents."
+        external_relation_agents = frozenset(
+            name
+            for name in relation_agent_names
+            if is_external_agent_node(name, external_agent_nodes)
+        )
+        if external_relation_agents:
+            logger.warning(
+                "Skipping externally managed relation agent nodes: %s",
+                ", ".join(sorted(external_relation_agents)),
             )
-            logger.error(message)
-            raise ReconcileBlockedError(message)
-
         agent_discovery_url = self._agent_discovery_url if state.agent_relation_meta else None
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
         agent_node_names = [node.name for node in agent_nodes]
+        missing_external_agents = sorted(
+            name for name in external_relation_agents if name not in agent_node_names
+        )
+        self._external_agent_warning = (
+            "External agent nodes not registered in Jenkins: " + ", ".join(missing_external_agents)
+            if missing_external_agents
+            else ""
+        )
 
         if state.agent_relation_meta:
             self._add_agent_nodes_from_relation(
                 agent_relation=state.agent_relation_meta,
                 agent_node_names=agent_node_names,
+                external_agent_nodes=external_agent_nodes,
                 api_client=client,
                 agent_discovery_url=typing.cast(str, agent_discovery_url),
             )
             self._update_agent_nodes_from_relation(
                 agent_relation=state.agent_relation_meta,
                 agent_nodes=agent_nodes,
+                external_agent_nodes=external_agent_nodes,
                 api_client=client,
             )
 
@@ -414,18 +457,23 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         external_agent_nodes: frozenset[str],
         api_client: jenkins.Jenkins,
     ) -> None:
-        """Remove agents not in a relation or the external agent definitions.
+        """Remove agents not in a relation or matching an external-agent pattern.
 
         Args:
             agent_node_names: The agents registered on the Jenkins server.
             relation_agent_names: Names of agents from current relation data.
-            external_agent_nodes: Nodes managed outside Juju and protected from deletion.
+            external_agent_nodes: Names or patterns for nodes managed outside Juju.
             api_client: The Jenkins API client.
 
         Raises:
             JenkinsError: if there was an error while removing agent nodes from Jenkins.
         """
-        unmanaged_agents = set(agent_node_names) - relation_agent_names - external_agent_nodes
+        unmanaged_agents = frozenset(
+            agent_name
+            for agent_name in agent_node_names
+            if agent_name not in relation_agent_names
+            and not is_external_agent_node(agent_name, external_agent_nodes)
+        )
         for agent_name in unmanaged_agents:
             try:
                 api_client.remove_agent_node(agent_name=agent_name)
@@ -556,19 +604,23 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
     @property
     def _agent_status_message(self) -> str:
         """Status message regarding agent discovery ingress configuration."""
+        messages: list[str] = []
+        if self._external_agent_warning:
+            messages.append(self._external_agent_warning)
         if (
             self.server_ingress.url
             and self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is None
         ):
-            return (
+            messages.append(
                 f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
             )
-        return ""
+        return " ".join(messages)
 
     def _add_agent_nodes_from_relation(
         self,
         agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
         agent_node_names: list[str],
+        external_agent_nodes: frozenset[str],
         api_client: jenkins.Jenkins,
         agent_discovery_url: str,
     ) -> None:
@@ -577,6 +629,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             agent_relation: Mapping of agent relation to agent metadata.
             agent_node_names: The node names of agents.
+            external_agent_nodes: Nodes managed outside Juju and skipped by reconciliation.
             api_client: The Jenkins API client.
             agent_discovery_url: The resolved URL for agent connections.
 
@@ -584,7 +637,12 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             JenkinsError: if there was an error while registering agent nodes to Jenkins.
         """
         for relation, agents in agent_relation.items():
-            unregistered_agents = [agent for agent in agents if agent.name not in agent_node_names]
+            unregistered_agents = [
+                agent
+                for agent in agents
+                if agent.name not in agent_node_names
+                and not is_external_agent_node(agent.name, external_agent_nodes)
+            ]
             for unregistered_agent in unregistered_agents:
                 try:
                     # AgentMeta includes remote_fs, which the Jenkins API wrapper
@@ -596,8 +654,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
             agent_relation_data: dict[str, str] = {"url": agent_discovery_url}
             for meta in agents:
+                secret_key = f"{meta.name}_secret"
+                if (
+                    is_external_agent_node(meta.name, external_agent_nodes)
+                    and meta.name not in agent_node_names
+                ):
+                    logger.warning(
+                        "External agent node %s is not registered; skipping secret publication.",
+                        meta.name,
+                    )
+                    continue
                 try:
-                    agent_relation_data[f"{meta.name}_secret"] = api_client.get_node_secret(
+                    agent_relation_data[secret_key] = api_client.get_node_secret(
                         node_name=meta.name
                     )
                 except jenkins.JenkinsError:
@@ -609,6 +677,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self,
         agent_relation: typing.Mapping[ops.Relation, list[AgentMeta]],
         agent_nodes: list[typing.Any],
+        external_agent_nodes: frozenset[str],
         api_client: jenkins.Jenkins,
     ) -> None:
         """Update existing Jenkins agent nodes to match relation remote filesystems.
@@ -616,6 +685,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         Args:
             agent_relation: Mapping of agent relation to agent metadata.
             agent_nodes: The agents currently registered on Jenkins.
+            external_agent_nodes: Names or patterns for nodes managed outside Juju.
             api_client: The Jenkins API client.
 
         Raises:
@@ -624,9 +694,13 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         agent_meta_by_name = {
             agent.name: agent for agents in agent_relation.values() for agent in agents
         }
-        for node in agent_nodes:
-            if node.name not in agent_meta_by_name:
-                continue
+        nodes_to_update = tuple(
+            node
+            for node in agent_nodes
+            if node.name in agent_meta_by_name
+            and not is_external_agent_node(node.name, external_agent_nodes)
+        )
+        for node in nodes_to_update:
             agent_meta = agent_meta_by_name[node.name]
             try:
                 api_client.reconcile_agent_node(node=node, agent_meta=agent_meta)
@@ -754,6 +828,43 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         except jenkins.JenkinsError as exc:
             logger.error("Failed to sync JCasC config: %s", exc)
             raise ReconcileBlockedError("Failed to sync JCasC configuration.") from exc
+
+    def _on_reconcile_storage(self, event: ops.ActionEvent) -> None:
+        """Reconcile Jenkins home ownership with an operator-provided timeout.
+
+        Args:
+            event: The event fired from the reconcile-storage action.
+        """
+        container = self.unit.get_container(JENKINS_SERVICE_NAME)
+        check_result = precondition.check(container=container, storages=self.model.storages)
+        if not check_result.success:
+            event.fail(check_result.reason or "Jenkins storage is not ready.")
+            return
+
+        recursive = event.params.get("recursive", False)
+        if not isinstance(recursive, bool):
+            event.fail("Recursive must be a boolean.")
+            return
+
+        timeout = event.params.get("timeout", storage.DEFAULT_RECONCILE_TIMEOUT)
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
+            event.fail("Storage timeout must be a positive integer.")
+            return
+
+        try:
+            self._reconcile_storage(container, recursive=recursive, timeout=timeout)
+        except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
+            self._storage_repair_state.pending = True
+            self.unit.status = ops.WaitingStatus(self._storage_repair_waiting_message())
+            logger.error("Failed to reconcile Jenkins home ownership: %s", exc)
+            event.fail("Failed to reconcile Jenkins home ownership. See logs.")
+            return
+
+        self._storage_repair_state.pending = False
+        self.unit.status = ops.WaitingStatus(
+            "Storage ownership repaired; waiting for the next reconciliation."
+        )
+        event.set_results({"timeout": timeout})
 
     def _on_get_admin_password(self, event: ops.ActionEvent) -> None:
         """Handle get-admin-password event.

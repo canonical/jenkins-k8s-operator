@@ -1,6 +1,6 @@
 # Configurations
 
-See [Configurations](https://charmhub.io/jenkins-k8s/configure).
+See [Configurations](https://charmhub.io/jenkins-k8s/configurations).
 
 > Read more about configurations in the Juju docs: [Configuration](https://canonical.com/juju/docs/juju-cli/3.6/reference/configuration/)
 

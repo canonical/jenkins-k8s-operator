@@ -4,12 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2026-11-18
+
+- Limit automatic Jenkins home ownership reconciliation to the Jenkins home
+  mount point, avoiding recursive walks during charm hooks.
+- Add the `reconcile-storage` action with configurable recursive repair and
+  timeout options for existing deployments.
+- Allow `external-agent-nodes` entries to use shell-style patterns while preserving exact-name
+  matching and relation-name collision protection.
+- Allow external-agent nodes to opt out of relation reconciliation while retaining relation secret
+  publication for connectivity.
+
 Each revision is versioned by the date of the revision.
 
-## 2026-11-13
+## 2026-11-20
 
 - Use Jenkins' `/health` endpoint for the Pebble readiness check so authenticated deployments
   report readiness based on Jenkins health rather than access to the root page.
+
+## 2026-11-16
+
+- Removed the Jenkins `monitoring` plugin requirement. Session invalidation now
+  uses Jenkins core user-session seeds, and deployments with a non-empty
+  `allowed-plugins` setting may remove `monitoring` during reconciliation.
 
 ## 2026-10-28
 

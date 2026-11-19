@@ -127,12 +127,6 @@ description = "Run integration tests"
 # --only-rerun so genuine test failures and assertion errors are NOT retried.
 commands = [
   [
-    "playwright",
-    "install",
-    "--with-deps",
-    "chromium",
-  ],
-  [
     "pytest",
     "--tb",
     "native",
