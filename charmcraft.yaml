@@ -112,8 +112,9 @@ config:
     external-agent-nodes:
       type: string
       description: >
-        Comma-separated names of Jenkins nodes managed outside Juju. These nodes are preserved and
-        are not created, modified, or deleted by agent relation reconciliation.
+        Comma-separated Jenkins node names or shell-style patterns for nodes managed outside Juju.
+        Matching nodes are preserved and are not created, modified, or deleted by agent relation
+        reconciliation.
       default: ""
     ssh-proxy-address:
       type: string

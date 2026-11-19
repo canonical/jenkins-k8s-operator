@@ -49,7 +49,7 @@ variable "config" {
       jcasc-repository. Defaults to "main".
     - jcasc-environment-secrets: A Juju user-secret URI containing key-value
       pairs to inject as environment variables for JCasC interpolation.
-    - external-agent-nodes: Comma-separated names of Jenkins nodes managed outside
+    - external-agent-nodes: Comma-separated Jenkins node names or shell-style patterns managed outside
       Juju and preserved during agent relation reconciliation.
   EOT
   type        = map(string)
