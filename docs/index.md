@@ -2,7 +2,7 @@
 
 A Juju charm deploying and managing Jenkins on Kubernetes. [Jenkins](https://www.jenkins.io/) is an open source automation server. Jenkins provides hundreds of plugins to support building, deploying and automating any project. It can be integrated with both k8s and machine (VM) agents for use.
 
-This charm simplifies initial deployment and operations of Jenkins on Kubernetes, including integration with Jenkins agent instances, automatic patch updates and more. It allows for deployment on many different Kubernetes platforms, from [MicroK8s](https://microk8s.io/) to [Charmed Kubernetes](https://ubuntu.com/kubernetes) to public cloud Kubernetes offerings.
+This charm simplifies initial deployment and operations of Jenkins on Kubernetes, including integration with Jenkins agent instances, automatic patch updates and more. It allows for deployment on many different Kubernetes platforms, from [MicroK8s](https://canonical.com/microk8s) to [Charmed Kubernetes](https://ubuntu.com/kubernetes) to public cloud Kubernetes offerings.
 
 For DevOps or SRE teams this charm will make operating Jenkins simple and straightforward through Juju's clean interface. It will allow easy deployment into multiple environments for testing of changes, and supports scaling out agents for enterprise deployments.
 
@@ -29,7 +29,7 @@ If there's a particular area of documentation that you'd like to see that's miss
 
 The Jenkins-k8s Operator is a member of the Ubuntu family. It's an open source project that warmly welcomes community projects, contributions, suggestions, fixes and constructive feedback.
 
-- [Code of conduct](https://ubuntu.com/community/code-of-conduct)
+- [Code of conduct](https://ubuntu.com/community/docs/ethos/code-of-conduct)
 - [Get support](https://discourse.charmhub.io/)
 - [Join our online chat](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
 - [Contribute](https://github.com/canonical/jenkins-k8s-operator/blob/94521d904be53c5645881fc43ba0b71ff60b9776/CONTRIBUTING.md)

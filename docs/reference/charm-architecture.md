@@ -3,7 +3,7 @@
 The jenkins-k8s charm aims to provide core functionalities of Jenkins with horizontally
 scalable architecture, leveraging its flexible capabilities enhanced by plugins. Operational
 capabilities are enhanced through integration with the
-Canonical Observability Stack ([COS](https://charmhub.io/topics/canonical-observability-stack/))
+Canonical Observability Stack ([COS](https://canonical.com/observability/docs/track-3.1/))
 charms.
 
 
@@ -12,7 +12,7 @@ charms.
 The core component of jenkins-k8s charm consists of a jenkins-k8s main workload container. The
 services inside the container are driven by Pebble, a lightweight API-driven process supervisor
 that controls the lifecycle of a service.
-Learn more about Pebble and its layer configurations [in the Pebble documentation](https://documentation.ubuntu.com/pebble/).
+Learn more about Pebble and its layer configurations [in the Pebble documentation](https://ubuntu.com/docs/pebble/).
 
 ```mermaid
 C4Context
