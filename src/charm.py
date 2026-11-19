@@ -293,10 +293,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.unit.status = ops.BlockedStatus(exc.message)
             return
 
-        if agent_sync_succeeded:
-            self.unit.status = ops.ActiveStatus(self._agent_status_message)
-        else:
+        if not agent_sync_succeeded:
             self.unit.status = ops.WaitingStatus("Agent sync failed; see logs.")
+            return
+        self.unit.status = ops.ActiveStatus(self._agent_status_message)
 
     def _storage_repair_waiting_message(self) -> str:
         """Return the recovery instruction for a failed storage ownership repair."""
