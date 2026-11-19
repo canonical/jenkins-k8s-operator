@@ -294,3 +294,24 @@ def test_reconcile_agent_node_preserves_ui_remote_fs_without_relation_value(
 
     node._get_config_element_tree.assert_called_once_with()
     node.upload_config.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "invalid_secret",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("null", id="null"),
+        pytest.param("stack trace", id="stack-trace"),
+    ],
+)
+def test_get_node_secret_rejects_invalid_script_results(
+    container: ops.Container, mock_client: MagicMock, invalid_secret: str
+):
+    """get_node_secret rejects HTTP-200 script failures and empty results."""
+    mock_client.run_groovy_script.return_value = invalid_secret
+
+    with (
+        patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
+        pytest.raises(jenkins.JenkinsError, match="No valid JNLP secret"),
+    ):
+        _jenkins_instance(container).get_node_secret("agent")

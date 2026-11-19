@@ -86,6 +86,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         """
         super().__init__(*args)
 
+        self._external_agent_warning = ""
         self.storage = storage.Reconciler(charm=self)
         self._storage_repair_state.set_default(pending=False)
         # Ingress dedicated to agent discovery
@@ -418,6 +419,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
         agent_node_names = [node.name for node in agent_nodes]
+        missing_external_agents = sorted(
+            name for name in external_relation_agents if name not in agent_node_names
+        )
+        self._external_agent_warning = (
+            "External agent nodes not registered in Jenkins: " + ", ".join(missing_external_agents)
+            if missing_external_agents
+            else ""
+        )
 
         if state.agent_relation_meta:
             self._add_agent_nodes_from_relation(
@@ -595,14 +604,17 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
     @property
     def _agent_status_message(self) -> str:
         """Status message regarding agent discovery ingress configuration."""
+        messages: list[str] = []
+        if self._external_agent_warning:
+            messages.append(self._external_agent_warning)
         if (
             self.server_ingress.url
             and self.model.get_relation(AGENT_DISCOVERY_INGRESS_RELATION_NAME) is None
         ):
-            return (
+            messages.append(
                 f"Consider separating ingress for agents ({AGENT_DISCOVERY_INGRESS_RELATION_NAME})"
             )
-        return ""
+        return " ".join(messages)
 
     def _add_agent_nodes_from_relation(
         self,
