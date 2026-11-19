@@ -418,6 +418,14 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
         agent_node_names = [node.name for node in agent_nodes]
+        missing_external_agents = sorted(
+            name for name in external_relation_agents if name not in agent_node_names
+        )
+        self._external_agent_warning = (
+            "External agent nodes not registered in Jenkins: " + ", ".join(missing_external_agents)
+            if missing_external_agents
+            else ""
+        )
         synced = True
         if state.agent_relation_meta:
             synced &= self._add_agent_nodes_from_relation(
