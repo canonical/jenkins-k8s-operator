@@ -17,6 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each revision is versioned by the date of the revision.
 
+## 2026-11-20
+
+- Use Jenkins' `/health` endpoint for the Pebble readiness check so authenticated deployments
+  report readiness based on Jenkins health rather than access to the root page.
+
 ## 2026-11-16
 
 - Removed the Jenkins `monitoring` plugin requirement. Session invalidation now

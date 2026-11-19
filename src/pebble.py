@@ -56,7 +56,8 @@ def compute_pebble_layer(jenkins_environment: dict[str, str], state: State) -> o
                 "level": "ready",
                 "http": {
                     "url": f"http://localhost:{jenkins.WEB_PORT}"
-                    f"{jenkins_environment['JENKINS_PREFIX']}{jenkins.LOGIN_PATH}"
+                    f"{jenkins_environment['JENKINS_PREFIX']}"
+                    f"{jenkins.JENKINS_HEALTH_CHECK_PATH}"
                 },
                 "period": "30s",
                 "threshold": 5,
