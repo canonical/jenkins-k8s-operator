@@ -297,6 +297,29 @@ def test_reconcile_agents_does_not_create_external_agent():
     client.add_agent_node.assert_not_called()
 
 
+def test_reconcile_agents_warns_for_missing_external_agent():
+    """Missing external relation agents are visible in the status message."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state_with_relation = _state_with_agents(
+        ["external-0"], config={"external-agent-nodes": "external-0"}
+    )
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state_with_relation) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        client = MagicMock(spec=jenkins.Jenkins)
+        client.list_agent_nodes.return_value = []
+        mgr.charm._reconcile_agents(state=charm_state, client=client)
+
+    assert (
+        "External agent nodes not registered in Jenkins: external-0"
+        in mgr.charm._agent_status_message
+    )
+
+
 def test_reconcile_agents_propagates_unmanaged_delete_error():
     """Propagate failures while pruning unmanaged nodes."""
     ctx = testing.Context(JenkinsK8sOperatorCharm)
