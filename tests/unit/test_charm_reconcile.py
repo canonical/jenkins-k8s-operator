@@ -648,10 +648,10 @@ def test_reconcile_calls_agent_reconciliation(harness_container: HarnessWithCont
     assert "event" not in reconcile_agents.call_args.kwargs
 
 
-def test_reconcile_sets_waiting_status_and_stops_after_agent_sync_failure(
+def test_reconcile_sets_waiting_status_and_continues_after_agent_sync_failure(
     harness_container: HarnessWithContainer,
 ):
-    """Agent sync failures surface as WaitingStatus and stop later reconciliations."""
+    """Agent sync failures surface as WaitingStatus after later reconciliations run."""
     harness = harness_container.harness
     harness.begin()
     jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
@@ -667,9 +667,7 @@ def test_reconcile_sets_waiting_status_and_stops_after_agent_sync_failure(
         patch.object(
             jenkins_charm,
             "_reconcile_agents",
-            return_value=charm.AgentSyncResult(
-                failures=(charm.AgentSyncFailure("create", "agent-0", "unavailable"),)
-            ),
+            return_value=False,
         ),
         patch.object(jenkins_charm, "_reconcile_agent_discovery") as discovery_mock,
         patch.object(jenkins_charm, "_reconcile_haproxy_route") as haproxy_mock,
