@@ -40,6 +40,7 @@ from state import (
     CharmRelationDataInvalidError,
     CharmRelationDataNotReadyError,
     State,
+    is_external_agent_node,
 )
 
 logger = logging.getLogger(__name__)
@@ -403,11 +404,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             agent.name for agents in (state.agent_relation_meta or {}).values() for agent in agents
         }
         external_agent_nodes = state.external_agent_nodes
-        name_collisions = relation_agent_names & external_agent_nodes
+        name_collisions = {
+            name
+            for name in relation_agent_names
+            if is_external_agent_node(name, external_agent_nodes)
+        }
         if name_collisions:
             names = ", ".join(sorted(name_collisions))
             message = (
-                f"Duplicate agent node names found: {names}. Remove these names from "
+                f"Duplicate agent node names found: {names}. Remove the matching entries from "
                 "external-agent-nodes or rename the relation-managed agents."
             )
             logger.error(message)
@@ -445,18 +450,23 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         external_agent_nodes: frozenset[str],
         api_client: jenkins.Jenkins,
     ) -> None:
-        """Remove agents not in a relation or the external agent definitions.
+        """Remove agents not in a relation or matching an external-agent pattern.
 
         Args:
             agent_node_names: The agents registered on the Jenkins server.
             relation_agent_names: Names of agents from current relation data.
-            external_agent_nodes: Nodes managed outside Juju and protected from deletion.
+            external_agent_nodes: Names or patterns for nodes managed outside Juju.
             api_client: The Jenkins API client.
 
         Raises:
             JenkinsError: if there was an error while removing agent nodes from Jenkins.
         """
-        unmanaged_agents = set(agent_node_names) - relation_agent_names - external_agent_nodes
+        unmanaged_agents = frozenset(
+            agent_name
+            for agent_name in agent_node_names
+            if agent_name not in relation_agent_names
+            and not is_external_agent_node(agent_name, external_agent_nodes)
+        )
         for agent_name in unmanaged_agents:
             try:
                 api_client.remove_agent_node(agent_name=agent_name)
@@ -655,9 +665,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         agent_meta_by_name = {
             agent.name: agent for agents in agent_relation.values() for agent in agents
         }
-        for node in agent_nodes:
-            if node.name not in agent_meta_by_name:
-                continue
+        nodes_to_update = tuple(node for node in agent_nodes if node.name in agent_meta_by_name)
+        for node in nodes_to_update:
             agent_meta = agent_meta_by_name[node.name]
             try:
                 api_client.reconcile_agent_node(node=node, agent_meta=agent_meta)
