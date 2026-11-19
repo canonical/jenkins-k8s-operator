@@ -41,6 +41,7 @@ JENKINS_PLUGIN_MANAGER_VERSION = "2.13.2"
 LOGIN_PATH = "/login?from=%2F"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 JENKINS_HOME_PATH = Path("/var/lib/jenkins")
+JENKINS_JNLP_SECRET_PATTERN = re.compile(r"[0-9a-fA-F]+")
 SSH_PROXY_CONFIG_PATH = Path("/etc/ssh/ssh_config.d/00-jenkins-proxy.conf")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
@@ -413,7 +414,10 @@ class Jenkins:
                 f"println(jenkins.model.Jenkins.getInstance()"
                 f'.getComputer("{node_name}").getJnlpMac())'
             )
-            return client.run_groovy_script(script).strip()
+            secret = client.run_groovy_script(script).strip()
+            if not JENKINS_JNLP_SECRET_PATTERN.fullmatch(secret):
+                raise JenkinsError(f"No valid JNLP secret for node {node_name}.")
+            return secret
         except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
             logger.error("Failed to run get_node_secret groovy script, %s", exc)
             raise JenkinsError("Failed to run groovy script getting node secret.") from exc

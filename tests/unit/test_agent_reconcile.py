@@ -4,6 +4,7 @@
 """Jenkins-k8s charm agent reconcile tests."""
 
 import inspect
+import logging
 import secrets
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -12,7 +13,6 @@ import ops
 import pytest
 from ops import testing
 
-import charm
 import jenkins
 from charm import JenkinsK8sOperatorCharm
 from state import AgentMeta, State
@@ -253,8 +253,29 @@ def test_reconcile_agents_prunes_when_no_relation_meta():
         assert isinstance(mgr.charm.unit.status, ops.MaintenanceStatus)
 
 
-def test_reconcile_agents_rejects_external_agent_name_collision():
-    """Do not silently adopt a node declared as externally managed."""
+def test_reconcile_agents_skips_external_agent_updates():
+    """Do not update a relation node declared as externally managed."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state_with_relation = _state_with_agents(
+        ["external-0"],
+        remote_fs={"external-0": "/relation/workspace"},
+        config={"external-agent-nodes": "external-0"},
+    )
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state_with_relation) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        fake_client = FakeJenkinsService(initial_agents=["external-0"])
+        mgr.charm._reconcile_agents(state=charm_state, client=fake_client)
+
+    assert fake_client.agents_remote_fs["external-0"] == "/var/lib/jenkins"
+
+
+def test_reconcile_agents_does_not_create_external_agent():
+    """Do not create a relation node declared as externally managed."""
     ctx = testing.Context(JenkinsK8sOperatorCharm)
     state_with_relation = _state_with_agents(
         ["external-0"], config={"external-agent-nodes": "external-0"}
@@ -265,9 +286,38 @@ def test_reconcile_agents_rejects_external_agent_name_collision():
         ctx(ctx.on.config_changed(), state_with_relation) as mgr,
     ):
         charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        client = MagicMock(spec=jenkins.Jenkins)
+        client.list_agent_nodes.return_value = [SimpleNamespace(name="external-0")]
+        client.get_node_secret.return_value = "secret"
+        mgr.charm._reconcile_agents(state=charm_state, client=client)
+        agent_rel = mgr.charm.model.relations["agent"][0]
 
-        with pytest.raises(charm.ReconcileBlockedError, match="Duplicate agent node names"):
-            mgr.charm._reconcile_agents(state=charm_state, client=MagicMock(spec=jenkins.Jenkins))
+    assert agent_rel.data[mgr.charm.unit]["external-0_secret"] == "secret"
+    client.add_agent_node.assert_not_called()
+
+
+def test_reconcile_agents_warns_for_missing_external_agent():
+    """Missing external relation agents are visible in the status message."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state_with_relation = _state_with_agents(
+        ["external-0"], config={"external-agent-nodes": "external-0"}
+    )
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state_with_relation) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        client = MagicMock(spec=jenkins.Jenkins)
+        client.list_agent_nodes.return_value = []
+        mgr.charm._reconcile_agents(state=charm_state, client=client)
+
+    assert (
+        "External agent nodes not registered in Jenkins: external-0"
+        in mgr.charm._agent_status_message
+    )
 
 
 def test_reconcile_agents_propagates_unmanaged_delete_error():
@@ -289,8 +339,8 @@ def test_reconcile_agents_propagates_unmanaged_delete_error():
             mgr.charm._reconcile_agents(charm_state, client)
 
 
-def test_reconcile_agents_rejects_external_agent_pattern_collision():
-    """External patterns cannot claim a relation-managed node name."""
+def test_update_agent_nodes_skips_external_agent_pattern():
+    """External nodes are not changed during relation reconciliation."""
     ctx = testing.Context(JenkinsK8sOperatorCharm)
     state = _state_with_agents(["external-0"], config={"external-agent-nodes": "external-*"})
 
@@ -300,6 +350,88 @@ def test_reconcile_agents_rejects_external_agent_pattern_collision():
     ):
         charm_state = State.from_charm(mgr.charm)
         assert charm_state is not None
+        client = MagicMock(spec=jenkins.Jenkins)
+        relation = {object(): [AgentMeta(executors="2", labels="new-label", name="external-0")]}
 
-        with pytest.raises(charm.ReconcileBlockedError, match="external-0"):
-            mgr.charm._reconcile_agents(state=charm_state, client=MagicMock(spec=jenkins.Jenkins))
+        mgr.charm._update_agent_nodes_from_relation(
+            agent_relation=relation,
+            agent_nodes=[SimpleNamespace(name="external-0")],
+            external_agent_nodes=charm_state.external_agent_nodes,
+            api_client=client,
+        )
+
+    client.reconcile_agent_node.assert_not_called()
+
+
+def test_reconcile_agents_skips_external_agent_pattern(caplog: pytest.LogCaptureFixture):
+    """External patterns skip relation-node updates without blocking reconciliation."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = _state_with_agents(
+        ["external-0"],
+        remote_fs={"external-0": "/relation/workspace"},
+        config={"external-agent-nodes": "external-*"},
+    )
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        fake_client = FakeJenkinsService(initial_agents=["external-0"])
+        with caplog.at_level(logging.WARNING, logger="charm"):
+            mgr.charm._reconcile_agents(state=charm_state, client=fake_client)
+
+    assert fake_client.agents_remote_fs["external-0"] == "/var/lib/jenkins"
+    assert "external-0" in caplog.text
+
+
+def test_reconcile_agents_preserves_secret_for_missing_external_agent(
+    caplog: pytest.LogCaptureFixture,
+):
+    """Missing external agents do not replace the last known secret."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = _state_with_agents(["external-0"], config={"external-agent-nodes": "external-0"})
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        relation = mgr.charm.model.relations["agent"][0]
+        relation.data[mgr.charm.unit].update({"external-0_secret": "stale-secret"})
+        client = MagicMock(spec=jenkins.Jenkins)
+        client.list_agent_nodes.return_value = []
+        client.get_node_secret.return_value = "bogus-secret"
+
+        with caplog.at_level(logging.WARNING, logger="charm"):
+            mgr.charm._reconcile_agents(state=charm_state, client=client)
+
+    assert relation.data[mgr.charm.unit]["external-0_secret"] == "stale-secret"
+    client.get_node_secret.assert_not_called()
+    assert "not registered; skipping secret publication" in caplog.text
+
+
+def test_reconcile_agents_preserves_last_external_secret_when_node_missing():
+    """A transient missing external node does not delete the last known secret."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state_with_relation = _state_with_agents(
+        ["external-0"], config={"external-agent-nodes": "external-0"}
+    )
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state_with_relation) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        relation = mgr.charm.model.relations["agent"][0]
+        relation.data[mgr.charm.unit].update({"external-0_secret": "last-known-good"})
+        client = MagicMock(spec=jenkins.Jenkins)
+        client.list_agent_nodes.return_value = []
+
+        mgr.charm._reconcile_agents(state=charm_state, client=client)
+
+    assert relation.data[mgr.charm.unit]["external-0_secret"] == "last-known-good"
+    client.get_node_secret.assert_not_called()
