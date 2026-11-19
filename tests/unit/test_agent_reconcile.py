@@ -386,10 +386,10 @@ def test_reconcile_agents_skips_external_agent_pattern(caplog: pytest.LogCapture
     assert "external-0" in caplog.text
 
 
-def test_reconcile_agents_skips_secret_for_missing_external_agent(
+def test_reconcile_agents_preserves_secret_for_missing_external_agent(
     caplog: pytest.LogCaptureFixture,
 ):
-    """Missing external agents do not publish a bogus secret."""
+    """Missing external agents do not replace the last known secret."""
     ctx = testing.Context(JenkinsK8sOperatorCharm)
     state = _state_with_agents(["external-0"], config={"external-agent-nodes": "external-0"})
 
@@ -408,6 +408,30 @@ def test_reconcile_agents_skips_secret_for_missing_external_agent(
         with caplog.at_level(logging.WARNING, logger="charm"):
             mgr.charm._reconcile_agents(state=charm_state, client=client)
 
-    assert "external-0_secret" not in relation.data[mgr.charm.unit]
+    assert relation.data[mgr.charm.unit]["external-0_secret"] == "stale-secret"
     client.get_node_secret.assert_not_called()
     assert "not registered; skipping secret publication" in caplog.text
+
+
+def test_reconcile_agents_preserves_last_external_secret_when_node_missing():
+    """A transient missing external node does not delete the last known secret."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state_with_relation = _state_with_agents(
+        ["external-0"], config={"external-agent-nodes": "external-0"}
+    )
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state_with_relation) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        relation = mgr.charm.model.relations["agent"][0]
+        relation.data[mgr.charm.unit].update({"external-0_secret": "last-known-good"})
+        client = MagicMock(spec=jenkins.Jenkins)
+        client.list_agent_nodes.return_value = []
+
+        mgr.charm._reconcile_agents(state=charm_state, client=client)
+
+    assert relation.data[mgr.charm.unit]["external-0_secret"] == "last-known-good"
+    client.get_node_secret.assert_not_called()

@@ -663,7 +663,6 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
                         "External agent node %s is not registered; skipping secret publication.",
                         meta.name,
                     )
-                    relation.data[self.model.unit].pop(secret_key, None)
                     continue
                 try:
                     agent_relation_data[secret_key] = api_client.get_node_secret(
