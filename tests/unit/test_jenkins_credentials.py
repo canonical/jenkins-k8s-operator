@@ -293,3 +293,28 @@ def test_rotate_credentials(container: ops.Container):
             "Password not newly generated"
         )
         assert old_password != container.pull(jenkins.PASSWORD_FILE_PATH, encoding="utf-8").read()
+
+
+@pytest.mark.parametrize(
+    "transport_error",
+    [
+        pytest.param(requests.exceptions.Timeout("timeout"), id="timeout"),
+        pytest.param(requests.exceptions.ConnectionError("connection"), id="connection"),
+        pytest.param(requests.exceptions.HTTPError("http-error"), id="http-error"),
+    ],
+)
+def test_get_api_client_normalizes_transport_errors(
+    container: ops.Container,
+    admin_credentials: jenkins.Credentials,
+    transport_error: requests.RequestException,
+):
+    """_get_api_client converts transport failures to JenkinsError."""
+    with (
+        patch.object(jenkins, "get_api_credentials", return_value=admin_credentials),
+        patch(
+            "jenkins.jenkinsapi.jenkins.Jenkins",
+            side_effect=transport_error,
+        ),
+        pytest.raises(jenkins.JenkinsError, match="create Jenkins API client"),
+    ):
+        _jenkins_instance(container)._get_api_client()
