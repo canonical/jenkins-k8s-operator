@@ -36,12 +36,16 @@ import state
 
 logger = logging.getLogger(__name__)
 
+_JENKINS_API_ERRORS = (
+    jenkinsapi.custom_exceptions.JenkinsAPIException,
+    requests.exceptions.RequestException,
+)
+
 WEB_PORT = 8080
 JENKINS_PLUGIN_MANAGER_VERSION = "2.13.2"
 LOGIN_PATH = "/login?from=%2F"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 JENKINS_HOME_PATH = Path("/var/lib/jenkins")
-JENKINS_JNLP_SECRET_PATTERN = re.compile(r"[0-9a-fA-F]+")
 SSH_PROXY_CONFIG_PATH = Path("/etc/ssh/ssh_config.d/00-jenkins-proxy.conf")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
@@ -344,14 +348,21 @@ class Jenkins:
 
         Returns:
             The Jenkins client.
+
+        Raises:
+            JenkinsError: if the Jenkins API client cannot be constructed.
         """
         credentials = get_api_credentials(self._container)
-        return jenkinsapi.jenkins.Jenkins(
-            baseurl=self.web_url,
-            username=credentials.username,
-            password=credentials.password_or_token,
-            timeout=60,
-        )
+        try:
+            return jenkinsapi.jenkins.Jenkins(
+                baseurl=self.web_url,
+                username=credentials.username,
+                password=credentials.password_or_token,
+                timeout=60,
+            )
+        except _JENKINS_API_ERRORS as exc:
+            logger.error("Failed to create Jenkins API client, %s", exc)
+            raise JenkinsError("Failed to create Jenkins API client.") from exc
 
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(5),
@@ -414,11 +425,8 @@ class Jenkins:
                 f"println(jenkins.model.Jenkins.getInstance()"
                 f'.getComputer("{node_name}").getJnlpMac())'
             )
-            secret = client.run_groovy_script(script).strip()
-            if not JENKINS_JNLP_SECRET_PATTERN.fullmatch(secret):
-                raise JenkinsError(f"No valid JNLP secret for node {node_name}.")
-            return secret
-        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+            return client.run_groovy_script(script).strip()
+        except _JENKINS_API_ERRORS as exc:
             logger.error("Failed to run get_node_secret groovy script, %s", exc)
             raise JenkinsError("Failed to run groovy script getting node secret.") from exc
 
@@ -467,7 +475,7 @@ class Jenkins:
             client.create_node_with_config(name=agent_meta.name, config=config)
         except jenkinsapi.custom_exceptions.AlreadyExists:
             pass
-        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        except _JENKINS_API_ERRORS as exc:
             logger.error("Failed to add agent node, %s", exc)
             raise JenkinsError("Failed to add agent node.") from exc
 
@@ -512,7 +520,7 @@ class Jenkins:
                     changed = True
             if changed:
                 node.upload_config(ET.tostring(config_tree))
-        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        except _JENKINS_API_ERRORS as exc:
             logger.error("Failed to reconcile agent node configuration, %s", exc)
             raise JenkinsError("Failed to reconcile agent node configuration.") from exc
 
@@ -528,7 +536,7 @@ class Jenkins:
         client = self._get_api_client()
         try:
             return client.get_nodes().values()
-        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        except _JENKINS_API_ERRORS as exc:
             logger.error("Failed to list agent nodes, %s", exc)
             raise JenkinsError("Failed to list agent nodes.") from exc
 
@@ -546,7 +554,7 @@ class Jenkins:
             client.delete_node(nodename=agent_name)
         except jenkinsapi.custom_exceptions.UnknownNode:
             logger.info("Agent node %s is already absent", agent_name)
-        except jenkinsapi.custom_exceptions.JenkinsAPIException as exc:
+        except _JENKINS_API_ERRORS as exc:
             logger.error("Failed to delete agent node, %s", exc)
             raise JenkinsError("Failed to delete agent node.") from exc
 

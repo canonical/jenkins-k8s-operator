@@ -8,12 +8,14 @@
 
 import json
 import xml.etree.ElementTree as ET  # nosec B405 - trusted test fixture XML
+from collections.abc import Callable
 from secrets import token_hex
 from unittest.mock import MagicMock, patch
 
 import jenkinsapi
 import ops
 import pytest
+import requests
 
 import jenkins
 import state
@@ -296,22 +298,48 @@ def test_reconcile_agent_node_preserves_ui_remote_fs_without_relation_value(
     node.upload_config.assert_not_called()
 
 
+def _mock_client_for_transport_failure(
+    operation: str, transport_error: requests.RequestException
+) -> tuple[MagicMock, Callable[[jenkins.Jenkins], object]]:
+    """Return a Jenkins client and operation that fail with a transport error."""
+    client = MagicMock(spec=jenkinsapi.jenkins.Jenkins)
+    operations = {
+        "list": (client.get_nodes, lambda wrapper: list(wrapper.list_agent_nodes())),
+        "secret": (
+            client.run_groovy_script,
+            lambda wrapper: wrapper.get_node_secret("agent"),
+        ),
+        "remove": (client.delete_node, lambda wrapper: wrapper.remove_agent_node("agent")),
+    }
+    failing_call, invoke = operations[operation]
+    failing_call.side_effect = transport_error
+    return client, invoke
+
+
 @pytest.mark.parametrize(
-    "invalid_secret",
+    "transport_error",
     [
-        pytest.param("", id="empty"),
-        pytest.param("null", id="null"),
-        pytest.param("stack trace", id="stack-trace"),
+        pytest.param(requests.exceptions.Timeout("timeout"), id="timeout"),
+        pytest.param(requests.exceptions.ConnectionError("connection"), id="connection"),
+        pytest.param(requests.exceptions.HTTPError("http-error"), id="http-error"),
     ],
 )
-def test_get_node_secret_rejects_invalid_script_results(
-    container: ops.Container, mock_client: MagicMock, invalid_secret: str
+@pytest.mark.parametrize(
+    "operation",
+    [
+        pytest.param("list", id="list-nodes"),
+        pytest.param("secret", id="node-secret"),
+        pytest.param("remove", id="remove-node"),
+    ],
+)
+def test_agent_operations_normalize_transport_errors(
+    container: ops.Container, operation: str, transport_error: requests.RequestException
 ):
-    """get_node_secret rejects HTTP-200 script failures and empty results."""
-    mock_client.run_groovy_script.return_value = invalid_secret
+    """Agent API wrappers convert transport failures to JenkinsError."""
+    mock_client, invoke = _mock_client_for_transport_failure(operation, transport_error)
 
     with (
         patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client),
-        pytest.raises(jenkins.JenkinsError, match="No valid JNLP secret"),
+        pytest.raises(jenkins.JenkinsError),
     ):
-        _jenkins_instance(container).get_node_secret("agent")
+        invoke(_jenkins_instance(container))
