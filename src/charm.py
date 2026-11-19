@@ -7,6 +7,7 @@
 
 # pylint: disable=too-many-instance-attributes
 
+import dataclasses
 import ipaddress
 import itertools
 import logging
@@ -44,6 +45,38 @@ from state import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass(frozen=True)
+class AgentSyncFailure:
+    """Describe one failed agent synchronization operation."""
+
+    operation: str
+    node_name: typing.Optional[str]
+    message: str
+
+
+@dataclasses.dataclass(frozen=True)
+class AgentSyncResult:
+    """Collect agent synchronization failures without stopping other actions."""
+
+    failures: tuple[AgentSyncFailure, ...] = ()
+
+    @property
+    def successful(self) -> bool:
+        """Return whether all agent synchronization operations succeeded."""
+        return not self.failures
+
+
+@dataclasses.dataclass(frozen=True)
+class _AgentRelationPlan:
+    """Plan agent actions and relation updates without side effects."""
+
+    relation: ops.Relation
+    agents: tuple[AgentMeta, ...]
+    agents_to_create: tuple[AgentMeta, ...]
+    skipped_secret_keys: frozenset[str]
+
 
 # The plugins that are required for Jenkins to work
 REQUIRED_PLUGINS = [
@@ -280,7 +313,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             logger.info("Reconciling API Token")
             self._reconcile_api_token(admin_client=admin_client)
             logger.info("Reconciling agents")
-            self._reconcile_agents(charm_state, client=admin_client)
+            agent_sync_result = self._reconcile_agents(charm_state, client=admin_client)
             logger.info("Reconciling agent discovery")
             self._reconcile_agent_discovery()
             logger.info("Reconciling haproxy route")
@@ -291,7 +324,10 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             self.unit.status = ops.BlockedStatus(exc.message)
             return
 
-        self.unit.status = ops.ActiveStatus(self._agent_status_message)
+        if agent_sync_result.successful:
+            self.unit.status = ops.ActiveStatus(self._agent_status_message)
+        else:
+            self.unit.status = ops.WaitingStatus("Agent sync failed; see logs.")
 
     def _storage_repair_waiting_message(self) -> str:
         """Return the recovery instruction for a failed storage ownership repair."""
@@ -393,12 +429,15 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         container.add_layer(JENKINS_SERVICE_NAME, desired_layer, combine=True)
         container.replan()
 
-    def _reconcile_agents(self, state: State, client: jenkins.Jenkins) -> None:
+    def _reconcile_agents(self, state: State, client: jenkins.Jenkins) -> AgentSyncResult:
         """Reconcile Jenkins agent nodes to match relation state.
 
         Args:
             state: The current charm state.
             client: Jenkins API client.
+
+        Returns:
+            The failures encountered while synchronizing agent nodes.
         """
         relation_agent_names = {
             agent.name for agents in (state.agent_relation_meta or {}).values() for agent in agents
@@ -418,28 +457,33 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         self.unit.status = ops.MaintenanceStatus("Reconciling agent nodes.")
         agent_nodes = client.list_agent_nodes()
         agent_node_names = [node.name for node in agent_nodes]
+        failures: list[AgentSyncFailure] = []
 
         if state.agent_relation_meta:
-            self._add_agent_nodes_from_relation(
+            add_result = self._add_agent_nodes_from_relation(
                 agent_relation=state.agent_relation_meta,
                 agent_node_names=agent_node_names,
                 external_agent_nodes=external_agent_nodes,
                 api_client=client,
                 agent_discovery_url=typing.cast(str, agent_discovery_url),
             )
-            self._update_agent_nodes_from_relation(
+            failures.extend(add_result.failures)
+            update_result = self._update_agent_nodes_from_relation(
                 agent_relation=state.agent_relation_meta,
                 agent_nodes=agent_nodes,
                 external_agent_nodes=external_agent_nodes,
                 api_client=client,
             )
+            failures.extend(update_result.failures)
 
-        self._remove_unmanaged_agents(
+        remove_result = self._remove_unmanaged_agents(
             agent_node_names=agent_node_names,
             relation_agent_names=relation_agent_names,
             external_agent_nodes=external_agent_nodes,
             api_client=client,
         )
+        failures.extend(remove_result.failures)
+        return AgentSyncResult(failures=tuple(failures))
 
     def _remove_unmanaged_agents(
         self,
@@ -447,8 +491,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         relation_agent_names: set[str],
         external_agent_nodes: frozenset[str],
         api_client: jenkins.Jenkins,
-    ) -> None:
-        """Remove agents not in a relation or matching an external-agent pattern.
+    ) -> AgentSyncResult:
+        """Remove unmanaged agents while continuing after individual failures.
 
         Args:
             agent_node_names: The agents registered on the Jenkins server.
@@ -456,8 +500,8 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             external_agent_nodes: Names or patterns for nodes managed outside Juju.
             api_client: The Jenkins API client.
 
-        Raises:
-            JenkinsError: if there was an error while removing agent nodes from Jenkins.
+        Returns:
+            The failures encountered while removing agents.
         """
         unmanaged_agents = frozenset(
             agent_name
@@ -465,12 +509,16 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             if agent_name not in relation_agent_names
             and not is_external_agent_node(agent_name, external_agent_nodes)
         )
+        failures: list[AgentSyncFailure] = []
         for agent_name in unmanaged_agents:
             try:
                 api_client.remove_agent_node(agent_name=agent_name)
-            except jenkins.JenkinsError:
+            except jenkins.JenkinsError as exc:
                 logger.exception("Failed to remove unmanaged agent node: %s", agent_name)
-                raise
+                failures.append(
+                    AgentSyncFailure(operation="remove", node_name=agent_name, message=str(exc))
+                )
+        return AgentSyncResult(failures=tuple(failures))
 
     def _reconcile_agent_discovery(self) -> None:
         """Update the agent discovery URL in all connected agent relations."""
@@ -611,56 +659,178 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         external_agent_nodes: frozenset[str],
         api_client: jenkins.Jenkins,
         agent_discovery_url: str,
-    ) -> None:
-        """Add agent nodes from relation data.
+    ) -> AgentSyncResult:
+        """Plan agent changes, execute Jenkins actions, then publish relation data.
 
         Args:
-            agent_relation: Mapping of agent relation to agent metadata.
-            agent_node_names: The node names of agents.
-            external_agent_nodes: Nodes managed outside Juju and skipped by reconciliation.
+            agent_relation: Mapping of agent relations to agent metadata.
+            agent_node_names: The node names currently registered in Jenkins.
+            external_agent_nodes: Names or patterns for nodes managed outside Juju.
             api_client: The Jenkins API client.
             agent_discovery_url: The resolved URL for agent connections.
 
-        Raises:
-            JenkinsError: if there was an error while registering agent nodes to Jenkins.
+        Returns:
+            The failures encountered while adding agents and publishing relation data.
         """
-        for relation, agents in agent_relation.items():
-            unregistered_agents = [
-                agent
-                for agent in agents
-                if agent.name not in agent_node_names
-                and not is_external_agent_node(agent.name, external_agent_nodes)
-            ]
-            for unregistered_agent in unregistered_agents:
-                try:
-                    # AgentMeta includes remote_fs, which the Jenkins API wrapper
-                    # applies to the newly created controller-side node.
-                    api_client.add_agent_node(agent_meta=unregistered_agent)
-                except jenkins.JenkinsError:
-                    logger.exception("Failed to register agent node: %s", unregistered_agent)
-                    raise
+        plans = tuple(
+            self._plan_agent_relation(
+                relation=relation,
+                agents=agents,
+                agent_node_names=agent_node_names,
+                external_agent_nodes=external_agent_nodes,
+            )
+            for relation, agents in agent_relation.items()
+        )
+        failed_creations, create_result = self._create_agent_nodes(plans, api_client)
+        relation_secrets, secret_result = self._fetch_agent_secrets(
+            plans, failed_creations, api_client
+        )
+        failures = list(create_result.failures) + list(secret_result.failures)
+        for plan in plans:
+            try:
+                self._update_agent_relation_data(
+                    relation=plan.relation,
+                    relation_data={
+                        "url": agent_discovery_url,
+                        **relation_secrets[plan.relation],
+                    },
+                    skipped_secret_keys=plan.skipped_secret_keys,
+                )
+            except ops.ModelError as exc:
+                logger.exception("Failed to update agent relation data: %s", plan.relation)
+                failures.append(
+                    AgentSyncFailure(operation="relation-data", node_name=None, message=str(exc))
+                )
+        return AgentSyncResult(failures=tuple(failures))
 
-            agent_relation_data: dict[str, str] = {"url": agent_discovery_url}
-            for meta in agents:
-                secret_key = f"{meta.name}_secret"
-                if (
-                    is_external_agent_node(meta.name, external_agent_nodes)
-                    and meta.name not in agent_node_names
-                ):
-                    logger.warning(
-                        "External agent node %s is not registered; skipping secret publication.",
-                        meta.name,
+    @staticmethod
+    def _plan_agent_relation(
+        relation: ops.Relation,
+        agents: list[AgentMeta],
+        agent_node_names: list[str],
+        external_agent_nodes: frozenset[str],
+    ) -> _AgentRelationPlan:
+        """Build an agent relation plan without side effects.
+
+        Args:
+            relation: The relation being planned.
+            agents: Agent metadata received from the relation.
+            agent_node_names: The node names currently registered in Jenkins.
+            external_agent_nodes: Names or patterns for nodes managed outside Juju.
+
+        Returns:
+            An immutable plan for Jenkins actions and relation-data updates.
+        """
+        planned_agents = tuple(agents)
+        agents_to_create = tuple(
+            agent
+            for agent in planned_agents
+            if agent.name not in agent_node_names
+            and not is_external_agent_node(agent.name, external_agent_nodes)
+        )
+        skipped_secret_keys = frozenset(
+            f"{agent.name}_secret"
+            for agent in planned_agents
+            if is_external_agent_node(agent.name, external_agent_nodes)
+            and agent.name not in agent_node_names
+        )
+        for secret_key in skipped_secret_keys:
+            logger.warning(
+                "External agent node %s is not registered; skipping secret publication.",
+                secret_key.removesuffix("_secret"),
+            )
+        return _AgentRelationPlan(
+            relation=relation,
+            agents=planned_agents,
+            agents_to_create=agents_to_create,
+            skipped_secret_keys=skipped_secret_keys,
+        )
+
+    @staticmethod
+    def _create_agent_nodes(
+        plans: tuple[_AgentRelationPlan, ...], api_client: jenkins.Jenkins
+    ) -> tuple[set[tuple[ops.Relation, str]], AgentSyncResult]:
+        """Create planned Jenkins nodes and collect failures.
+
+        Args:
+            plans: Immutable plans for the related agent nodes.
+            api_client: The Jenkins API client.
+
+        Returns:
+            Failed relation/node creation pairs and the recorded failures.
+        """
+        failures: list[AgentSyncFailure] = []
+        failed_creations: set[tuple[ops.Relation, str]] = set()
+        for plan in plans:
+            for agent in plan.agents_to_create:
+                try:
+                    api_client.add_agent_node(agent_meta=agent)
+                except jenkins.JenkinsError as exc:
+                    logger.exception("Failed to register agent node: %s", agent)
+                    failures.append(
+                        AgentSyncFailure(
+                            operation="create", node_name=agent.name, message=str(exc)
+                        )
                     )
-                    relation.data[self.model.unit].pop(secret_key, None)
+                    failed_creations.add((plan.relation, agent.name))
+        return failed_creations, AgentSyncResult(failures=tuple(failures))
+
+    @staticmethod
+    def _fetch_agent_secrets(
+        plans: tuple[_AgentRelationPlan, ...],
+        failed_creations: set[tuple[ops.Relation, str]],
+        api_client: jenkins.Jenkins,
+    ) -> tuple[dict[ops.Relation, dict[str, str]], AgentSyncResult]:
+        """Fetch planned node secrets and collect failures.
+
+        Args:
+            plans: Immutable plans for the related agent nodes.
+            failed_creations: Relation/node pairs whose creation failed.
+            api_client: The Jenkins API client.
+
+        Returns:
+            Secrets grouped by relation and the recorded failures.
+        """
+        failures: list[AgentSyncFailure] = []
+        relation_secrets: dict[ops.Relation, dict[str, str]] = {}
+        for plan in plans:
+            secrets: dict[str, str] = {}
+            for meta in plan.agents:
+                if (plan.relation, meta.name) in failed_creations:
+                    continue
+                if f"{meta.name}_secret" in plan.skipped_secret_keys:
                     continue
                 try:
-                    agent_relation_data[secret_key] = api_client.get_node_secret(
+                    secrets[f"{meta.name}_secret"] = api_client.get_node_secret(
                         node_name=meta.name
                     )
-                except jenkins.JenkinsError:
+                except jenkins.JenkinsError as exc:
                     logger.exception("Failed to get secret for registered node: %s", meta)
-                    raise
-            relation.data[self.model.unit].update(agent_relation_data)
+                    failures.append(
+                        AgentSyncFailure(operation="secret", node_name=meta.name, message=str(exc))
+                    )
+            relation_secrets[plan.relation] = secrets
+        return relation_secrets, AgentSyncResult(failures=tuple(failures))
+
+    def _update_agent_relation_data(
+        self,
+        relation: ops.Relation,
+        relation_data: dict[str, str],
+        skipped_secret_keys: frozenset[str],
+    ) -> None:
+        """Publish agent discovery and node secret data to a relation.
+
+        Args:
+            relation: The relation receiving the data.
+            relation_data: Discovery URL and successfully fetched node secrets.
+            skipped_secret_keys: Stale secret keys to remove before updating data.
+
+        Returns:
+            None.
+        """
+        for secret_key in skipped_secret_keys:
+            relation.data[self.model.unit].pop(secret_key, None)
+        relation.data[self.model.unit].update(relation_data)
 
     def _update_agent_nodes_from_relation(
         self,
@@ -668,17 +838,17 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         agent_nodes: list[typing.Any],
         external_agent_nodes: frozenset[str],
         api_client: jenkins.Jenkins,
-    ) -> None:
-        """Update existing Jenkins agent nodes to match relation remote filesystems.
+    ) -> AgentSyncResult:
+        """Update existing Jenkins agent nodes while continuing after failures.
 
         Args:
-            agent_relation: Mapping of agent relation to agent metadata.
+            agent_relation: Mapping of agent relations to agent metadata.
             agent_nodes: The agents currently registered on Jenkins.
             external_agent_nodes: Names or patterns for nodes managed outside Juju.
             api_client: The Jenkins API client.
 
-        Raises:
-            JenkinsError: if there was an error updating an agent node.
+        Returns:
+            The failures encountered while updating agents.
         """
         agent_meta_by_name = {
             agent.name: agent for agents in agent_relation.values() for agent in agents
@@ -689,13 +859,17 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
             if node.name in agent_meta_by_name
             and not is_external_agent_node(node.name, external_agent_nodes)
         )
+        failures: list[AgentSyncFailure] = []
         for node in nodes_to_update:
             agent_meta = agent_meta_by_name[node.name]
             try:
                 api_client.reconcile_agent_node(node=node, agent_meta=agent_meta)
-            except jenkins.JenkinsError:
+            except jenkins.JenkinsError as exc:
                 logger.exception("Failed to update agent node: %s", agent_meta)
-                raise
+                failures.append(
+                    AgentSyncFailure(operation="update", node_name=node.name, message=str(exc))
+                )
+        return AgentSyncResult(failures=tuple(failures))
 
     def _reconcile_pre_startup_configurations(
         self, container: ops.Container, charm_state: State

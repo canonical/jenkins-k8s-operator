@@ -205,8 +205,10 @@ def test_reconcile_agents_error(error_stage: str):
         elif error_stage == "secret":
             mock_client.list_agent_nodes.return_value = []
             mock_client.get_node_secret.side_effect = jenkins.JenkinsError()
-        with pytest.raises(jenkins.JenkinsError):
-            mgr.charm._reconcile_agents(state=charm_state, client=mock_client)
+        result = mgr.charm._reconcile_agents(state=charm_state, client=mock_client)
+
+        assert not result.successful
+        assert len(result.failures) == 2
 
 
 def test_reconcile_agents_accepts_state_and_client_parameters():
@@ -312,8 +314,10 @@ def test_reconcile_agents_propagates_unmanaged_delete_error():
         client.list_agent_nodes.return_value = [SimpleNamespace(name="stale-0")]
         client.remove_agent_node.side_effect = jenkins.JenkinsError("unavailable")
 
-        with pytest.raises(jenkins.JenkinsError, match="unavailable"):
-            mgr.charm._reconcile_agents(charm_state, client)
+        result = mgr.charm._reconcile_agents(charm_state, client)
+
+        assert not result.successful
+        assert result.failures[0].operation == "remove"
 
 
 def test_update_agent_nodes_skips_external_agent_pattern():
