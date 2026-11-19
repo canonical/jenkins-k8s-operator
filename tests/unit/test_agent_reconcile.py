@@ -207,8 +207,7 @@ def test_reconcile_agents_error(error_stage: str):
             mock_client.get_node_secret.side_effect = jenkins.JenkinsError()
         result = mgr.charm._reconcile_agents(state=charm_state, client=mock_client)
 
-        assert not result.successful
-        assert len(result.failures) == 2
+        assert result is False
 
 
 def test_reconcile_agents_accepts_state_and_client_parameters():
@@ -316,8 +315,8 @@ def test_reconcile_agents_propagates_unmanaged_delete_error():
 
         result = mgr.charm._reconcile_agents(charm_state, client)
 
-        assert not result.successful
-        assert result.failures[0].operation == "remove"
+        assert result is False
+        client.remove_agent_node.assert_called_once_with(agent_name="stale-0")
 
 
 def test_update_agent_nodes_skips_external_agent_pattern():
