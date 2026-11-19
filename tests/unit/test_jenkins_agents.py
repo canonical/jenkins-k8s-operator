@@ -294,3 +294,23 @@ def test_reconcile_agent_node_preserves_ui_remote_fs_without_relation_value(
 
     node._get_config_element_tree.assert_called_once_with()
     node.upload_config.assert_not_called()
+
+
+def test_reconcile_agent_node_preserves_labels_not_owned_by_relation(
+    container: ops.Container, mock_client: MagicMock
+):
+    """Relation label updates preserve labels outside the previously managed set."""
+    node = MagicMock()
+    node.name = "agent_node_0"
+    node._get_config_element_tree.return_value = ET.fromstring(  # nosec B314 - trusted test fixture XML
+        "<node><numExecutors>1</numExecutors><label>machine manual-cpc</label></node>"
+    )
+
+    agent_meta = state.AgentMeta(executors="1", labels="linux", name="agent_node_0")
+    with patch.object(jenkins.Jenkins, "_get_api_client", return_value=mock_client):
+        _jenkins_instance(container).reconcile_agent_node(
+            node, agent_meta, managed_labels=frozenset({"machine"})
+        )
+
+    updated = ET.fromstring(node.upload_config.call_args.args[0])  # nosec B314 - trusted test fixture XML
+    assert updated.findtext("label") == "linux manual-cpc"

@@ -107,6 +107,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
     """Charmed Jenkins."""
 
     _storage_repair_state = ops.StoredState()
+    _label_reconciliation_state = ops.StoredState()
 
     def __init__(self, *args: typing.Any):
         """Initialize the charm and register event handlers.
@@ -121,6 +122,7 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
 
         self.storage = storage.Reconciler(charm=self)
         self._storage_repair_state.set_default(pending=False)
+        self._label_reconciliation_state.set_default(managed_labels={})
         # Ingress dedicated to agent discovery
         self.agent_discovery_ingress = IngressPerAppRequirer(
             self,
@@ -853,6 +855,13 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         agent_meta_by_name = {
             agent.name: agent for agents in agent_relation.values() for agent in agents
         }
+        managed_labels = typing.cast(
+            dict[str, list[str]], self._label_reconciliation_state.managed_labels
+        )
+        managed_labels = {
+            name: labels for name, labels in managed_labels.items() if name in agent_meta_by_name
+        }
+        self._label_reconciliation_state.managed_labels = managed_labels
         nodes_to_update = tuple(
             node
             for node in agent_nodes
@@ -862,13 +871,18 @@ class JenkinsK8sOperatorCharm(ops.CharmBase):
         failures: list[AgentSyncFailure] = []
         for node in nodes_to_update:
             agent_meta = agent_meta_by_name[node.name]
+            previous_labels = frozenset(managed_labels.get(node.name, []))
             try:
-                api_client.reconcile_agent_node(node=node, agent_meta=agent_meta)
+                api_client.reconcile_agent_node(
+                    node=node, agent_meta=agent_meta, managed_labels=previous_labels
+                )
+                managed_labels[node.name] = list(jenkins.split_labels(agent_meta.labels))
             except jenkins.JenkinsError as exc:
                 logger.exception("Failed to update agent node: %s", agent_meta)
                 failures.append(
                     AgentSyncFailure(operation="update", node_name=node.name, message=str(exc))
                 )
+        self._label_reconciliation_state.managed_labels = managed_labels
         return AgentSyncResult(failures=tuple(failures))
 
     def _reconcile_pre_startup_configurations(
