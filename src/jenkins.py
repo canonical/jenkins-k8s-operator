@@ -41,6 +41,13 @@ JENKINS_PLUGIN_MANAGER_VERSION = "2.13.2"
 LOGIN_PATH = "/login?from=%2F"
 EXECUTABLES_PATH = Path("/srv/jenkins/")
 JENKINS_HOME_PATH = Path("/var/lib/jenkins")
+
+
+def split_labels(labels: str) -> tuple[str, ...]:
+    """Split Jenkins labels supplied as comma- or whitespace-separated values."""
+    return tuple(dict.fromkeys(label for label in re.split(r"[,\s]+", labels.strip()) if label))
+
+
 SSH_PROXY_CONFIG_PATH = Path("/etc/ssh/ssh_config.d/00-jenkins-proxy.conf")
 # Path to initial Jenkins password file
 PASSWORD_FILE_PATH = JENKINS_HOME_PATH / "secrets/initialAdminPassword"
@@ -467,7 +474,12 @@ class Jenkins:
             logger.error("Failed to add agent node, %s", exc)
             raise JenkinsError("Failed to add agent node.") from exc
 
-    def reconcile_agent_node(self, node: Node, agent_meta: state.AgentMeta) -> None:
+    def reconcile_agent_node(
+        self,
+        node: Node,
+        agent_meta: state.AgentMeta,
+        managed_labels: typing.Optional[frozenset[str]] = None,
+    ) -> None:
         """Reconcile an existing agent node with relation metadata.
 
         The complete agent metadata is accepted here so all node properties owned
@@ -478,15 +490,31 @@ class Jenkins:
         Args:
             node: The existing Jenkins agent node.
             agent_meta: The desired agent metadata.
+            managed_labels: Labels previously supplied by the relation, or None to replace
+                the existing label value.
 
         Raises:
             JenkinsError: if an error occurred updating the node configuration.
         """
         try:
             config_tree = node._get_config_element_tree()  # pylint: disable=protected-access
+            current_label_element = config_tree.find("label")
+            current_labels = (
+                current_label_element.text if current_label_element is not None else ""
+            )
+            relation_labels = split_labels(agent_meta.labels)
+            if managed_labels is None:
+                desired_labels = agent_meta.labels
+            else:
+                preserved_labels = tuple(
+                    label
+                    for label in split_labels(current_labels)
+                    if label not in managed_labels and label not in relation_labels
+                )
+                desired_labels = " ".join((*relation_labels, *preserved_labels))
             desired_elements = {
                 "numExecutors": str(agent_meta.executors),
-                "label": agent_meta.labels,
+                "label": desired_labels,
             }
             if agent_meta.remote_fs is not None:
                 desired_elements["remoteFS"] = agent_meta.remote_fs
