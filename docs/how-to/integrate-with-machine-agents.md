@@ -6,7 +6,7 @@ This guide assumes the `jenkins-k8s` charm to already be deployed on a Kubernete
 
 To integrate machine (VM) agents, you'll need to have a bootstrapped machine model. Learn about
 bootstrapping different clouds
-[here](https://canonical.com/juju/docs/juju-cli/3.6/tutorial/#prepare-your-cloud).
+[Juju tutorial: prepare your cloud](https://canonical.com/juju/docs/juju-cli/3.6/tutorial/#prepare-your-cloud).
 
 Use `juju bootstrap localhost localhost` to bootstrap a `lxd` machine controller with the name
 `localhost` for tutorial purposes.
@@ -17,7 +17,7 @@ Use `juju add-model tutorial` to add a model named `tutorial`.
 ### Deploy Jenkins agents (VM)
 <!-- vale Canonical.007-Headings-sentence-case = YES -->
 
-Deploy 3 units of [jenkins agents](https://charmhub.io/jenkins-agent) on the LXD cloud.
+Deploy three units of [jenkins agents](https://charmhub.io/jenkins-agent) on the LXD cloud.
 
 ```
 # Deploy an edge version of the charm until stable version is released.

@@ -2,3 +2,6 @@ SCMs
 unregisters
 Dex
 Keycloak
+OIDC
+SPOE
+unmanaged

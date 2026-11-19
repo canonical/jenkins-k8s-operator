@@ -25,7 +25,7 @@ so HAProxy forwards a non-root `ingress` path unchanged.
 
 ## Steps
 
-1. Configure `external-hostname` on Jenkins to the public hostname (e.g.
+1. Configure `external-hostname` on Jenkins to the public hostname (for example,
    `jenkins.example.com`) and relate Jenkins to HAProxy:
 
        juju config jenkins-k8s external-hostname=jenkins.example.com
