@@ -1,6 +1,6 @@
 # How to redeploy
 
-Redeployment is a process where the old charm instance is removed and data is migrated to a new charm instance. Redeploying the Jenkins charm consists of 3 steps:
+Redeployment is a process where the old charm instance is removed and data is migrated to a new charm instance. Redeploying the Jenkins charm consists of three steps:
 
 1. Create the new Jenkins charm instance:
 ```bash

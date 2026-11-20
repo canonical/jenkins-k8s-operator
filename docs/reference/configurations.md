@@ -4,7 +4,7 @@ See [Configurations](https://charmhub.io/jenkins-k8s/configurations).
 
 > Read more about configurations in the Juju docs: [Configuration](https://canonical.com/juju/docs/juju-cli/3.6/reference/configuration/)
 
-## OpenSSH Proxy Configuration
+## OpenSSH proxy configuration
 
 By default Jenkins uses a built-in Java SSH client. Users may configure Jenkins
 to use the OpenSSH client included in the Jenkins server container. To route

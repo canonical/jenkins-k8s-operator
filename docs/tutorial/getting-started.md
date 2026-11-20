@@ -115,10 +115,10 @@ You may need to wait for up to five minutes for the URL to work correctly.
 
 ### Deploy and integrate k8s agents
 
-By default, jenkins-k8s server application is installed with 0 executors for security purposes.
+By default, jenkins-k8s server application is installed with zero executors for security purposes.
 A functional Jenkins application requires additional Jenkins agents to be integrated.
 
-The following commands deploy 3 units of the jenkins-agent-k8s charm and integrate them with the
+The following commands deploy three units of the jenkins-agent-k8s charm and integrate them with the
 jenkins-k8s charm.
 
 ```

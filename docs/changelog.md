@@ -50,7 +50,7 @@ Each revision is versioned by the date of the revision.
   the charm module's `base` now defaults to `null` (the charm's own base
   default applies) instead of `ubuntu@24.04`, `constraints` now defaults to
   `null` instead of `""`, and `config` is now a flat `map(string)` keyed by
-  the charmcraft.yaml option names (e.g. `"jcasc-repository"`) instead of a
+  the charmcraft.yaml option names (for example, `"jcasc-repository"`) instead of a
   typed object with underscore-named attributes.
 - Removed the `terraform/product` Terraform module. A Jenkins deployment can
   connect to any number of Jenkins agents, so compose the `terraform/charm`

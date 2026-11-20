@@ -1,6 +1,6 @@
 # How to integrate with external agent charms
 
-We consider any agent charm to be `external` when they don't have layer 3 connectivity with the `jenkins-k8s` charm. To integrate with those agent charms, we'll leverage the `jenkins-k8s` charm's `agent-discovery-ingress` integration.
+We consider any agent charm to be `external` when they don't have layer-3 connectivity with the `jenkins-k8s` charm. To integrate with those agent charms, we'll leverage the `jenkins-k8s` charm's `agent-discovery-ingress` integration.
 
 The `agent-discovery-ingress` integration can be used with any charm that supports the `:ingress` interface. One example is the [traefik-k8s](https://charmhub.io/traefik-k8s) charm.
 ```bash

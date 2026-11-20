@@ -6,7 +6,7 @@ A low disk-space on the built-in node will cause the node to go offline, blockin
 ### Create a backup of the current Jenkins charm instance
 Follow the "Create a backup" section of [the charm's backup and restore documentation](https://charmhub.io/jenkins-k8s/docs/how-to-backup-and-restore-jenkins) to create an archive of the Jenkins data on your host system
 
-### Deploy the new Jenkins charm instance, specifying the size of the storage volume
+### Deploy the new Jenkins charm instance with the required storage volume size
 Create a new application with the `--storage` flag. In this example we'll deploy the charm with a storage of 10GB:
 ```bash
 juju deploy jenkins-k8s-new --storage jenkins-home=10GB
