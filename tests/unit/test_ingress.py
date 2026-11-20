@@ -31,7 +31,11 @@ def _patch_reconcile_dependencies(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         JenkinsK8sOperatorCharm, "_reconcile_api_token", MagicMock(return_value=None)
     )
-    monkeypatch.setattr(JenkinsK8sOperatorCharm, "_reconcile_agents", MagicMock(return_value=None))
+    monkeypatch.setattr(
+        JenkinsK8sOperatorCharm,
+        "_reconcile_agents",
+        MagicMock(return_value=True),
+    )
     monkeypatch.setattr(
         JenkinsK8sOperatorCharm,
         "_reconcile_agent_discovery",

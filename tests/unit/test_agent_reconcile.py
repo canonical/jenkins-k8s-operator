@@ -205,8 +205,9 @@ def test_reconcile_agents_error(error_stage: str):
         elif error_stage == "secret":
             mock_client.list_agent_nodes.return_value = []
             mock_client.get_node_secret.side_effect = jenkins.JenkinsError()
-        with pytest.raises(jenkins.JenkinsError):
-            mgr.charm._reconcile_agents(state=charm_state, client=mock_client)
+        result = mgr.charm._reconcile_agents(state=charm_state, client=mock_client)
+
+        assert result is False
 
 
 def test_reconcile_agents_accepts_state_and_client_parameters():
@@ -335,8 +336,10 @@ def test_reconcile_agents_propagates_unmanaged_delete_error():
         client.list_agent_nodes.return_value = [SimpleNamespace(name="stale-0")]
         client.remove_agent_node.side_effect = jenkins.JenkinsError("unavailable")
 
-        with pytest.raises(jenkins.JenkinsError, match="unavailable"):
-            mgr.charm._reconcile_agents(charm_state, client)
+        result = mgr.charm._reconcile_agents(charm_state, client)
+
+        assert result is False
+        client.remove_agent_node.assert_called_once_with(agent_name="stale-0")
 
 
 def test_update_agent_nodes_skips_external_agent_pattern():
@@ -435,3 +438,54 @@ def test_reconcile_agents_preserves_last_external_secret_when_node_missing():
 
     assert relation.data[mgr.charm.unit]["external-0_secret"] == "last-known-good"
     client.get_node_secret.assert_not_called()
+
+
+def test_update_agent_nodes_records_update_failure():
+    """Agent update failures are recorded without stopping reconciliation."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = _state_with_agents(["agent-0"])
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        client = MagicMock(spec=jenkins.Jenkins)
+        client.reconcile_agent_node.side_effect = jenkins.JenkinsError("unavailable")
+        result = mgr.charm._update_agent_nodes_from_relation(
+            agent_relation=charm_state.agent_relation_meta or {},
+            agent_nodes=[SimpleNamespace(name="agent-0")],
+            external_agent_nodes=frozenset(),
+            api_client=client,
+        )
+
+    assert result is False
+
+
+def test_add_agent_nodes_records_relation_data_failure():
+    """Relation-data update failures are recorded after Jenkins actions."""
+    ctx = testing.Context(JenkinsK8sOperatorCharm)
+    state = _state_with_agents(["agent-0"])
+
+    with (
+        patch.object(JenkinsK8sOperatorCharm, "_reconcile", new=lambda self, event: None),
+        ctx(ctx.on.config_changed(), state) as mgr,
+    ):
+        charm_state = State.from_charm(mgr.charm)
+        assert charm_state is not None
+        relation = mgr.charm.model.relations["agent"][0]
+        relation.data[mgr.charm.unit].update = MagicMock(side_effect=ops.ModelError())
+        client = MagicMock(spec=jenkins.Jenkins)
+        client.get_node_secret.return_value = "secret"
+        result = mgr.charm._add_agent_nodes_from_relation(
+            agent_relation={
+                relation: [AgentMeta(executors="1", labels="testing", name="agent-0")]
+            },
+            agent_node_names=["agent-0"],
+            external_agent_nodes=frozenset(),
+            api_client=client,
+            agent_discovery_url="http://agents.example",
+        )
+
+    assert result is False

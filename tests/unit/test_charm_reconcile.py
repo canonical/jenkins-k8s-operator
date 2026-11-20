@@ -646,3 +646,39 @@ def test_reconcile_calls_agent_reconciliation(harness_container: HarnessWithCont
 
     reconcile_agents.assert_called_once()
     assert "event" not in reconcile_agents.call_args.kwargs
+
+
+def test_reconcile_sets_waiting_status_and_continues_after_agent_sync_failure(
+    harness_container: HarnessWithContainer,
+):
+    """Agent sync failures surface as WaitingStatus after later reconciliations run."""
+    harness = harness_container.harness
+    harness.begin()
+    jenkins_charm = typing.cast(JenkinsK8sOperatorCharm, harness.charm)
+
+    with (
+        patch.object(jenkins_charm, "_reconcile_storage"),
+        patch.object(
+            jenkins_charm, "_reconcile_pre_startup_configurations", return_value="hash123"
+        ),
+        patch.object(jenkins_charm, "_reconcile_admin", return_value="secret"),
+        patch.object(jenkins.Jenkins, "wait_ready"),
+        patch.object(jenkins_charm, "_reconcile_api_token"),
+        patch.object(
+            jenkins_charm,
+            "_reconcile_agents",
+            return_value=False,
+        ),
+        patch.object(jenkins_charm, "_reconcile_agent_discovery") as discovery_mock,
+        patch.object(jenkins_charm, "_reconcile_haproxy_route") as haproxy_mock,
+        patch.object(jenkins_charm, "_reconcile_plugins") as plugins_mock,
+        patch.object(harness_container.container, "add_layer"),
+        patch.object(harness_container.container, "replan"),
+    ):
+        jenkins_charm._reconcile(MagicMock(spec=ops.RelationDepartedEvent))
+
+    assert jenkins_charm.unit.status.name == WAITING_STATUS_NAME
+    assert jenkins_charm.unit.status.message == "Agent sync failed; see logs."
+    discovery_mock.assert_called_once()
+    haproxy_mock.assert_called_once()
+    plugins_mock.assert_called_once()
