@@ -10,6 +10,7 @@ import copy
 import dataclasses
 import functools
 import hashlib
+import io
 import json
 import logging
 import re
@@ -1160,6 +1161,15 @@ def install_plugins(
     Raises:
         JenkinsBootstrapError: if an error occurred installing the plugin.
     """
+    plugin_names = sorted(set(plugins))
+    logger.info(
+        "phase=plugin_install start manager_version=%s plugin_count=%d plugins=%s "
+        "proxy_configured=%s timeout_s=600",
+        JENKINS_PLUGIN_MANAGER_VERSION,
+        len(plugin_names),
+        plugin_names,
+        proxy_config is not None,
+    )
     proxy_args = [] if not proxy_config else _get_java_proxy_args(proxy_config)
     command = [
         "java",
@@ -1171,21 +1181,105 @@ def install_plugins(
         "-d",
         str(PLUGINS_PATH),
         "-p",
-        " ".join(set(plugins)),
+        " ".join(plugin_names),
         "--latest",
     ]
-    proc: ops.pebble.ExecProcess = container.exec(
-        command,
-        working_dir=str(EXECUTABLES_PATH),
-        timeout=600,
-        user=USER,
-        group=GROUP,
-    )
+    timeout_s = 600
+    stdout_buffer = io.StringIO()
+    stderr_buffer = io.StringIO()
+    started_at = time.monotonic()
     try:
-        proc.wait_output()
-    except (ops.pebble.ChangeError, ops.pebble.ExecError) as exc:
-        logger.error("Failed to install plugins, %s", exc)
+        proc: ops.pebble.ExecProcess = container.exec(
+            command,
+            working_dir=str(EXECUTABLES_PATH),
+            timeout=timeout_s,
+            user=USER,
+            group=GROUP,
+            stdout=stdout_buffer,
+            stderr=stderr_buffer,
+        )
+        proc.wait()
+    except ops.pebble.Error as exc:
+        elapsed_s = time.monotonic() - started_at
+        change = getattr(exc, "change", None)
+        tasks = getattr(change, "tasks", []) if change else []
+        task_summaries = [
+            {
+                "status": getattr(task, "status", None),
+                "summary": getattr(task, "summary", None),
+            }
+            for task in tasks
+        ]
+        logger.error(
+            "phase=plugin_install failed elapsed_s=%.1f error_type=%s "
+            "change_id=%s change_status=%s change_summary=%s tasks=%s error=%s",
+            elapsed_s,
+            type(exc).__name__,
+            getattr(change, "id", None),
+            getattr(change, "status", None),
+            getattr(change, "summary", None),
+            task_summaries,
+            exc,
+        )
+        _log_plugin_install_output(stdout_buffer.getvalue(), stderr_buffer.getvalue())
+        _log_plugin_install_processes(container)
         raise JenkinsBootstrapError("Failed to install plugins.") from exc
+    else:
+        logger.info(
+            "phase=plugin_install completed elapsed_s=%.1f plugin_count=%d",
+            time.monotonic() - started_at,
+            len(plugin_names),
+        )
+
+
+def _log_plugin_install_output(stdout: str, stderr: str) -> None:
+    """Log bounded, redacted plugin-manager output after a failure."""
+    logger.error(
+        "phase=plugin_install output stdout_lines=%d stdout_tail=%s "
+        "stderr_lines=%d stderr_tail=%s",
+        len(stdout.splitlines()),
+        _safe_plugin_install_output_tail(stdout),
+        len(stderr.splitlines()),
+        _safe_plugin_install_output_tail(stderr),
+    )
+
+
+def _safe_plugin_install_output_tail(output: str) -> str:
+    """Return a bounded output tail with common secret values redacted."""
+    tail = "\n".join(output.splitlines()[-50:])[-8192:]
+    return re.sub(
+        r"(?i)(password|passwd|token|authorization)([=:]\s*)[^\s]+",
+        r"\1\2<redacted>",
+        tail or "<empty>",
+    )
+
+
+def _log_plugin_install_processes(container: ops.Container) -> None:
+    """Log safe process metadata after a plugin installation failure.
+
+    Command lines are intentionally excluded because authenticated proxy arguments
+    may contain credentials. Process state and elapsed time distinguish a Java
+    process waiting on I/O from one consuming CPU without exposing arguments.
+    """
+    try:
+        process = container.exec(
+            ["ps", "-eo", "pid=,ppid=,stat=,etime=,%cpu=,%mem=,rss=,vsz=,wchan=,comm="],
+            timeout=10,
+        )
+        stdout, _ = process.wait_output()
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning(
+            "phase=plugin_install process_snapshot_failed error_type=%s",
+            type(exc).__name__,
+        )
+        return
+
+    process_lines = [line.strip() for line in stdout.splitlines() if line.strip()]
+    logger.error(
+        "phase=plugin_install process_snapshot process_count=%d processes=%s",
+        len(process_lines),
+        process_lines,
+    )
 
 
 def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str]:

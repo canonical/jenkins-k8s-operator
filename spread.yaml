@@ -67,6 +67,41 @@ backends:
           done <<< "$containers"
         done <<< "$pod_names"
       done
+
+      # Machine-backed integration fixtures use a separate LXD controller and
+      # model. Capture machine allocation and cross-model state when a unit is
+      # pending or errored. Do not print machine environment or credentials.
+      for controller in concierge-lxd; do
+        echo "=== machine-controller: $controller ==="
+        machine_models="$(juju models --controller "$controller" --format json 2>/dev/null \
+          | jq -r '.models[]."short-name"' 2>/dev/null || true)"
+        while IFS= read -r machine_model; do
+          [ -z "$machine_model" ] && continue
+          machine_status_json="$(juju status -m "$controller:$machine_model" --format json \
+            --color=false 2>/dev/null || true)"
+          machine_summary="$(echo "$machine_status_json" | jq -r \
+            '.machines | to_entries[] | "machine=" + .key + " instance=" + (.value["instance-id"] // "") + " agent=" + (.value["agent-status"].current // "") + " agent_message=" + (.value["agent-status"].message // "")' \
+            2>/dev/null || true)"
+          unit_summary="$(echo "$machine_status_json" | jq -r \
+            '.applications | to_entries[] | .value.units // {} | to_entries[] | "unit=" + .key + " machine=" + (.value.machine // "") + " workload=" + (.value["workload-status"].current // "") + " workload_message=" + (.value["workload-status"].message // "")' \
+            2>/dev/null || true)"
+          if [ -n "$machine_summary" ] || [ -n "$unit_summary" ]; then
+            echo "=== machine-model: $controller:$machine_model ==="
+            echo "$machine_summary"
+            echo "$unit_summary"
+            juju status -m "$controller:$machine_model" --relations --storage --color=false || true
+            while IFS= read -r machine_id; do
+              [ -z "$machine_id" ] && continue
+              echo "=== machine-details: $controller:$machine_model machine=$machine_id ==="
+              juju show-machine -m "$controller:$machine_model" "$machine_id" || true
+              juju debug-log -m "$controller:$machine_model" \
+                --include "machine-$machine_id" --limit 120 || true
+            done < <(echo "$machine_status_json" | jq -r \
+              '.machines | to_entries[] | select((.value["agent-status"].current // "") == "error" or (.value["agent-status"].message // "") | test("waiting|pending|failed"; "i")) | .key' \
+              2>/dev/null || true)
+          fi
+        done <<< "$machine_models"
+      done
       DIAGNOSTICS
 environment:
   CONCIERGE: '$(HOST: echo "${CONCIERGE:-concierge-juju3.yaml}")'
