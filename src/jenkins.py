@@ -1249,12 +1249,18 @@ def build_jcasc_config(
     proxy = proxy_config.https_proxy or proxy_config.http_proxy if proxy_config else None
     if proxy:
         host, port = proxy.host, proxy.port
-        jenkins_section["proxy"] = {
-            "name": host,
-        }
+        # Model proxy takes precedence for host/port and credentials-if-present;
+        # the rest of the user JCasC proxy block is preserved.
+        merged = jenkins_section.get("proxy") or {}
+        merged["name"] = host
         # Pydantic v2 fills a scheme-default port (80/443); only emit an explicit port.
         if port and f":{port}" in str(proxy):
-            jenkins_section["proxy"]["port"] = str(port)
+            merged["port"] = str(port)
+        if proxy.username is not None:
+            merged["userName"] = proxy.username
+        if proxy.password is not None:
+            merged["password"] = proxy.password
+        jenkins_section["proxy"] = merged
 
     config["jenkins"] = jenkins_section
     return config

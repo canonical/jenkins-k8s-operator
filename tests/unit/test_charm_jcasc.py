@@ -109,6 +109,109 @@ def test_build_jcasc_config_injects_proxy_name_without_port():
     assert result["jenkins"]["proxy"] == {"name": "proxy-no-port.example.com"}
 
 
+def test_build_jcasc_config_proxy_merges_preserves_user_credentials():
+    """
+    arrange: model proxy without credentials and user JCasC proxy block with credentials.
+    act: when build_jcasc_config is called.
+    assert: user JCasC credentials are preserved and charm-set name/port are present.
+    """
+    # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
+    proxy = state.ProxyConfig(
+        http_proxy="http://proxy.example.com:3128",  # type: ignore
+        https_proxy=None,
+        no_proxy=None,
+    )
+    jcasc_config = {
+        "jenkins": {
+            "proxy": {
+                "name": "user-proxy.example.com",
+                "port": "8080",
+                "userName": "user",
+                "password": "user-secret",
+                "noProxyHost": "localhost",
+            }
+        }
+    }
+
+    result = jenkins.build_jcasc_config(
+        jcasc_config,
+        proxy_config=proxy,
+    )
+
+    assert result["jenkins"]["proxy"] == {
+        "name": "proxy.example.com",
+        "port": "3128",
+        "userName": "user",
+        "password": "user-secret",
+        "noProxyHost": "localhost",
+    }
+
+
+def test_build_jcasc_config_proxy_credentials_from_model_proxy_url():
+    """
+    arrange: model proxy URL with embedded credentials.
+    act: when build_jcasc_config is called.
+    assert: model proxy credentials override user JCasC proxy credentials.
+    """
+    # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
+    proxy = state.ProxyConfig(
+        http_proxy="http://alice:s3cret@proxy.example.com:3128",  # type: ignore
+        https_proxy=None,
+        no_proxy=None,
+    )
+    jcasc_config = {
+        "jenkins": {
+            "proxy": {
+                "userName": "user",
+                "password": "user-secret",
+            }
+        }
+    }
+
+    result = jenkins.build_jcasc_config(
+        jcasc_config,
+        proxy_config=proxy,
+    )
+
+    assert result["jenkins"]["proxy"] == {
+        "name": "proxy.example.com",
+        "port": "3128",
+        "userName": "alice",
+        "password": "s3cret",
+    }
+
+
+def test_build_jcasc_config_proxy_without_credentials_injects_none():
+    """
+    arrange: model proxy without credentials and user JCasC proxy block without credentials.
+    act: when build_jcasc_config is called.
+    assert: no userName/password keys are injected.
+    """
+    # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
+    proxy = state.ProxyConfig(
+        http_proxy="http://proxy.example.com:3128",  # type: ignore
+        https_proxy=None,
+        no_proxy=None,
+    )
+    jcasc_config = {
+        "jenkins": {
+            "proxy": {
+                "name": "user-proxy.example.com",
+            }
+        }
+    }
+
+    result = jenkins.build_jcasc_config(
+        jcasc_config,
+        proxy_config=proxy,
+    )
+
+    assert result["jenkins"]["proxy"] == {
+        "name": "proxy.example.com",
+        "port": "3128",
+    }
+
+
 def test_reconcile_jcasc_config_skips_when_no_config(
     harness_container: HarnessWithContainer,
 ):
