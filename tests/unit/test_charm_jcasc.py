@@ -109,105 +109,104 @@ def test_build_jcasc_config_injects_proxy_name_without_port():
     assert result["jenkins"]["proxy"] == {"name": "proxy-no-port.example.com"}
 
 
-def test_build_jcasc_config_proxy_owns_block_when_model_proxy_configured():
-    """
-    arrange: model proxy without credentials and user JCasC proxy block with credentials.
-    act: when build_jcasc_config is called.
-    assert: the charm owns the whole proxy block - user JCasC proxy config is not
-    mixed in (no mixing between model proxy and JCasC proxy configuration).
-    """
-    # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
-    proxy = state.ProxyConfig(
-        http_proxy="http://proxy.example.com:3128",  # type: ignore
-        https_proxy=None,
-        no_proxy=None,
-    )
-    jcasc_config = {
-        "jenkins": {
-            "proxy": {
+@pytest.mark.parametrize(
+    ("proxy_url", "user_proxy", "expected"),
+    [
+        pytest.param(
+            None,
+            {
+                "name": "user-proxy.example.com",
+                "port": "8080",
+                "userName": "user",
+                "password": "legacy-user-secret",
+                "noProxyHost": "localhost",
+            },
+            {
+                "name": "user-proxy.example.com",
+                "port": "8080",
+                "userName": "user",
+                "password": "legacy-user-secret",
+                "noProxyHost": "localhost",
+            },
+            id="no-model-proxy-user-block-untouched",
+        ),
+        pytest.param(None, None, None, id="no-model-proxy-no-proxy-key"),
+        pytest.param(
+            "http://proxy.example.com:3128",
+            {
                 "name": "user-proxy.example.com",
                 "port": "8080",
                 "userName": "user",
                 "secretPassword": "user-secret",
                 "noProxyHost": "localhost",
-            }
-        }
-    }
-
-    result = jenkins.build_jcasc_config(
-        jcasc_config,
-        proxy_config=proxy,
-    )
-
-    assert result["jenkins"]["proxy"] == {
-        "name": "proxy.example.com",
-        "port": "3128",
-    }
-
-
-def test_build_jcasc_config_proxy_credentials_from_model_proxy_url():
+            },
+            {"name": "proxy.example.com", "port": "3128"},
+            id="cred-free-model-proxy-drops-user-block",
+        ),
+        pytest.param(
+            "http://proxy.example.com:3128",
+            None,
+            {"name": "proxy.example.com", "port": "3128"},
+            id="cred-free-model-proxy-no-user-block",
+        ),
+        pytest.param(
+            "http://proxy.example.com:3128",
+            {"noProxyHost": "localhost", "testUrl": "http://example.com"},
+            {"name": "proxy.example.com", "port": "3128"},
+            id="cred-free-model-proxy-drops-user-keys",
+        ),
+        pytest.param(
+            "http://alice:s3cret@proxy.example.com:3128",
+            {"userName": "user", "secretPassword": "user-secret"},
+            {
+                "name": "proxy.example.com",
+                "port": "3128",
+                "userName": "alice",
+                "secretPassword": "s3cret",
+            },
+            id="model-proxy-creds-win",
+        ),
+        pytest.param(
+            "http://alice:s3cret@proxy.example.com:3128",
+            None,
+            {
+                "name": "proxy.example.com",
+                "port": "3128",
+                "userName": "alice",
+                "secretPassword": "s3cret",
+            },
+            id="model-proxy-creds-no-user-block",
+        ),
+    ],
+)
+def test_build_jcasc_config_proxy_ownership(proxy_url, user_proxy, expected):
     """
-    arrange: model proxy URL with embedded credentials.
+    arrange: combinations of model proxy (absent / credential-free / credentialed)
+        and user JCasC proxy blocks.
     act: when build_jcasc_config is called.
-    assert: model proxy credentials override user JCasC proxy credentials.
+    assert: the model proxy owns the whole jenkins.proxy block when configured
+        (no mixing with user JCasC proxy config); otherwise the user block passes
+        through untouched.
     """
-    # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
-    proxy = state.ProxyConfig(
-        http_proxy="http://alice:s3cret@proxy.example.com:3128",  # type: ignore
-        https_proxy=None,
-        no_proxy=None,
+    proxy = (
+        state.ProxyConfig(  # type: ignore[arg-type]
+            http_proxy=proxy_url,
+            https_proxy=None,
+            no_proxy=None,
+        )
+        if proxy_url
+        else None
     )
-    jcasc_config = {
-        "jenkins": {
-            "proxy": {
-                "userName": "user",
-                "secretPassword": "user-secret",
-            }
-        }
-    }
+    jcasc_config = {"jenkins": {}}
+    if user_proxy is not None:
+        jcasc_config["jenkins"]["proxy"] = user_proxy
 
-    result = jenkins.build_jcasc_config(
-        jcasc_config,
-        proxy_config=proxy,
-    )
+    result = jenkins.build_jcasc_config(jcasc_config, proxy_config=proxy)
 
-    assert result["jenkins"]["proxy"] == {
-        "name": "proxy.example.com",
-        "port": "3128",
-        "userName": "alice",
-        "secretPassword": "s3cret",
-    }
-
-
-def test_build_jcasc_config_proxy_without_credentials_injects_none():
-    """
-    arrange: model proxy without credentials and user JCasC proxy block without credentials.
-    act: when build_jcasc_config is called.
-    assert: no userName/secretPassword keys are injected.
-    """
-    # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
-    proxy = state.ProxyConfig(
-        http_proxy="http://proxy.example.com:3128",  # type: ignore
-        https_proxy=None,
-        no_proxy=None,
-    )
-    jcasc_config = {
-        "jenkins": {
-            "proxy": {
-                "name": "user-proxy.example.com",
-            }
-        }
-    }
-
-    result = jenkins.build_jcasc_config(
-        jcasc_config,
-        proxy_config=proxy,
-    )
-
-    assert result["jenkins"]["proxy"] == {
-        "name": "proxy.example.com",
-        "port": "3128",
-    }
+    if expected is None:
+        assert "proxy" not in result["jenkins"]
+    else:
+        assert result["jenkins"]["proxy"] == expected
 
 
 def test_reconcile_jcasc_config_skips_when_no_config(
@@ -535,29 +534,3 @@ def test_reconcile_jcasc_config_repository_fetch_error_raises_blocked(
         ),
     ):
         charm._reconcile_jcasc_config(harness_container.container, charm_state)
-
-
-def test_build_jcasc_config_proxy_untouched_without_model_proxy():
-    """
-    arrange: no model proxy and user JCasC proxy block with credentials.
-    act: when build_jcasc_config is called.
-    assert: the user JCasC proxy block passes through untouched.
-    """
-    jcasc_config = {
-        "jenkins": {
-            "proxy": {
-                "name": "user-proxy.example.com",
-                "port": "8080",
-                "userName": "user",
-                "password": "legacy-user-secret",
-                "noProxyHost": "localhost",
-            }
-        }
-    }
-
-    result = jenkins.build_jcasc_config(
-        jcasc_config,
-        proxy_config=None,
-    )
-
-    assert result["jenkins"]["proxy"] == jcasc_config["jenkins"]["proxy"]
