@@ -20,47 +20,40 @@ configuration.
 |---|---|---|
 | `jenkins.securityRealm` | Only when the user configuration has no `securityRealm` | User configuration wins if present |
 | `jenkins.disabledAdministrativeMonitors` | Always | The charm always wins |
-| `jenkins.proxy` | When a Juju model proxy is configured | Merged, see below |
+| `jenkins.proxy` | When a Juju model proxy is configured | The model proxy owns the block, see below |
 
 ## Proxy precedence
 
 When the Juju model has a proxy configured (`juju model-config
-juju-http-proxy=...` and `juju-https-proxy=...`), the charm applies it to
-Jenkins through the JCasC `jenkins.proxy` block. The charm merges its values
-into any user-provided proxy block instead of replacing it:
+juju-http-proxy=...` and `juju-https-proxy=...`), the charm owns the whole
+JCasC `jenkins.proxy` block. The block is built from the model proxy only;
+user JCasC proxy configuration is never mixed in:
 
 - `name` and `port` always come from the Juju model proxy.
-- `userName` and `secretPassword` come from the model proxy URL when the
-  URL contains credentials (`http://user:password@host:port`). Otherwise the
-  user-provided `userName` and `secretPassword` are kept.
-- All other keys of the user proxy block (`noProxyHost`, `testUrl`, ...) are
-  preserved.
+- `userName` and `secretPassword` come from the model proxy URL when the URL
+  contains credentials (`http://user:password@host:port`). Otherwise no
+  credential keys are written.
 - The charm never writes empty credentials.
-Jenkins' JCasC `jenkins.proxy` block uses the `secretPassword` attribute
-for the proxy password.
+
+When no model proxy is configured, the user JCasC `jenkins.proxy` block
+passes through untouched.
 
 For example, with the model proxy
-`http://alice:s3cret@proxy.example.com:3128` and the following user JCasC:
+`http://alice:s3cret@proxy.example.com:3128`, the rendered JCasC proxy block
+becomes:
 
 ```yaml
 jenkins:
   proxy:
-    noProxyHost: localhost
-    userName: myuser
-    secretPassword: mypass
-```
-
-the rendered JCasC becomes:
-
-```yaml
-jenkins:
-  proxy:
-    noProxyHost: localhost
     userName: alice
     secretPassword: s3cret
     name: proxy.example.com
     port: "3128"
 ```
+
+Configure the proxy entirely through the Juju model, or entirely through
+JCasC (by not setting a model proxy). A configured model proxy takes
+precedence over the user JCasC proxy block.
 
 ## Related configuration
 
