@@ -177,6 +177,17 @@ def test_build_jcasc_config_injects_proxy_name_without_port():
             },
             id="model-proxy-creds-no-user-block",
         ),
+        pytest.param(
+            "http://alice:p%40ss@proxy.example.com:3128",
+            None,
+            {
+                "name": "proxy.example.com",
+                "port": "3128",
+                "userName": "alice",
+                "secretPassword": "p@ss",
+            },
+            id="model-proxy-creds-percent-decoded",
+        ),
     ],
 )
 def test_build_jcasc_config_proxy_ownership(proxy_url, user_proxy, expected):
