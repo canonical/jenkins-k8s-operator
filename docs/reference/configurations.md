@@ -31,6 +31,11 @@ when each new SSH process starts, and the managed file is outside the Pebble
 service plan. Existing SSH processes keep their current connection settings; new
 processes use the updated proxy configuration.
 
+The Juju model proxy settings are separate and control Jenkins and plugin
+network traffic. The charm applies them through the JCasC `jenkins.proxy`
+block; see [JCasC configuration](jcasc.md#proxy-precedence) for the
+precedence rules.
+
 ### Security
 
 The charm contacts the proxy with a plain HTTP `CONNECT` request that carries no
