@@ -26,7 +26,9 @@ configuration.
 
 When the Juju model has a proxy configured (`juju model-config
 juju-http-proxy=...` and `juju-https-proxy=...`), the charm owns the whole
-JCasC `jenkins.proxy` block. The block is built from the model proxy only;
+JCasC `jenkins.proxy` block. When both settings are set, the charm uses
+`juju-https-proxy` and falls back to `juju-http-proxy` only when the HTTPS
+setting is absent, so place the proxy credentials on `juju-https-proxy`. The block is built from the model proxy only;
 user JCasC proxy configuration is never mixed in:
 
 - `name` and `port` always come from the Juju model proxy.
