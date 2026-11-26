@@ -1259,7 +1259,7 @@ def build_jcasc_config(
         if proxy.username is not None:
             merged["userName"] = proxy.username
         if proxy.password is not None:
-            merged["password"] = proxy.password
+            merged["secretPassword"] = proxy.password
         jenkins_section["proxy"] = merged
 
     config["jenkins"] = jenkins_section

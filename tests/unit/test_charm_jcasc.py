@@ -127,7 +127,7 @@ def test_build_jcasc_config_proxy_merges_preserves_user_credentials():
                 "name": "user-proxy.example.com",
                 "port": "8080",
                 "userName": "user",
-                "password": "user-secret",
+                "secretPassword": "user-secret",
                 "noProxyHost": "localhost",
             }
         }
@@ -142,7 +142,7 @@ def test_build_jcasc_config_proxy_merges_preserves_user_credentials():
         "name": "proxy.example.com",
         "port": "3128",
         "userName": "user",
-        "password": "user-secret",
+        "secretPassword": "user-secret",
         "noProxyHost": "localhost",
     }
 
@@ -163,7 +163,7 @@ def test_build_jcasc_config_proxy_credentials_from_model_proxy_url():
         "jenkins": {
             "proxy": {
                 "userName": "user",
-                "password": "user-secret",
+                "secretPassword": "user-secret",
             }
         }
     }
@@ -177,7 +177,7 @@ def test_build_jcasc_config_proxy_credentials_from_model_proxy_url():
         "name": "proxy.example.com",
         "port": "3128",
         "userName": "alice",
-        "password": "s3cret",
+        "secretPassword": "s3cret",
     }
 
 
@@ -185,7 +185,7 @@ def test_build_jcasc_config_proxy_without_credentials_injects_none():
     """
     arrange: model proxy without credentials and user JCasC proxy block without credentials.
     act: when build_jcasc_config is called.
-    assert: no userName/password keys are injected.
+    assert: no userName/secretPassword keys are injected.
     """
     # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
     proxy = state.ProxyConfig(
@@ -537,3 +537,35 @@ def test_reconcile_jcasc_config_repository_fetch_error_raises_blocked(
         ),
     ):
         charm._reconcile_jcasc_config(harness_container.container, charm_state)
+
+
+def test_build_jcasc_config_proxy_preserves_legacy_password_key():
+    """
+    arrange: user JCasC proxy block uses the legacy password key.
+    act: when build_jcasc_config is called.
+    assert: the legacy password key is preserved verbatim (the charm does not
+    rewrite user configuration; JCasC validates it on its own).
+    """
+    proxy = state.ProxyConfig(
+        http_proxy="http://proxy.example.com:3128",  # type: ignore
+        https_proxy=None,
+        no_proxy=None,
+    )
+    jcasc_config = {
+        "jenkins": {
+            "proxy": {
+                "password": "legacy-user-secret",
+            }
+        }
+    }
+
+    result = jenkins.build_jcasc_config(
+        jcasc_config,
+        proxy_config=proxy,
+    )
+
+    assert result["jenkins"]["proxy"] == {
+        "name": "proxy.example.com",
+        "port": "3128",
+        "password": "legacy-user-secret",
+    }
