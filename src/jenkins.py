@@ -1246,21 +1246,24 @@ def build_jcasc_config(
         "hudson.model.UpdateCenter$CoreUpdateMonitor"
     ]
 
+    # When a model proxy is configured, the charm owns the whole JCasC proxy
+    # block; user JCasC proxy configuration is not mixed in. Without a model
+    # proxy, the user's proxy block passes through untouched.
     proxy = proxy_config.https_proxy or proxy_config.http_proxy if proxy_config else None
     if proxy:
         host, port = proxy.host, proxy.port
-        # Model proxy takes precedence for host/port and credentials-if-present;
-        # the rest of the user JCasC proxy block is preserved.
-        merged = jenkins_section.get("proxy") or {}
-        merged["name"] = host
+        proxy_block = {
+            "name": host,
+        }
         # Pydantic v2 fills a scheme-default port (80/443); only emit an explicit port.
         if port and f":{port}" in str(proxy):
-            merged["port"] = str(port)
+            proxy_block["port"] = str(port)
+        # Credentials only from the model proxy URL; never write empty strings.
         if proxy.username is not None:
-            merged["userName"] = proxy.username
+            proxy_block["userName"] = proxy.username
         if proxy.password is not None:
-            merged["secretPassword"] = proxy.password
-        jenkins_section["proxy"] = merged
+            proxy_block["secretPassword"] = proxy.password
+        jenkins_section["proxy"] = proxy_block
 
     config["jenkins"] = jenkins_section
     return config

@@ -109,11 +109,12 @@ def test_build_jcasc_config_injects_proxy_name_without_port():
     assert result["jenkins"]["proxy"] == {"name": "proxy-no-port.example.com"}
 
 
-def test_build_jcasc_config_proxy_merges_preserves_user_credentials():
+def test_build_jcasc_config_proxy_owns_block_when_model_proxy_configured():
     """
     arrange: model proxy without credentials and user JCasC proxy block with credentials.
     act: when build_jcasc_config is called.
-    assert: user JCasC credentials are preserved and charm-set name/port are present.
+    assert: the charm owns the whole proxy block - user JCasC proxy config is not
+    mixed in (no mixing between model proxy and JCasC proxy configuration).
     """
     # Mypy doesn't understand str is supposed to be converted to HttpUrl by Pydantic.
     proxy = state.ProxyConfig(
@@ -141,9 +142,6 @@ def test_build_jcasc_config_proxy_merges_preserves_user_credentials():
     assert result["jenkins"]["proxy"] == {
         "name": "proxy.example.com",
         "port": "3128",
-        "userName": "user",
-        "secretPassword": "user-secret",
-        "noProxyHost": "localhost",
     }
 
 
@@ -539,33 +537,27 @@ def test_reconcile_jcasc_config_repository_fetch_error_raises_blocked(
         charm._reconcile_jcasc_config(harness_container.container, charm_state)
 
 
-def test_build_jcasc_config_proxy_preserves_legacy_password_key():
+def test_build_jcasc_config_proxy_untouched_without_model_proxy():
     """
-    arrange: user JCasC proxy block uses the legacy password key.
+    arrange: no model proxy and user JCasC proxy block with credentials.
     act: when build_jcasc_config is called.
-    assert: the legacy password key is preserved verbatim (the charm does not
-    rewrite user configuration; JCasC validates it on its own).
+    assert: the user JCasC proxy block passes through untouched.
     """
-    proxy = state.ProxyConfig(
-        http_proxy="http://proxy.example.com:3128",  # type: ignore
-        https_proxy=None,
-        no_proxy=None,
-    )
     jcasc_config = {
         "jenkins": {
             "proxy": {
+                "name": "user-proxy.example.com",
+                "port": "8080",
+                "userName": "user",
                 "password": "legacy-user-secret",
+                "noProxyHost": "localhost",
             }
         }
     }
 
     result = jenkins.build_jcasc_config(
         jcasc_config,
-        proxy_config=proxy,
+        proxy_config=None,
     )
 
-    assert result["jenkins"]["proxy"] == {
-        "name": "proxy.example.com",
-        "port": "3128",
-        "password": "legacy-user-secret",
-    }
+    assert result["jenkins"]["proxy"] == jcasc_config["jenkins"]["proxy"]
