@@ -30,12 +30,14 @@ Jenkins through the JCasC `jenkins.proxy` block. The charm merges its values
 into any user-provided proxy block instead of replacing it:
 
 - `name` and `port` always come from the Juju model proxy.
-- `userName` and `password` come from the model proxy URL when the URL
-  contains credentials (`http://user:password@host:port`). Otherwise the
-  user-provided `userName` and `password` are kept.
+- `userName` and `secretPassword` come from the model proxy URL when the
+  URL contains credentials (`http://user:password@host:port`). Otherwise the
+  user-provided `userName` and `secretPassword` are kept.
 - All other keys of the user proxy block (`noProxyHost`, `testUrl`, ...) are
   preserved.
 - The charm never writes empty credentials.
+Jenkins' JCasC `jenkins.proxy` block uses the `secretPassword` attribute
+for the proxy password.
 
 For example, with the model proxy
 `http://alice:s3cret@proxy.example.com:3128` and the following user JCasC:
@@ -45,7 +47,7 @@ jenkins:
   proxy:
     noProxyHost: localhost
     userName: myuser
-    password: mypass
+    secretPassword: mypass
 ```
 
 the rendered JCasC becomes:
@@ -55,7 +57,7 @@ jenkins:
   proxy:
     noProxyHost: localhost
     userName: alice
-    password: s3cret
+    secretPassword: s3cret
     name: proxy.example.com
     port: "3128"
 ```
