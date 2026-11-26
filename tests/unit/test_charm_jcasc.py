@@ -197,7 +197,7 @@ def test_build_jcasc_config_proxy_ownership(proxy_url, user_proxy, expected):
         if proxy_url
         else None
     )
-    jcasc_config = {"jenkins": {}}
+    jcasc_config: typing.Dict[str, typing.Any] = {"jenkins": {}}
     if user_proxy is not None:
         jcasc_config["jenkins"]["proxy"] = user_proxy
 
