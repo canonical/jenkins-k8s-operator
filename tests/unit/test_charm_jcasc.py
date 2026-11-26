@@ -109,6 +109,117 @@ def test_build_jcasc_config_injects_proxy_name_without_port():
     assert result["jenkins"]["proxy"] == {"name": "proxy-no-port.example.com"}
 
 
+@pytest.mark.parametrize(
+    ("proxy_url", "user_proxy", "expected"),
+    [
+        pytest.param(
+            None,
+            {
+                "name": "user-proxy.example.com",
+                "port": "8080",
+                "userName": "user",
+                "password": "legacy-user-secret",
+                "noProxyHost": "localhost",
+            },
+            {
+                "name": "user-proxy.example.com",
+                "port": "8080",
+                "userName": "user",
+                "password": "legacy-user-secret",
+                "noProxyHost": "localhost",
+            },
+            id="no-model-proxy-user-block-untouched",
+        ),
+        pytest.param(None, None, None, id="no-model-proxy-no-proxy-key"),
+        pytest.param(
+            "http://proxy.example.com:3128",
+            {
+                "name": "user-proxy.example.com",
+                "port": "8080",
+                "userName": "user",
+                "secretPassword": "user-secret",
+                "noProxyHost": "localhost",
+            },
+            {"name": "proxy.example.com", "port": "3128"},
+            id="cred-free-model-proxy-drops-user-block",
+        ),
+        pytest.param(
+            "http://proxy.example.com:3128",
+            None,
+            {"name": "proxy.example.com", "port": "3128"},
+            id="cred-free-model-proxy-no-user-block",
+        ),
+        pytest.param(
+            "http://proxy.example.com:3128",
+            {"noProxyHost": "localhost", "testUrl": "http://example.com"},
+            {"name": "proxy.example.com", "port": "3128"},
+            id="cred-free-model-proxy-drops-user-keys",
+        ),
+        pytest.param(
+            "http://alice:s3cret@proxy.example.com:3128",
+            {"userName": "user", "secretPassword": "user-secret"},
+            {
+                "name": "proxy.example.com",
+                "port": "3128",
+                "userName": "alice",
+                "secretPassword": "s3cret",
+            },
+            id="model-proxy-creds-win",
+        ),
+        pytest.param(
+            "http://alice:s3cret@proxy.example.com:3128",
+            None,
+            {
+                "name": "proxy.example.com",
+                "port": "3128",
+                "userName": "alice",
+                "secretPassword": "s3cret",
+            },
+            id="model-proxy-creds-no-user-block",
+        ),
+        pytest.param(
+            "http://alice:p%40ss@proxy.example.com:3128",
+            None,
+            {
+                "name": "proxy.example.com",
+                "port": "3128",
+                "userName": "alice",
+                "secretPassword": "p@ss",
+            },
+            id="model-proxy-creds-percent-decoded",
+        ),
+    ],
+)
+def test_build_jcasc_config_proxy_ownership(proxy_url, user_proxy, expected):
+    """
+    arrange: combinations of model proxy (absent / credential-free / credentialed)
+        and user JCasC proxy blocks.
+    act: when build_jcasc_config is called.
+    assert: the model proxy owns the whole jenkins.proxy block when configured
+        (no mixing with user JCasC proxy config); otherwise the user block passes
+        through untouched.
+    """
+    proxy = (
+        state.ProxyConfig(  # type: ignore[arg-type]
+            http_proxy=proxy_url,
+            https_proxy=None,
+            no_proxy=None,
+        )
+        if proxy_url
+        else None
+    )
+    jcasc_config: typing.Dict[str, typing.Any] = {"jenkins": {}}
+    if user_proxy is not None:
+        jcasc_config["jenkins"]["proxy"] = user_proxy
+
+    result = jenkins.build_jcasc_config(jcasc_config, proxy_config=proxy)
+
+    if expected is None:
+        assert "proxy" not in result["jenkins"]
+    else:
+        assert result["jenkins"]["proxy"] == expected
+
+
 def test_reconcile_jcasc_config_skips_when_no_config(
     harness_container: HarnessWithContainer,
 ):

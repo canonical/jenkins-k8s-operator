@@ -22,6 +22,7 @@ import xml.etree.ElementTree as ET  # nosec B405 - only serializes Jenkins API X
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
+from urllib.parse import unquote
 
 import jenkinsapi.custom_exceptions
 import jenkinsapi.jenkins
@@ -908,16 +909,16 @@ def _get_groovy_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[s
     if proxy_config.https_proxy:
         yield f"'{proxy_config.https_proxy.host}'"
         yield f"{proxy_config.https_proxy.port}"
-        yield f"'{proxy_config.https_proxy.username or ''}'"
-        yield f"'{proxy_config.https_proxy.password or ''}'"
+        yield f"'{unquote(proxy_config.https_proxy.username or '')}'"
+        yield f"'{unquote(proxy_config.https_proxy.password or '')}'"
     else:
         # http proxy and https proxy value cannot both be None since proxy_config would be parsed
         # as None.
         proxy_config.http_proxy = typing.cast(HttpUrl, proxy_config.http_proxy)
         yield f"'{proxy_config.http_proxy.host}'"
         yield f"{proxy_config.http_proxy.port}"
-        yield f"'{proxy_config.http_proxy.username or ''}'"
-        yield f"'{proxy_config.http_proxy.password or ''}'"
+        yield f"'{unquote(proxy_config.http_proxy.username or '')}'"
+        yield f"'{unquote(proxy_config.http_proxy.password or '')}'"
     if proxy_config.no_proxy:
         yield f"'{proxy_config.no_proxy}'"
 
@@ -1201,14 +1202,14 @@ def _get_java_proxy_args(proxy_config: state.ProxyConfig) -> typing.Iterable[str
         yield f"-Dhttp.proxyHost={proxy_config.http_proxy.host}"
         yield f"-Dhttp.proxyPort={proxy_config.http_proxy.port}"
         if proxy_config.http_proxy.username and proxy_config.http_proxy.password:
-            yield f"-Dhttp.proxyUser={proxy_config.http_proxy.username}"
-            yield f"-Dhttp.proxyPassword={proxy_config.http_proxy.password}"
+            yield f"-Dhttp.proxyUser={unquote(proxy_config.http_proxy.username)}"
+            yield f"-Dhttp.proxyPassword={unquote(proxy_config.http_proxy.password)}"
     if proxy_config.https_proxy:
         yield f"-Dhttps.proxyHost={proxy_config.https_proxy.host}"
         yield f"-Dhttps.proxyPort={proxy_config.https_proxy.port}"
         if proxy_config.https_proxy.username and proxy_config.https_proxy.password:
-            yield f"-Dhttps.proxyUser={proxy_config.https_proxy.username}"
-            yield f"-Dhttps.proxyPassword={proxy_config.https_proxy.password}"
+            yield f"-Dhttps.proxyUser={unquote(proxy_config.https_proxy.username)}"
+            yield f"-Dhttps.proxyPassword={unquote(proxy_config.https_proxy.password)}"
     if proxy_config.no_proxy:
         formatted_no_proxy_hosts = "|".join(proxy_config.no_proxy.split(","))
         yield f'-Dhttp.nonProxyHosts="{formatted_no_proxy_hosts}"'
@@ -1246,15 +1247,24 @@ def build_jcasc_config(
         "hudson.model.UpdateCenter$CoreUpdateMonitor"
     ]
 
+    # When a model proxy is configured, the charm owns the whole JCasC proxy
+    # block; user JCasC proxy configuration is not mixed in. Without a model
+    # proxy, the user's proxy block passes through untouched.
     proxy = proxy_config.https_proxy or proxy_config.http_proxy if proxy_config else None
     if proxy:
         host, port = proxy.host, proxy.port
-        jenkins_section["proxy"] = {
+        proxy_block = {
             "name": host,
         }
         # Pydantic v2 fills a scheme-default port (80/443); only emit an explicit port.
         if port and f":{port}" in str(proxy):
-            jenkins_section["proxy"]["port"] = str(port)
+            proxy_block["port"] = str(port)
+        # Credentials only from the model proxy URL; never write empty strings.
+        if proxy.username is not None:
+            proxy_block["userName"] = unquote(proxy.username)
+        if proxy.password is not None:
+            proxy_block["secretPassword"] = unquote(proxy.password)
+        jenkins_section["proxy"] = proxy_block
 
     config["jenkins"] = jenkins_section
     return config

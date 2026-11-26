@@ -9,6 +9,7 @@ The following pages provide technical details about the charm's features, includ
 * [Actions]
 * [Configurations]
 * [External access]
+* [JCasC configuration]
 
 ## Architecture and design
 
@@ -23,4 +24,5 @@ The following pages cover the charm's internal design and its relationships with
 [Configurations]: configurations.md
 [Integrations]: integrations.md
 [External access]: external-access.md
+[JCasC configuration]: jcasc.md
 [Charm architecture]: charm-architecture.md

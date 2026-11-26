@@ -294,6 +294,64 @@ async def test_git_plugin_k8s_agent(unit_web_client: UnitWebClient):
     )
 
 
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(5),
+    stop=tenacity.stop_after_delay(10 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+def _wait_for_ldap_pod_ready(
+    kube_core_client: kubernetes.client.CoreV1Api, namespace: str
+) -> bool:
+    """Return whether the LDAP pod is running and ready.
+
+    The ldap_server fixture only creates the Deployment; the pod may not be
+    ready yet when seeding, which caused a flaky "Can't contact LDAP server"
+    failure in test_ldap_plugin.
+    """
+    pods = kube_core_client.list_namespaced_pod(namespace=namespace, label_selector="app=ldap")
+    return bool(
+        pods.items
+        and all(
+            pod.status.phase == "Running"
+            and pod.status.container_statuses
+            and all(container.ready for container in pod.status.container_statuses)
+            for pod in pods.items
+        )
+    )
+
+
+@tenacity.retry(
+    retry=tenacity.retry_if_result(lambda result: not result),
+    wait=tenacity.wait_fixed(10),
+    stop=tenacity.stop_after_delay(5 * 60),
+    retry_error_callback=_raise_retry_timeout,
+    before_sleep=_log_retry,
+)
+def _seed_ldap_user(
+    kube_core_client: kubernetes.client.CoreV1Api,
+    namespace: str,
+    pod_name: str,
+    command: typing.List[str],
+) -> bool:
+    """Seed the LDAP user, retrying while the LDAP server is still starting."""
+    try:
+        response = stream(
+            kube_core_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=namespace,
+            command=["sh", "-c", " ".join(command)],
+            stderr=True,
+            stdin=True,
+            stdout=True,
+        )
+        return "adding new entry" in response
+    except Exception:
+        logger.exception("Failed to exec ldapadd.")
+        return False
+
+
 @pytest.fixture(name="seed_ldap_user")
 def seed_ldap_user_fixture(
     model: Model,
@@ -326,18 +384,11 @@ gidNumber: 1001
 homeDirectory: /home/{ldap_settings.username}
 EOF""",
     ]
-    pods = kube_core_client.list_namespaced_pod(namespace=model.name, label_selector="app=ldap")
+    namespace = model.name
+    _wait_for_ldap_pod_ready(kube_core_client, namespace)
+    pods = kube_core_client.list_namespaced_pod(namespace=namespace, label_selector="app=ldap")
     pod_name = pods.items[0].metadata.name
-    response = stream(
-        kube_core_client.connect_get_namespaced_pod_exec,
-        name=pod_name,
-        namespace=model.name,
-        command=["sh", "-c", " ".join(command)],
-        stderr=True,
-        stdin=True,
-        stdout=True,
-    )
-    assert "adding new entry" in response
+    _seed_ldap_user(kube_core_client, namespace, pod_name, command)
 
 
 @pytest.mark.usefixtures("app_with_allowed_plugins", "seed_ldap_user")
