@@ -1116,7 +1116,7 @@ integration = [
     { name = "lightkube", specifier = "==1.0.2" },
     { name = "macaroonbakery" },
     { name = "opcli", marker = "python_full_version >= '3.12'", git = "https://github.com/canonical/charm-ci.git?tag=v1.0.2" },
-    { name = "pyotp", specifier = "==2.12.1" },
+    { name = "pyotp", specifier = "==2.12.2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-operator" },
@@ -1135,7 +1135,7 @@ lint = [
     { name = "mypy" },
     { name = "ops", extras = ["testing"] },
     { name = "pep8-naming" },
-    { name = "pyotp", specifier = "==2.12.1" },
+    { name = "pyotp", specifier = "==2.12.2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-operator" },
@@ -2043,11 +2043,11 @@ wheels = [
 
 [[package]]
 name = "pyotp"
-version = "2.12.1"
+version = "2.12.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/70/d7/fe43d6cfd1e80081a374c612df6b6555205a7ab761fdd6ba6e30435fd963/pyotp-2.12.1.tar.gz", hash = "sha256:8d0c4192f3c5d1b1a8792df23b9d8acbb7e70abd2b160962af55c5700edbd236", size = 27480, upload-time = "2026-11-19T05:06:24.189Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/22/d2/654ba3cfcae2adc662d6e8c0f584d072b0bd0d5b7feb4f2f78ada3350c69/pyotp-2.12.2.tar.gz", hash = "sha256:6d581512da252dfda3e9099b8d870469f181e736c2f6320d5253eb00d334dc09", size = 28008, upload-time = "2026-11-27T01:47:27.529Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/32/d5/ca399f55b474357c42b8d0ee1c0222a22e6f88bbf4588130b75737c3b73b/pyotp-2.12.1-py3-none-any.whl", hash = "sha256:2f65978d0a0afe5588ec960c810cbb974ba1957ffbf29775d8d4e1b2d4b8984c", size = 17026, upload-time = "2026-11-19T05:06:22.922Z" },
+    { url = "https://files.pythonhosted.org/packages/55/c0/20d57269e321ef88dea8e2013eecd16d4b626c4243ee348af68f1be68a0a/pyotp-2.12.2-py3-none-any.whl", hash = "sha256:1ab818c7b7c2d736af87e617fde7b83851b8e895d242c869db80ee96e98d5b81", size = 17186, upload-time = "2026-11-27T01:47:26.446Z" },
 ]
 
 [[package]]
